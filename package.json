@@ -1,0 +1,47 @@
+{
+  "name": "blatkom89",
+  "version": "0.1.0",
+  "private": true,
+  "description": "БЛАТКОМ ’89 — top-down 2D multiplayer action for Telegram Mini Apps",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "node tools/dev.mjs",
+    "build": "npm run build:web && npm run build:server",
+    "build:web": "node apps/web/build.mjs --mode=production",
+    "build:demo": "node apps/web/build.mjs --mode=demo",
+    "build:server": "node apps/server/build.mjs",
+    "start": "node apps/server/dist/server.js",
+    "assets": "tsx tools/art/build-all.ts",
+    "typecheck": "tsc -p packages/shared && tsc -p apps/server && tsc -p apps/web && tsc -p tools",
+    "test": "node --import tsx --test --test-reporter=spec \"packages/shared/src/**/*.test.ts\" \"apps/server/src/**/*.test.ts\" \"apps/web/src/**/*.test.ts\"",
+    "test:unit": "node --import tsx --test \"packages/shared/src/**/*.test.ts\" \"apps/web/src/**/*.test.ts\"",
+    "test:integration": "node --import tsx --test --test-concurrency=1 \"apps/server/src/**/*.test.ts\"",
+    "test:e2e": "node tests/e2e/run-e2e.mjs",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:migrate": "tsx apps/server/src/database/cli.ts migrate",
+    "db:status": "tsx apps/server/src/database/cli.ts status",
+    "admin:create": "tsx apps/server/src/admin/cli.ts create",
+    "verify": "npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.37.0",
+    "@types/node": "^22.18.0",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.28.2",
+    "eslint": "^9.37.0",
+    "playwright": "^1.56.0",
+    "prettier": "^3.8.1",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0"
+  }
+}

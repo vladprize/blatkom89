@@ -1,0 +1,13 @@
+{
+  "name": "@blatkom/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared game rules, maps, simulation, network protocol, schemas and analytics events",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  }
+}
