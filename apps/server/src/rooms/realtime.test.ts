@@ -407,9 +407,13 @@ test('a player who does not return within the grace period loses the slot; empty
   assert.ok(services.recorder.abandoned.length >= 0);
 });
 
-test('rematch: after results everyone votes, a new match starts with a new id and results are recorded separately', async () => {
+test('rematch: after results everyone votes, a new match starts with a new id, players can move and results are recorded separately', async () => {
   const { a, ca, cb, room } = await startedMatch();
   const roomObj = rooms.get(room.roomId)!;
+  const slotA = (await ca.msg('welcome')).slot;
+  // match 1: A's input sequence climbs to 60
+  for (let i = 0; i < 60; i++) ca.input({ viewTime: ca.lastSnap?.serverTime ?? 0 });
+  await sleep(250);
   roomObj.world.finish('time');
   const r1 = await ca.msg('results');
   await cb.msg('results');
@@ -417,18 +421,27 @@ test('rematch: after results everyone votes, a new match starts with a new id an
   const prog = await ca.msg('progress');
   assert.ok(prog.result.level > 1);
   await ca.msg('roster', (m) => m.players.some((p) => p.id === a.userId && p.level === prog.result.level));
+  const mark = ca.snaps.length;
   ca.send({ type: 'rematch' });
   cb.send({ type: 'rematch' });
-  await ca.snap((s) => s.phase === 'active' && rooms.get(room.roomId)!.matchId !== r1.matchId, 6000);
+  const fresh = () => ca.snaps.slice(mark).filter((s) => s.phase === 'active');
+  await ca.until(() => fresh().find((s) => s.players.some((p) => p.slot === slotA && p.alive)), 6000, 'active snapshot after the rematch');
   const m2 = rooms.get(room.roomId)!.matchId;
   assert.ok(m2 && m2 !== r1.matchId);
+  // regression: the new match's game scene restarts the input sequence at 1 — the player must still move
+  const before = fresh().at(-1)!.players.find((p) => p.slot === slotA)!;
+  ca.seq = 0;
+  for (let i = 0; i < 40; i++) {
+    ca.input({ moveX: 127, moveY: 0, viewTime: ca.lastSnap?.serverTime ?? 0 });
+    await sleep(16);
+  }
+  await ca.until(() => fresh().some((s) => s.players.some((p) => p.slot === slotA && Math.abs(p.x - before.x) > 25)), 4000, 'movement after the rematch');
   rooms.get(room.roomId)!.world.finish('time');
   const r2 = await ca.msg('results', (m) => m.matchId !== r1.matchId);
   assert.notEqual(r2.matchId, r1.matchId);
   await sleep(200);
   assert.ok(services.recorder.completed.has(r1.matchId));
   assert.ok(services.recorder.completed.has(r2.matchId));
-  void a;
   ca.close();
   cb.close();
 });

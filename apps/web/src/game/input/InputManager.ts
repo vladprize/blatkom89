@@ -5,9 +5,14 @@ import type { InputFrame } from '@blatkom/shared';
 import { touchState } from './TouchState.js';
 import { getSettings } from '../../app/settings.js';
 
+/**
+ * Input sequence shared by every InputManager of this page: a rematch or a second match in the same
+ * room creates a new game scene, but the server must keep seeing increasing sequence numbers.
+ */
+let lastSeq = 0;
+
 export class InputManager {
   private readonly keys: Record<string, Phaser.Input.Keyboard.Key> = {};
-  private seq = 0;
   private aim = 0;
   private edgeButtons = 0;
   private pendingSlot = 0;
@@ -98,7 +103,7 @@ export class InputManager {
     const slot = this.pendingSlot;
     this.pendingSlot = 0;
     return {
-      seq: ++this.seq,
+      seq: ++lastSeq,
       moveX: quantizeAxis(mx),
       moveY: quantizeAxis(my),
       aim: quantizeAngle(this.aim),

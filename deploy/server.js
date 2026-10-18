@@ -14339,6 +14339,8 @@ var MatchRoom = class {
       if (p) p.character = c.character;
       c.matchTimeMs = 0;
       c.rematch = false;
+      c.queue = [];
+      c.lastQueuedSeq = 0;
     }
     this.world.beginMatch();
     this.matchId = randomUUID3();

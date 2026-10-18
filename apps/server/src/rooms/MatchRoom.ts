@@ -357,6 +357,10 @@ export class MatchRoom {
       if (p) p.character = c.character;
       c.matchTimeMs = 0;
       c.rematch = false;
+      // a new match is a new input stream: the client's game scene (and its input sequence) is
+      // recreated, so inputs numbered below the previous match's last seq must not be dropped
+      c.queue = [];
+      c.lastQueuedSeq = 0;
     }
     this.world.beginMatch();
     this.matchId = randomUUID();
