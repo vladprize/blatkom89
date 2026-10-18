@@ -2,8 +2,8 @@
  * App shell: screen navigation (HTML/CSS over the canvas), offline practice flow, online flow
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
-import { CHARACTERS, CHARACTER_IDS, FREE_CHARACTERS, MAP_ORDER, WEAPONS, DEFAULT_LOADOUT, getMap, isCharacterId, isMapId, levelForXp } from '@blatkom/shared';
-import type { CharacterId, MapId, BotDifficulty, Standing, PersonalResult, Loadout, WeaponId } from '@blatkom/shared';
+import { CHARACTERS, CHARACTER_IDS, FREE_CHARACTERS, GADGETS, MAP_ORDER, MODS, WEAPONS, DEFAULT_LOADOUT, getMap, isCharacterId, isMapId, levelForXp } from '@blatkom/shared';
+import type { CharacterId, MapId, BotDifficulty, Standing, PersonalResult, Loadout } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
@@ -25,7 +25,7 @@ import { openNicknameDialog, randomNickname } from '../profile/nickname.js';
 import { renderResults } from '../ui/screens/results.js';
 import { renderLobby } from '../ui/screens/lobby.js';
 import { renderArsenal, characterPriceNote, amount } from '../ui/screens/shop.js';
-import type { ArsenalTab } from '../ui/screens/shop.js';
+import type { ArsenalTab, TryOn } from '../ui/screens/shop.js';
 import { renderAccountPanel, openEmailLogin, openPasswordReset } from '../ui/screens/account.js';
 import { sfx } from '../game/audio/Sfx.js';
 
@@ -495,7 +495,7 @@ export class App {
       online: this.online,
       inTelegram: inTelegram(),
       ...(tab ? { tab } : {}),
-      onTry: (w) => this.startPractice({ ...this.lastPractice, tryWeapon: w }),
+      onTry: (t) => this.startPractice({ ...this.lastPractice, tryOn: t }),
       onWallet: () => this.refreshStrip(),
       onCharacter: (c) => this.showCharacters(true, c),
     });
@@ -558,14 +558,27 @@ export class App {
   }
 
   /** Practice loadout: the player's own (online), the free default (demo), or a weapon to try on. */
-  private practiceLoadout(tryWeapon?: WeaponId): Loadout {
+  private practiceLoadout(t?: TryOn): Loadout {
     const base: Loadout = this.online?.inventory?.loadout ?? { ...DEFAULT_LOADOUT, mods: {} };
-    if (!tryWeapon) return base;
-    const slot = WEAPONS[tryWeapon].slot;
-    return { ...base, ...(slot === 1 ? { sidearm: tryWeapon } : slot === 2 ? { melee: tryWeapon } : { primary: tryWeapon }) };
+    if (!t) return base;
+    let l: Loadout = { ...base, mods: { ...base.mods } };
+    if (t.weapon) {
+      const slot = WEAPONS[t.weapon].slot;
+      l = { ...l, ...(slot === 1 ? { sidearm: t.weapon } : slot === 2 ? { melee: t.weapon } : { primary: t.weapon }) };
+      if (t.mods) l.mods[t.weapon] = [...t.mods];
+    }
+    if (t.gadget) l.gadget = t.gadget;
+    return l;
   }
 
-  private startPractice(opts: { mapId: MapId; bots: number; difficulty: BotDifficulty; tryWeapon?: WeaponId; character?: CharacterId }) {
+  private static tryOnLabel(t: TryOn): string {
+    const parts: string[] = [];
+    if (t.weapon) parts.push(WEAPONS[t.weapon].name + (t.mods?.length ? ` + ${t.mods.map((m) => MODS[m].name.toLowerCase()).join(', ')}` : ''));
+    if (t.gadget) parts.push(GADGETS[t.gadget].name);
+    return parts.join(' и ');
+  }
+
+  private startPractice(opts: { mapId: MapId; bots: number; difficulty: BotDifficulty; tryOn?: TryOn; character?: CharacterId }) {
     this.lastPractice = { mapId: opts.mapId, difficulty: opts.difficulty, bots: Math.max(1, Math.min(5, opts.bots || 3)) };
     const name = this.playerName() ?? CHARACTERS[this.character].name;
     const session = new OfflineSession({
@@ -575,9 +588,12 @@ export class App {
       level: this.playerLevel(),
       bots: this.lastPractice.bots,
       difficulty: opts.difficulty,
-      loadout: this.practiceLoadout(opts.tryWeapon),
+      loadout: this.practiceLoadout(opts.tryOn),
     });
-    if (opts.tryWeapon) setTimeout(() => toast(`Примерка: ${WEAPONS[opts.tryWeapon!].name}`), 1200);
+    if (opts.tryOn) {
+      const label = App.tryOnLabel(opts.tryOn);
+      setTimeout(() => toast(`Примерка: ${label}${opts.tryOn!.gadget ? ' — клавиша G' : ''}`), 1200);
+    }
     this.beginSession(session);
   }
 

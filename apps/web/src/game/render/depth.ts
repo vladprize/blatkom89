@@ -13,6 +13,10 @@ export const D = {
   LEGS: 10,
   TORSO: 11,
   FX_LOW: 12,
+  /** Equipment lying on the floor (mines, C4) and turrets. */
+  GADGET: 9.5,
+  /** Smoke clouds: above characters, below walls. */
+  SMOKE: 15,
   WALL_SHADOW: 19,
   WALL: 20,
   PROP_HIGH: 21,

@@ -14,7 +14,9 @@ import type {
   CheckoutResponse,
   PaymentStatusResponse,
   LedgerEntry,
-  UpgradeStat,
+  Loadout,
+  ModId,
+  ShopKind,
   WeaponId,
 } from '@blatkom/shared';
 import { platform } from '../telegram/tg.js';
@@ -103,17 +105,18 @@ export class Api {
   ledger() {
     return this.req<{ entries: LedgerEntry[] }>('GET', '/api/me/ledger?limit=30');
   }
-  buy(kind: 'weapon' | 'character', id: string) {
+  buy(kind: ShopKind, id: string) {
     return this.req<Inventory>('POST', '/api/shop/buy', { kind, id });
   }
-  upgrade(weapon: WeaponId, stat: UpgradeStat) {
-    return this.req<Inventory>('POST', '/api/shop/upgrade', { weapon, stat });
+  /** Buys a modification for one weapon (tokens); the server equips it right away. */
+  buyMod(weapon: WeaponId, mod: ModId) {
+    return this.req<Inventory>('POST', '/api/shop/mod', { weapon, mod });
   }
   openCase() {
     return this.req<CaseResult>('POST', '/api/shop/case', { confirmAge: true });
   }
-  setLoadout(sidearm: WeaponId, melee: WeaponId, primary: WeaponId | null) {
-    return this.req<Inventory>('POST', '/api/me/loadout', { sidearm, melee, primary });
+  setLoadout(l: Loadout) {
+    return this.req<Inventory>('POST', '/api/me/loadout', { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods });
   }
   checkout(packId: string, method: 'card' | 'crypto') {
     return this.req<CheckoutResponse>('POST', '/api/pay/checkout', { packId, method });

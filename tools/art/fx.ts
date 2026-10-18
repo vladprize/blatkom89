@@ -1,5 +1,5 @@
 /** Effect sprites (muzzle flashes, blood, smoke, glow) and HUD/UI icons. */
-import { Img, hex, mix, noise2 } from './lib/raster.js';
+import { Img, hex, mix, noise2, vnoise } from './lib/raster.js';
 import type { RGBA } from './lib/raster.js';
 
 export function glow(size = 64, falloff = 2): Img {
@@ -88,6 +88,57 @@ export function bloodSplat(size: number, seed: number, pool = false): Img {
       const k = Math.min(3, Math.floor(f * 4));
       const col = cols[3 - k]!;
       img.set(u, v, [col[0], col[1], col[2], pool ? 235 : 245]);
+    }
+  return img;
+}
+
+/** Soot mark left by an explosion or a fire: dark centre, ragged blast rays, a few ash specks. */
+export function scorchMark(size: number, seed: number): Img {
+  const img = new Img(size, size);
+  const c = size / 2;
+  const rays = 13;
+  for (let v = 0; v < size; v++)
+    for (let u = 0; u < size; u++) {
+      const dx = u + 0.5 - c;
+      const dy = v + 0.5 - c;
+      const a = Math.atan2(dy, dx);
+      // blast rays: smooth noise around the circle decides how far the soot reaches
+      const t = (a / (2 * Math.PI) + 1) * rays;
+      const i0 = Math.floor(t);
+      const f = t - i0;
+      const n0 = noise2(i0 % rays, 3, seed);
+      const n1 = noise2((i0 + 1) % rays, 3, seed);
+      const ray = n0 + (n1 - n0) * f * f * (3 - 2 * f);
+      const reach = 0.5 + ray * 0.5;
+      const d = Math.sqrt(dx * dx + dy * dy) / c / reach + (vnoise(u / 3, v / 3, seed + 9) - 0.5) * 0.35;
+      if (d >= 1) continue;
+      const speck = noise2(u, v, seed + 21);
+      const col: RGBA = speck > 0.94 && d > 0.25 ? [74, 66, 58, 255] : d < 0.45 ? [10, 8, 7, 255] : speck > 0.5 ? [30, 24, 19, 255] : [18, 14, 11, 255];
+      // stepped alpha keeps the pixel-art look
+      const k = Math.min(1, (1 - d) * 1.6);
+      img.set(u, v, [col[0], col[1], col[2], Math.round(235 * Math.ceil(k * 4) / 4)]);
+    }
+  return img;
+}
+
+/** A tongue of flame pointing up: white-yellow core, orange body, red rim (pixel art, 4 tones). */
+export function flameSprite(w: number, h: number, seed: number): Img {
+  const img = new Img(w, h);
+  const cx = w / 2;
+  const cy = h * 0.66;
+  const tones: RGBA[] = [hex('#fff4c4'), hex('#ffd050'), hex('#ff8a24'), hex('#d0401a')];
+  for (let v = 0; v < h; v++)
+    for (let u = 0; u < w; u++) {
+      const ny = (v + 0.5 - cy) / (h * 0.34);
+      // the flame sways and narrows to a tip above its centre
+      const sway = ny < 0 ? Math.sin(-ny * 2.6 + seed) * 0.22 * -ny : 0;
+      const nx = (u + 0.5 - cx) / (w / 2) - sway;
+      const taper = ny < 0 ? 1 + -ny * 1.3 : 1;
+      const d = Math.sqrt((nx * taper) ** 2 + (ny < 0 ? (ny * 0.6) ** 2 : ny ** 2)) + (noise2(u, v, seed) - 0.5) * 0.12;
+      if (d >= 1) continue;
+      const tone = d < 0.32 ? 0 : d < 0.58 ? 1 : d < 0.82 ? 2 : 3;
+      const c = tones[tone]!;
+      img.set(u, v, [c[0], c[1], c[2], tone === 3 ? 200 : 255]);
     }
   return img;
 }

@@ -23,7 +23,7 @@ interface Actor {
 }
 
 /** Gear of the four backdrop actors (a sampler of the arsenal). */
-const GEAR: WeaponId[] = ['avtomat', 'uzi', 'obrez', 'pkm'];
+const GEAR: WeaponId[] = ['avtomat', 'uzi', 'obrez', 'm249'];
 
 export class PreviewScene extends Phaser.Scene {
   private actors: Actor[] = [];
@@ -81,6 +81,8 @@ export class PreviewScene extends Phaser.Scene {
         deaths: 0,
         score: 0,
         level: null,
+        laser: false,
+        flashedMs: 0,
       };
       const view = new CharacterView(this, p);
       view.onSmoke = (x, y) => this.fx.cigaretteSmoke(x, y);

@@ -14,7 +14,7 @@ import { propPrims, PROP_VARIANTS } from './props.js';
 import { buildWeapons } from './build-weapons.js';
 import { floorTexture, wallTexture, treeCanopy, bush, pipeTexture, roofDetail } from './textures.js';
 import type { FloorKey, WallKey } from './textures.js';
-import { glow, softCircle, muzzleFlash, bloodSplat, tracer, ring, ICONS } from './fx.js';
+import { glow, softCircle, muzzleFlash, bloodSplat, scorchMark, flameSprite, tracer, ring, ICONS } from './fx.js';
 import { Img, hex } from './lib/raster.js';
 import { PROP_DEFS } from '../../packages/shared/src/maps/props.js';
 
@@ -56,6 +56,8 @@ function buildFx() {
   frames.push({ name: 'flash_obrez_1', img: muzzleFlash(54, 44, 6, 1.0, 6) });
   for (let i = 0; i < 6; i++) frames.push({ name: `blood_${i}`, img: bloodSplat(48, 100 + i * 13) });
   for (let i = 0; i < 3; i++) frames.push({ name: `pool_${i}`, img: bloodSplat(72, 300 + i * 17, true) });
+  for (let i = 0; i < 2; i++) frames.push({ name: `scorch_${i}`, img: scorchMark(64, 500 + i * 31), noTrim: true });
+  for (let i = 0; i < 3; i++) frames.push({ name: `flame_${i}`, img: flameSprite(12, 20, 1 + i * 2.1), noTrim: true });
   frames.push({ name: 'tracer', img: tracer(), noTrim: true });
   frames.push({ name: 'ring', img: ring(56, 3) });
   frames.push({ name: 'shell', img: (() => { const i = new Img(6, 4); i.fillRect(1, 1, 4, 2, hex('#d0a040')); i.set(4, 1, hex('#fff0b0')); return i; })(), noTrim: true });

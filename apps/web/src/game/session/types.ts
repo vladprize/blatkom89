@@ -1,4 +1,4 @@
-import type { CharacterId, MapId, MatchPhase, PelletResult, PersonalResult, Standing, WeaponId } from '@blatkom/shared';
+import type { ArmsId, CharacterId, GadgetId, MapId, MatchPhase, PelletResult, PersonalResult, Standing, WeaponId } from '@blatkom/shared';
 
 export interface RenderPlayer {
   slot: number;
@@ -25,6 +25,26 @@ export interface RenderPlayer {
   score: number;
   /** Profile level when known (online roster, local profile, practice bots). */
   level: number | null;
+  /** The weapon in hand has a laser sight: everyone sees the beam. */
+  laser: boolean;
+  /** Blinded by a flashbang for this many more ms. */
+  flashedMs: number;
+}
+
+/** Equipment in the world (thrown grenades, fire, smoke, mines, C4, turrets). */
+export interface RenderGadget {
+  id: number;
+  kind: GadgetId;
+  /** Owner's slot. */
+  owner: number;
+  phase: 'moving' | 'armed' | 'active';
+  triggered: boolean;
+  x: number;
+  y: number;
+  aim: number;
+  hp: number;
+  /** Time left in the current phase (ms). */
+  leftMs: number;
 }
 
 export interface RenderPickup {
@@ -41,10 +61,10 @@ export interface RenderPickup {
 }
 
 export type SessionEvent =
-  | { t: 'shot'; shooter: number; weapon: WeaponId; ox: number; oy: number; aim: number; pellets: PelletResult[]; predicted: boolean }
+  | { t: 'shot'; shooter: number; weapon: ArmsId; ox: number; oy: number; aim: number; pellets: PelletResult[]; predicted: boolean; turret?: boolean; silenced?: boolean }
   | { t: 'melee'; shooter: number; angle: number; hit: number; predicted: boolean }
-  | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: WeaponId }
-  | { t: 'kill'; killer: number; victim: number; weapon: WeaponId; assists: number[] }
+  | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: ArmsId }
+  | { t: 'kill'; killer: number; victim: number; weapon: ArmsId; assists: number[] }
   | { t: 'respawn'; slot: number; x: number; y: number }
   | { t: 'pickup'; slot: number; weapon: WeaponId; ammoOnly: boolean }
   | { t: 'drop'; slot: number; weapon: WeaponId }
@@ -52,7 +72,13 @@ export type SessionEvent =
   | { t: 'heal'; slot: number; amount: number; x: number; y: number }
   /** A rocket / grenade launched; `age` = ms it has already flown when the client learns about it. */
   | { t: 'rocket'; id: number; shooter: number; weapon: WeaponId; x: number; y: number; angle: number; speed: number; range: number; age?: number }
-  | { t: 'boom'; id: number; shooter: number; weapon: WeaponId; x: number; y: number; radius: number }
+  | { t: 'boom'; id: number; shooter: number; weapon: ArmsId; x: number; y: number; radius: number }
+  | { t: 'gadget'; id: number; kind: GadgetId; slot: number; x: number; y: number }
+  | { t: 'flashbang'; x: number; y: number }
+  | { t: 'ignite'; id: number; x: number; y: number; radius: number }
+  | { t: 'smoke'; id: number; x: number; y: number; radius: number }
+  | { t: 'beep'; id: number; x: number; y: number }
+  | { t: 'turretDown'; id: number; x: number; y: number }
   | { t: 'reload'; slot: number; weapon: WeaponId }
   | { t: 'dry'; slot: number }
   | { t: 'phase'; phase: MatchPhase }
@@ -80,6 +106,12 @@ export interface HudState {
   connection: 'offline' | 'online' | 'reconnecting' | 'lost';
   pickupPrompt: WeaponId | null;
   killedBy: string | null;
+  /** Equipment (slot 4): type, charges left, and whether a placed C4 is waiting for the detonator. */
+  gadget: GadgetId | null;
+  gadgetCharges: number;
+  c4Armed: boolean;
+  /** Blinded by a flashbang for this many more ms (white screen). */
+  flashedMs: number;
 }
 
 export interface ResultsData {
@@ -101,6 +133,7 @@ export interface GameSession {
   frame(nowMs: number): void;
   players(): RenderPlayer[];
   pickups(): RenderPickup[];
+  gadgets(): RenderGadget[];
   drainEvents(): SessionEvent[];
   hud(): HudState;
   standings(): Standing[];

@@ -1,18 +1,19 @@
 /** Offline practice: the shared World + bots running locally (no server). */
 import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS, DEFAULT_LOADOUT, weaponAmmo } from '@blatkom/shared';
-import type { CharacterId, InputFrame, MapId, Standing, BotDifficulty, PlayerState, Loadout, WeaponId } from '@blatkom/shared';
-import type { GameSession, HudState, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
-import { toRenderPlayer, worldEventToSession, reloadProgress } from './convert.js';
+import type { CharacterId, GadgetId, InputFrame, MapId, Standing, BotDifficulty, PlayerState, Loadout, WeaponId } from '@blatkom/shared';
+import type { GameSession, HudState, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
+import { toRenderGadget, toRenderPlayer, worldEventToSession, reloadProgress } from './convert.js';
 
 const BOT_NAMES = ['Борода', 'Гость_312', 'Кооператор', 'Петрович', 'Сантехник', 'Завхоз', 'Прапор', 'Колян'];
 
 /** Practice bots carry varied gear so the training ground shows what the arsenal holds. */
-const BOT_PRIMARIES: WeaponId[] = ['avtomat', 'obrez', 'ksyuha', 'uzi', 'toz', 'sayga', 'svd', 'pkm', 'val', 'tommy', 'mosinka'];
-const BOT_SIDEARMS: WeaponId[] = ['pistol', 'pistol', 'nagan', 'pb', 'stechkin'];
-const BOT_MELEE: WeaponId[] = ['montirovka', 'montirovka', 'bita', 'finka', 'lopata'];
+const BOT_PRIMARIES: WeaponId[] = ['avtomat', 'obrez', 'ksyuha', 'uzi', 'ppsh', 'mp5', 's12', 'm4', 'g36', 'svd', 'm24', 'm249', 'tommy'];
+const BOT_SIDEARMS: WeaponId[] = ['pistol', 'pistol', 'tt', 'p92', 'deagle'];
+const BOT_MELEE: WeaponId[] = ['montirovka', 'montirovka', 'bita', 'nozh', 'topor'];
+const BOT_GADGETS: GadgetId[] = ['f1', 'f1', 'f1', 'molotov', 'flash', 'smoke', 'mine', 'turret'];
 export function botLoadout(seed: number): Loadout {
   const pick = <T,>(list: readonly T[], k: number) => list[Math.abs(Math.floor(seed * 7919 + k * 104729)) % list.length]!;
-  return { sidearm: pick(BOT_SIDEARMS, 1), melee: pick(BOT_MELEE, 2), primary: pick(BOT_PRIMARIES, 3), mods: {} };
+  return { sidearm: pick(BOT_SIDEARMS, 1), melee: pick(BOT_MELEE, 2), primary: pick(BOT_PRIMARIES, 3), gadget: pick(BOT_GADGETS, 4), mods: {} };
 }
 
 export interface OfflineOptions {
@@ -25,7 +26,7 @@ export interface OfflineOptions {
   difficulty: BotDifficulty;
   durationMs?: number;
   scoreLimit?: number;
-  /** The local player's loadout (owned weapons and upgrades); the free default otherwise. */
+  /** The local player's loadout (owned weapons, modifications, equipment); the free default otherwise. */
   loadout?: Loadout;
 }
 
@@ -121,6 +122,10 @@ export class OfflineSession implements GameSession {
     return this.world.pickups.map((p) => ({ id: p.id, weapon: p.weapon, medkit: p.kind === 'medkit', x: p.x, y: p.y, active: p.active, dropped: p.dropped, supply: p.supply }));
   }
 
+  gadgets(): RenderGadget[] {
+    return this.world.gadgets.map((g) => toRenderGadget(g, this.world.time));
+  }
+
   drainEvents(): SessionEvent[] {
     const e = this.events;
     this.events = [];
@@ -157,6 +162,10 @@ export class OfflineSession implements GameSession {
       connection: 'offline',
       pickupPrompt: prompt,
       killedBy: this.killedBy,
+      gadget: me.gadget,
+      gadgetCharges: me.gadgetCharges,
+      c4Armed: w.gadgets.some((g) => g.kind === 'c4' && g.ownerId === me.id && w.time >= g.fuseAt),
+      flashedMs: Math.max(0, me.flashedUntil - w.time),
     };
   }
 

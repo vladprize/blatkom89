@@ -59,7 +59,7 @@ export const THROW_FRICTION = 700;
 export const THROW_BOUNCE = 0.45;
 /** Burning: one damage tick every this many ms. */
 export const FIRE_TICK_MS = 250;
-/** Mines trigger when an opponent comes this close; C4 and mines are visible to others only this close. */
+/** Mines trigger when an opponent comes this close (plus the player radius). Opponents see placed charges dimmed. */
 export const MINE_TRIGGER = 26;
 
 // ── «Arms»: weapons and gadgets share one id space on the wire (kill feed, damage, explosions) ──

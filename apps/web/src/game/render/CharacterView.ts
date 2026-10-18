@@ -11,6 +11,17 @@ import { D } from './depth.js';
 import { GRIPS } from './rig.gen.js';
 
 const SCALE = 0.5;
+/** Tip of the cigarette / cigar / pipe in body space (forward, side; world px), from the rigs. */
+const SMOKERS: Partial<Record<CharacterId, { f: number; s: number }>> = {
+  valuta: { f: 9.5, s: 4.5 },
+  mihalych: { f: 10.5, s: -4.6 },
+  akula: { f: 10.4, s: 4.9 },
+  varan: { f: 10.3, s: 4.6 },
+  leopard: { f: 8.2, s: -3.8 },
+  slon: { f: 9.5, s: -4.7 },
+  lobster: { f: 9.1, s: 4.0 },
+  popugay: { f: 8.9, s: 4.5 },
+};
 const LOCAL_TAG = '#f2e6c8';
 const ENEMY_TAG = '#ffffff';
 
@@ -113,7 +124,8 @@ export class CharacterView {
     this.playIdle();
   }
 
-  update(p: RenderPlayer, now: number, dtMs: number): void {
+  /** `concealed`: an opponent inside a smoke cloud — no name tag or health bar gives them away. */
+  update(p: RenderPlayer, now: number, dtMs: number, concealed = false): void {
     if (p.character !== this.character) this.setCharacter(p.character);
     const visible = p.alive;
     if (visible !== this.alive) {
@@ -212,10 +224,14 @@ export class CharacterView {
       this.levelTag.setPosition(bx - 2 - lw / 2, by + 1).setVisible(true);
     } else this.levelTag.setVisible(false);
 
-    // cigarette smoke for the smokers
-    if ((this.character === 'valuta' || this.character === 'mihalych') && now > this.smokeAt) {
+    this.label.setVisible(!concealed);
+    this.bar.setVisible(!concealed);
+    if (concealed) this.levelTag.setVisible(false);
+
+    // cigarette, cigar and pipe smoke for the smokers
+    const off = SMOKERS[this.character];
+    if (off && now > this.smokeAt && !concealed) {
       this.smokeAt = now + 380 + Math.random() * 300;
-      const off = this.character === 'valuta' ? { f: 9.5, s: 4.5 } : { f: 10.5, s: -4.6 };
       const c = Math.cos(p.aim);
       const s = Math.sin(p.aim);
       this.onSmoke?.(p.x + c * off.f - s * off.s, p.y + s * off.f + c * off.s);

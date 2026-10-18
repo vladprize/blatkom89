@@ -150,6 +150,8 @@ export interface NetShot {
   /** A weapon, or 'turret' for a turret's shot (then ox/oy is the turret). */
   weapon: ArmsId;
   turret: boolean;
+  /** Suppressed (by design or by a silencer modification): no flash, quiet sound, no radar blip. */
+  silenced: boolean;
   shotId: number;
   ox: number;
   oy: number;
@@ -271,7 +273,7 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
     v.setUint16(o + 4, u16(s.ox * POS_SCALE), true);
     v.setUint16(o + 6, u16(s.oy * POS_SCALE), true);
     v.setUint8(o + 8, s.pellets.length);
-    v.setUint8(o + 9, s.turret ? 1 : 0);
+    v.setUint8(o + 9, (s.turret ? 1 : 0) | (s.silenced ? 2 : 0));
     o += 10;
     for (const pl of s.pellets) {
       v.setUint16(o, quantizeAngle(pl.angle), true);
@@ -421,6 +423,7 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
       shooter: v.getUint8(o),
       weapon: armsFrom(v.getUint8(o + 1)),
       turret: (v.getUint8(o + 9) & 1) !== 0,
+      silenced: (v.getUint8(o + 9) & 2) !== 0,
       shotId: v.getUint16(o + 2, true),
       ox: v.getUint16(o + 4, true) / POS_SCALE,
       oy: v.getUint16(o + 6, true) / POS_SCALE,

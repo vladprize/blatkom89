@@ -100,6 +100,24 @@ await Promise.all(
 );
 step('host started the match; both clients reached phase "active"');
 
+// ── equipment over the network: A throws the default F-1 (G key); B sees it fly and explode ──
+{
+  const before = await A.page.evaluate(() => window.__blatkom.game.scene.getScene('game').session.hud().gadgetCharges);
+  const slotA = await A.page.evaluate(() => window.__blatkom.game.scene.getScene('game').session.localSlot());
+  await A.page.keyboard.press('g');
+  const seen = await B.page
+    .waitForFunction((slot) => window.__blatkom.game.scene.getScene('game').session.gadgets().some((g) => g.kind === 'f1' && g.owner === slot), slotA, { timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  const gone = await B.page
+    .waitForFunction(() => window.__blatkom.game.scene.getScene('game').session.gadgets().length === 0, null, { timeout: 6000 })
+    .then(() => true)
+    .catch(() => false);
+  const after = await A.page.evaluate(() => window.__blatkom.game.scene.getScene('game').session.hud().gadgetCharges);
+  report.equipment = { chargesBefore: before, chargesAfter: after, seenOnB: seen, explodedOnB: gone };
+  step(`equipment: A threw an F-1 (charges ${before} → ${after}); B saw it ${seen}, explosion ${gone}`);
+}
+
 // ── play ──────────────────────────────────────────────────────────────────
 const state = (p) =>
   p.page.evaluate(() => {
@@ -239,5 +257,8 @@ const ok =
   report.nickInLobbyA &&
   report.nickInResults &&
   report.assistsColumn &&
+  report.equipment?.seenOnB === true &&
+  report.equipment?.explodedOnB === true &&
+  report.equipment?.chargesAfter === report.equipment?.chargesBefore - 1 &&
   deviations.length > 0;
 process.exit(ok ? 0 : 1);

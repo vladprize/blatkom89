@@ -18,7 +18,7 @@ import {
   weaponFor,
 } from '@blatkom/shared';
 import type { CollisionWorld, GameEvent, InputFrame, MapId, MatchConfig, PlayerState, RosterEntry, Snapshot, NetPlayer, Standing, PersonalResult, PelletResult, MatchPhase } from '@blatkom/shared';
-import type { GameSession, HudState, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
+import type { GameSession, HudState, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
 import type { GameConnection } from '../../net/GameConnection.js';
 
 const INTERP_DELAY = 100;
@@ -49,6 +49,10 @@ export class OnlineSession implements GameSession {
   private personal: PersonalResult | null = null;
   private killedBy: string | null = null;
   private interpolated = new Map<number, RenderPlayer>();
+  private interpGadgets: RenderGadget[] = [];
+  /** Local player's flashbang blindness: remaining ms as of `flashedAt` (performance.now). */
+  private flashedMs = 0;
+  private flashedAt = 0;
   private readonly silent = { shot: () => {}, melee: () => {}, event: () => {} };
   status: HudState['connection'] = 'online';
 
@@ -87,10 +91,15 @@ export class OnlineSession implements GameSession {
     const best = Math.max(...this.offsets.map((o) => o.off));
     this.offset = this.offset === 0 ? best : this.offset + (best - this.offset) * 0.1;
     const np = s.players.find((p) => p.slot === this.slot);
-    if (np) this.reconcile(np);
+    if (np) {
+      this.reconcile(np);
+      this.flashedMs = np.flashedRemaining;
+      this.flashedAt = arrived;
+    }
     for (const shot of s.shots) {
-      const own = shot.shooter === this.slot;
-      const e: SessionEvent = { t: 'shot', shooter: shot.shooter, weapon: shot.weapon, ox: shot.ox, oy: shot.oy, aim: shot.pellets[0]?.angle ?? 0, pellets: shot.pellets, predicted: false };
+      // turret shots live on the interpolated timeline like the turret itself
+      const own = shot.shooter === this.slot && !shot.turret;
+      const e: SessionEvent = { t: 'shot', shooter: shot.shooter, weapon: shot.weapon, ox: shot.ox, oy: shot.oy, aim: shot.pellets[0]?.angle ?? 0, pellets: shot.pellets, predicted: false, turret: shot.turret, silenced: shot.silenced };
       if (own) this.events.push(e);
       else this.delayed.push({ at: s.serverTime, e });
     }
@@ -108,6 +117,7 @@ export class OnlineSession implements GameSession {
         (e.t === 'kill' && (e.victim === this.slot || e.killer === this.slot)) ||
         ((e.t === 'respawn' || e.t === 'pickup' || e.t === 'drop' || e.t === 'heal') && e.slot === this.slot) ||
         ((e.t === 'rocket' || e.t === 'boom') && e.shooter === this.slot) ||
+        (e.t === 'gadget' && e.slot === this.slot) ||
         e.t === 'phase' ||
         e.t === 'supply' ||
         e.t === 'matchEnd' ||
@@ -166,6 +176,8 @@ export class OnlineSession implements GameSession {
     me.heavy = np.heavy;
     me.heavyMag = np.heavyMag;
     me.heavyReserve = np.heavyReserve;
+    me.gadget = np.gadget;
+    me.gadgetCharges = np.gadgetCharges;
     me.kills = np.kills;
     me.assists = np.assists;
     me.deaths = np.deaths;
@@ -311,8 +323,31 @@ export class OnlineSession implements GameSession {
         deaths: pb.deaths,
         score: pb.score,
         level: r?.level ?? null,
+        laser: src.laser,
+        flashedMs: src.flashedRemaining,
       });
     }
+    // equipment: thrown grenades glide between snapshots, the rest stands still
+    this.interpGadgets = b.gadgets.map((gb) => {
+      const ga = a.gadgets.find((g) => g.id === gb.id && g.kind === gb.kind) ?? gb;
+      const age = Math.max(0, T - b.serverTime);
+      return {
+        id: gb.id,
+        kind: gb.kind,
+        owner: gb.owner,
+        phase: gb.phase,
+        triggered: gb.triggered,
+        x: ga.x + (gb.x - ga.x) * t,
+        y: ga.y + (gb.y - ga.y) * t,
+        aim: lerpAngle(ga.aim, gb.aim, t),
+        hp: gb.hp,
+        leftMs: Math.max(0, gb.leftMs - age),
+      };
+    });
+  }
+
+  gadgets(): RenderGadget[] {
+    return this.interpGadgets;
   }
 
   players(): RenderPlayer[] {
@@ -344,9 +379,15 @@ export class OnlineSession implements GameSession {
         deaths: me.deaths,
         score: me.score,
         level: r?.level ?? null,
+        laser: me.mods[me.weapon]?.includes('laser') ?? false,
+        flashedMs: this.localFlashMs(),
       });
     }
     return out;
+  }
+
+  private localFlashMs(): number {
+    return Math.max(0, this.flashedMs - (performance.now() - this.flashedAt));
   }
 
   pickups(): RenderPickup[] {
@@ -399,6 +440,10 @@ export class OnlineSession implements GameSession {
       connection: this.status,
       pickupPrompt: prompt,
       killedBy: this.killedBy,
+      gadget: me?.gadget ?? null,
+      gadgetCharges: me?.gadgetCharges ?? 0,
+      c4Armed: !!s?.gadgets.some((g) => g.kind === 'c4' && g.owner === this.slot),
+      flashedMs: this.localFlashMs(),
     };
   }
 

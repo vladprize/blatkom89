@@ -4,10 +4,10 @@
  */
 import type { WeaponSound } from '@blatkom/shared';
 
-type SfxName = WeaponSound | 'hit' | 'ricochet' | 'reload' | 'dry' | 'pickup' | 'death' | 'kill' | 'assist' | 'supply' | 'beep' | 'beepHigh' | 'click' | 'step' | 'end' | 'hurt' | 'respawn' | 'boom' | 'heal' | 'buy';
+type SfxName = WeaponSound | 'hit' | 'ricochet' | 'reload' | 'dry' | 'pickup' | 'death' | 'kill' | 'assist' | 'supply' | 'beep' | 'beepHigh' | 'click' | 'step' | 'end' | 'hurt' | 'respawn' | 'boom' | 'heal' | 'buy' | 'throw' | 'place' | 'deploy' | 'flashbang' | 'tinnitus' | 'ignite' | 'hiss' | 'mineBeep' | 'turret' | 'crash';
 
 /** Rapid-fire sounds are rate-limited per listener so automatic fire does not turn into noise. */
-const MIN_GAP: Partial<Record<SfxName, number>> = { avtomat: 30, smg: 28, lmg: 34, nail: 40, flame: 90, step: 60 };
+const MIN_GAP: Partial<Record<SfxName, number>> = { avtomat: 30, smg: 28, lmg: 34, nail: 40, flame: 90, step: 60, turret: 40 };
 
 class SfxEngine {
   private ctx: AudioContext | null = null;
@@ -171,6 +171,25 @@ class SfxEngine {
     }
     this.buffers.set('hurt', this.buf(0.2, (t) => Math.sin(2 * Math.PI * (300 - 600 * t) * t) * env(t, 0.003, 0.06) * 0.5));
     this.buffers.set('respawn', this.buf(0.4, (t) => Math.sin(2 * Math.PI * (330 + 400 * t) * t) * env(t, 0.02, 0.15) * 0.35));
+    // ── equipment ──
+    {
+      const f = lp(0.1);
+      // a quick whoosh of the throwing arm and a spoon «ting»
+      this.buffers.set('throw', this.buf(0.3, (t) => f(rnd() * 2) * Math.sin(Math.PI * Math.min(1, t / 0.22)) * 1.4 + click(t, 0.02, 3200) * 0.25));
+      this.buffers.set('place', this.buf(0.28, (t) => click(t, 0.0, 700) * 0.6 + click(t, 0.12, 1900) * 0.5 + click(t, 0.18, 2600) * 0.35));
+      this.buffers.set('deploy', this.buf(0.7, (t) => click(t, 0.0, 500) * 0.6 + click(t, 0.18, 800) * 0.5 + (t > 0.3 ? Math.sin(2 * Math.PI * (300 + 700 * (t - 0.3)) * t) * 0.18 * env(t - 0.3, 0.02, 0.15) : 0)));
+      const g = lp(0.5);
+      this.buffers.set('flashbang', this.buf(0.9, (t) => g(rnd() * 2) * 2.4 * env(t, 0.001, 0.06) + Math.sin(2 * Math.PI * 95 * t) * env(t, 0.002, 0.1) + rnd() * env(t, 0.0003, 0.01) * 2));
+      this.buffers.set('tinnitus', this.buf(2.6, (t) => Math.sin(2 * Math.PI * 4100 * t) * 0.08 * env(t, 0.05, 1.1) + Math.sin(2 * Math.PI * 4170 * t) * 0.05 * env(t, 0.05, 0.9)));
+      const h = lp(0.25);
+      // glass shatters, then the fire catches with a whoosh
+      this.buffers.set('ignite', this.buf(1.0, (t) => (t < 0.12 ? (rnd() > 0.2 ? rnd() * 1.6 : 0) * env(t, 0.0005, 0.04) + Math.sin(2 * Math.PI * (5200 - 9000 * t) * t) * 0.2 * env(t, 0.001, 0.03) : 0) + f(rnd() * 2) * 1.8 * Math.sin(Math.PI * Math.min(1, Math.max(0, t - 0.08) / 0.9)) * (0.7 + 0.3 * Math.sin(t * 40))));
+      this.buffers.set('hiss', this.buf(1.6, (t) => h(rnd() * 2) * 0.9 * env(t, 0.08, 0.7)));
+      this.buffers.set('mineBeep', tone(1760, 0.12, 'sin'));
+      this.buffers.set('turret', shot(0.16, 180, 0.6, 0.02, 0.9));
+      const k = lp(0.2);
+      this.buffers.set('crash', this.buf(0.6, (t) => k(rnd() * 2) * 1.8 * env(t, 0.002, 0.12) + click(t, 0.05, 600) * 0.6 + click(t, 0.15, 400) * 0.5));
+    }
     this.buffers.set('end', this.buf(1.2, (t) => {
       const notes = [523, 659, 784, 1046];
       const i = Math.min(3, Math.floor(t / 0.18));

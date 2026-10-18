@@ -11,6 +11,7 @@ import type { KillFeedEntry, PointsEntry, SupplyEntry } from './hudBus.js';
 import { touchState, isTouchDevice } from '../input/TouchState.js';
 import { getSettings, storageGet, storageSet } from '../../app/settings.js';
 import { analytics } from '../../analytics/client.js';
+import { sfx } from '../audio/Sfx.js';
 
 const TUTORIAL_KEY = 'blatkom89.tutorial.v1';
 
@@ -123,6 +124,13 @@ export class HudScene extends Phaser.Scene {
   private slotGfx!: Phaser.GameObjects.Graphics;
   private slotIcons: Phaser.GameObjects.Image[] = [];
   private slotNums: Phaser.GameObjects.Text[] = [];
+  /** Slot 4: equipment icon + charges (desktop panel). */
+  private gadgetIcon!: Phaser.GameObjects.Image;
+  private gadgetCount!: Phaser.GameObjects.Text;
+  private gadgetBtn: Btn | null = null;
+  private gadgetBtnCount: Phaser.GameObjects.Text | null = null;
+  private flashOverlay!: Phaser.GameObjects.Rectangle;
+  private wasFlashed = false;
   // centre
   private bigText!: Phaser.GameObjects.Text;
   private subText!: Phaser.GameObjects.Text;
@@ -164,6 +172,9 @@ export class HudScene extends Phaser.Scene {
     this.shownLevel = undefined;
     this.modeLimit = -1;
     this.sbSig = '';
+    this.wasFlashed = false;
+    this.gadgetBtn = null;
+    this.gadgetBtnCount = null;
   }
 
   create(): void {
@@ -179,6 +190,8 @@ export class HudScene extends Phaser.Scene {
     this.buildPause();
     if (this.touch) this.buildTouch();
     this.buildTutorial();
+    // flashbang: the screen goes white and fades back (under the touch controls, over everything else)
+    this.flashOverlay = this.add.rectangle(0, 0, 10, 10, 0xffffff, 1).setOrigin(0, 0).setDepth(35).setVisible(false);
     if (getSettings().showFps) this.fpsText = txt(this, 6, 0, '', 11, '#9a9080', '400').setDepth(100);
     this.layout();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
@@ -202,6 +215,7 @@ export class HudScene extends Phaser.Scene {
       touchState.moveX = touchState.moveY = 0;
       touchState.aimActive = false;
       touchState.fireHeld = false;
+      touchState.gadgetTap = false;
     });
   }
 
@@ -278,10 +292,12 @@ export class HudScene extends Phaser.Scene {
     this.ammoText = txt(this, 0, 0, '8/∞', this.touch ? 16 : 22, BEIGE, '600').setOrigin(0.5, 0);
     this.weaponName = txt(this, 0, 0, '', 10, '#b8a888', '500').setOrigin(0.5, 0);
     this.slotGfx = this.add.graphics();
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       this.slotIcons.push(this.add.image(0, 0, 'weapons', 'ico_pistol').setOrigin(0.5));
-      this.slotNums.push(txt(this, 0, 0, String(i + 1), 10, '#1a1410', '700').setStroke('#000', 0).setOrigin(0.5));
+      this.slotNums.push(txt(this, 0, 0, i === 3 ? 'G' : String(i + 1), 10, '#1a1410', '700').setStroke('#000', 0).setOrigin(0.5));
     }
+    this.gadgetIcon = this.slotIcons[3]!;
+    this.gadgetCount = txt(this, 0, 0, '', 11, BEIGE, '700').setOrigin(1, 0);
   }
 
   private buildCentre() {
@@ -298,8 +314,8 @@ export class HudScene extends Phaser.Scene {
     this.tutorialState = null;
     if (storageGet(TUTORIAL_KEY)) return;
     const lines = this.touch
-      ? ['Левый стик — движение', 'Правый стик — прицел и огонь', '⟳ — перезарядка · ⇄ — смена оружия', 'Оружие и аптечки подбираются на ходу']
-      : ['WASD — движение · Shift — шагом', 'Мышь — прицел · ЛКМ — огонь', 'R — перезарядка · 1/2/3, Q — оружие', 'E — взять оружие · Tab — счёт · Esc — пауза'];
+      ? ['Левый стик — движение', 'Правый стик — прицел и огонь', '⟳ — перезарядка · ⇄ — смена оружия', 'Кнопка с гранатой — снаряжение', 'Оружие и аптечки подбираются на ходу']
+      : ['WASD — движение · Shift — шагом', 'Мышь — прицел · ЛКМ — огонь', 'R — перезарядка · 1/2/3, Q — оружие', 'G — граната / снаряжение', 'E — взять оружие · Tab — счёт · Esc — пауза'];
     const title = txt(this, 0, 0, 'КАК ВЕСТИ ДЕЛА', 13, '#1a1410', '700').setStroke('#000', 0).setOrigin(0.5, 0);
     const body = txt(this, 0, 0, lines.join('\n'), this.touch ? 12 : 14, BEIGE, '500').setOrigin(0.5, 0).setAlign('center').setLineSpacing(4);
     const w = Math.max(title.width, body.width) + 32;
@@ -383,7 +399,12 @@ export class HudScene extends Phaser.Scene {
     const reload = btn('ico_reload', 32, () => (touchState.reloadTap = true));
     const swap = btn('ico_swap', 32, () => (touchState.swapTap = true));
     this.interactBtn = btn('ico_hand', 36, () => (touchState.interactTap = true));
-    this.buttons = [fire, reload, swap, this.interactBtn];
+    // equipment: the icon comes from the weapons atlas and follows the equipped gadget
+    const gadget = btn('ico_reload', 34, () => (touchState.gadgetTap = true));
+    gadget.icon.setTexture('weapons', 'ico_f1');
+    this.gadgetBtn = gadget;
+    this.gadgetBtnCount = txt(this, 0, 0, '', 12, BEIGE, '700').setOrigin(0.5).setDepth(42);
+    this.buttons = [fire, reload, swap, this.interactBtn, gadget];
     this.input.on('pointerdown', this.onPointerDown, this);
     this.input.on('pointermove', this.onPointerMove, this);
     this.input.on('pointerup', this.onPointerUp, this);
@@ -538,15 +559,19 @@ export class HudScene extends Phaser.Scene {
       // buttons
       const lh = getSettings().leftHanded;
       const bx = (x: number) => (lh ? W - x : x);
-      const [fire, reload, swap, interact] = this.buttons;
+      const [fire, reload, swap, interact, gadget] = this.buttons;
       if (fire) Object.assign(fire, { x: bx(W - 88), y: H - 236 });
       if (reload) Object.assign(reload, { x: bx(W - 236), y: H - 52 });
       if (swap) Object.assign(swap, { x: bx(W - 58), y: H - 330 });
       if (interact) Object.assign(interact, { x: bx(W - 196), y: H - 300 });
+      if (gadget) Object.assign(gadget, { x: bx(W - 268), y: H - 186 });
       for (const b of this.buttons) {
         b.ring.setPosition(b.x, b.y).setScale((b.r * 2) / 112);
-        b.icon.setPosition(b.x, b.y).setScale(b.r / 34);
+        b.icon.setPosition(b.x, b.y);
+        if (b !== gadget) b.icon.setScale(b.r / 34);
       }
+      if (gadget) this.gadgetBtnCount?.setPosition(gadget.x + gadget.r * 0.62, gadget.y + gadget.r * 0.62);
+      this.gadgetCount.setVisible(false);
       this.restSticks();
     } else {
       // desktop: bottom-left health, bottom-right weapon (like the reference HUD)
@@ -558,18 +583,20 @@ export class HudScene extends Phaser.Scene {
       this.nameText.setPosition(pad + 80, hy + 8);
       this.hpText.setPosition(pad + 80, hy + 30);
       const wy = H - pad - 74;
-      const wx = W - pad - 330;
+      const wx = W - pad - 380;
       this.weaponBg.clear();
       this.panel(this.weaponBg, wx, wy, 170, 74);
       this.weaponIcon.setPosition(wx + 85, wy + 24);
       this.ammoText.setPosition(wx + 85, wy + 40);
       this.weaponName.setPosition(wx + 85, wy + 4).setVisible(true);
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 4; i++) {
         const sx = wx + 182 + i * 50;
         this.slotIcons[i]!.setPosition(sx + 20, wy + 26).setVisible(true);
         this.slotNums[i]!.setPosition(sx + 20, wy + 62).setVisible(true);
       }
+      this.gadgetCount.setPosition(wx + 182 + 3 * 50 + 38, wy + 7).setVisible(true);
     }
+    this.flashOverlay.setSize(W, H);
     this.bigText.setPosition(cx, H * 0.36);
     this.subText.setPosition(cx, H * 0.36 + 48);
     this.promptText.setPosition(cx, H * 0.7);
@@ -781,6 +808,12 @@ export class HudScene extends Phaser.Scene {
     this.ammoText.setColor(def.kind !== 'melee' && hud.mag === 0 ? '#ff6a5a' : BEIGE);
     this.weaponName.setText(hud.reloading ? 'ПЕРЕЗАРЯДКА…' : def.name.toUpperCase());
     if (!this.touch) this.drawSlots(hud.weapon, [hud.sidearm, hud.melee, hud.heavy]);
+    this.updateGadget(hud, time);
+    // flashbang: full white, then fades over the last 0.7 s; the ears ring while it lasts
+    const fl = hud.flashedMs;
+    this.flashOverlay.setVisible(fl > 0).setAlpha(Math.min(1, fl / 700) * 0.97);
+    if (fl > 400 && !this.wasFlashed) sfx.play('tinnitus', { volume: Math.min(1, fl / 2000) });
+    this.wasFlashed = fl > 0;
     if (hud.reloading) {
       const x = this.ammoText.x - 40;
       const y = this.ammoText.y + (this.touch ? 22 : 28);
@@ -855,6 +888,45 @@ export class HudScene extends Phaser.Scene {
     this.lastShotAt.set(slot, now);
   }
 
+  /** Slot 4 (desktop) / the equipment button (touch): icon, charges left, «detonate» state of C4. */
+  private updateGadget(hud: ReturnType<GameSession['hud']>, time: number) {
+    const g = hud.gadget;
+    const n = hud.gadgetCharges;
+    const armed = hud.c4Armed;
+    const blink = Math.floor(time / 250) % 2 === 0;
+    if (!this.touch) {
+      const icon = this.gadgetIcon;
+      const x = icon.x - 20;
+      const y = icon.y - 20;
+      const gfx = this.slotGfx;
+      gfx.fillStyle(PANEL, 0.65).fillRect(x, y, 40, 40);
+      gfx.lineStyle(armed ? 2 : 1, armed ? (blink ? 0xff3a2a : 0x8a1a16) : 0x3a3128, 1).strokeRect(x + 0.5, y + 0.5, 39, 39);
+      gfx.fillStyle(0xd9c7a3, 1).fillRect(icon.x - 7, icon.y + 29, 14, 14);
+      if (g) {
+        fitIcon(icon, `ico_${g}`, 30, 26, 1).setAlpha(n > 0 || armed ? 1 : 0.3).setVisible(true);
+        this.gadgetCount.setText(armed ? '' : `×${n}`).setColor(n > 0 ? BEIGE : '#8a7a68');
+      } else {
+        icon.setVisible(false);
+        this.gadgetCount.setText('');
+      }
+      this.slotNums[3]!.setVisible(true);
+    } else if (this.gadgetBtn) {
+      const b = this.gadgetBtn;
+      const show = !!g && hud.alive;
+      b.visible = show;
+      b.ring.setVisible(show);
+      b.icon.setVisible(show);
+      this.gadgetBtnCount?.setVisible(show);
+      if (show) {
+        fitIcon(b.icon, `ico_${g}`, b.r * 1.25, b.r * 0.95, 2);
+        b.icon.setAlpha(n > 0 || armed ? 1 : 0.35);
+        if (armed) b.icon.setTint(blink ? 0xff5a4a : 0xffffff);
+        else b.icon.clearTint();
+        this.gadgetBtnCount?.setText(armed ? '!' : String(n));
+      }
+    }
+  }
+
   private drawSlots(weapon: WeaponId, items: Array<WeaponId | null>) {
     const g = this.slotGfx;
     g.clear();
@@ -892,7 +964,11 @@ export class HudScene extends Phaser.Scene {
     this.bigText.setText(big).setFontSize(big.length > 3 ? (this.touch ? 34 : 44) : 72);
     this.bigText.setColor(big === 'ВАС УСТРАНИЛИ' || big === 'СВЯЗЬ ПОТЕРЯНА' ? '#ff5a4a' : BEIGE);
     this.subText.setText(sub);
-    this.promptText.setText(hud.pickupPrompt && hud.alive ? (this.touch ? `Взять: ${WEAPONS[hud.pickupPrompt].name}` : `[E] — взять ${WEAPONS[hud.pickupPrompt].name.toLowerCase()}`) : '');
+    let prompt = '';
+    if (hud.alive && hud.pickupPrompt) prompt = this.touch ? `Взять: ${WEAPONS[hud.pickupPrompt].name}` : `[E] — взять ${WEAPONS[hud.pickupPrompt].name.toLowerCase()}`;
+    // a placed C4 waits for the second press
+    else if (hud.alive && hud.c4Armed) prompt = this.touch ? 'Кнопка снаряжения — взорвать C4' : '[G] — взорвать C4';
+    this.promptText.setText(prompt);
   }
 
   /** Tab table: rebuilt only when its content or the screen width changes. */

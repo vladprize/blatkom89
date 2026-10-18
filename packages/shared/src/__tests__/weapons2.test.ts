@@ -8,6 +8,7 @@ import { DEFAULT_LOADOUT, sanitizeLoadout } from '../game-rules/loadout.js';
 import type { Loadout } from '../game-rules/loadout.js';
 import { encodeSnapshot, decodeSnapshot } from '../net/codec.js';
 import { weaponFor } from '../sim/world.js';
+import type { WorldEvent } from '../sim/world.js';
 import type { ModId } from '../game-rules/weapons.js';
 
 const withPrimary = (primary: WeaponId | null, extra: Partial<Loadout> = {}): Loadout => ({ ...PISTOL_ONLY, primary, ...extra });
@@ -140,11 +141,19 @@ test('modifications: the world applies a player\'s magazine and silencer', () =>
   assert.equal(p1.heavyMag, 45, 'extended magazine at spawn');
   assert.ok(weaponFor(p1, 'avtomat').silenced);
   let shots = 0;
+  const fired: WorldEvent[] = [];
   for (let i = 0; i < 60; i++) {
     w.applyInput('a', input({ buttons: BTN.FIRE, aimRad: 0 }));
-    shots += w.drainEvents().filter((e) => e.t === 'shot').length;
+    const ev = w.drainEvents().filter((e) => e.t === 'shot');
+    shots += ev.length;
+    fired.push(...ev);
   }
   assert.equal(shots, 10, '1 s of fire at the unchanged 100 ms interval');
+  // every viewer learns that the shot was suppressed: the flag survives the snapshot
+  assert.ok(fired.every((e) => e.t === 'shot' && e.silenced === true));
+  const snap = decodeSnapshot(encodeSnapshot({ tick: w.tick, time: w.time, phase: w.phase, phaseRemaining: 0, players: w.players.values(), pickups: w.pickups, gadgets: w.gadgets, events: fired, now: w.time }));
+  assert.equal(snap.shots.length, fired.length);
+  assert.ok(snap.shots.every((sh) => sh.silenced && !sh.turret && sh.weapon === 'avtomat'));
 });
 
 test('loadout: spawn with the primary in hand (full magazine + one spare), slots 1–3 switch', () => {

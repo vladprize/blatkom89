@@ -3,13 +3,14 @@
  * runs the camera and lighting, and turns session events into feedback (visual, audio, haptics).
  */
 import * as Phaser from 'phaser';
-import { TICK_MS, getMap, WEAPONS, SCORING } from '@blatkom/shared';
-import type { MapDef } from '@blatkom/shared';
+import { TICK_MS, getMap, getCollision, WEAPONS, SCORING, isWeaponId } from '@blatkom/shared';
+import type { CollisionWorld, MapDef } from '@blatkom/shared';
 import type { GameSession, RenderPlayer, SessionEvent, RenderPickup } from '../session/types.js';
 import { MapRenderer } from '../render/MapRenderer.js';
 import { Lighting } from '../render/Lighting.js';
 import { Effects, muzzlePoint } from '../render/Effects.js';
 import { CharacterView, spawnCorpse } from '../render/CharacterView.js';
+import { GadgetView } from '../render/GadgetView.js';
 import { VhsPipeline, vhsIntensity } from '../render/VhsPipeline.js';
 import { InputManager } from '../input/InputManager.js';
 import { D } from '../render/depth.js';
@@ -33,6 +34,10 @@ export class GameScene extends Phaser.Scene {
   private mapView!: MapRenderer;
   private lighting!: Lighting;
   private fx!: Effects;
+  private gadgetView!: GadgetView;
+  private collision!: CollisionWorld;
+  private lasers!: Phaser.GameObjects.Graphics;
+  private laserDots: Phaser.GameObjects.Image[] = [];
   private inputs!: InputManager;
   private readonly views = new Map<number, CharacterView>();
   private readonly pickupSprites = new Map<number, { img: Phaser.GameObjects.Image; ring: Phaser.GameObjects.Image; marker: Phaser.GameObjects.Image | null; crate: Phaser.GameObjects.Image | null; glow: Phaser.GameObjects.Image | null }>();
@@ -85,6 +90,9 @@ export class GameScene extends Phaser.Scene {
     this.mapView.build();
     this.lighting = new Lighting(this, this.map);
     this.fx = new Effects(this);
+    this.gadgetView = new GadgetView(this, this.fx, this.lighting);
+    this.collision = getCollision(this.session.mapId);
+    this.lasers = this.add.graphics().setDepth(D.FX_ADD - 0.5).setBlendMode(Phaser.BlendModes.ADD);
     this.inputs = new InputManager(this);
     this.inputs.onPause = () => hudBus.emit('pause');
     this.inputs.onScoreboard = (show) => hudBus.emit('scoreboard', show);
@@ -151,6 +159,7 @@ export class GameScene extends Phaser.Scene {
     hudBus.off('pause-state', this.onPauseState, this);
     this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this);
     this.lighting.destroy();
+    this.gadgetView.destroy();
     for (const v of this.views.values()) v.destroy();
     this.views.clear();
     this.scene.stop('hud');
@@ -177,6 +186,8 @@ export class GameScene extends Phaser.Scene {
     this.lastPlayers = players;
     const me = players.find((p) => p.isLocal) ?? null;
 
+    // equipment first: smoke clouds decide who is concealed
+    this.gadgetView.update(this.session.gadgets(), this.session.localSlot(), time, dt);
     // views
     const seen = new Set<number>();
     for (const p of players) {
@@ -191,8 +202,9 @@ export class GameScene extends Phaser.Scene {
         v.onSmoke = (x, y) => this.fx.cigaretteSmoke(x, y);
         this.views.set(p.slot, v);
       }
-      v.update(p, time, dt);
+      v.update(p, time, dt, !p.isLocal && this.gadgetView.concealed(p.x, p.y));
     }
+    this.drawLasers(players);
     for (const [slot, v] of this.views) {
       if (!seen.has(slot)) {
         v.destroy();
@@ -267,6 +279,30 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Laser sights: a thin red beam from the muzzle to the first wall, visible to everyone. */
+  private drawLasers(players: RenderPlayer[]) {
+    const g = this.lasers;
+    g.clear();
+    let n = 0;
+    for (const p of players) {
+      if (!p.alive || !p.laser || !isWeaponId(p.weapon)) continue;
+      const m = muzzlePoint(p.x, p.y, p.aim, p.weapon);
+      const dx = Math.cos(p.aim);
+      const dy = Math.sin(p.aim);
+      const hit = this.collision.raycast(m.x, m.y, dx, dy, 700, 'shot');
+      const len = hit ? hit.t : 700;
+      g.lineStyle(0.6, 0xff2a1a, 0.55).lineBetween(m.x, m.y, m.x + dx * len, m.y + dy * len);
+      let dot = this.laserDots[n];
+      if (!dot) {
+        dot = this.add.image(0, 0, 'fx', 'glow').setTint(0xff3a24).setBlendMode(Phaser.BlendModes.ADD).setDepth(D.FX_ADD).setScale(0.12);
+        this.laserDots.push(dot);
+      }
+      dot.setVisible(true).setPosition(m.x + dx * len, m.y + dy * len).setAlpha(0.7 + Math.random() * 0.3);
+      n++;
+    }
+    for (let i = n; i < this.laserDots.length; i++) this.laserDots[i]!.setVisible(false);
+  }
+
   private renderPickups(list: RenderPickup[], time: number) {
     const seen = new Set<number>();
     for (const pk of list) {
@@ -306,6 +342,21 @@ export class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     switch (e.t) {
       case 'shot': {
+        if (e.turret || !isWeaponId(e.weapon)) {
+          // a turret's burst: tracer from the turret, small flash, its own sound
+          const c = Math.cos(e.aim);
+          const sn = Math.sin(e.aim);
+          const mx = e.ox + c * 12;
+          const my = e.oy + sn * 12;
+          for (const pl of e.pellets) this.fx.tracer(mx, my, e.ox + Math.cos(pl.angle) * pl.dist, e.oy + Math.sin(pl.angle) * pl.dist, 'mp5');
+          this.fx.particle('glow', mx, my, { life: 50, scale: 0.3, tint: 0xffc060, alpha: 0.9, add: true });
+          this.lighting.flash(mx, my, 70, 0xffb050, 0.7, 50, time);
+          this.impacts(e);
+          sfx.play('turret', { x: e.ox, y: e.oy, volume: 0.8 });
+          hudBus.emit('radar', e.shooter);
+          break;
+        }
+        const weapon = e.weapon;
         const shooter = bySlot(e.shooter);
         const isLocal = shooter?.isLocal ?? false;
         if (isLocal && !e.predicted && this.session.mode === 'online') {
@@ -316,20 +367,22 @@ export class GameScene extends Phaser.Scene {
         const aim = shooter && shooter.alive ? shooter.aim : e.aim;
         const ox = shooter ? shooter.x : e.ox;
         const oy = shooter ? shooter.y : e.oy;
-        const def = WEAPONS[e.weapon];
-        this.views.get(e.shooter)?.onShot(e.weapon, time);
+        // the shot carries the base weapon; a silencer modification arrives as a flag
+        const def = WEAPONS[weapon];
+        const silenced = def.silenced || e.silenced === true;
+        this.views.get(e.shooter)?.onShot(weapon, time);
         // suppressed weapons do not give the shooter away on the minimap radar
-        if (!def.silenced) hudBus.emit('radar', e.shooter);
-        this.fx.muzzleFlash(ox, oy, aim, e.weapon);
-        const m = muzzlePoint(ox, oy, aim, e.weapon);
+        if (!silenced) hudBus.emit('radar', e.shooter);
+        if (!silenced) this.fx.muzzleFlash(ox, oy, aim, weapon);
+        const m = muzzlePoint(ox, oy, aim, weapon);
         for (const pl of e.pellets) {
           const ex = e.ox + Math.cos(pl.angle) * pl.dist;
           const ey = e.oy + Math.sin(pl.angle) * pl.dist;
-          this.fx.tracer(m.x, m.y, ex, ey, e.weapon);
+          this.fx.tracer(m.x, m.y, ex, ey, weapon);
         }
         if (!(isLocal && e.predicted && this.session.mode === 'online')) this.impacts(e);
-        if (!def.silenced) this.lighting.flash(m.x, m.y, def.flash === 'obrez' || def.sound === 'flame' ? 150 : 110, def.sound === 'flame' ? 0xff8a30 : 0xffb050, 0.9, def.sound === 'flame' ? 120 : 60, time);
-        sfx.play(def.sound, { x: ox, y: oy, volume: isLocal ? 0.9 : def.silenced ? 0.6 : 1 });
+        if (!silenced) this.lighting.flash(m.x, m.y, def.flash === 'obrez' || def.sound === 'flame' ? 150 : 110, def.sound === 'flame' ? 0xff8a30 : 0xffb050, 0.9, def.sound === 'flame' ? 120 : 60, time);
+        sfx.play(silenced && !def.silenced && def.sound !== 'shotgun' && def.sound !== 'obrez' ? 'silenced' : def.sound, { x: ox, y: oy, volume: isLocal ? 0.9 : silenced ? 0.6 : 1 });
         if (isLocal) this.fx.shake(cam, def.shake);
         break;
       }
@@ -343,6 +396,37 @@ export class GameScene extends Phaser.Scene {
         }
         break;
       }
+      case 'gadget': {
+        const p = bySlot(e.slot);
+        const kind = e.kind;
+        sfx.play(kind === 'mine' || kind === 'c4' ? 'place' : kind === 'turret' ? 'deploy' : 'throw', { x: e.x, y: e.y, volume: p?.isLocal ? 1 : 0.7 });
+        if (p?.isLocal) haptic('impact-light');
+        break;
+      }
+      case 'flashbang': {
+        this.fx.flashBurst(e.x, e.y);
+        this.lighting.flash(e.x, e.y, 520, 0xffffff, 1.4, 260, time);
+        sfx.play('flashbang', { x: e.x, y: e.y });
+        if (local && local.alive && Math.hypot(local.x - e.x, local.y - e.y) < 300) {
+          this.fx.shake(cam, 0.5);
+          haptic('impact-heavy');
+        }
+        break;
+      }
+      case 'ignite':
+        sfx.play('ignite', { x: e.x, y: e.y });
+        this.lighting.flash(e.x, e.y, e.radius * 3, 0xff8a24, 1.1, 300, time);
+        break;
+      case 'smoke':
+        sfx.play('hiss', { x: e.x, y: e.y });
+        break;
+      case 'beep':
+        sfx.play('mineBeep', { x: e.x, y: e.y });
+        break;
+      case 'turretDown':
+        this.fx.debris(e.x, e.y);
+        sfx.play('crash', { x: e.x, y: e.y });
+        break;
       case 'rocket': {
         const shooter = bySlot(e.shooter);
         this.fx.launch(e.id, e.weapon, e.x, e.y, e.angle, e.speed, e.range, e.age ?? 0);
@@ -471,6 +555,7 @@ export class GameScene extends Phaser.Scene {
     }
     void local;
   }
+
 
   private impacts(e: Extract<SessionEvent, { t: 'shot' }>) {
     for (const pl of e.pellets) {

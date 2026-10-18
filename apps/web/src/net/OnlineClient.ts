@@ -2,7 +2,7 @@
  * Online flow controller: authentication (Telegram initData or dev login), room creation/quick
  * match/invites over HTTP, the game WebSocket, lobby state and the OnlineSession lifecycle.
  */
-import type { CharacterId, InviteInfo, Inventory, MapId, MatchConfig, MatchPhase, PublicProfile, RosterEntry, ServerMessage, UpgradeStat, WeaponId } from '@blatkom/shared';
+import type { CharacterId, InviteInfo, Inventory, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, WeaponId } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { GameConnection } from './GameConnection.js';
 import { OnlineSession } from '../game/session/OnlineSession.js';
@@ -182,12 +182,12 @@ export class OnlineClient {
     return inv;
   }
 
-  async buy(kind: 'weapon' | 'character', id: string): Promise<Inventory> {
-    return this.applyInventory(await this.api.buy(kind, id), kind === 'weapon');
+  async buy(kind: ShopKind, id: string): Promise<Inventory> {
+    return this.applyInventory(await this.api.buy(kind, id), kind !== 'character');
   }
 
-  async upgrade(weapon: WeaponId, stat: UpgradeStat): Promise<Inventory> {
-    return this.applyInventory(await this.api.upgrade(weapon, stat), true);
+  async buyMod(weapon: WeaponId, mod: ModId): Promise<Inventory> {
+    return this.applyInventory(await this.api.buyMod(weapon, mod), true);
   }
 
   async openCase() {
@@ -196,8 +196,8 @@ export class OnlineClient {
     return r;
   }
 
-  async setLoadout(sidearm: WeaponId, melee: WeaponId, primary: WeaponId | null): Promise<Inventory> {
-    return this.applyInventory(await this.api.setLoadout(sidearm, melee, primary), true);
+  async setLoadout(l: Loadout): Promise<Inventory> {
+    return this.applyInventory(await this.api.setLoadout(l), true);
   }
 
   private setToken(token: string) {

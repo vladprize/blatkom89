@@ -10,6 +10,8 @@ export interface TouchState {
   reloadTap: boolean;
   swapTap: boolean;
   interactTap: boolean;
+  /** Equipment (grenade, mine, C4, turret): one press per tap. */
+  gadgetTap: boolean;
 }
 
 export const touchState: TouchState = {
@@ -23,6 +25,7 @@ export const touchState: TouchState = {
   reloadTap: false,
   swapTap: false,
   interactTap: false,
+  gadgetTap: false,
 };
 
 export function isTouchDevice(): boolean {

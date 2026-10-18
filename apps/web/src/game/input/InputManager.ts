@@ -26,11 +26,15 @@ export class InputManager {
     const kb = scene.input.keyboard;
     if (kb) {
       const K = Phaser.Input.Keyboard.KeyCodes;
-      const map: Record<string, number> = { W: K.W, A: K.A, S: K.S, D: K.D, UP: K.UP, DOWN: K.DOWN, LEFT: K.LEFT, RIGHT: K.RIGHT, SHIFT: K.SHIFT, R: K.R, Q: K.Q, E: K.E, ONE: K.ONE, TWO: K.TWO, THREE: K.THREE, TAB: K.TAB, ESC: K.ESC, SPACE: K.SPACE };
+      const map: Record<string, number> = { W: K.W, A: K.A, S: K.S, D: K.D, UP: K.UP, DOWN: K.DOWN, LEFT: K.LEFT, RIGHT: K.RIGHT, SHIFT: K.SHIFT, R: K.R, Q: K.Q, E: K.E, ONE: K.ONE, TWO: K.TWO, THREE: K.THREE, G: K.G, TAB: K.TAB, ESC: K.ESC, SPACE: K.SPACE };
       for (const [name, code] of Object.entries(map)) this.keys[name] = kb.addKey(code, true, false);
       kb.on('keydown-R', () => (this.edgeButtons |= BTN.RELOAD));
       kb.on('keydown-Q', () => (this.edgeButtons |= BTN.NEXT_WEAPON));
       kb.on('keydown-E', () => (this.edgeButtons |= BTN.INTERACT));
+      // equipment: one use per key press (auto-repeat of a held key is ignored)
+      kb.on('keydown-G', (e: KeyboardEvent) => {
+        if (!e.repeat) this.edgeButtons |= BTN.GADGET;
+      });
       kb.on('keydown-ONE', () => (this.pendingSlot = 1));
       kb.on('keydown-TWO', () => (this.pendingSlot = 2));
       kb.on('keydown-THREE', () => (this.pendingSlot = 3));
@@ -42,6 +46,10 @@ export class InputManager {
     scene.input.mouse?.disableContextMenu();
     scene.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => {
       if (Math.abs(dy) > 0) this.edgeButtons |= BTN.NEXT_WEAPON;
+    });
+    // the middle mouse button also uses the equipment
+    scene.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (!p.wasTouch && p.middleButtonDown()) this.edgeButtons |= BTN.GADGET;
     });
     scene.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (p.wasTouch) return;
@@ -76,7 +84,8 @@ export class InputManager {
         if (touchState.reloadTap) buttons |= BTN.RELOAD;
         if (touchState.swapTap) buttons |= BTN.NEXT_WEAPON;
         if (touchState.interactTap) buttons |= BTN.INTERACT;
-        touchState.reloadTap = touchState.swapTap = touchState.interactTap = false;
+        if (touchState.gadgetTap) buttons |= BTN.GADGET;
+        touchState.reloadTap = touchState.swapTap = touchState.interactTap = touchState.gadgetTap = false;
       } else {
         if (k.A?.isDown || k.LEFT?.isDown) mx -= 1;
         if (k.D?.isDown || k.RIGHT?.isDown) mx += 1;

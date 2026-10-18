@@ -159,7 +159,7 @@ export interface PelletResult {
 }
 
 export type WorldEvent =
-  | { t: 'shot'; shooter: number; weapon: ArmsId; shotId: number; ox: number; oy: number; pellets: PelletResult[]; turret?: boolean }
+  | { t: 'shot'; shooter: number; weapon: ArmsId; shotId: number; ox: number; oy: number; pellets: PelletResult[]; turret?: boolean; silenced?: boolean }
   | { t: 'melee'; shooter: number; angle: number; hit: number }
   | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: ArmsId }
   | { t: 'kill'; killer: number; victim: number; weapon: ArmsId; assists: number[] }
@@ -863,7 +863,7 @@ export class World {
         pellets.push({ angle: a, dist: maxT, hit: -1, kind: wallHit ? 1 : 0 });
       }
     }
-    this.events.push({ t: 'shot', shooter: p.slot, weapon: w.id, shotId: p.shotCounter, ox: p.x, oy: p.y, pellets });
+    this.events.push({ t: 'shot', shooter: p.slot, weapon: w.id, shotId: p.shotCounter, ox: p.x, oy: p.y, pellets, ...(w.silenced ? { silenced: true } : {}) });
     for (const [victim, dmg] of dmgByVictim) this.applyDamage(victim, p, Math.round(dmg), w.id);
     for (const [g, dmg] of dmgByTurret) this.damageTurret(g, dmg);
   }
@@ -1053,9 +1053,11 @@ export class World {
     const def = GADGETS[kind];
     const dx = Math.cos(p.aim);
     const dy = Math.sin(p.aim);
-    const reach = def.use === 'deploy' ? 20 : 12;
+    // a turret stands clear of its owner (radius 10 + 9); grenades and charges leave from the hand
+    const reach = def.use === 'deploy' ? PLAYER_RADIUS + TURRET.radius + 8 : 12;
+    const clearance = def.use === 'deploy' ? TURRET.radius + 2 : 5;
     const wall = this.collision.raycast(p.x, p.y, dx, dy, reach + 4, 'shot');
-    const d = wall ? Math.max(0, wall.t - 5) : reach;
+    const d = wall ? Math.max(0, wall.t - clearance) : reach;
     let x = p.x + dx * d;
     let y = p.y + dy * d;
     if (def.use === 'deploy' && this.collision.overlapsCircle(x, y, TURRET.radius)) {
@@ -1265,7 +1267,8 @@ export class World {
       if (d > def.radius || !this.collision.lineOfSight(g.x, g.y, q.x, q.y)) continue;
       const look = Math.abs(angleDiff(q.aim, Math.atan2(g.y - q.y, g.x - q.x)));
       const facing = look < Math.PI / 3 ? 1 : look < (Math.PI * 2) / 3 ? 0.6 : 0.3;
-      const ms = def.durationMs * facing * (1 - 0.6 * (d / def.radius));
+      // full strength up close, 60 % at the edge of the radius
+      const ms = def.durationMs * facing * (1 - 0.4 * (d / def.radius));
       q.flashedUntil = Math.max(q.flashedUntil, this.time + ms);
     }
   }

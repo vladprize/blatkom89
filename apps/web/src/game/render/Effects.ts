@@ -22,6 +22,23 @@ interface Particle {
   onEnd?: (p: Particle) => void;
 }
 
+export interface ParticleOptions {
+  vx?: number;
+  vy?: number;
+  life: number;
+  scale?: number;
+  tint?: number;
+  alpha?: number;
+  add?: boolean;
+  depth?: number;
+  rot?: number;
+  drag?: number;
+  grow?: number;
+  spin?: number;
+  fade?: boolean;
+  onEnd?: (p: Particle) => void;
+}
+
 const MAX_PARTICLES = 260;
 const MAX_DECALS = 220;
 
@@ -63,7 +80,7 @@ export class Effects {
     }
   }
 
-  private spawn(frame: string, x: number, y: number, o: { vx?: number; vy?: number; life: number; scale?: number; tint?: number; alpha?: number; add?: boolean; depth?: number; rot?: number; drag?: number; grow?: number; spin?: number; fade?: boolean; onEnd?: (p: Particle) => void }): Particle | null {
+  private spawn(frame: string, x: number, y: number, o: ParticleOptions): Particle | null {
     const p = this.pool.find((q) => !q.active);
     if (!p) return null;
     p.active = true;
@@ -177,8 +194,69 @@ export class Effects {
       const sp = (60 + Math.random() * 120) * k;
       this.spawn('px', x, y, { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 380 + Math.random() * 200, scale: 0.7, tint: 0x2a2420, drag: 5, spin: 12, depth: D.FX_LOW, fade: false });
     }
-    const scorch = this.decal(`pool_${Math.floor(Math.random() * 3)}`, x, y, Math.random() * Math.PI * 2, 0.75 * k, 0.75);
-    scorch.setTint(0x141210);
+    // soot mark about the size of the blast core
+    this.decal(`scorch_${Math.floor(Math.random() * 2)}`, x, y, Math.random() * Math.PI * 2, (radius * 1.3) / 64, 0.8);
+  }
+
+  /** Public particle spawner for other renderers (equipment). */
+  particle(frame: string, x: number, y: number, o: ParticleOptions): void {
+    this.spawn(frame, x, y, o);
+  }
+
+  /** Burning molotov: tongues of flame inside the circle, embers and dark smoke above it. */
+  fireTick(x: number, y: number, radius: number): void {
+    for (let i = 0; i < 2; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * radius * 0.9;
+      const fx = x + Math.cos(a) * r;
+      const fy = y + Math.sin(a) * r;
+      // bigger flames in the middle of the puddle
+      const s = (0.55 + Math.random() * 0.45) * (1.25 - (r / radius) * 0.6);
+      this.spawn(`flame_${Math.floor(Math.random() * 3)}`, fx, fy, { vx: (Math.random() - 0.5) * 8, vy: -10 - Math.random() * 14, life: 360 + Math.random() * 240, scale: s, grow: -s * 1.2, alpha: 0.95, depth: D.FX_LOW + 0.5 });
+    }
+    if (Math.random() < 0.5) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * radius * 0.8;
+      this.spawn('glow', x + Math.cos(a) * r, y + Math.sin(a) * r, { vy: -8, life: 300, scale: 0.35 + Math.random() * 0.25, tint: 0xff7a1a, alpha: 0.5, add: true, depth: D.FX_LOW + 0.4 });
+    }
+    if (Math.random() < 0.3) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * radius * 0.8;
+      this.spawn('px', x + Math.cos(a) * r, y + Math.sin(a) * r, { vx: (Math.random() - 0.5) * 30, vy: -30 - Math.random() * 30, life: 500, scale: 0.35, tint: 0xffc060, add: true, drag: 1 });
+    }
+    if (Math.random() < 0.35) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * radius * 0.7;
+      this.spawn('smoke', x + Math.cos(a) * r, y + Math.sin(a) * r, { vx: (Math.random() - 0.5) * 8, vy: -12, life: 1400, scale: 0.35, grow: 0.5, alpha: 0.35, drag: 0.8, depth: D.FX_LOW + 0.6, tint: 0x2a2420 });
+    }
+  }
+
+  /** Scorched floor under a fire. */
+  scorch(x: number, y: number, radius: number): void {
+    this.decal(`scorch_${Math.floor(Math.random() * 2)}`, x, y, Math.random() * Math.PI * 2, (radius * 2.2) / 64, 0.7);
+  }
+
+  /** Flashbang: a white burst and sparks. */
+  flashBurst(x: number, y: number): void {
+    this.spawn('glow', x, y, { life: 260, scale: 5.5, tint: 0xffffff, alpha: 1, add: true, depth: D.FX_ADD });
+    this.spawn('ring', x, y, { life: 300, scale: 0.4, grow: 6, tint: 0xffffff, alpha: 0.9, add: true, depth: D.FX_ADD });
+    for (let i = 0; i < 16; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 160 + Math.random() * 200;
+      this.spawn('px', x, y, { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 180 + Math.random() * 160, scale: 0.4, tint: 0xffffff, add: true, drag: 5 });
+    }
+    this.spawn('smoke', x, y, { life: 1200, scale: 0.4, grow: 0.6, alpha: 0.4, drag: 1, depth: D.FX_LOW, tint: 0xd8d4cc });
+  }
+
+  /** Bits of a destroyed turret. */
+  debris(x: number, y: number): void {
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 60 + Math.random() * 140;
+      this.spawn('px', x, y, { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 400 + Math.random() * 300, scale: 0.7, tint: i % 2 ? 0x3a4024 : 0x1a1a1e, drag: 5, spin: 10, depth: D.FX_LOW, fade: false });
+    }
+    this.spawn('glow', x, y, { life: 200, scale: 1.4, tint: 0xffb050, alpha: 0.8, add: true });
+    this.spawn('smoke', x, y, { life: 1500, scale: 0.3, grow: 0.5, alpha: 0.5, drag: 1, depth: D.FX_LOW, tint: 0x3a3430 });
   }
 
   /** Green first-aid sparkle. */

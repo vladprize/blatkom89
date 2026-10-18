@@ -13,7 +13,10 @@ import { Img, hex } from './lib/raster.js';
 import type { RGBA } from './lib/raster.js';
 import { packAtlas } from './lib/pack.js';
 import type { PackInput } from './lib/pack.js';
-import { topPrims, sidePrims, transformPrims, topBounds, muzzleAtRest, medkitPrims, rocketPrims } from './weapons.js';
+import { topPrims, sidePrims, transformPrims, topBounds, muzzleAtRest, medkitPrims, rocketPrims, GADGET_MODELS, MOD_MODELS } from './weapons.js';
+import { viewPrims } from './lib/model.js';
+import { GADGET_IDS } from '../../packages/shared/src/game-rules/gadgets.js';
+import { MOD_IDS } from '../../packages/shared/src/game-rules/weapons.js';
 import { gripFor } from './characters.js';
 import { TORSO_ANIMS, POSES } from './build-characters.js';
 import { WEAPON_IDS, WEAPONS } from '../../packages/shared/src/game-rules/weapons.js';
@@ -40,6 +43,8 @@ export function primBounds(prims: Prim[]): [number, number, number, number] {
       const m = Math.hypot(p.h[0], p.h[1]);
       add(p.c[0], p.c[1], p.yaw ? m : p.h[0], p.yaw ? m : p.h[1]);
     } else if (p.k === 'cyl') add(p.c[0], p.c[1], p.r);
+    else if (p.k === 'oell') add(p.c[0], p.c[1], Math.max(p.r[0], p.r[1], p.r[2]));
+    else if (p.k === 'obox') add(p.c[0], p.c[1], Math.hypot(p.h[0], p.h[1], p.h[2]));
   }
   return [x0, y0, x1, y1];
 }
@@ -94,6 +99,22 @@ export function buildWeapons(spritesDir: string, uiDir: string, genFile: string)
     frames.push({ name: `ico_${id}`, img: silhouette(side) });
     renderFit(sidePrims(id), 4, 2).savePng(join(uiDir, 'weapons', `${id}.png`));
   }
+  // equipment: top-down sprites in the world, HUD/kill-feed silhouettes, shop images (3/4 view)
+  mkdirSync(join(uiDir, 'gadgets'), { recursive: true });
+  mkdirSync(join(uiDir, 'mods'), { recursive: true });
+  for (const [name, model] of Object.entries(GADGET_MODELS)) {
+    const prims = model();
+    // the turret's base and head rotate/sit on the model origin: fixed canvases centred on it
+    const img = name === 'turret_head' ? render(prims, 48, 32, { scale: 2, cx: 4, cy: 0 }) : name === 'turret' ? render(prims, 40, 40, { scale: 2, cx: 0, cy: 0 }) : renderFit(prims, 2, 2);
+    frames.push({ name: `g_${name}`, img });
+  }
+  for (const id of GADGET_IDS) {
+    const prims = id === 'turret' ? [...GADGET_MODELS.turret(), ...GADGET_MODELS.turret_head()] : GADGET_MODELS[id]();
+    const view = viewPrims(prims, 0.35, 0.75);
+    frames.push({ name: `ico_${id}`, img: silhouette(renderFit(viewPrims(prims, 0, 0.25), 2)) });
+    renderFit(view, 5, 2).savePng(join(uiDir, 'gadgets', `${id}.png`));
+  }
+  for (const id of MOD_IDS) renderFit(viewPrims(MOD_MODELS[id](), 0, 0.15), 4, 2).savePng(join(uiDir, 'mods', `${id}.png`));
   frames.push({ name: 'pickup_medkit', img: render(medkitPrims(), 40, 32) });
   frames.push({ name: 'proj_rocket', img: render(rocketPrims('rocket'), 32, 16) });
   frames.push({ name: 'proj_grenade', img: render(rocketPrims('grenade'), 16, 12) });

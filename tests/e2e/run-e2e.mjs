@@ -7,6 +7,8 @@
 //      and persisted XP (tests/e2e/online.mjs); with E2E_ADMIN_USER/E2E_ADMIN_PASS the admin dashboard too
 //   6. demo: the single-file offline demo — nickname dialog, assists/points, supply drop, local XP
 //      and level, profile screen, persistence after reload (tests/e2e/demo.mjs)
+//   7. equipment: F-1, smoke, flashbang, molotov, mine, C4 and turret used with the G key in the demo
+//      build, checked against the World state (tests/e2e/gadgets.mjs)
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
 // E2E_PROD=1 runs the prebuilt deploy/ bundle exactly as a host would (NODE_ENV=production, guest login,
 // RENDER_EXTERNAL_URL, TRUST_PROXY) instead of the development server.
@@ -102,6 +104,9 @@ try {
   console.log('\n[e2e] single-file demo (no server)');
   const demo = spawnSync(process.execPath, ['tests/e2e/demo.mjs', 'apps/web/dist-demo/blatkom89-demo.html', join(out, 'demo')], { stdio: 'inherit' });
   if (demo.status !== 0) failed = true;
+  console.log('\n[e2e] equipment: grenades, mines, C4, turret (demo build)');
+  const gadgets = spawnSync(process.execPath, ['tests/e2e/gadgets.mjs', 'apps/web/dist-demo/blatkom89-demo.html', join(out, 'gadgets')], { stdio: 'inherit' });
+  if (gadgets.status !== 0) failed = true;
 } catch (e) {
   console.error('[e2e]', e.message);
   failed = true;
