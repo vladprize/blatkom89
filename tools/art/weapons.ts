@@ -401,6 +401,8 @@ export function transformPrims(prims: Prim[], angle: number, dx: number, dy: num
       }
       case 'poly':
         return { ...p, pts: p.pts.map(([x, y]) => { const q = P([x, y, 0]); return [q[0], q[1]] as [number, number]; }), z: p.z + dz };
+      default:
+        return p;
     }
   });
 }

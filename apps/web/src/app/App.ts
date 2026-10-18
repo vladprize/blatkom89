@@ -2,8 +2,8 @@
  * App shell: screen navigation (HTML/CSS over the canvas), offline practice flow, online flow
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
-import { CHARACTERS, CHARACTER_IDS, MAP_ORDER, getMap, isCharacterId, isMapId, levelForXp } from '@blatkom/shared';
-import type { CharacterId, MapId, BotDifficulty, Standing, PersonalResult } from '@blatkom/shared';
+import { CHARACTERS, CHARACTER_IDS, FREE_CHARACTERS, MAP_ORDER, WEAPONS, DEFAULT_LOADOUT, getMap, isCharacterId, isMapId, levelForXp } from '@blatkom/shared';
+import type { CharacterId, MapId, BotDifficulty, Standing, PersonalResult, Loadout, WeaponId } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
@@ -24,14 +24,17 @@ import { clearLocalProfile, loadLocalProfile, saveLocalProfile } from '../profil
 import { openNicknameDialog, randomNickname } from '../profile/nickname.js';
 import { renderResults } from '../ui/screens/results.js';
 import { renderLobby } from '../ui/screens/lobby.js';
+import { renderArsenal, characterPriceNote, amount } from '../ui/screens/shop.js';
+import type { ArsenalTab } from '../ui/screens/shop.js';
+import { renderAccountPanel, openEmailLogin, openPasswordReset } from '../ui/screens/account.js';
 import { sfx } from '../game/audio/Sfx.js';
 
-type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'error' | 'loading';
+type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
 
 /** Profile id whose nickname has been confirmed in the first-launch dialog (online build). */
 const NICK_CONFIRMED_KEY = 'blatkom89.nick-confirmed.v1';
 
-const MAP_BLURB: Record<MapId, string> = {
+const MAP_BLURB: Partial<Record<MapId, string>> = {
   factory: 'Проходная, цех №3, склад. Коридоры, укрытия, контроль точек.',
   garages: 'Ряды гаражей, узкие проходы, засады на ближней дистанции.',
   yard: 'Панельки, арки и детская площадка. Обходы и средние дистанции.',
@@ -76,15 +79,20 @@ export class App {
         onError: (msg, fatal) => (fatal ? this.showError(msg) : toast(msg)),
         onLeft: () => this.goMenu(),
       });
+      this.online.onEmailSessionExpired = (email) =>
+        openEmailLogin(this.root, this.online!, { email, note: 'Сессия этого аккаунта истекла — войдите снова.', onDone: () => this.afterAccountSwitch() });
+      this.online.pingVisit();
       void this.online
         .ensureAuth()
         .then(() => {
           this.refreshStrip();
           this.maybeAskNickname();
+          void this.online!.loadInventory().then(() => this.refreshStrip()).catch(() => {});
         })
         .catch(() => {});
     }
     const params = new URLSearchParams(location.search);
+    this.handleReturnParams(params);
     // deep links: invite (Telegram start_param or ?invite=), direct room, quick test hook
     const invite = telegramStartParam() ?? params.get('invite');
     const play = params.get('play');
@@ -104,10 +112,74 @@ export class App {
     if (room && this.online && /^[A-Za-z0-9_-]{4,32}$/.test(room)) {
       this.go('loading');
       this.render(this.loading('Подключаемся к комнате…'));
-      void this.online.joinRoom(room, this.character).catch((e: Error) => this.showError(e.message));
+      void this.online.joinRoom(room, this.onlineCharacter()).catch((e: Error) => this.showError(e.message));
       return;
     }
     this.goMenu();
+  }
+
+  /** Back from a payment page (?pay=success&pid=…) or from a password-reset email (?reset=…). */
+  private handleReturnParams(params: URLSearchParams) {
+    const online = this.online;
+    if (!online) return;
+    const reset = params.get('reset');
+    const pay = params.get('pay');
+    const pid = params.get('pid');
+    if (reset || pay) history.replaceState(null, '', location.pathname);
+    if (reset && /^[A-Za-z0-9_-]{20,64}$/.test(reset)) {
+      setTimeout(() => openPasswordReset(this.root, online, reset, () => openEmailLogin(this.root, online, { onDone: () => this.afterAccountSwitch() })), 300);
+    }
+    if (pay === 'cancel') setTimeout(() => toast('Оплата отменена'), 600);
+    if (pay === 'success' && pid && /^[0-9a-f-]{36}$/i.test(pid)) {
+      // the provider confirms the payment to the server separately: wait for it (up to ~2 minutes)
+      let tries = 0;
+      const poll = async () => {
+        tries++;
+        try {
+          await online.ensureAuth();
+          const st = await online.api.paymentStatus(pid);
+          if (st.status === 'paid') {
+            await online.loadInventory().catch(() => {});
+            this.refreshStrip();
+            sfx.play('buy');
+            toast(`Зачислено ${st.diamonds} алмазов`);
+            return;
+          }
+          if (st.status === 'failed' || st.status === 'expired') return toast('Платёж не прошёл');
+        } catch {
+          /* keep polling */
+        }
+        if (tries < 40) setTimeout(() => void poll(), 3000);
+        else toast('Платёж ещё обрабатывается — алмазы придут автоматически');
+      };
+      setTimeout(() => {
+        toast('Проверяем оплату…');
+        void poll();
+      }, 800);
+    }
+  }
+
+  /** Signed in to another account (email): reload everything that depends on the player. */
+  private afterAccountSwitch() {
+    void this.online
+      ?.loadInventory()
+      .catch(() => {})
+      .finally(() => {
+        if (this.online?.profile?.preferredCharacter) this.character = this.online.profile.preferredCharacter;
+        this.goMenu();
+      });
+  }
+
+  /** Characters this player may use online (all of them in the demo build and in practice). */
+  private ownsCharacter(c: CharacterId): boolean {
+    if (!this.online) return true;
+    const inv = this.online.inventory;
+    return inv ? inv.characters.includes(c) : FREE_CHARACTERS.includes(c);
+  }
+
+  /** The character to bring into an online room (a locked one falls back to the free default). */
+  private onlineCharacter(): CharacterId {
+    return this.ownsCharacter(this.character) ? this.character : 'petya';
   }
 
   // ── navigation ──────────────────────────────────────────────────────────
@@ -141,6 +213,8 @@ export class App {
         return this.showProfile(push);
       case 'settings':
         return this.showSettings(push);
+      case 'arsenal':
+        return this.showArsenal(push);
       default:
         return this.goMenu();
     }
@@ -186,6 +260,7 @@ export class App {
             h('button', { class: 'btn btn--red', onclick: () => this.quickMatch(), disabled: !ONLINE_AVAILABLE }, 'Быстрая игра', h('span', { class: 'sub' }, 'онлайн, до 6 игроков')),
             h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, 'Играть с друзьями', h('span', { class: 'sub' }, 'комната по приглашению')),
             h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, 'Тренировка', h('span', { class: 'sub' }, 'с ботами, без интернета')),
+            h('button', { class: 'btn', onclick: () => this.showArsenal() }, 'Арсенал', h('span', { class: 'sub' }, 'оружие, улучшения, персонажи')),
             h('div', { class: 'row' }, h('button', { class: 'btn grow', onclick: () => this.showProfile() }, 'Профиль'), h('button', { class: 'btn grow', onclick: () => this.showSettings() }, 'Настройки')),
             onlineNote,
           ),
@@ -204,7 +279,7 @@ export class App {
         ),
         h('div', { class: 'grow' }),
         ONLINE_AVAILABLE
-          ? h('div', { class: 'footer' }, `БЛАТКОМ ’89 · v${VERSION} · Бесплатно. Без доната. · `, h('a', { href: asset('privacy.html'), target: '_blank', style: 'color:inherit' }, 'Конфиденциальность'))
+          ? h('div', { class: 'footer' }, `БЛАТКОМ ’89 · v${VERSION} · Играть бесплатно, покупки — по желанию · `, h('a', { href: asset('privacy.html'), target: '_blank', style: 'color:inherit' }, 'Конфиденциальность'))
           : h('div', { class: 'footer' }, `БЛАТКОМ ’89 · v${VERSION} · Демо: игра идёт прямо в браузере, никакие данные не собираются и не отправляются.`),
       ),
     );
@@ -249,6 +324,8 @@ export class App {
       ),
       h('button', { class: 'edit', 'aria-label': 'Сменить кличку', title: 'Сменить кличку', onclick: () => this.editNickname() }, '✎'),
     );
+    const inv = this.online?.inventory;
+    if (inv) strip.append(h('button', { class: 'pstrip__wallet', onclick: () => this.showArsenal(), 'aria-label': `Жетоны ${inv.tokens}, алмазы ${inv.diamonds}` }, amount(inv.tokens, 'tokens'), amount(inv.diamonds, 'diamonds')));
     return strip;
   }
 
@@ -331,11 +408,13 @@ export class App {
   }
 
   // ── characters ──────────────────────────────────────────────────────────
-  private showCharacters(push = true) {
+  private showCharacters(push = true, initial?: CharacterId) {
     this.go('characters', push);
-    let selected = this.character;
+    let selected = initial ?? this.character;
+    this.host.previewScene()?.setFocus(selected);
     const grid = h('div', { class: 'chars', role: 'radiogroup', 'aria-label': 'Персонажи' });
     const dossier = h('div', { class: 'panel dossier' });
+    const actions = h('div', { class: 'row' });
     const draw = () => {
       grid.replaceChildren(
         ...CHARACTER_IDS.map((id) =>
@@ -344,6 +423,7 @@ export class App {
             {
               'aria-pressed': String(id === selected),
               role: 'radio',
+              class: this.ownsCharacter(id) ? '' : 'locked',
               onclick: () => {
                 selected = id;
                 this.host.previewScene()?.setFocus(id);
@@ -353,11 +433,13 @@ export class App {
               },
             },
             portrait(id),
-            CHARACTERS[id].name,
+            h('span', null, CHARACTERS[id].name),
           ),
         ),
       );
       const c = CHARACTERS[selected];
+      const locked = !this.ownsCharacter(selected);
+      const price = locked ? characterPriceNote(selected, this.online?.inventory ?? null) : null;
       dossier.replaceChildren(
         h('span', { class: 'tag' }, 'Личное дело'),
         h(
@@ -367,6 +449,8 @@ export class App {
           h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, 'Роль: '), c.role),
           h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, 'Характер: '), c.personality),
           h('div', { class: 'quote' }, `«${c.quote}»`),
+          h('div', { class: 'lore' }, c.lore),
+          price ? h('div', { class: 'badge badge--host', style: 'align-self:flex-start' }, price) : null,
         ),
         h(
           'div',
@@ -384,16 +468,38 @@ export class App {
           h('div', { class: 'muted', style: 'font-size:13px;margin-top:8px' }, 'Все персонажи равны по характеристикам — различаются только внешность и характер.'),
         ),
       );
+      actions.replaceChildren(
+        locked
+          ? h('button', { class: 'btn btn--red grow', onclick: () => this.showArsenal(true, 'characters') }, 'Открыть в Арсенале')
+          : h('button', { class: 'btn btn--red grow', onclick: confirm }, 'Выбрать'),
+      );
+      if (locked) actions.append(h('button', { class: 'btn grow', onclick: () => this.startPractice({ ...this.lastPractice, character: selected }) }, 'Опробовать в тренировке'));
     };
-    draw();
     const confirm = () => {
+      if (!this.ownsCharacter(selected)) return;
       this.character = selected;
       storageSet('blatkom89.character', selected);
       analytics.track('character_selected', { character: selected });
       void this.online?.setPreferredCharacter(selected);
       this.back();
     };
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Выбор персонажа'), grid, dossier, h('button', { class: 'btn btn--red', onclick: confirm }, 'Выбрать'))));
+    draw();
+    if (this.online) void this.online.loadInventory().then(() => this.screen === 'characters' && draw()).catch(() => {});
+    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Выбор персонажа'), grid, dossier, actions)));
+  }
+
+  // ── arsenal (loadout, shop, case, diamonds) ─────────────────────────────
+  private showArsenal(push = true, tab?: ArsenalTab) {
+    this.go('arsenal', push);
+    const el = renderArsenal({
+      online: this.online,
+      inTelegram: inTelegram(),
+      ...(tab ? { tab } : {}),
+      onTry: (w) => this.startPractice({ ...this.lastPractice, tryWeapon: w }),
+      onWallet: () => this.refreshStrip(),
+      onCharacter: (c) => this.showCharacters(true, c),
+    });
+    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Арсенал'), el)));
   }
 
   // ── practice ────────────────────────────────────────────────────────────
@@ -451,10 +557,27 @@ export class App {
     this.render(h('div', { class: 'screen screen--dim' }, content));
   }
 
-  private startPractice(opts: { mapId: MapId; bots: number; difficulty: BotDifficulty }) {
-    this.lastPractice = { ...opts, bots: Math.max(1, Math.min(5, opts.bots || 3)) };
+  /** Practice loadout: the player's own (online), the free default (demo), or a weapon to try on. */
+  private practiceLoadout(tryWeapon?: WeaponId): Loadout {
+    const base: Loadout = this.online?.inventory?.loadout ?? { ...DEFAULT_LOADOUT, mods: {} };
+    if (!tryWeapon) return base;
+    const slot = WEAPONS[tryWeapon].slot;
+    return { ...base, ...(slot === 1 ? { sidearm: tryWeapon } : slot === 2 ? { melee: tryWeapon } : { primary: tryWeapon }) };
+  }
+
+  private startPractice(opts: { mapId: MapId; bots: number; difficulty: BotDifficulty; tryWeapon?: WeaponId; character?: CharacterId }) {
+    this.lastPractice = { mapId: opts.mapId, difficulty: opts.difficulty, bots: Math.max(1, Math.min(5, opts.bots || 3)) };
     const name = this.playerName() ?? CHARACTERS[this.character].name;
-    const session = new OfflineSession({ mapId: opts.mapId, character: this.character, name, level: this.playerLevel(), bots: this.lastPractice.bots, difficulty: opts.difficulty });
+    const session = new OfflineSession({
+      mapId: opts.mapId,
+      character: opts.character ?? this.character,
+      name,
+      level: this.playerLevel(),
+      bots: this.lastPractice.bots,
+      difficulty: opts.difficulty,
+      loadout: this.practiceLoadout(opts.tryWeapon),
+    });
+    if (opts.tryWeapon) setTimeout(() => toast(`Примерка: ${WEAPONS[opts.tryWeapon!].name}`), 1200);
     this.beginSession(session);
   }
 
@@ -571,7 +694,7 @@ export class App {
     this.go('loading');
     this.render(this.loading('Ищем матч…'));
     try {
-      await this.online.quickMatch(this.character);
+      await this.online.quickMatch(this.onlineCharacter());
     } catch (e) {
       this.showError((e as Error).message);
     }
@@ -603,7 +726,7 @@ export class App {
               this.go('loading');
               this.render(this.loading('Создаём комнату…'));
               try {
-                await this.online!.createRoom(mapId, this.character);
+                await this.online!.createRoom(mapId, this.onlineCharacter());
               } catch (e) {
                 this.showError((e as Error).message);
               }
@@ -645,7 +768,7 @@ export class App {
         if (info.status === 'joinable' || info.status === 'in_progress') {
           await this.ensureNicknameBeforeJoin();
           this.render(this.loading(`Входим в комнату${info.hostName ? ` (${info.hostName})` : ''}…`));
-          await this.online!.joinRoom(info.roomId!, this.character);
+          await this.online!.joinRoom(info.roomId!, this.onlineCharacter());
           return;
         }
         const msg: Record<string, string> = {
@@ -670,7 +793,7 @@ export class App {
     this.render(
       renderLobby({
         state: s,
-        character: this.character,
+        character: this.onlineCharacter(),
         onReady: (r) => this.online?.setReady(r),
         onStart: () => this.online?.startMatch(),
         onMap: (m) => this.online?.setMap(m),
@@ -690,7 +813,9 @@ export class App {
     void load
       .then((d) => {
         if (this.screen !== 'profile') return;
-        box.replaceChildren(this.topbar('Профиль'), renderProfileView(d, { local: !this.online, onRename: () => this.editNickname(() => this.screen === 'profile' && this.showProfile(false)) }));
+        box.replaceChildren(this.topbar('Профиль'));
+        if (this.online) box.append(renderAccountPanel(this.online, { root: this.root, onChanged: () => (this.refreshStrip(), this.screen === 'profile' && this.showProfile(false)) }));
+        box.append(renderProfileView(d, { local: !this.online, onRename: () => this.editNickname(() => this.screen === 'profile' && this.showProfile(false)) }));
       })
       .catch((e: Error) => box.replaceChildren(this.topbar('Профиль'), h('div', { class: 'panel' }, `Не удалось загрузить профиль: ${e.message}`)));
   }

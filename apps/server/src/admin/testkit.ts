@@ -68,6 +68,8 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     LOG_LEVEL: 'error',
     SERVER_VERSION: 'test',
     MAX_ROOMS: 10,
+    CASES_ENABLED: true,
+    NOWPAYMENTS_SANDBOX: false,
     MATCH_DURATION_SEC: 240,
     MATCH_SCORE_LIMIT: 50,
     MATCH_MIN_PLAYERS: 2,

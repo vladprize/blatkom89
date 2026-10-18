@@ -12,6 +12,9 @@ import type { PackInput } from './lib/pack.js';
 import { buildCharacters } from './build-characters.js';
 import { propPrims, PROP_VARIANTS } from './props.js';
 import { buildWeapons } from './build-weapons.js';
+import { renderPortrait } from './portraits.js';
+import { EXTRA_RIGS } from './characters2.js';
+import type { CharId } from './characters.js';
 import { floorTexture, wallTexture, treeCanopy, bush, pipeTexture, roofDetail } from './textures.js';
 import type { FloorKey, WallKey } from './textures.js';
 import { glow, softCircle, muzzleFlash, bloodSplat, tracer, ring, ICONS } from './fx.js';
@@ -73,6 +76,17 @@ function buildTiles() {
   return { floors: floors.length, walls: walls.length };
 }
 
+/** Procedural 3/4 portraits for the characters without painted art (the original four keep theirs). */
+function buildPortraits() {
+  const ids = Object.keys(EXTRA_RIGS) as CharId[];
+  mkdirSync(join(OUT, 'portraits'), { recursive: true });
+  for (const id of ids) {
+    renderPortrait(id, 120, 5.6, 1).savePng(join(OUT, `portraits/${id}.png`));
+    renderPortrait(id, 48, 2.2, 1).savePng(join(OUT, `portraits/${id}_small.png`));
+  }
+  return ids.length;
+}
+
 function writeManifest() {
   const files: Record<string, string> = {};
   const walk = (dir: string, rel: string) => {
@@ -96,5 +110,6 @@ console.log('props', buildProps());
 console.log('weapons', buildWeapons(join(OUT, 'sprites'), join(OUT, 'ui'), join(ROOT, 'apps/web/src/game/render/rig.gen.ts')).atlas);
 console.log('fx', buildFx());
 console.log('tiles', buildTiles());
+console.log('portraits', buildPortraits());
 console.log('manifest entries', writeManifest());
 console.timeEnd('assets');

@@ -93,7 +93,13 @@ export function attachGateway(server: Server, rooms: RoomManager, services: Serv
         return ws.close(WS_CLOSE.ROOM_NOT_FOUND, 'room not found');
       }
       const viaInvite = room.isPrivate;
-      const result = room.join(user, ws, hello.character, viaInvite);
+      // owned characters and the spawn loadout (free gear if the economy cannot be reached)
+      const gear = await services.economy.gear(user.userId).catch((e: Error) => {
+        log.warn('gear lookup failed', { user: user.userId, err: e });
+        return undefined;
+      });
+      if (ws.readyState !== 1) return;
+      const result = room.join(user, ws, hello.character, viaInvite, gear);
       if (result === 'room_full' || result === 'room_closed') {
         ws.send(JSON.stringify({ type: 'error', code: result, message: result === 'room_full' ? 'Комната заполнена' : 'Матч завершён' }));
         return ws.close(result === 'room_full' ? WS_CLOSE.ROOM_FULL : WS_CLOSE.ROOM_CLOSED, result);

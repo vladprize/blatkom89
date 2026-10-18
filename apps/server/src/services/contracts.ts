@@ -2,7 +2,7 @@
  * Service contracts between the realtime game layer (rooms) and persistence/analytics.
  * Implementations: services/persistence.ts (PostgreSQL) and services/memory.ts (tests/offline).
  */
-import type { CharacterId, MapId, PersonalResult } from '@blatkom/shared';
+import type { CharacterId, Loadout, MapId, PersonalResult } from '@blatkom/shared';
 import type { Platform } from '@blatkom/shared';
 
 export interface AuthedUser {
@@ -82,7 +82,12 @@ export type ServerEventName =
   | 'match_completed'
   | 'match_abandoned'
   | 'map_played'
-  | 'invite_created';
+  | 'invite_created'
+  | 'shop_purchase'
+  | 'upgrade_bought'
+  | 'case_opened'
+  | 'payment_completed'
+  | 'email_linked';
 
 export interface EventContext {
   userId?: string | null;
@@ -97,9 +102,21 @@ export interface Analytics {
   error(e: { source: 'client' | 'server'; component: string; category: string; message: string; clientVersion?: string | null; sessionId?: string | null; userId?: string | null }): void;
 }
 
+/** What a player brings into a room: validated spawn loadout (with upgrades) and owned characters. */
+export interface PlayerGear {
+  loadout: Loadout;
+  characters: ReadonlySet<CharacterId>;
+}
+
+export interface Economy {
+  /** Loadout and owned characters of a player (rooms call it on join and after a 'loadout' message). */
+  gear(userId: string): Promise<PlayerGear>;
+}
+
 export interface Services {
   sessions: SessionVerifier;
   recorder: MatchRecorder;
   invites: InviteRegistry;
   analytics: Analytics;
+  economy: Economy;
 }

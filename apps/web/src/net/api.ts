@@ -1,5 +1,22 @@
 /** HTTP API client (same origin). Never handles secrets other than the player's own session token. */
-import type { AuthResponse, CreateRoomResponse, InviteInfo, MapId, PublicProfile, CharacterId, MatchHistoryResponse, AchievementsResponse } from '@blatkom/shared';
+import type {
+  AuthResponse,
+  CreateRoomResponse,
+  InviteInfo,
+  MapId,
+  PublicProfile,
+  CharacterId,
+  MatchHistoryResponse,
+  AchievementsResponse,
+  Inventory,
+  ShopConfig,
+  CaseResult,
+  CheckoutResponse,
+  PaymentStatusResponse,
+  LedgerEntry,
+  UpgradeStat,
+  WeaponId,
+} from '@blatkom/shared';
 import { platform } from '../telegram/tg.js';
 import { VERSION } from '../app/config.js';
 
@@ -53,8 +70,56 @@ export class Api {
     return this.req<AuthResponse>('POST', '/api/auth/telegram', { initData, platform: platform(), clientVersion: VERSION });
   }
   /** Public website: device-bound guest account (the server stores only an HMAC of `deviceId`). */
-  authGuest(name: string, deviceId: string) {
-    return this.req<AuthResponse>('POST', '/api/auth/guest', { name, deviceId, platform: platform(), clientVersion: VERSION });
+  authGuest(name: string, deviceId: string, visitorId?: string) {
+    return this.req<AuthResponse>('POST', '/api/auth/guest', { name, deviceId, platform: platform(), clientVersion: VERSION, ...(visitorId ? { visitorId } : {}) });
+  }
+  /** Anonymous «opened the site» ping for the admin funnel (random per-browser id only). */
+  visit(visitorId: string, referrer?: string) {
+    return this.req<void>('POST', '/api/visit', { visitorId, platform: platform(), ...(referrer ? { referrer } : {}) });
+  }
+  // ── email sign-in ───────────────────────────────────────────────────────
+  loginEmail(email: string, password: string) {
+    return this.req<AuthResponse>('POST', '/api/auth/email/login', { email, password, platform: platform(), clientVersion: VERSION });
+  }
+  linkEmail(email: string, password: string) {
+    return this.req<PublicProfile>('POST', '/api/auth/email/link', { email, password });
+  }
+  changePassword(current: string, password: string) {
+    return this.req<{ ok: true }>('POST', '/api/auth/email/password', { current, password });
+  }
+  resetRequest(email: string) {
+    return this.req<{ ok: true }>('POST', '/api/auth/email/reset-request', { email });
+  }
+  resetConfirm(token: string, password: string) {
+    return this.req<{ ok: true }>('POST', '/api/auth/email/reset', { token, password });
+  }
+  // ── economy ─────────────────────────────────────────────────────────────
+  shopConfig() {
+    return this.req<ShopConfig>('GET', '/api/shop/config');
+  }
+  inventory() {
+    return this.req<Inventory>('GET', '/api/me/inventory');
+  }
+  ledger() {
+    return this.req<{ entries: LedgerEntry[] }>('GET', '/api/me/ledger?limit=30');
+  }
+  buy(kind: 'weapon' | 'character', id: string) {
+    return this.req<Inventory>('POST', '/api/shop/buy', { kind, id });
+  }
+  upgrade(weapon: WeaponId, stat: UpgradeStat) {
+    return this.req<Inventory>('POST', '/api/shop/upgrade', { weapon, stat });
+  }
+  openCase() {
+    return this.req<CaseResult>('POST', '/api/shop/case', { confirmAge: true });
+  }
+  setLoadout(sidearm: WeaponId, melee: WeaponId, primary: WeaponId | null) {
+    return this.req<Inventory>('POST', '/api/me/loadout', { sidearm, melee, primary });
+  }
+  checkout(packId: string, method: 'card' | 'crypto') {
+    return this.req<CheckoutResponse>('POST', '/api/pay/checkout', { packId, method });
+  }
+  paymentStatus(id: string) {
+    return this.req<PaymentStatusResponse>('GET', `/api/pay/${encodeURIComponent(id)}`);
   }
   logout() {
     return this.req<void>('POST', '/api/auth/logout', {});

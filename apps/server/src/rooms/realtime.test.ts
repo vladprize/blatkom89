@@ -447,3 +447,41 @@ test('rematch: after results everyone votes, a new match starts with a new id, p
   ca.close();
   cb.close();
 });
+
+test('gear: rooms spawn players with their owned loadout and upgrades, refuse unowned characters and re-read the loadout on request', async () => {
+  const a = user('Снайпер');
+  const b = user('Новичок');
+  services.economy.gearByUser.set(a.userId, { loadout: { sidearm: 'nagan', melee: 'bita', primary: 'svd', mods: { svd: { mag: 3 } } }, characters: ['leopard'] });
+  const room = await privateRoom(a);
+  const ca = Client.join(a, room.roomId, 'leopard');
+  const welcomeA = await ca.msg('welcome');
+  // B asks for a premium character it does not own → plays the free default
+  const cb = Client.join(b, room.roomId, 'slon');
+  await cb.msg('welcome');
+  const roster = await ca.msg('roster', (m) => m.players.length === 2);
+  assert.equal(roster.players.find((p) => p.id === a.userId)!.character, 'leopard');
+  assert.equal(roster.players.find((p) => p.id === b.userId)!.character, 'petya');
+  assert.deepEqual(roster.players.find((p) => p.id === a.userId)!.mods, { svd: { mag: 3 } }, 'own upgrades travel for client prediction');
+  cb.send({ type: 'character', character: 'akula' });
+  await cb.msg('error', (m) => m.code === 'invalid_state');
+  ca.send({ type: 'start' });
+  const s = await ca.snap((x) => x.phase === 'active' && x.players.some((p) => p.slot === welcomeA.slot && p.alive));
+  const pa = s.players.find((p) => p.slot === welcomeA.slot)!;
+  assert.equal(pa.weapon, 'svd');
+  assert.equal(pa.heavy, 'svd');
+  assert.equal(pa.sidearm, 'nagan');
+  assert.equal(pa.melee, 'bita');
+  assert.equal(pa.heavyMag, 13, 'upgraded magazine (10 + 30 %)');
+  const pb = s.players.find((p) => p.slot !== welcomeA.slot)!;
+  assert.equal(pb.weapon, 'avtomat', 'free default loadout');
+  // the player changes the loadout over the API and tells the room: applies from the next spawn
+  services.economy.gearByUser.set(a.userId, { loadout: { sidearm: 'pistol', melee: 'montirovka', primary: 'obrez', mods: {} }, characters: ['leopard'] });
+  ca.send({ type: 'loadout' });
+  const roomObj = rooms.get(room.roomId)!;
+  await ca.until(() => roomObj.world.players.get(a.userId)!.primary === 'obrez', 3000, 'loadout refresh');
+  roomObj.world.spawnPlayer(roomObj.world.players.get(a.userId)!, false);
+  const s2 = await ca.snap((x) => x.players.some((p) => p.slot === welcomeA.slot && p.weapon === 'obrez'));
+  assert.ok(s2);
+  ca.close();
+  cb.close();
+});

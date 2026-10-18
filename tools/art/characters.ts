@@ -1,6 +1,6 @@
 /**
- * Top-down character rigs for the four playable characters, following the reference sheets in
- * /references (03–06). Models face +x; y+ is the character's right side; z is up.
+ * Top-down character rigs. The first four follow the reference sheets in /references (03–06); the
+ * ten shop characters live in characters2.ts. Models face +x; y+ is the character's right side; z is up.
  */
 import { hex } from './lib/raster.js';
 import type { RGBA } from './lib/raster.js';
@@ -9,12 +9,14 @@ import { poseGrip } from './weapons.js';
 import { MAT } from './materials.js';
 export { MAT };
 import type { PoseClass } from './weapons.js';
+import { EXTRA_RIGS } from './characters2.js';
+import type { CharacterId } from '../../packages/shared/src/game-rules/characters.js';
 
-export type CharId = 'petya' | 'valuta' | 'uchastkovy' | 'mihalych';
+export type CharId = CharacterId;
 
 const H = (...c: string[]): RGBA[] => c.map((x) => hex(x));
 
-interface Palette {
+export interface Palette {
   torso: Material;
   sleeve: Material;
   hand: Material;
@@ -37,6 +39,10 @@ export interface Rig {
   torsoExtras(p: Prim[], o: PoseOffsets): void;
   head(p: Prim[], o: PoseOffsets): void;
   tail?(p: Prim[], o: PoseOffsets): void;
+  /** Custom hand (claws, gloves with cuffs); default: an ellipsoid in pal.hand. */
+  hand?(p: Prim[], at: V3, side: -1 | 1, rig: Rig): void;
+  /** Bird feet: three toes per foot. */
+  toes?: boolean;
 }
 
 export interface PoseOffsets {
@@ -332,7 +338,9 @@ const mihalych: Rig = {
   },
 };
 
-export const RIGS: Record<CharId, Rig> = { petya, valuta, uchastkovy, mihalych };
+petya.toes = true;
+
+export const RIGS: Record<CharId, Rig> = { petya, valuta, uchastkovy, mihalych, ...EXTRA_RIGS };
 
 // ── Pose construction ────────────────────────────────────────────────────────
 
@@ -352,7 +360,7 @@ function rot(x: number, y: number, a: number): [number, number] {
 }
 
 /** Two-segment arm with an elbow pushed outward from the body. */
-function arm(p: Prim[], rig: Rig, side: -1 | 1, hand: V3, o: PoseOffsets, sleeve: Material) {
+export function arm(p: Prim[], rig: Rig, side: -1 | 1, hand: V3, o: PoseOffsets, sleeve: Material) {
   const sh: V3 = [-0.2 + o.dx, side * rig.shoulderY + o.dy, rig.shoulderZ + o.dz];
   const mid: V3 = [(sh[0] + hand[0]) / 2, (sh[1] + hand[1]) / 2, (sh[2] + hand[2]) / 2 + 0.6];
   const dx = hand[0] - sh[0];
@@ -369,7 +377,8 @@ function arm(p: Prim[], rig: Rig, side: -1 | 1, hand: V3, o: PoseOffsets, sleeve
   const elbow: V3 = [mid[0] + px * bend, mid[1] + py * bend, mid[2]];
   p.push({ k: 'cap', a: sh, b: elbow, r: rig.armR, r2: rig.armR * 0.92, mat: sleeve, group: 'arm' + side });
   p.push({ k: 'cap', a: elbow, b: hand, r: rig.armR * 0.92, r2: rig.armR * 0.82, mat: sleeve, group: 'arm' + side });
-  p.push({ k: 'ell', c: hand, r: [rig.armR * 0.85, rig.armR * 0.8, rig.armR * 0.75], mat: rig.pal.hand, group: 'hand' + side });
+  if (rig.hand) rig.hand(p, hand, side, rig);
+  else p.push({ k: 'ell', c: hand, r: [rig.armR * 0.85, rig.armR * 0.8, rig.armR * 0.75], mat: rig.pal.hand, group: 'hand' + side });
 }
 
 const ease = (t: number) => t * t * (3 - 2 * t);
@@ -474,7 +483,7 @@ export function legsPrims(id: CharId, anim: LegAnim, frame: number, frames: numb
     const ankle: V3 = [fx - 0.6, side * (hy + 0.5), fz + 1.0];
     p.push({ k: 'cap', a: hip, b: ankle, r: 2.3, r2: 1.9, mat: rig.pal.pants, group: 'leg' + side });
     p.push({ k: 'ell', c: [fx + 1.0, side * (hy + 0.6), fz], r: [rig.footR[0] + 0.4, rig.footR[1], rig.footR[2]], mat: rig.pal.shoe, group: 'foot' + side });
-    if (id === 'petya') {
+    if (rig.toes) {
       // bird toes
       for (const a of [-0.45, 0, 0.45]) {
         const [tx, ty] = rot(rig.footR[0] + 1.1, 0, a);

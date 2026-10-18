@@ -16,6 +16,10 @@ import { PgAnalytics } from '../analytics/writer.js';
 import { AdminAuth } from '../admin/auth.js';
 import { bootstrapAdmin } from '../admin/bootstrap.js';
 import { scheduleRetention } from '../analytics/retention.js';
+import { EconomyRepo } from '../economy/repo.js';
+import { EmailAuth } from '../auth/email.js';
+import { PaymentService } from '../payments/service.js';
+import { NowPaymentsProvider, StripeProvider } from '../payments/providers.js';
 
 export interface Persistence {
   services: Services;
@@ -64,6 +68,9 @@ export interface PgContext {
   invites: PgInvites;
   analytics: PgAnalytics;
   adminAuth: AdminAuth;
+  economy: EconomyRepo;
+  payments: PaymentService;
+  emailAuth: EmailAuth;
 }
 
 const contexts = new WeakMap<object, PgContext>();
@@ -87,6 +94,16 @@ export function pgContext(sql: Sql, env: Env, log: Logger): PgContext {
     invites: new PgInvites(sql),
     analytics,
     adminAuth: new AdminAuth(sql, env.SESSION_SECRET, env.ADMIN_SESSION_TTL_HOURS, env.PUBLIC_URL.startsWith('https://'), origins),
+    economy: new EconomyRepo(sql, log),
+    emailAuth: new EmailAuth(sql, env.SESSION_SECRET, log),
+    payments: new PaymentService(
+      sql,
+      log,
+      analytics,
+      env.PUBLIC_URL,
+      env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET ? new StripeProvider(env.STRIPE_SECRET_KEY, env.STRIPE_WEBHOOK_SECRET) : null,
+      env.NOWPAYMENTS_API_KEY && env.NOWPAYMENTS_IPN_SECRET ? new NowPaymentsProvider(env.NOWPAYMENTS_API_KEY, env.NOWPAYMENTS_IPN_SECRET, env.NOWPAYMENTS_SANDBOX) : null,
+    ),
   };
   contexts.set(sql as unknown as object, ctx);
   return ctx;
@@ -99,7 +116,7 @@ export async function createPersistence(deps: { sql: Sql; env: Env; log: Logger 
   // Retention purge (docs/PRIVACY.md): first run 5 min after start, then daily; unref'd timers.
   const stopRetention = deps.env.NODE_ENV === 'test' ? () => {} : scheduleRetention(deps.sql, deps.log);
   return {
-    services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics },
+    services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy },
     close: async () => {
       stopRetention();
       await ctx.analytics.close();

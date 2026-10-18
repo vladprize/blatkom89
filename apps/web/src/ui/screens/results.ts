@@ -1,4 +1,5 @@
 import { h, portrait, fmtDuration, plural } from '../dom.js';
+import { amount } from './shop.js';
 import { ACHIEVEMENTS, getMap, levelForXp, SCORING } from '@blatkom/shared';
 import type { ResultsData } from '../../game/session/types.js';
 
@@ -31,6 +32,9 @@ export function renderResults(o: {
       h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, h('div', { class: 'lvlbadge' }, h('small', null, 'УР.'), String(personal.level)), h('div', { class: 'h1 grow' }, `+${personal.xpGained} опыта`)),
       h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
       h('div', { class: 'muted' }, personal.leveledUp ? `Новый уровень — ${personal.level}!` : lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} до ${personal.level + 1}-го уровня` : 'Максимальный уровень'),
+      personal.tokensGained !== undefined
+        ? h('div', { class: 'row tokens-gain' }, h('b', null, '+', amount(personal.tokensGained, 'tokens')), h('span', { class: 'muted' }, `${plural(personal.tokensGained, ['жетон', 'жетона', 'жетонов'])} · всего ${personal.totalTokens ?? 0} — тратятся в Арсенале`))
+        : null,
       ...personal.newAchievements.map((a) => h('div', { class: 'ach' }, h('div', { class: 'ico' }, '★'), h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 't' }, ACHIEVEMENTS[a].title), h('div', { class: 'muted' }, ACHIEVEMENTS[a].description)))),
       o.localProfile ? h('div', { class: 'muted', style: 'font-size:14px' }, 'Локальный профиль — хранится в этом браузере.') : null,
     );

@@ -2,7 +2,7 @@
  * Online flow controller: authentication (Telegram initData or dev login), room creation/quick
  * match/invites over HTTP, the game WebSocket, lobby state and the OnlineSession lifecycle.
  */
-import type { CharacterId, InviteInfo, MapId, MatchConfig, MatchPhase, PublicProfile, RosterEntry, ServerMessage } from '@blatkom/shared';
+import type { CharacterId, InviteInfo, Inventory, MapId, MatchConfig, MatchPhase, PublicProfile, RosterEntry, ServerMessage, UpgradeStat, WeaponId } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { GameConnection } from './GameConnection.js';
 import { OnlineSession } from '../game/session/OnlineSession.js';
@@ -36,12 +36,21 @@ export interface OnlineCallbacks {
 
 const TOKEN_KEY = 'blatkom89.token';
 const DEVICE_KEY = 'blatkom89.device';
+/** Signed in with email on this browser: when the session expires, ask for the password instead of creating a guest. */
+const EMAIL_MODE_KEY = 'blatkom89.email-account';
+/** Anonymous per-browser id for the visitor funnel (no other data). */
+const VISITOR_KEY = 'blatkom89.visitor';
+const VISIT_DAY_KEY = 'blatkom89.visit-day';
 /** Free hosting (e.g. Render) sleeps after ~15 min without HTTP traffic — ping while in a room. */
 const KEEPALIVE_MS = 4 * 60_000;
 
 export class OnlineClient {
   readonly api = new Api();
   profile: PublicProfile | null = null;
+  /** Wallet, owned items and loadout (refreshed after purchases and matches). */
+  inventory: Inventory | null = null;
+  /** Called when the stored email session has expired and the player has to sign in again. */
+  onEmailSessionExpired: ((email: string) => void) | null = null;
   private conn: GameConnection | null = null;
   private session: OnlineSession | null = null;
   private roomId: string | null = null;
@@ -79,8 +88,14 @@ export class OnlineClient {
         this.profile = await this.api.me();
         this.setToken(saved);
         return this.profile;
-      } catch {
+      } catch (e) {
         this.api.token = null;
+        // an email account on this browser: never silently replace it with a fresh guest
+        const email = storageGet(EMAIL_MODE_KEY);
+        if (email && e instanceof ApiError && e.status === 401) {
+          this.onEmailSessionExpired?.(email);
+          throw new Error('Сессия истекла — войдите по почте ещё раз.');
+        }
       }
     }
     // guest account bound to this browser: a random device secret (the server keeps only its HMAC)
@@ -91,7 +106,7 @@ export class OnlineClient {
     }
     const name = telegramUserName() ?? `Гость_${device.slice(0, 3).toUpperCase()}`;
     try {
-      const res = await this.api.authGuest(name, device);
+      const res = await this.api.authGuest(name, device, storageGet(VISITOR_KEY) ?? undefined);
       this.setToken(res.token);
       storageSet(TOKEN_KEY, res.token);
       this.profile = res.profile;
@@ -106,8 +121,83 @@ export class OnlineClient {
   forgetLocalSession(): void {
     storageSet(TOKEN_KEY, null);
     storageSet(DEVICE_KEY, null);
+    storageSet(EMAIL_MODE_KEY, null);
     this.api.token = null;
     this.profile = null;
+    this.inventory = null;
+  }
+
+  /** Once a day per browser: an anonymous visit for the admin funnel (before any sign-up). */
+  pingVisit(): void {
+    const day = new Date().toISOString().slice(0, 10);
+    if (storageGet(VISIT_DAY_KEY) === day) return;
+    let vid = storageGet(VISITOR_KEY);
+    if (!vid || !/^[A-Za-z0-9_-]{16,64}$/.test(vid)) {
+      vid = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+      storageSet(VISITOR_KEY, vid);
+    }
+    let ref: string | undefined;
+    try {
+      ref = document.referrer && new URL(document.referrer).host !== location.host ? document.referrer.slice(0, 120) : undefined;
+    } catch {
+      ref = undefined;
+    }
+    void this.api
+      .visit(vid, ref)
+      .then(() => storageSet(VISIT_DAY_KEY, day))
+      .catch(() => {});
+  }
+
+  // ── email account ───────────────────────────────────────────────────────
+  /** Signs in to an existing account by email (this browser switches to it). */
+  async loginEmail(email: string, password: string): Promise<PublicProfile> {
+    const res = await this.api.loginEmail(email, password);
+    this.setToken(res.token);
+    storageSet(TOKEN_KEY, res.token);
+    storageSet(EMAIL_MODE_KEY, res.profile.email ?? email);
+    this.profile = res.profile;
+    this.inventory = null;
+    return res.profile;
+  }
+
+  async linkEmail(email: string, password: string): Promise<PublicProfile> {
+    await this.ensureAuth();
+    this.profile = await this.api.linkEmail(email, password);
+    storageSet(EMAIL_MODE_KEY, this.profile.email ?? email);
+    return this.profile;
+  }
+
+  // ── economy ─────────────────────────────────────────────────────────────
+  async loadInventory(): Promise<Inventory> {
+    await this.ensureAuth();
+    this.inventory = await this.api.inventory();
+    return this.inventory;
+  }
+
+  private applyInventory(inv: Inventory, loadoutChanged: boolean): Inventory {
+    this.inventory = inv;
+    if (this.profile) this.profile = { ...this.profile, tokens: inv.tokens, diamonds: inv.diamonds };
+    // tell the room to re-read the loadout (applies from the next spawn)
+    if (loadoutChanged) this.conn?.send({ type: 'loadout' });
+    return inv;
+  }
+
+  async buy(kind: 'weapon' | 'character', id: string): Promise<Inventory> {
+    return this.applyInventory(await this.api.buy(kind, id), kind === 'weapon');
+  }
+
+  async upgrade(weapon: WeaponId, stat: UpgradeStat): Promise<Inventory> {
+    return this.applyInventory(await this.api.upgrade(weapon, stat), true);
+  }
+
+  async openCase() {
+    const r = await this.api.openCase();
+    this.applyInventory(r.inventory, true);
+    return r;
+  }
+
+  async setLoadout(sidearm: WeaponId, melee: WeaponId, primary: WeaponId | null): Promise<Inventory> {
+    return this.applyInventory(await this.api.setLoadout(sidearm, melee, primary), true);
   }
 
   private setToken(token: string) {

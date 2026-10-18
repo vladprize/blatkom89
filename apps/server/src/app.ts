@@ -14,6 +14,7 @@ import { registerAuthRoutes } from './api/auth.js';
 import { registerProfileRoutes } from './api/profile.js';
 import { registerEventRoutes } from './api/events.js';
 import { registerAdminRoutes } from './admin/routes.js';
+import { registerShopRoutes } from './api/shop.js';
 
 export interface AppDeps {
   env: Env;
@@ -25,7 +26,7 @@ export interface AppDeps {
 
 export type RouteModule = (router: Router, deps: AppDeps) => void;
 
-export const ROUTE_MODULES: RouteModule[] = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerAdminRoutes];
+export const ROUTE_MODULES: RouteModule[] = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerAdminRoutes];
 
 export function createApp(deps: AppDeps, modules: RouteModule[] = ROUTE_MODULES) {
   const router = new Router();

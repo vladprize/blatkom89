@@ -1,8 +1,8 @@
 /** In-memory implementations of the service contracts (tests and local experiments). */
 import { randomBytes } from 'node:crypto';
-import { levelForXp, xpForMatch } from '@blatkom/shared';
-import type { PersonalResult } from '@blatkom/shared';
-import type { Analytics, AuthedUser, InviteRegistry, MatchCompletion, MatchRecorder, MatchStart, Services, SessionVerifier } from './contracts.js';
+import { DEFAULT_LOADOUT, FREE_CHARACTERS, levelForXp, tokensForMatch, xpForMatch } from '@blatkom/shared';
+import type { CharacterId, Loadout, PersonalResult } from '@blatkom/shared';
+import type { Analytics, AuthedUser, Economy, InviteRegistry, MatchCompletion, MatchRecorder, MatchStart, PlayerGear, Services, SessionVerifier } from './contracts.js';
 
 export class MemorySessions implements SessionVerifier {
   readonly tokens = new Map<string, AuthedUser>();
@@ -21,6 +21,7 @@ export class MemoryRecorder implements MatchRecorder {
   readonly completed = new Map<string, MatchCompletion>();
   readonly abandoned: string[] = [];
   readonly xp = new Map<string, number>();
+  readonly tokens = new Map<string, number>();
   async matchStarted(m: MatchStart) {
     this.started.push(m);
   }
@@ -29,10 +30,14 @@ export class MemoryRecorder implements MatchRecorder {
     const first = !this.completed.has(m.matchId);
     if (first) this.completed.set(m.matchId, m);
     for (const p of m.participants) {
-      const gained = first ? xpForMatch({ kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends: p.viaInvite && m.playersAtEnd > 1 }) : 0;
+      const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends: p.viaInvite && m.playersAtEnd > 1 };
+      const gained = first ? xpForMatch(perf) : 0;
       const total = (this.xp.get(p.userId) ?? 0) + gained;
       this.xp.set(p.userId, total);
-      out.set(p.userId, { xpGained: gained, totalXp: total, level: levelForXp(total).level, leveledUp: false, newAchievements: [] });
+      const tok = first ? tokensForMatch(perf) : 0;
+      const totalTokens = (this.tokens.get(p.userId) ?? 0) + tok;
+      this.tokens.set(p.userId, totalTokens);
+      out.set(p.userId, { xpGained: gained, totalXp: total, level: levelForXp(total).level, leveledUp: false, newAchievements: [], tokensGained: tok, totalTokens });
     }
     return out;
   }
@@ -66,6 +71,15 @@ export class MemoryAnalytics implements Analytics {
   }
 }
 
-export function memoryServices(): Services & { sessions: MemorySessions; recorder: MemoryRecorder; invites: MemoryInvites; analytics: MemoryAnalytics } {
-  return { sessions: new MemorySessions(), recorder: new MemoryRecorder(), invites: new MemoryInvites(), analytics: new MemoryAnalytics() };
+/** Free gear for everyone unless a test sets something else. */
+export class MemoryEconomy implements Economy {
+  readonly gearByUser = new Map<string, { loadout?: Loadout; characters?: CharacterId[] }>();
+  async gear(userId: string): Promise<PlayerGear> {
+    const g = this.gearByUser.get(userId);
+    return { loadout: g?.loadout ?? DEFAULT_LOADOUT, characters: new Set([...FREE_CHARACTERS, ...(g?.characters ?? [])]) };
+  }
+}
+
+export function memoryServices(): Services & { sessions: MemorySessions; recorder: MemoryRecorder; invites: MemoryInvites; analytics: MemoryAnalytics; economy: MemoryEconomy } {
+  return { sessions: new MemorySessions(), recorder: new MemoryRecorder(), invites: new MemoryInvites(), analytics: new MemoryAnalytics(), economy: new MemoryEconomy() };
 }

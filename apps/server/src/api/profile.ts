@@ -25,6 +25,10 @@ export const registerProfileRoutes: RouteModule = (router, deps) => {
   router.patch('/api/me', auth, rateLimit(writeLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
     const user = currentUser(ctx);
     const body = await ctx.body(UpdateProfileRequest, 4 * 1024);
+    if (body.preferredCharacter) {
+      const inv = await pg().economy.inventory(user.userId);
+      if (!inv.characters.includes(body.preferredCharacter)) throw new HttpError(409, 'not_owned', 'Этот персонаж ещё не открыт');
+    }
     await pg().profiles.update(user.userId, body);
     const profile = await pg().profiles.get(user.userId);
     ctx.json(200, profile);

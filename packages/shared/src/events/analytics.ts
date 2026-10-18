@@ -27,6 +27,11 @@ export const ANALYTICS_EVENTS = [
   'reconnect_attempted',
   'reconnect_succeeded',
   'client_error',
+  'shop_purchase',
+  'upgrade_bought',
+  'case_opened',
+  'payment_completed',
+  'email_linked',
 ] as const;
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];
 
@@ -70,7 +75,7 @@ export const CLIENT_EVENT_PROPS = {
 } satisfies Record<ClientEventName, z.ZodTypeAny>;
 
 export const SERVER_EVENT_PROPS = {
-  session_started: z.object({ platform, method: z.enum(['telegram', 'dev', 'guest']) }),
+  session_started: z.object({ platform, method: z.enum(['telegram', 'dev', 'guest', 'email']) }),
   profile_created: z.object({ method: z.enum(['telegram', 'dev', 'guest']) }),
   lobby_created: z.object({ roomId: z.string(), mapId: z.enum(MAP_IDS), isPrivate: z.boolean() }),
   lobby_joined: z.object({ roomId: z.string(), viaInvite: z.boolean() }),
@@ -80,6 +85,11 @@ export const SERVER_EVENT_PROPS = {
   match_abandoned: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS), phase: z.string() }),
   map_played: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS) }),
   invite_created: z.object({ code: z.string(), roomId: z.string() }),
+  shop_purchase: z.object({ kind: z.enum(['weapon', 'character']), item: z.string(), currency: z.enum(['tokens', 'diamonds']), amount: z.number().int() }),
+  upgrade_bought: z.object({ weapon: z.string(), stat: z.string(), level: z.number().int(), cost: z.number().int() }),
+  case_opened: z.object({ weapon: z.string(), rarity: z.enum(['rare', 'epic', 'legendary']), price: z.number().int() }),
+  payment_completed: z.object({ provider: z.string(), packId: z.string(), diamonds: z.number().int(), amountCents: z.number().int() }),
+  email_linked: z.object({}),
 } as const;
 
 export const ClientEventEnvelopeSchema = z

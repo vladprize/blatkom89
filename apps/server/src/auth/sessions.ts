@@ -26,7 +26,7 @@ export class SessionStore implements SessionVerifier {
     private readonly log: Logger,
   ) {}
 
-  async issue(userId: string, method: 'telegram' | 'dev' | 'guest', platform: string | null, clientVersion: string | null): Promise<IssuedSession> {
+  async issue(userId: string, method: 'telegram' | 'dev' | 'guest' | 'email', platform: string | null, clientVersion: string | null): Promise<IssuedSession> {
     const token = newToken(32);
     const expiresAt = new Date(Date.now() + this.ttlHours * 3600_000);
     const rows = await this.sql<Array<{ id: string }>>`

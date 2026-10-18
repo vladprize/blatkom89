@@ -21,6 +21,8 @@ import {
   TICK_MS,
   WS_CLOSE,
   DEFAULT_MATCH_CONFIG,
+  DEFAULT_LOADOUT,
+  FREE_CHARACTERS,
   isMapId,
   rankPlaces,
 } from '@blatkom/shared';
@@ -36,7 +38,7 @@ import type {
   WorldEvent,
   Standing,
 } from '@blatkom/shared';
-import type { AuthedUser, Services } from '../services/contracts.js';
+import type { AuthedUser, PlayerGear, Services } from '../services/contracts.js';
 import type { Logger } from '../logging/logger.js';
 
 export interface RoomOptions {
@@ -54,6 +56,9 @@ interface Client {
   user: AuthedUser;
   ws: WebSocket | null;
   character: CharacterId;
+  /** Owned characters and the validated spawn loadout (refreshed on 'loadout'). */
+  gear: PlayerGear;
+  lastGearAt: number;
   ready: boolean;
   rematch: boolean;
   viaInvite: boolean;
@@ -72,6 +77,8 @@ interface Client {
 }
 
 const AUTO_START_DELAY_MS = 4000;
+/** Free gear (used when the economy is unavailable). */
+export const FREE_GEAR: PlayerGear = Object.freeze({ loadout: DEFAULT_LOADOUT, characters: new Set(FREE_CHARACTERS) });
 const SOLO_ABORT_MS = 20_000;
 const MAX_MSGS_PER_SEC = 150;
 
@@ -147,10 +154,14 @@ export class MatchRoom {
 
   // ── Connections ─────────────────────────────────────────────────────────
   /** Adds or resumes a player. Returns an error code when the join is refused. */
-  join(user: AuthedUser, ws: WebSocket, character: CharacterId, viaInvite: boolean): 'ok' | 'resumed' | 'room_full' | 'room_closed' {
+  join(user: AuthedUser, ws: WebSocket, requested: CharacterId, viaInvite: boolean, gear: PlayerGear = FREE_GEAR): 'ok' | 'resumed' | 'room_full' | 'room_closed' {
     if (this.closed) return 'room_closed';
+    // only owned characters can be played online
+    const character: CharacterId = gear.characters.has(requested) ? requested : 'petya';
     const existing = this.clients.get(user.userId);
     if (existing) {
+      existing.gear = gear;
+      this.world.setLoadout(user.userId, gear.loadout);
       if (existing.ws && existing.ws !== ws) {
         try {
           existing.ws.close(WS_CLOSE.REPLACED, 'replaced');
@@ -178,6 +189,8 @@ export class MatchRoom {
       user,
       ws,
       character,
+      gear,
+      lastGearAt: 0,
       ready: this.autoStart,
       rematch: false,
       viaInvite,
@@ -195,7 +208,7 @@ export class MatchRoom {
     };
     this.clients.set(user.userId, client);
     if (!this.hostId) this.hostId = user.userId;
-    this.world.addPlayer(user.userId, user.displayName, character, false);
+    this.world.addPlayer(user.userId, user.displayName, character, false, gear.loadout);
     this.send(client, this.welcome(client, false));
     this.broadcastRoster();
     this.services.analytics.server('lobby_joined', { roomId: this.id, viaInvite }, user);
@@ -309,6 +322,7 @@ export class MatchRoom {
         this.broadcastRoster();
         return;
       case 'character': {
+        if (!c.gear.characters.has(msg.character)) return this.error(c, 'invalid_state', 'Этот персонаж ещё не открыт');
         c.character = msg.character;
         const p = this.world.players.get(c.user.userId);
         if (p && (this.world.phase === 'waiting' || !p.alive)) p.character = msg.character;
@@ -327,6 +341,24 @@ export class MatchRoom {
         if (this.connectedCount < this.config.minPlayers) return this.error(c, 'invalid_state', `Нужно минимум ${this.config.minPlayers} игрока`);
         this.startMatch();
         return;
+      case 'loadout': {
+        // the player changed weapons/upgrades over the API: re-read them (applies from the next spawn)
+        const now = Date.now();
+        if (now - c.lastGearAt < 1500) return;
+        c.lastGearAt = now;
+        const userId = c.user.userId;
+        void this.services.economy
+          .gear(userId)
+          .then((g) => {
+            const cur = this.clients.get(userId);
+            if (!cur || this.closed) return;
+            cur.gear = g;
+            this.world.setLoadout(userId, g.loadout);
+            this.broadcastRoster();
+          })
+          .catch((e: Error) => this.log.warn('loadout refresh failed', { user: userId, err: e }));
+        return;
+      }
       case 'rematch':
         if (this.world.phase !== 'finished') return;
         c.rematch = true;
@@ -573,6 +605,7 @@ export class MatchRoom {
         isHost: c.user.userId === this.hostId,
         isBot: false,
         level: c.user.level,
+        mods: c.gear.loadout.mods,
       };
     });
     return { type: 'roster', players, hostId: this.hostId, mapId: this.mapId, phase: this.world.phase, inviteCode: this.inviteCode, isPrivate: this.isPrivate, maxPlayers: this.config.maxPlayers };

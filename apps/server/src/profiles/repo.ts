@@ -21,6 +21,9 @@ interface ProfileRow {
   current_win_streak: number;
   best_win_streak: number;
   preferred_character: CharacterId | null;
+  tokens: number;
+  diamonds: number;
+  email: string | null;
 }
 
 export function toPublicProfile(r: ProfileRow): PublicProfile {
@@ -45,6 +48,9 @@ export function toPublicProfile(r: ProfileRow): PublicProfile {
     currentWinStreak: r.current_win_streak,
     bestWinStreak: r.best_win_streak,
     preferredCharacter: r.preferred_character,
+    tokens: r.tokens,
+    diamonds: r.diamonds,
+    email: r.email,
   };
 }
 
@@ -60,7 +66,7 @@ export class ProfileRepo {
              COALESCE(p.assists, 0) AS assists,
              COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
-             p.preferred_character
+             p.preferred_character, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
       WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
     return rows[0] ? toPublicProfile(rows[0]) : null;

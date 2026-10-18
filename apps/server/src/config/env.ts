@@ -37,6 +37,18 @@ const EnvSchema = z.object({
   MATCH_SCORE_LIMIT: z.coerce.number().int().min(1).max(400).default(50),
   MATCH_MIN_PLAYERS: z.coerce.number().int().min(2).max(6).default(2),
   MATCH_MAX_PLAYERS: z.coerce.number().int().min(2).max(6).default(6),
+  /** Paid cases can be switched off where randomised paid items are restricted (docs/ECONOMY.md). */
+  CASES_ENABLED: bool.default('true'),
+  /** Card payments (Stripe Checkout). Both keys are required to enable them. */
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  /** Crypto payments (NOWPayments invoices). Both keys are required to enable them. */
+  NOWPAYMENTS_API_KEY: z.string().optional(),
+  NOWPAYMENTS_IPN_SECRET: z.string().optional(),
+  NOWPAYMENTS_SANDBOX: bool.default('false'),
+  /** Password-reset emails through Resend (https://resend.com); without a key the admin issues reset links. */
+  RESEND_API_KEY: z.string().optional(),
+  MAIL_FROM: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

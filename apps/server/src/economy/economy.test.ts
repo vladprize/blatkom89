@@ -1,0 +1,329 @@
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
+import { CASE_PRICE, CASE_TABLE, DEFAULT_LOADOUT, FREE_CHARACTERS, FREE_WEAPONS, UPGRADE_COSTS, WEAPON_PRICES, tokensForMatch } from '@blatkom/shared';
+import { startTestApp, api, devLogin } from '../admin/testkit.js';
+import type { TestApp } from '../admin/testkit.js';
+import { pgContext } from '../services/persistence.js';
+import { silentLogger } from '../logging/logger.js';
+import { StripeProvider, NowPaymentsProvider, sortKeysDeep } from '../payments/providers.js';
+import type { FetchLike } from '../payments/providers.js';
+import { PaymentService } from '../payments/service.js';
+import { MemoryAnalytics } from '../services/memory.js';
+
+let app: TestApp;
+before(async () => {
+  app = await startTestApp();
+});
+after(async () => {
+  await app.close();
+});
+
+const ctx = () => pgContext(app.db.sql, app.env, silentLogger);
+const setLevel = (userId: string, level: number) => app.db.sql`UPDATE profiles SET level = ${level} WHERE user_id = ${userId}`;
+
+test('economy: a new player owns the free weapons and characters and spawns with the default loadout', async () => {
+  const a = await devLogin(app.base, 'Новичок');
+  const r = await api(app.base, '/api/me/inventory', { token: a.token });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.tokens, 0);
+  assert.equal(r.body.diamonds, 0);
+  assert.deepEqual([...r.body.weapons].sort(), [...FREE_WEAPONS].sort());
+  assert.deepEqual([...r.body.characters].sort(), [...FREE_CHARACTERS].sort());
+  assert.deepEqual({ ...r.body.loadout, mods: {} }, { ...DEFAULT_LOADOUT, mods: {} });
+  const me = await api(app.base, '/api/me', { token: a.token });
+  assert.equal(me.body.tokens, 0);
+  assert.equal(me.body.email, null);
+});
+
+test('economy: tokens are awarded once per finished match, with a ledger entry', async () => {
+  const a = await devLogin(app.base, 'Игрок А');
+  const b = await devLogin(app.base, 'Игрок Б');
+  const matchId = '7b0f7c4e-1b6a-4f0e-9a51-2c1d00000001';
+  const started = new Date(Date.now() - 200_000);
+  const completion = {
+    matchId,
+    roomId: 'R1',
+    mapId: 'factory' as const,
+    isPrivate: false,
+    startedAt: started,
+    endedAt: new Date(),
+    durationMs: 200_000,
+    endReason: 'time' as const,
+    playersAtEnd: 2,
+    participants: [
+      { userId: a.userId, character: 'petya' as const, place: 1, kills: 5, assists: 2, deaths: 1, score: 12, damageDealt: 500, completed: true, viaInvite: false, playtimeMs: 200_000 },
+      { userId: b.userId, character: 'valuta' as const, place: 2, kills: 1, assists: 0, deaths: 5, score: 2, damageDealt: 150, completed: true, viaInvite: false, playtimeMs: 200_000 },
+    ],
+  };
+  const r1 = await ctx().recorder.matchCompleted(completion);
+  const expectA = tokensForMatch({ kills: 5, assists: 2, deaths: 1, place: 1, playersAtEnd: 2, completed: true, withFriends: false });
+  assert.equal(r1.get(a.userId)!.tokensGained, expectA);
+  assert.equal(r1.get(a.userId)!.totalTokens, expectA);
+  // a duplicate completion (retry) awards nothing new and reports the stored values
+  const r2 = await ctx().recorder.matchCompleted(completion);
+  assert.equal(r2.get(a.userId)!.tokensGained, expectA);
+  assert.equal(r2.get(a.userId)!.totalTokens, expectA);
+  const inv = await ctx().economy.inventory(a.userId);
+  assert.equal(inv.tokens, expectA);
+  const led = await api(app.base, '/api/me/ledger', { token: a.token });
+  assert.equal(led.body.entries.filter((e: { reason: string }) => e.reason === 'match').length, 1);
+});
+
+test('economy: buying weapons checks funds, level and ownership; prices come from the server', async () => {
+  const a = await devLogin(app.base, 'Покупатель');
+  const buy = (kind: string, id: string) => api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind, id } });
+  let r = await buy('weapon', 'uzi');
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error.code, 'funds');
+  await ctx().economy.grant(a.userId, 'tokens', 1000, null, 'test');
+  r = await buy('weapon', 'uzi');
+  assert.equal(r.status, 200, r.text);
+  assert.ok(r.body.weapons.includes('uzi'));
+  assert.equal(r.body.tokens, 1000 - WEAPON_PRICES.uzi!.amount);
+  r = await buy('weapon', 'uzi');
+  assert.equal(r.body.error.code, 'owned');
+  r = await buy('weapon', 'ksyuha');
+  assert.equal(r.body.error.code, 'level', 'ksyuha needs level 3');
+  await setLevel(a.userId, 3);
+  r = await buy('weapon', 'ksyuha');
+  assert.equal(r.status, 200, r.text);
+  r = await buy('weapon', 'svd');
+  assert.equal(r.body.error.code, 'funds', 'diamond items cannot be bought with tokens');
+  r = await buy('weapon', 'zolotoy');
+  assert.equal(r.body.error.code, 'not_for_sale', 'case weapons are not sold directly');
+  r = await buy('weapon', 'laser');
+  assert.equal(r.body.error.code, 'not_for_sale');
+  const led = await ctx().economy.ledger(a.userId);
+  assert.equal(led.filter((e) => e.reason === 'purchase').length, 2);
+});
+
+test('economy: characters — level + tokens or diamonds; only owned characters can be preferred', async () => {
+  const a = await devLogin(app.base, 'Коллекционер');
+  const r0 = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { preferredCharacter: 'vorona' } });
+  assert.equal(r0.status, 409);
+  await ctx().economy.grant(a.userId, 'tokens', 500, null, 'test');
+  await ctx().economy.grant(a.userId, 'diamonds', 300, null, 'test');
+  let r = await api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'character', id: 'vorona' } });
+  assert.equal(r.body.error.code, 'level');
+  await setLevel(a.userId, 2);
+  r = await api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'character', id: 'vorona' } });
+  assert.equal(r.status, 200, r.text);
+  r = await api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'character', id: 'leopard' } });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.diamonds, 1);
+  assert.ok(r.body.characters.includes('vorona') && r.body.characters.includes('leopard'));
+  const p = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { preferredCharacter: 'leopard' } });
+  assert.equal(p.status, 200);
+  assert.equal(p.body.preferredCharacter, 'leopard');
+  const gear = await ctx().economy.gear(a.userId);
+  assert.ok(gear.characters.has('leopard'));
+});
+
+test('economy: upgrades cost tokens per level, are capped and only fit stats the weapon has', async () => {
+  const a = await devLogin(app.base, 'Оружейник');
+  await ctx().economy.grant(a.userId, 'tokens', 5000, null, 'test');
+  const up = (weapon: string, stat: string) => api(app.base, '/api/shop/upgrade', { method: 'POST', token: a.token, body: { weapon, stat } });
+  for (let lv = 1; lv <= 3; lv++) {
+    const r = await up('avtomat', 'dmg');
+    assert.equal(r.status, 200, r.text);
+    assert.equal(r.body.upgrades.avtomat.dmg, lv);
+  }
+  assert.equal((await up('avtomat', 'dmg')).body.error.code, 'max_level');
+  assert.equal((await up('montirovka', 'mag')).body.error.code, 'not_upgradable');
+  assert.equal((await up('svd', 'dmg')).body.error.code, 'not_owned');
+  const inv = await ctx().economy.inventory(a.userId);
+  assert.equal(inv.tokens, 5000 - UPGRADE_COSTS[1]! - UPGRADE_COSTS[2]! - UPGRADE_COSTS[3]!);
+  // upgrades travel with the loadout into rooms
+  assert.deepEqual(inv.loadout.mods.avtomat, { dmg: 3 });
+});
+
+test('economy: cases cost diamonds, never repeat a weapon and stop when the collection is complete', async () => {
+  const a = await devLogin(app.base, 'Азартный');
+  const open = () => api(app.base, '/api/shop/case', { method: 'POST', token: a.token, body: { confirmAge: true } });
+  assert.equal((await open()).body.error.code, 'funds');
+  assert.equal((await api(app.base, '/api/shop/case', { method: 'POST', token: a.token, body: {} })).status, 400, 'adult confirmation required');
+  await ctx().economy.grant(a.userId, 'diamonds', CASE_PRICE * CASE_TABLE.length + 5, null, 'test');
+  const got = new Set<string>();
+  for (let i = 0; i < CASE_TABLE.length; i++) {
+    const r = await open();
+    assert.equal(r.status, 200, r.text);
+    assert.ok(!got.has(r.body.weapon), `no duplicate (${r.body.weapon})`);
+    got.add(r.body.weapon);
+    assert.ok(r.body.inventory.weapons.includes(r.body.weapon));
+  }
+  assert.equal(got.size, CASE_TABLE.length);
+  const last = await open();
+  assert.equal(last.status, 409);
+  assert.equal(last.body.error.code, 'collection_complete');
+  const inv = await ctx().economy.inventory(a.userId);
+  assert.equal(inv.diamonds, 5);
+  const [n] = await app.db.sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM case_openings WHERE user_id = ${a.userId}`;
+  assert.equal(n!.n, CASE_TABLE.length);
+  const off = await startTestApp({ CASES_ENABLED: false });
+  try {
+    const b = await devLogin(off.base, 'Бельгиец');
+    const r = await api(off.base, '/api/shop/case', { method: 'POST', token: b.token, body: { confirmAge: true } });
+    assert.equal(r.status, 403);
+    assert.equal((await api(off.base, '/api/shop/config')).body.casesEnabled, false);
+  } finally {
+    await off.close();
+  }
+});
+
+test('economy: the loadout only keeps owned weapons and the server re-reads it for rooms', async () => {
+  const a = await devLogin(app.base, 'Снайпер');
+  let r = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'nagan', melee: 'bita', primary: 'svd' } });
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual([r.body.loadout.sidearm, r.body.loadout.melee, r.body.loadout.primary], ['pistol', 'montirovka', 'avtomat'], 'unowned → free defaults');
+  await ctx().economy.grantItem(a.userId, 'weapon', 'svd');
+  r = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'pistol', melee: 'montirovka', primary: 'svd' } });
+  assert.equal(r.body.loadout.primary, 'svd');
+  r = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'pistol', melee: 'montirovka', primary: null } });
+  assert.equal(r.body.loadout.primary, null, 'going in with a pistol only is allowed');
+  assert.equal((await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'svd', melee: 'montirovka', primary: null } })).status, 200);
+  const gear = await ctx().economy.gear(a.userId);
+  assert.equal(gear.loadout.sidearm, 'pistol', 'a rifle cannot be a sidearm');
+});
+
+test('economy: concurrent purchases cannot overspend', async () => {
+  const a = await devLogin(app.base, 'Торопыга');
+  await ctx().economy.grant(a.userId, 'tokens', WEAPON_PRICES.finka!.amount + WEAPON_PRICES.uzi!.amount - 1, null, 'test');
+  const results = await Promise.all([
+    api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'weapon', id: 'finka' } }),
+    api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'weapon', id: 'uzi' } }),
+  ]);
+  assert.equal(results.filter((r) => r.status === 200).length, 1, results.map((r) => r.text).join(' | '));
+  const inv = await ctx().economy.inventory(a.userId);
+  assert.ok(inv.tokens >= 0);
+});
+
+// ── Payments ──────────────────────────────────────────────────────────────
+
+test('payments: without provider keys checkout is unavailable (no simulated purchases)', async () => {
+  const a = await devLogin(app.base, 'Без карты');
+  const cfg = await api(app.base, '/api/shop/config');
+  assert.equal(cfg.body.card, false);
+  assert.equal(cfg.body.crypto, false);
+  const r = await api(app.base, '/api/pay/checkout', { method: 'POST', token: a.token, body: { packId: 'd199', method: 'card' } });
+  assert.equal(r.status, 503);
+  assert.equal(r.body.error.code, 'payments_not_configured');
+  assert.equal((await api(app.base, '/api/pay/stripe/webhook', { method: 'POST', body: {} })).status, 404);
+});
+
+test('payments: Stripe checkout + signed webhook credits diamonds exactly once; bad signatures are refused', async () => {
+  const a = await devLogin(app.base, 'Платящий');
+  const calls: Array<{ url: string; body: string; headers: Record<string, string> }> = [];
+  const fakeFetch: FetchLike = async (url, init) => {
+    calls.push({ url, body: init.body, headers: init.headers });
+    return { ok: true, status: 200, json: async () => ({ id: 'cs_test_123', url: 'https://checkout.stripe.com/c/pay/cs_test_123' }), text: async () => '' };
+  };
+  const stripe = new StripeProvider('sk_test_x', 'whsec_test', fakeFetch);
+  const svc = new PaymentService(app.db.sql, silentLogger, new MemoryAnalytics(), 'https://blatkom.example', stripe, null);
+  const co = await svc.checkout(a.userId, 'd499', 'card');
+  assert.equal(co.url, 'https://checkout.stripe.com/c/pay/cs_test_123');
+  const form = new URLSearchParams(calls[0]!.body);
+  assert.equal(form.get('line_items[0][price_data][unit_amount]'), '499');
+  assert.equal(form.get('metadata[payment_id]'), co.paymentId);
+  assert.equal(calls[0]!.headers['idempotency-key'], co.paymentId);
+  // signature verification
+  const payload = Buffer.from(JSON.stringify({ type: 'checkout.session.completed', data: { object: { payment_status: 'paid', currency: 'usd', amount_total: 499, metadata: { payment_id: co.paymentId } } } }));
+  const t = Math.floor(Date.now() / 1000);
+  const sig = createHmac('sha256', 'whsec_test').update(`${t}.`).update(payload).digest('hex');
+  assert.equal(stripe.verifyWebhook(payload, `t=${t},v1=${sig}`), true);
+  assert.equal(stripe.verifyWebhook(payload, `t=${t},v1=${'0'.repeat(64)}`), false);
+  assert.equal(stripe.verifyWebhook(payload, `t=${t - 3600},v1=${sig}`), false, 'old timestamps are rejected');
+  assert.equal(stripe.verifyWebhook(Buffer.from(payload.toString().replace('499', '1')), `t=${t},v1=${sig}`), false, 'tampered body');
+  await svc.onStripeEvent(JSON.parse(payload.toString()));
+  await svc.onStripeEvent(JSON.parse(payload.toString()));
+  const inv = await ctx().economy.inventory(a.userId);
+  assert.equal(inv.diamonds, 499, 'credited once');
+  assert.equal((await svc.status(a.userId, co.paymentId)).status, 'paid');
+  // refund takes back unspent diamonds
+  await svc.markRefunded(co.paymentId, 'stripe');
+  assert.equal((await ctx().economy.inventory(a.userId)).diamonds, 0);
+});
+
+test('payments: NOWPayments IPN signature (sorted keys, HMAC-SHA512); underpaid invoices credit nothing', async () => {
+  const a = await devLogin(app.base, 'Криптан');
+  const fakeFetch: FetchLike = async () => ({ ok: true, status: 200, json: async () => ({ id: 987654, invoice_url: 'https://nowpayments.io/payment/?iid=987654' }), text: async () => '' });
+  const np = new NowPaymentsProvider('np_key', 'ipn_secret', false, fakeFetch);
+  const svc = new PaymentService(app.db.sql, silentLogger, new MemoryAnalytics(), 'https://blatkom.example', null, np);
+  const co = await svc.checkout(a.userId, 'd999', 'crypto');
+  const body = { payment_status: 'finished', order_id: co.paymentId, price_amount: 9.99, price_currency: 'usd', pay_currency: 'usdttrc20', actually_paid: 9.99 };
+  const sig = createHmac('sha512', 'ipn_secret').update(JSON.stringify(sortKeysDeep(body))).digest('hex');
+  assert.equal(np.verifyIpn(body, sig), true);
+  assert.equal(np.verifyIpn({ ...body, price_amount: 0.01 }, sig), false);
+  await svc.onNowPaymentsIpn({ ...body, price_amount: 1.0 });
+  assert.equal((await ctx().economy.inventory(a.userId)).diamonds, 0, 'underpaid');
+  await svc.onNowPaymentsIpn(body);
+  await svc.onNowPaymentsIpn(body);
+  assert.equal((await ctx().economy.inventory(a.userId)).diamonds, 999);
+  const [n] = await app.db.sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM currency_ledger WHERE user_id = ${a.userId} AND reason = 'topup'`;
+  assert.equal(n!.n, 1);
+});
+
+// ── Email sign-in ───────────────────────────────────────────────────────────
+
+test('email: link an email, sign in from another device, refuse taken emails and wrong passwords', async () => {
+  const a = await devLogin(app.base, 'Донатер');
+  const b = await devLogin(app.base, 'Сосед');
+  await ctx().economy.grant(a.userId, 'diamonds', 300, null, 'test');
+  let r = await api(app.base, '/api/auth/email/link', { method: 'POST', token: a.token, body: { email: 'Donater@Example.com ', password: 'короткий' } });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.email, 'donater@example.com');
+  r = await api(app.base, '/api/auth/email/link', { method: 'POST', token: a.token, body: { email: 'other@example.com', password: 'длинный-пароль' } });
+  assert.equal(r.body.error.code, 'already_linked');
+  r = await api(app.base, '/api/auth/email/link', { method: 'POST', token: b.token, body: { email: 'donater@example.com', password: 'длинный-пароль' } });
+  assert.equal(r.body.error.code, 'email_taken');
+  r = await api(app.base, '/api/auth/email/link', { method: 'POST', token: b.token, body: { email: 'neighbour@example.com', password: '1234567' } });
+  assert.equal(r.status, 400, 'password too short');
+  r = await api(app.base, '/api/auth/email/login', { method: 'POST', body: { email: 'donater@example.com', password: 'неверный' } });
+  assert.equal(r.status, 401);
+  r = await api(app.base, '/api/auth/email/login', { method: 'POST', body: { email: 'DONATER@example.com', password: 'короткий', platform: 'browser_mobile' } });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.profile.id, a.userId, 'the same account on the new device');
+  assert.equal(r.body.profile.diamonds, 300);
+  const [u] = await app.db.sql<Array<{ password_hash: string }>>`SELECT password_hash FROM users WHERE id = ${a.userId}`;
+  assert.ok(u!.password_hash.startsWith('scrypt$') && !u!.password_hash.includes('короткий'));
+  // password change
+  r = await api(app.base, '/api/auth/email/password', { method: 'POST', token: r.body.token, body: { current: 'короткий', password: 'новый-пароль-89' } });
+  assert.equal(r.status, 200);
+  assert.equal((await api(app.base, '/api/auth/email/login', { method: 'POST', body: { email: 'donater@example.com', password: 'новый-пароль-89' } })).status, 200);
+});
+
+test('email: reset links are single-use and revoke old sessions; without a mail service the request is refused', async () => {
+  const a = await devLogin(app.base, 'Забывчивый');
+  await api(app.base, '/api/auth/email/link', { method: 'POST', token: a.token, body: { email: 'forgetful@example.com', password: 'первый-пароль' } });
+  const req = await api(app.base, '/api/auth/email/reset-request', { method: 'POST', body: { email: 'forgetful@example.com' } });
+  assert.equal(req.status, 503);
+  assert.equal(req.body.error.code, 'mail_not_configured');
+  const reset = await ctx().emailAuth.createReset('admin', { userId: a.userId });
+  assert.ok(reset);
+  let r = await api(app.base, '/api/auth/email/reset', { method: 'POST', body: { token: reset!.token, password: 'второй-пароль' } });
+  assert.equal(r.status, 200, r.text);
+  r = await api(app.base, '/api/auth/email/reset', { method: 'POST', body: { token: reset!.token, password: 'третий-пароль' } });
+  assert.equal(r.status, 400, 'single use');
+  assert.equal((await api(app.base, '/api/me', { token: a.token })).status, 401, 'old sessions revoked');
+  assert.equal((await api(app.base, '/api/auth/email/login', { method: 'POST', body: { email: 'forgetful@example.com', password: 'второй-пароль' } })).status, 200);
+});
+
+test('funnel: anonymous visits are recorded and linked to the account created from them', async () => {
+  const vid = 'visitor_abcdefghijklmnop';
+  const v = await api(app.base, '/api/visit', { method: 'POST', body: { visitorId: vid, platform: 'browser_mobile', referrer: 'https://t.me/some/chat' } });
+  assert.equal(v.status, 204, v.text);
+  await api(app.base, '/api/visit', { method: 'POST', body: { visitorId: vid } });
+  const [row] = await app.db.sql<Array<{ referrer: string; user_id: string | null }>>`SELECT referrer, user_id FROM visitors WHERE visitor_id = ${vid}`;
+  assert.equal(row!.referrer, 't.me', 'only the referrer domain is kept');
+  assert.equal(row!.user_id, null);
+  const guestOn = await startTestApp({ GUEST_AUTH_ENABLED: true });
+  try {
+    await api(guestOn.base, '/api/visit', { method: 'POST', body: { visitorId: vid } });
+    const g = await api(guestOn.base, '/api/auth/guest', { method: 'POST', body: { name: 'Гость', deviceId: 'device_0123456789abcdefghij', visitorId: vid } });
+    assert.equal(g.status, 200, g.text);
+    const [linked] = await guestOn.db.sql<Array<{ user_id: string }>>`SELECT user_id FROM visitors WHERE visitor_id = ${vid}`;
+    assert.equal(linked!.user_id, g.body.profile.id);
+  } finally {
+    await guestOn.close();
+  }
+});

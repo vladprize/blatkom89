@@ -2,6 +2,9 @@
 import { z } from 'zod';
 import { CHARACTER_IDS } from '../game-rules/characters.js';
 import type { CharacterId } from '../game-rules/characters.js';
+import { WEAPON_IDS, UPGRADE_STATS } from '../game-rules/weapons.js';
+import type { WeaponId } from '../game-rules/weapons.js';
+import type { Currency, DiamondPack, Inventory, Rarity } from '../game-rules/economy.js';
 import { MAP_IDS } from '../maps/types.js';
 import type { MapId } from '../maps/types.js';
 import type { AchievementId } from '../game-rules/progression.js';
@@ -36,8 +39,72 @@ export const GuestAuthRequest = z
     deviceId: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/),
     platform: PlatformSchema.optional(),
     clientVersion: z.string().max(32).optional(),
+    visitorId: z.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
   })
   .strict();
+/** Optional anonymous browser id (see VisitRequest) that links a sign-up to the visitor funnel. */
+const visitorIdSchema = z.string().regex(/^[A-Za-z0-9_-]{16,64}$/);
+export const emailSchema = z.string().trim().toLowerCase().max(254).email('Неверный адрес почты');
+export const passwordSchema = z.string().min(8, 'Пароль — минимум 8 символов').max(128);
+
+/** Email sign-in for an existing account (any device). `deviceId` binds this browser's guest key to the account. */
+export const EmailLoginRequest = z
+  .object({
+    email: emailSchema,
+    password: z.string().min(1).max(128),
+    deviceId: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/).optional(),
+    platform: PlatformSchema.optional(),
+    clientVersion: z.string().max(32).optional(),
+  })
+  .strict();
+/** Attach an email + password to the current account so it can be restored on another device. */
+export const EmailLinkRequest = z.object({ email: emailSchema, password: passwordSchema }).strict();
+export const PasswordChangeRequest = z.object({ current: z.string().min(1).max(128), password: passwordSchema }).strict();
+export const PasswordResetRequest = z.object({ email: emailSchema }).strict();
+export const PasswordResetConfirm = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/), password: passwordSchema }).strict();
+/** Anonymous visit (before any sign-up): a random per-browser id, nothing else identifying. */
+export const VisitRequest = z
+  .object({ visitorId: visitorIdSchema, platform: PlatformSchema.optional(), referrer: z.string().max(120).optional() })
+  .strict();
+
+// ── Economy ────────────────────────────────────────────────────────────────
+export const BuyRequest = z.object({ kind: z.enum(['weapon', 'character']), id: z.string().regex(/^[a-z_]{2,24}$/) }).strict();
+export const UpgradeRequest = z.object({ weapon: z.enum(WEAPON_IDS), stat: z.enum(UPGRADE_STATS) }).strict();
+export const LoadoutRequest = z.object({ sidearm: z.enum(WEAPON_IDS), melee: z.enum(WEAPON_IDS), primary: z.enum(WEAPON_IDS).nullable() }).strict();
+/** Opening a paid case requires an explicit adult confirmation (see docs/ECONOMY.md). */
+export const CaseOpenRequest = z.object({ confirmAge: z.literal(true) }).strict();
+export const CheckoutRequest = z.object({ packId: z.string().regex(/^[a-z0-9]{2,16}$/), method: z.enum(['card', 'crypto']) }).strict();
+
+/** GET /api/shop/config — which payment methods are configured on this server. */
+export interface ShopConfig {
+  card: boolean;
+  crypto: boolean;
+  casesEnabled: boolean;
+  packs: DiamondPack[];
+}
+export interface CaseResult {
+  weapon: WeaponId;
+  rarity: Rarity;
+  inventory: Inventory;
+}
+export interface CheckoutResponse {
+  paymentId: string;
+  url: string;
+}
+export type PaymentStatus = 'created' | 'paid' | 'failed' | 'expired' | 'refunded';
+export interface PaymentStatusResponse {
+  status: PaymentStatus;
+  diamonds: number;
+}
+export interface LedgerEntry {
+  at: string;
+  currency: Currency;
+  delta: number;
+  balanceAfter: number;
+  reason: 'match' | 'purchase' | 'upgrade' | 'case' | 'topup' | 'grant' | 'refund';
+  ref: string | null;
+}
+
 export const UpdateProfileRequest = z
   .object({ displayName: displayNameSchema.optional(), preferredCharacter: z.enum(CHARACTER_IDS).optional() })
   .strict();
@@ -64,6 +131,10 @@ export interface PublicProfile {
   currentWinStreak: number;
   bestWinStreak: number;
   preferredCharacter: CharacterId | null;
+  tokens: number;
+  diamonds: number;
+  /** Email sign-in is set up (the account can be restored on another device). */
+  email: string | null;
 }
 
 export interface AuthResponse {
