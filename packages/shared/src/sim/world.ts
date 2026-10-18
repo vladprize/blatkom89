@@ -20,7 +20,7 @@ import {
 } from '../constants/game.js';
 import type { CharacterId } from '../game-rules/characters.js';
 import type { MatchConfig, MatchPhase } from '../game-rules/match.js';
-import { DEFAULT_MATCH_CONFIG } from '../game-rules/match.js';
+import { DEFAULT_MATCH_CONFIG, SCORING } from '../game-rules/match.js';
 import { rankPlaces } from '../game-rules/progression.js';
 import type { HeavyWeaponId, WeaponDef, WeaponId } from '../game-rules/weapons.js';
 import { WEAPONS, damageFalloff, isHeavy } from '../game-rules/weapons.js';
@@ -104,6 +104,10 @@ export interface PlayerState {
   lastShotAt: number;
   lastHitAt: number;
   lastDamagedBy: string | null;
+  /** Eliminations of others this player contributed damage to (see SCORING). */
+  assists: number;
+  /** Damage taken since the last spawn, per attacker (assist detection). */
+  recentDamage: Array<{ id: string; at: number; amount: number }>;
 }
 
 export interface PickupState {
@@ -118,6 +122,8 @@ export interface PickupState {
   respawnAt: number;
   expiresAt: number;
   spawnIndex: number;
+  /** A «дефицит» supply crate (full ammunition, expires). */
+  supply: boolean;
 }
 
 export interface PelletResult {
@@ -133,10 +139,11 @@ export type WorldEvent =
   | { t: 'shot'; shooter: number; weapon: WeaponId; shotId: number; ox: number; oy: number; pellets: PelletResult[] }
   | { t: 'melee'; shooter: number; angle: number; hit: number }
   | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: WeaponId }
-  | { t: 'kill'; killer: number; victim: number; weapon: WeaponId }
+  | { t: 'kill'; killer: number; victim: number; weapon: WeaponId; assists: number[] }
   | { t: 'respawn'; slot: number; x: number; y: number }
   | { t: 'pickup'; slot: number; weapon: HeavyWeaponId; ammoOnly: boolean }
   | { t: 'drop'; slot: number; weapon: HeavyWeaponId }
+  | { t: 'supply'; x: number; y: number; weapon: HeavyWeaponId }
   | { t: 'reload'; slot: number; weapon: WeaponId }
   | { t: 'dry'; slot: number }
   | { t: 'phase'; phase: MatchPhase }
@@ -149,7 +156,9 @@ export interface Standing {
   character: CharacterId;
   isBot: boolean;
   kills: number;
+  assists: number;
   deaths: number;
+  /** Match points: eliminations and assists (SCORING). */
   score: number;
   damageDealt: number;
   bestStreak: number;
@@ -214,6 +223,8 @@ export function createPlayerState(id: string, slot: number, name: string, charac
     lastShotAt: -1e9,
     lastHitAt: -1e9,
     lastDamagedBy: null,
+    assists: 0,
+    recentDamage: [],
   };
 }
 
@@ -391,6 +402,8 @@ export class World {
   readonly pickups: PickupState[] = [];
   events: WorldEvent[] = [];
   private nextPickupId = 1;
+  /** World time of the next «дефицит» supply drop (active phase only). */
+  nextSupplyAt = 0;
   private readonly history: HistoryFrame[] = [];
   private readonly rng: () => number;
   private readonly normals: number[] = [];
@@ -414,6 +427,7 @@ export class World {
         respawnAt: 0,
         expiresAt: 0,
         spawnIndex: i,
+        supply: false,
       });
     });
   }
@@ -475,6 +489,7 @@ export class World {
     this.setPhase('active', this.config.durationMs);
     this.matchStartedAt = this.time;
     this.matchEndsAt = this.time + this.config.durationMs;
+    this.nextSupplyAt = this.time + this.config.supplyFirstMs;
     for (const p of this.players.values()) {
       if (!p.alive) this.spawnPlayer(p, false);
       p.invulnUntil = this.time + this.config.spawnProtectionMs;
@@ -512,6 +527,7 @@ export class World {
   private resetScores() {
     for (const p of this.players.values()) {
       p.kills = 0;
+      p.assists = 0;
       p.deaths = 0;
       p.score = 0;
       p.damageDealt = 0;
@@ -591,6 +607,7 @@ export class World {
     p.nextFireAt = p.clock;
     p.spreadHeat = 0;
     p.lastDamagedBy = null;
+    p.recentDamage = [];
     this.events.push({ t: 'respawn', slot: p.slot, x: p.x, y: p.y });
   }
 
@@ -701,6 +718,13 @@ export class World {
     if (attacker) {
       victim.lastDamagedBy = attacker.id;
       attacker.damageDealt += amount;
+      if (attacker !== victim) {
+        const rec = victim.recentDamage.find((r) => r.id === attacker.id);
+        if (rec) {
+          rec.amount += amount;
+          rec.at = this.time;
+        } else victim.recentDamage.push({ id: attacker.id, at: this.time, amount });
+      }
     }
     this.events.push({ t: 'damage', victim: victim.slot, attacker: attacker ? attacker.slot : -1, amount, hp: victim.hp, weapon });
     if (victim.hp <= 0) this.kill(victim, attacker, weapon);
@@ -716,15 +740,30 @@ export class World {
     victim.vy = 0;
     victim.reloadWeapon = null;
     if (victim.heavy) this.dropHeavy(victim);
+    const scorers: PlayerState[] = [];
     if (killer && killer !== victim) {
       killer.kills++;
-      killer.score++;
+      killer.score += SCORING.killPoints;
       killer.streak++;
       killer.bestStreak = Math.max(killer.bestStreak, killer.streak);
       killer.lastKillAt = this.time;
+      scorers.push(killer);
     }
-    this.events.push({ t: 'kill', killer: killer ? killer.slot : -1, victim: victim.slot, weapon });
-    if (killer && killer.score >= this.config.scoreLimit) this.finish('score');
+    // assists: recent, meaningful damage by anyone other than the killer
+    const assists: number[] = [];
+    for (const rec of victim.recentDamage) {
+      if (rec.id === killer?.id || rec.id === victim.id) continue;
+      if (this.time - rec.at > SCORING.assistWindowMs || rec.amount < SCORING.assistMinDamage) continue;
+      const helper = this.players.get(rec.id);
+      if (!helper) continue;
+      helper.assists++;
+      helper.score += SCORING.assistPoints;
+      assists.push(helper.slot);
+      scorers.push(helper);
+    }
+    victim.recentDamage = [];
+    this.events.push({ t: 'kill', killer: killer ? killer.slot : -1, victim: victim.slot, weapon, assists });
+    if (scorers.some((p) => p.score >= this.config.scoreLimit)) this.finish('score');
   }
 
   // ── Pickups ─────────────────────────────────────────────────────────────
@@ -744,6 +783,7 @@ export class World {
         respawnAt: 0,
         expiresAt: this.time + DROPPED_WEAPON_TTL_MS,
         spawnIndex: -1,
+        supply: false,
       });
       this.events.push({ t: 'drop', slot: p.slot, weapon: p.heavy });
     }
@@ -794,6 +834,7 @@ export class World {
           respawnAt: 0,
           expiresAt: this.time + DROPPED_WEAPON_TTL_MS,
           spawnIndex: -1,
+          supply: false,
         });
         this.events.push({ t: 'pickup', slot: p.slot, weapon: pk.weapon, ammoOnly: false });
         return;
@@ -841,8 +882,47 @@ export class World {
           pk.reserve = WEAPONS[pk.weapon].reserveOnPickup;
         }
       }
+      if (this.nextSupplyAt > 0 && this.time >= this.nextSupplyAt) {
+        this.nextSupplyAt = this.time + this.config.supplyIntervalMs;
+        this.dropSupply();
+      }
     }
     this.recordHistory();
+  }
+
+  /**
+   * «Дефицит завезли»: a crate with a full heavy weapon appears at a free supply point away from
+   * players (deterministic: world RNG). Unclaimed crates expire after `supplyTtlMs`.
+   */
+  dropSupply(): PickupState | null {
+    const points = this.map.supplyPoints;
+    if (points.length === 0) return null;
+    const free = points.filter((pt) => {
+      for (const pk of this.pickups) if (pk.active && Math.hypot(pk.x - pt.x, pk.y - pt.y) < 48) return false;
+      for (const p of this.players.values()) if (p.alive && Math.hypot(p.x - pt.x, p.y - pt.y) < 110) return false;
+      return true;
+    });
+    if (free.length === 0) return null;
+    const pt = free[Math.floor(this.rng() * free.length)]!;
+    const weapon: HeavyWeaponId = this.rng() < 0.5 ? 'obrez' : 'avtomat';
+    const def = WEAPONS[weapon];
+    const crate: PickupState = {
+      id: this.nextPickupId++,
+      weapon,
+      x: pt.x,
+      y: pt.y,
+      active: true,
+      dropped: true,
+      mag: def.magazine,
+      reserve: def.reserveMax,
+      respawnAt: 0,
+      expiresAt: this.time + this.config.supplyTtlMs,
+      spawnIndex: -1,
+      supply: true,
+    };
+    this.pickups.push(crate);
+    this.events.push({ t: 'supply', x: pt.x, y: pt.y, weapon });
+    return crate;
   }
 
   private recordHistory() {
@@ -894,7 +974,7 @@ export class World {
 
   standings(): Standing[] {
     const list = [...this.players.values()].sort(
-      (a, b) => b.score - a.score || a.deaths - b.deaths || b.damageDealt - a.damageDealt || a.joinedAt - b.joinedAt,
+      (a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths || b.damageDealt - a.damageDealt || a.joinedAt - b.joinedAt,
     );
     const places = rankPlaces(list);
     return list.map((p, i) => ({
@@ -904,6 +984,7 @@ export class World {
       character: p.character,
       isBot: p.isBot,
       kills: p.kills,
+      assists: p.assists,
       deaths: p.deaths,
       score: p.score,
       damageDealt: p.damageDealt,

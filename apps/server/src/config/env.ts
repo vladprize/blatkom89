@@ -30,9 +30,9 @@ const EnvSchema = z.object({
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   SERVER_VERSION: z.string().default('0.1.0'),
   MAX_ROOMS: z.coerce.number().int().min(1).max(10000).default(500),
-  /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 25 eliminations, 2–6 players. */
+  /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: z.coerce.number().int().min(30).max(900).default(240),
-  MATCH_SCORE_LIMIT: z.coerce.number().int().min(1).max(200).default(25),
+  MATCH_SCORE_LIMIT: z.coerce.number().int().min(1).max(400).default(50),
   MATCH_MIN_PLAYERS: z.coerce.number().int().min(2).max(6).default(2),
   MATCH_MAX_PLAYERS: z.coerce.number().int().min(2).max(6).default(6),
 });

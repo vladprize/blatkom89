@@ -142,5 +142,14 @@ export function buildGaragesMap(): MapDef {
     .spawn(1420, 830, 180)
     .spawn(992, 496, 90)
     .spawn(60, 380, 45);
+  // ── Extra loot & «дефицит» drop points ───────────────────────────────────
+  b.pickup('obrez', 600, 152, 16_000)
+    .pickup('avtomat', 856, 840, 20_000)
+    .pickup('obrez', 1144, 736, 16_000)
+    .pickup('avtomat', 408, 360, 20_000)
+    .pickup('obrez', 1256, 360, 16_000)
+    .pickup('avtomat', 52, 632, 20_000);
+  b.supply(248, 528).supply(624, 800).supply(824, 192).supply(1144, 192).supply(960, 680).supply(688, 320);
+
   return b.build();
 }

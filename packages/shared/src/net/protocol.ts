@@ -9,7 +9,8 @@ import type { HeavyWeaponId, WeaponId } from '../game-rules/weapons.js';
 import type { Standing } from '../sim/world.js';
 import type { AchievementId } from '../game-rules/progression.js';
 
-export const PROTOCOL_VERSION = 1;
+/** v2: match points with assists, «дефицит» supply drops. */
+export const PROTOCOL_VERSION = 2;
 
 const roomId = z.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 
@@ -47,10 +48,11 @@ export interface RosterEntry {
 
 export type GameEvent =
   | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: WeaponId }
-  | { t: 'kill'; killer: number; victim: number; weapon: WeaponId }
+  | { t: 'kill'; killer: number; victim: number; weapon: WeaponId; assists: number[] }
   | { t: 'respawn'; slot: number; x: number; y: number }
   | { t: 'pickup'; slot: number; weapon: HeavyWeaponId; ammoOnly: boolean }
   | { t: 'drop'; slot: number; weapon: HeavyWeaponId }
+  | { t: 'supply'; x: number; y: number; weapon: HeavyWeaponId }
   | { t: 'reload'; slot: number; weapon: WeaponId }
   | { t: 'dry'; slot: number }
   | { t: 'phase'; phase: MatchPhase }

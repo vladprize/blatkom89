@@ -7,7 +7,7 @@
  *   4. mark the match completed + results_processed_at
  * Concurrent duplicate calls serialize on the match row lock, so XP is awarded exactly once.
  */
-import { ACHIEVEMENTS, ACHIEVEMENT_IDS, evaluateAchievements, isWin, levelForXp, xpForMatch } from '@blatkom/shared';
+import { ACHIEVEMENTS, ACHIEVEMENT_IDS, applyMatchProgress } from '@blatkom/shared';
 import type { AchievementId, PersonalResult } from '@blatkom/shared';
 import type postgres from 'postgres';
 import type { Sql } from '../database/db.js';
@@ -77,16 +77,10 @@ export class PgMatchRecorder implements MatchRecorder {
           SELECT xp, level, matches_completed, wins, current_win_streak, best_win_streak FROM profiles WHERE user_id = ${p.userId} FOR UPDATE`;
         const withFriends = m.isPrivate && p.viaInvite && m.playersAtEnd >= 2;
         const sharedPlace = p.completed && m.participants.some((o) => o.userId !== p.userId && o.completed && o.place === p.place);
-        const perf = { kills: p.kills, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends, sharedPlace };
-        const won = isWin(perf);
-        const lost = p.completed && !won && m.playersAtEnd >= 2;
-        const streak = won ? prof!.current_win_streak + 1 : p.completed && m.playersAtEnd < 2 ? prof!.current_win_streak : 0;
-        const after = { matchesCompleted: prof!.matches_completed + (p.completed ? 1 : 0), wins: prof!.wins + (won ? 1 : 0), currentWinStreak: streak };
+        const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends, sharedPlace };
         const ownedRows = await tx<Array<{ achievement_id: AchievementId }>>`SELECT achievement_id FROM player_achievements WHERE user_id = ${p.userId}`;
-        const unlocked = evaluateAchievements(after, perf, new Set(ownedRows.map((r) => r.achievement_id)));
-        const xp = xpForMatch(perf) + unlocked.reduce((s, a) => s + ACHIEVEMENTS[a].xpReward, 0);
-        const totalXp = prof!.xp + xp;
-        const level = levelForXp(totalXp).level;
+        const prev = { xp: prof!.xp, level: prof!.level, matchesCompleted: prof!.matches_completed, wins: prof!.wins, currentWinStreak: prof!.current_win_streak };
+        const { won, lost, streak, unlocked, xpGained: xp, totalXp, level } = applyMatchProgress(prev, perf, new Set(ownedRows.map((r) => r.achievement_id)));
         await tx`
           UPDATE profiles SET
             xp = ${totalXp},
@@ -96,6 +90,7 @@ export class PgMatchRecorder implements MatchRecorder {
             wins = wins + ${won ? 1 : 0},
             losses = losses + ${lost ? 1 : 0},
             kills = kills + ${p.kills},
+            assists = assists + ${p.assists},
             deaths = deaths + ${p.deaths},
             playtime_sec = playtime_sec + ${Math.max(0, Math.round(p.playtimeMs / 1000))},
             current_win_streak = ${streak},
@@ -107,10 +102,10 @@ export class PgMatchRecorder implements MatchRecorder {
           await tx`INSERT INTO player_achievements (user_id, achievement_id, match_id) VALUES (${p.userId}, ${a}, ${m.matchId}) ON CONFLICT DO NOTHING`;
         }
         await tx`
-          INSERT INTO match_participants (match_id, user_id, character, place, kills, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, joined_at, left_at)
-          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.place}, ${p.kills}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
+          INSERT INTO match_participants (match_id, user_id, character, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, joined_at, left_at)
+          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
           ON CONFLICT (match_id, user_id) DO UPDATE SET
-            character = EXCLUDED.character, place = EXCLUDED.place, kills = EXCLUDED.kills, deaths = EXCLUDED.deaths,
+            character = EXCLUDED.character, place = EXCLUDED.place, kills = EXCLUDED.kills, assists = EXCLUDED.assists, deaths = EXCLUDED.deaths,
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded, left_at = EXCLUDED.left_at`;
         out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof!.level, newAchievements: unlocked });

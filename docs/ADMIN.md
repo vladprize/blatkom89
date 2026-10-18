@@ -88,7 +88,7 @@ Range parameters (where noted): `range=24h|7d|30d|90d` (default `7d`) or
 | `GET /api/admin/overview?range…` | viewer | KPI tiles (`AdminOverview`) |
 | `GET /api/admin/charts?range…` | viewer | chart series (`AdminCharts`) |
 | `GET /api/admin/rooms` | viewer | live rooms (map, phase, players, private) |
-| `GET /api/admin/players?q=&sort=&dir=&page=&pageSize=` | viewer | search by name (case-insensitive, Cyrillic-safe), exact Telegram ID or internal UUID; `sort` ∈ `created, last_seen, name, level, xp, matches, wins, losses, kills, playtime`; `pageSize` 5–100 |
+| `GET /api/admin/players?q=&sort=&dir=&page=&pageSize=` | viewer | search by name (case-insensitive, Cyrillic-safe), exact Telegram ID or internal UUID; `sort` ∈ `created, last_seen, name, level, xp, matches, wins, losses, kills, assists, playtime`; `pageSize` 5–100 |
 | `GET /api/admin/players/:id` | viewer | profile, progression, sessions summary, achievements, last 50 matches, last 50 errors (audited) |
 | `GET /api/admin/errors?range…` | viewer | errors grouped by fingerprint (≤200 groups) |
 | `GET /api/admin/audit` | admin | latest 200 audit entries |

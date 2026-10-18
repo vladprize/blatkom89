@@ -408,6 +408,7 @@ export class MatchRoom {
           character: c.character,
           place: presentIdx >= 0 ? presentPlaces[presentIdx]! : standings.length,
           kills: s.kills,
+          assists: s.assists,
           deaths: s.deaths,
           score: s.score,
           damageDealt: s.damageDealt,
@@ -431,10 +432,18 @@ export class MatchRoom {
         participants,
       })
       .then((personal) => {
+        let levelChanged = false;
         for (const [userId, result] of personal) {
           const c = this.clients.get(userId);
-          if (c) this.send(c, { type: 'progress', matchId, result });
+          if (!c) continue;
+          // the roster shows the level the player has *now* (nameplates/scoreboard in a rematch)
+          if (c.user.level !== result.level) {
+            c.user = { ...c.user, level: result.level };
+            levelChanged = true;
+          }
+          this.send(c, { type: 'progress', matchId, result });
         }
+        if (levelChanged && !this.closed) this.broadcastRoster();
       })
       .catch((e: Error) => {
         this.log.error('matchCompleted failed', { err: e, matchId });

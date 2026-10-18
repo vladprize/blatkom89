@@ -2,7 +2,7 @@
  * Procedural sound effects synthesised with WebAudio at startup (no audio files, no licensing).
  * Positional: volume falls off with distance from the listener, stereo pan by horizontal offset.
  */
-type SfxName = 'pistol' | 'avtomat' | 'obrez' | 'swing' | 'hit' | 'ricochet' | 'reload' | 'dry' | 'pickup' | 'death' | 'kill' | 'beep' | 'beepHigh' | 'click' | 'step' | 'end' | 'hurt' | 'respawn';
+type SfxName = 'pistol' | 'avtomat' | 'obrez' | 'swing' | 'hit' | 'ricochet' | 'reload' | 'dry' | 'pickup' | 'death' | 'kill' | 'assist' | 'supply' | 'beep' | 'beepHigh' | 'click' | 'step' | 'end' | 'hurt' | 'respawn';
 
 class SfxEngine {
   private ctx: AudioContext | null = null;
@@ -94,6 +94,14 @@ class SfxEngine {
     this.buffers.set('beepHigh', tone(880, 0.32));
     this.buffers.set('pickup', this.buf(0.25, (t) => Math.sign(Math.sin(2 * Math.PI * (t < 0.08 ? 660 : t < 0.16 ? 880 : 1320) * t)) * 0.25 * env(t, 0.002, 0.12)));
     this.buffers.set('kill', this.buf(0.35, (t) => (Math.sin(2 * Math.PI * 1560 * t) * 0.35 + Math.sin(2 * Math.PI * 2340 * t) * 0.2) * env(t, 0.002, 0.08)));
+    // assist: a softer, lower confirmation ping
+    this.buffers.set('assist', this.buf(0.25, (t) => Math.sin(2 * Math.PI * 1170 * t) * 0.3 * env(t, 0.002, 0.06)));
+    // «дефицит завезли»: station-style two-tone chime over a short truck-horn buzz
+    this.buffers.set('supply', this.buf(1.1, (t) => {
+      const chime = (t < 0.45 ? Math.sin(2 * Math.PI * 784 * t) * env(t, 0.005, 0.3) : Math.sin(2 * Math.PI * 523 * t) * env(t - 0.45, 0.005, 0.35)) * 0.45;
+      const horn = t < 0.25 ? Math.sign(Math.sin(2 * Math.PI * 220 * t)) * 0.12 * env(t, 0.01, 0.12) : 0;
+      return chime + horn;
+    }));
     {
       const f = lp(0.04);
       this.buffers.set('death', this.buf(0.6, (t) => f(rnd() * 2) * env(t, 0.005, 0.12) * 2.5 + Math.sin(2 * Math.PI * (120 - 80 * t) * t) * env(t, 0.01, 0.15) * 0.6));

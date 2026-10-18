@@ -14,6 +14,8 @@ export function testMap(): MapDef {
     .spawn(50, 40, 0)
     .spawn(350, 260, 180)
     .pickup('avtomat', 100, 260)
+    .supply(300, 50)
+    .supply(120, 70)
     .build();
 }
 

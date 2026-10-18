@@ -68,7 +68,7 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     SERVER_VERSION: 'test',
     MAX_ROOMS: 10,
     MATCH_DURATION_SEC: 240,
-    MATCH_SCORE_LIMIT: 25,
+    MATCH_SCORE_LIMIT: 50,
     MATCH_MIN_PLAYERS: 2,
     MATCH_MAX_PLAYERS: 6,
     ...overrides,

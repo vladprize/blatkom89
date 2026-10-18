@@ -43,6 +43,14 @@ Living document. Status markers: ✅ done & verified · 🟡 done, partially ver
 7. ✅ Visual polish — lighting/fixtures, litter, VHS, effects, synthesized sound, HUD for desktop/landscape/portrait; adaptive quality.
 8. 🟡 Deployment — server/web production builds and migrations verified; Docker/compose/Caddy written, **not executed** (no Docker here).
 
+## 2a. Update 2026-10-18 — player feedback (loot, assists, nickname/level)
+
+| Request | Implementation | Status |
+|---|---|---|
+| More weapon loot on the maps during a match | 10 fixed weapon spawns per map (was 4, respawn 16–20 s); «дефицит» supply drops: 6 supply points per map, first drop at 25 s then every 35 s, обрез/автомат with full magazine + reserve, 30 s lifetime, never next to a living player. Client: army crate with a pulsing ring, «ДЕФИЦИТ ЗАВЕЗЛИ!» banner + chime, blinking minimap marker, screen-edge arrow when off-screen | ✅ shared sim tests (placement, ammo, expiry, reachability of all supply points), demo E2E |
+| Rating points for assists, not only kills | Points: elimination +2, assist +1 (≥ 20 damage within 6 s before the elimination, shared `SCORING`); limit in points (50 online / 40 practice); kill feed lists assisters; «+2 УСТРАНЕНИЕ» / «+1 ПОМОЩЬ» popups; Tab table, results, profile, history and admin show assists; +5 XP per assist; DB migration `003_assists.sql`; protocol v2 (`assists` in snapshots and kill events) | ✅ shared + recorder + realtime tests, online and demo E2E |
+| Personal nickname / profile and level | First-launch dialog «Как тебя звать на районе?» with random district nicknames; profile strip in the menu (level badge, nickname, XP bar, «✎»); level shown in HUD, nameplates (badge next to the health bar) and the Tab table; the roster is refreshed with the level earned after each match. Online: server profile (`PATCH /api/me`, same validation). Demo (no server): browser-only profile with XP, levels, stats, achievements and history using the same shared `applyMatchProgress` as the server | ✅ unit tests (local profile, shared progression), realtime roster-level test, online E2E (nickname visible to the other player, persisted) and demo E2E (XP, level, reload persistence) |
+
 ## 3. Open risks / next steps
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).
@@ -58,7 +66,7 @@ Living document. Status markers: ✅ done & verified · 🟡 done, partially ver
 |---|---|---|
 | The project builds successfully | ✅ | `npm run typecheck`; `node apps/web/build.mjs --mode=production`; `node apps/server/build.mjs` |
 | The server starts | ✅ | bundled `apps/server/dist/server.js` started against PostgreSQL; `/api/health`, `/api/ready` OK |
-| PostgreSQL works | ✅ | migrations 001–002 applied; 34 DB-backed integration tests on PostgreSQL 16 |
+| PostgreSQL works | ✅ | migrations 001–003 applied; 35 DB-backed integration tests on PostgreSQL 16 |
 | Strict top-down 2D camera; not isometric / first-person | ✅ | orthographic camera, top-down sprites; screenshots in all modes |
 | Flagship factory map fully playable | ✅ | offline E2E + online two-browser E2E on «Заводская проходная» |
 | Four characters playable | ✅ | selectable in menu/lobby, used by players and bots; sprites + animations for all four |
@@ -80,7 +88,7 @@ Living document. Status markers: ✅ done & verified · 🟡 done, partially ver
 | Retention calculations are documented | ✅ | `docs/ANALYTICS.md` |
 | Analytics events are deduplicated | ✅ | UUID primary key, tests across requests and inside batches |
 | CSV export works | ✅ | export tests incl. formula-injection neutralisation |
-| Critical tests pass | ✅ | 69/69 unit+integration, browser E2E suite passes (see `docs/TESTING.md`) |
+| Critical tests pass | ✅ | 77/77 unit+integration, browser E2E suite passes incl. the single-file demo (see `docs/TESTING.md`) |
 | No real secrets are exposed | ✅ | `.env*` ignored; bot token/DB/session secrets server-only; logger redaction |
 | Deployment instructions match the actual project | 🟡 | non-Docker path executed locally; Docker/compose/Caddy not executed |
 | The first release is completely free | ✅ | no payment code; Stars only described as a future module |

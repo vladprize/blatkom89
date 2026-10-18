@@ -94,12 +94,12 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
     if (!UUID_RE.test(id)) throw new HttpError(400, 'bad_id', 'Неверный идентификатор');
     const p = pg();
     const rows = await p.sql<
-      Array<{ id: string; display_name: string; telegram_id: string | null; created_at: Date; last_seen_at: Date; language_code: string | null; platform: string | null; level: number; xp: number; matches_played: number; matches_completed: number; wins: number; losses: number; kills: number; deaths: number; playtime_sec: number; current_win_streak: number; best_win_streak: number; preferred_character: CharacterId | null }>
+      Array<{ id: string; display_name: string; telegram_id: string | null; created_at: Date; last_seen_at: Date; language_code: string | null; platform: string | null; level: number; xp: number; matches_played: number; matches_completed: number; wins: number; losses: number; kills: number; assists: number; deaths: number; playtime_sec: number; current_win_streak: number; best_win_streak: number; preferred_character: CharacterId | null }>
     >`
       SELECT u.id, u.display_name, u.telegram_id::text AS telegram_id, u.created_at, u.last_seen_at, u.language_code, u.platform,
              COALESCE(p.level, 1) AS level, COALESCE(p.xp, 0) AS xp, COALESCE(p.matches_played, 0) AS matches_played,
              COALESCE(p.matches_completed, 0) AS matches_completed, COALESCE(p.wins, 0) AS wins, COALESCE(p.losses, 0) AS losses,
-             COALESCE(p.kills, 0) AS kills, COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
+             COALESCE(p.kills, 0) AS kills, COALESCE(p.assists, 0) AS assists, COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak, p.preferred_character
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ${id} AND u.deleted_at IS NULL`;
     const r = rows[0];
@@ -163,19 +163,19 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
   // ── CSV exports (admin role, audited) ────────────────────────────────────
   router.get('/api/admin/export/players.csv', admin, async (ctx) => {
     const p = pg();
-    const rows = await p.sql<Array<{ id: string; display_name: string; telegram_id: string | null; created_at: Date; last_seen_at: Date; level: number; xp: number; matches_played: number; wins: number; losses: number; kills: number; deaths: number; playtime_sec: number }>>`
+    const rows = await p.sql<Array<{ id: string; display_name: string; telegram_id: string | null; created_at: Date; last_seen_at: Date; level: number; xp: number; matches_played: number; wins: number; losses: number; kills: number; assists: number; deaths: number; playtime_sec: number }>>`
       SELECT u.id, u.display_name, u.telegram_id::text AS telegram_id, u.created_at, u.last_seen_at,
              COALESCE(p.level, 1) AS level, COALESCE(p.xp, 0) AS xp, COALESCE(p.matches_played, 0) AS matches_played,
              COALESCE(p.wins, 0) AS wins, COALESCE(p.losses, 0) AS losses, COALESCE(p.kills, 0) AS kills,
-             COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec
+             COALESCE(p.assists, 0) AS assists, COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.deleted_at IS NULL ORDER BY u.created_at`;
     await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: 'export_players', details: { rows: rows.length }, ip: ctx.ip });
     csv(
       ctx,
       'players.csv',
       toCsv(
-        ['id', 'display_name', 'telegram_id', 'registered_at', 'last_activity', 'level', 'xp', 'matches', 'wins', 'losses', 'eliminations', 'deaths', 'playtime_sec'],
-        rows.map((r) => [r.id, r.display_name, r.telegram_id, r.created_at, r.last_seen_at, r.level, r.xp, r.matches_played, r.wins, r.losses, r.kills, r.deaths, r.playtime_sec]),
+        ['id', 'display_name', 'telegram_id', 'registered_at', 'last_activity', 'level', 'xp', 'matches', 'wins', 'losses', 'eliminations', 'assists', 'deaths', 'playtime_sec'],
+        rows.map((r) => [r.id, r.display_name, r.telegram_id, r.created_at, r.last_seen_at, r.level, r.xp, r.matches_played, r.wins, r.losses, r.kills, r.assists, r.deaths, r.playtime_sec]),
       ),
     );
   });

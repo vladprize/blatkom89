@@ -27,7 +27,7 @@ async function newUser(name: string) {
 }
 
 function part(userId: string, place: number, kills: number, deaths: number, extra: Partial<MatchParticipantResult> = {}): MatchParticipantResult {
-  return { userId, character: 'petya', place, kills, deaths, score: kills, damageDealt: kills * 100, completed: true, viaInvite: false, playtimeMs: 180_000, ...extra };
+  return { userId, character: 'petya', place, kills, assists: 0, deaths, score: kills * 2, damageDealt: kills * 100, completed: true, viaInvite: false, playtimeMs: 180_000, ...extra };
 }
 
 function completion(participants: MatchParticipantResult[], extra: Partial<MatchCompletion> = {}): MatchCompletion {
@@ -130,4 +130,25 @@ test('recorder: unknown/invalid user ids are ignored; abandoned matches are mark
   await rec.matchAbandoned(id, 'empty');
   const [row] = await db.sql<Array<{ status: string; end_reason: string }>>`SELECT status, end_reason FROM matches WHERE id = ${id}`;
   assert.deepEqual({ ...row }, { status: 'abandoned', end_reason: 'empty' });
+});
+
+test('recorder: assists are stored per match, added to the profile and earn XP', async () => {
+  const a = await newUser('Помощник');
+  const b = await newUser('Добивала');
+  const m = completion([part(b, 1, 3, 0), part(a, 2, 0, 1, { assists: 4, score: 4 })]);
+  const res = await rec.matchCompleted(m);
+  const [prof] = await db.sql<Array<{ assists: number; kills: number }>>`SELECT assists, kills FROM profiles WHERE user_id = ${a}`;
+  assert.equal(prof!.assists, 4);
+  const [mp] = await db.sql<Array<{ assists: number }>>`SELECT assists FROM match_participants WHERE match_id = ${m.matchId} AND user_id = ${a}`;
+  assert.equal(mp!.assists, 4);
+  // same placement and kills, with vs without assists: the assists are worth XP_RULES.perAssist each
+  const c = await newUser('Без помощи');
+  const d = await newUser('Победитель');
+  const m2 = completion([part(d, 1, 3, 0), part(c, 2, 0, 1, { score: 0 })]);
+  const res2 = await rec.matchCompleted(m2);
+  assert.equal(res.get(a)!.xpGained - res2.get(c)!.xpGained, 4 * XP_RULES.perAssist);
+  // replaying the completion never adds assists twice
+  await rec.matchCompleted(m);
+  const [again] = await db.sql<Array<{ assists: number }>>`SELECT assists FROM profiles WHERE user_id = ${a}`;
+  assert.equal(again!.assists, 4);
 });

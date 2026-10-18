@@ -19,7 +19,8 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
 
 1. `POST /api/rooms` (create, private → invite code) or `POST /api/rooms/quick` → `roomId`.
 2. WebSocket `GET /ws` (same origin; foreign `Origin` → 403; ≤24 sockets per IP; 4 KB max frame).
-3. First message must be JSON `hello {protocol, token, roomId, character, clientVersion}` within 8 s.
+3. First message must be JSON `hello {protocol, token, roomId, character, clientVersion}` within 8 s
+   (`PROTOCOL_VERSION` = 2 since assists and supply drops were added; older clients get `version_mismatch`).
    The session token is verified exactly like the REST bearer token. Wrong protocol → `error
    version_mismatch` + close 1008; bad token → 4001; unknown room → 4004; full → 4005; finished → 4010.
 4. Server replies `welcome {playerId, slot, config, serverTime, tick, resumed}` and broadcasts `roster`.
@@ -29,7 +30,9 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
 6. Match phases (server state machine): `waiting → ready → countdown → active → finished → (waiting | closed)`.
 7. Results: `results {matchId, reason, durationMs, standings}` is broadcast once, right after the
    deciding events are flushed; personal `progress {xpGained, level, newAchievements}` follows when the
-   database transaction commits. `rematch` votes restart the room with a new match id.
+   database transaction commits, and the `roster` is re-broadcast with the levels just earned (nameplates
+   and the Tab table in a rematch show the current level). `rematch` votes restart the room with a new
+   match id.
 
 ## 3. Input path and validation (server)
 
@@ -48,6 +51,20 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
   spawn protection; melee arc and range. Damage, eliminations, score, respawn and XP are decided only here.
 * The client's `viewTime` (the timeline it was rendering) is used for lag compensation but clamped to
   `[now − 250 ms, now]`, so a lying client gains at most the normal compensation window.
+
+## 3a. Scoring and supply drops (decided by the shared `World`, i.e. by the server online)
+
+* **Points.** Elimination +2, assist +1 (`SCORING` in `game-rules/match.ts`). An assist is credited to every
+  other player who dealt ≥ 20 damage to the victim within the 6 s before the elimination; the victim's damage
+  log is cleared on death. The score limit is in points (`MATCH_SCORE_LIMIT`, default 50 online, 40 in
+  practice) and an assist can end the match. Standings: points → eliminations → fewer deaths.
+* **Kill event.** `{t:'kill', killer, victim, weapon, assists:[slots]}` — the client shows «+2 УСТРАНЕНИЕ» /
+  «+1 ПОМОЩЬ» and the assisters in the kill feed.
+* **«Дефицит» supply drops.** First drop 25 s into the match, then every 35 s (`supplyFirstMs`,
+  `supplyIntervalMs`): the server picks a map `supplyPoint` (seeded RNG) that is ≥ 48 px from other active
+  pickups and ≥ 110 px from living players, spawns an обрез or автомат with a full magazine and full
+  reserve, and emits `{t:'supply', x, y, weapon}`. Unclaimed crates disappear after 30 s (`supplyTtlMs`).
+  Picking up a crate follows the normal pickup rules. Each map also has 6 extra fixed weapon spawns.
 
 ## 4. Client: prediction, reconciliation, interpolation
 
@@ -74,8 +91,8 @@ u8 type=2 | u32 tick | u32 serverTimeMs | u8 phase | u32 phaseRemainingMs | u8 p
 player × N (40 B): u8 slot | u8 flags(alive,connected,reloading,invulnerable,walking,hasHeavy) | u16 x*4 | u16 y*4
    | i16 vx*8 | i16 vy*8 | u16 aim | u8 hp | u8 weapon | u8 pistolMag | u8 heavy(255=none) | u8 heavyMag
    | u8 heavyReserve | u16 kills | u16 deaths | u16 score | u32 ackSeq | u16 reloadLeft | u16 cooldownLeft
-   | u16 spreadHeat*1e4 | u16 shotCounter | u16 respawnIn | u16 reserved
-u8 pickupCount, pickup × N (8 B): u16 id | u8 weapon | u8 flags(active,dropped) | u16 x*4 | u16 y*4
+   | u16 spreadHeat*1e4 | u16 shotCounter | u16 respawnIn | u16 assists
+u8 pickupCount, pickup × N (8 B): u16 id | u8 weapon | u8 flags(active,dropped,supply) | u16 x*4 | u16 y*4
 u16 shotCount, shot × N: u8 shooter | u8 weapon | u16 shotId | u16 ox*4 | u16 oy*4 | u8 pellets | u8 0
    | pellet × n (6 B): u16 angle | u16 dist*4 | u8 hitSlot(255 none) | u8 kind(0 miss,1 wall,2 player)
 u8 meleeCount, melee × N (4 B): u8 shooter | u16 angle | u8 hitSlot
@@ -89,7 +106,8 @@ Input frame (14 B): `u32 seq | i8 moveX | i8 moveY | u16 aim | u8 buttons(FIRE,R
   authoritative combat with identical results and identical per-tick positions on both clients, kill
   events delivered before results, results/XP sent once, speed-hack flood, invalid handshakes and
   commands, capacity (7th player refused), disconnect/resume/replace, grace-period expiry and empty-room
-  cleanup, rematch with separately recorded matches.
+  cleanup, rematch with separately recorded matches and the roster refreshed with the earned level.
 * `packages/shared/src/__tests__/` — codec round-trips and malformed input rejection, lag compensation,
-  walls blocking shots, movement normalisation, sliding, weapons timing.
+  walls blocking shots, movement normalisation, sliding, weapons timing, assists (window, minimum damage,
+  reaching the limit), supply drops (free point away from players, full ammo, expiry).
 * `tests/e2e/online.mjs` — two real browsers play a match through the server (see [TESTING.md](TESTING.md)).

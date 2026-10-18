@@ -5,6 +5,8 @@
 //   4. touch: on an emulated phone the left stick moves, the right stick aims and fires (tests/e2e/touch.mjs)
 //   5. online: two independent browsers create/join a room by invite, play, get identical results
 //      and persisted XP (tests/e2e/online.mjs); with E2E_ADMIN_USER/E2E_ADMIN_PASS the admin dashboard too
+//   6. demo: the single-file offline demo — nickname dialog, assists/points, supply drop, local XP
+//      and level, profile screen, persistence after reload (tests/e2e/demo.mjs)
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -25,6 +27,7 @@ const run = (args, opts = {}) => {
 if (!process.env.E2E_SKIP_BUILD) {
   run(['apps/web/build.mjs', '--mode=production']);
   run(['apps/server/build.mjs']);
+  run(['apps/web/build.mjs', '--mode=demo', '--single']);
 }
 if (!existsSync('apps/server/dist/server.js')) {
   console.error('[e2e] apps/server/dist/server.js missing — build first');
@@ -68,6 +71,9 @@ try {
   if (process.env.E2E_ADMIN_USER) args.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
   const online = spawnSync(process.execPath, args, { stdio: 'inherit' });
   if (online.status !== 0) failed = true;
+  console.log('\n[e2e] single-file demo (no server)');
+  const demo = spawnSync(process.execPath, ['tests/e2e/demo.mjs', 'apps/web/dist-demo/blatkom89-demo.html', join(out, 'demo')], { stdio: 'inherit' });
+  if (demo.status !== 0) failed = true;
 } catch (e) {
   console.error('[e2e]', e.message);
   failed = true;

@@ -199,7 +199,7 @@ export async function charts(sql: Sql, r: AdminRange, now = new Date()): Promise
 const UPPER_CYR = 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯІЇЄҐ';
 const LOWER_CYR = 'абвгдеёжзийклмнопрстуфхцчшщъыьэюяіїєґ';
 
-export const PLAYER_SORTS = ['created', 'last_seen', 'name', 'level', 'xp', 'matches', 'wins', 'losses', 'kills', 'playtime'] as const;
+export const PLAYER_SORTS = ['created', 'last_seen', 'name', 'level', 'xp', 'matches', 'wins', 'losses', 'kills', 'assists', 'playtime'] as const;
 export type PlayerSort = (typeof PLAYER_SORTS)[number];
 
 interface PlayerDbRow {
@@ -214,6 +214,7 @@ interface PlayerDbRow {
   wins: number;
   losses: number;
   kills: number;
+  assists: number;
   deaths: number;
   playtime_sec: number;
   total?: number;
@@ -232,6 +233,7 @@ export function toPlayerRow(r: PlayerDbRow): AdminPlayerRow {
     wins: r.wins,
     losses: r.losses,
     kills: r.kills,
+    assists: r.assists,
     deaths: r.deaths,
     playtimeSec: r.playtime_sec,
   };
@@ -257,6 +259,7 @@ export async function listPlayers(sql: Sql, opts: { q?: string | null; sort?: st
     wins: sql`COALESCE(p.wins, 0)`,
     losses: sql`COALESCE(p.losses, 0)`,
     kills: sql`COALESCE(p.kills, 0)`,
+    assists: sql`COALESCE(p.assists, 0)`,
     playtime: sql`COALESCE(p.playtime_sec, 0)`,
   }[sort];
   const order = dir === 'asc' ? sql`ASC` : sql`DESC`;
@@ -271,6 +274,7 @@ export async function listPlayers(sql: Sql, opts: { q?: string | null; sort?: st
     SELECT u.id, u.display_name, u.telegram_id::text AS telegram_id, u.created_at, u.last_seen_at,
            COALESCE(p.level, 1) AS level, COALESCE(p.xp, 0) AS xp, COALESCE(p.matches_played, 0) AS matches_played,
            COALESCE(p.wins, 0) AS wins, COALESCE(p.losses, 0) AS losses, COALESCE(p.kills, 0) AS kills,
+           COALESCE(p.assists, 0) AS assists,
            COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
            (count(*) OVER ())::int AS total
     FROM users u LEFT JOIN profiles p ON p.user_id = u.id

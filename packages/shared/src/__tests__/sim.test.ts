@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { makeWorld, input, startDuel, BTN, testMap } from './helpers.js';
 import { RUN_SPEED, WALK_SPEED, PLAYER_RADIUS, TICK_MS, MAX_HP } from '../constants/game.js';
 import { WEAPONS } from '../game-rules/weapons.js';
+import { SCORING } from '../game-rules/match.js';
+import { World } from '../sim/world.js';
 import { CollisionWorld } from '../maps/collision.js';
 
 test('movement: diagonal input is normalized and never exceeds run speed', () => {
@@ -113,7 +115,7 @@ test('combat: hitscan damages, eliminates, scores and respawns', () => {
   assert.equal(p2.alive, false);
   assert.equal(p2.deaths, 1);
   assert.equal(p1.kills, 1);
-  assert.equal(p1.score, 1);
+  assert.equal(p1.score, SCORING.killPoints);
   // respawn after delay
   const ticks = Math.ceil(w.config.respawnDelayMs / TICK_MS) + 1;
   for (let i = 0; i < ticks; i++) w.update();
@@ -192,4 +194,88 @@ test('lag compensation: shots are tested against rewound positions', () => {
   const shot = w.drainEvents().find((e) => e.t === 'shot');
   assert.ok(shot && shot.t === 'shot');
   assert.equal(shot.pellets[0]!.hit, p2.slot, 'hit at rewound position');
+});
+
+test('scoring: recent meaningful damage by another player earns an assist; killer gets kill points', () => {
+  const w = makeWorld();
+  const { p1: killer, p2: victim } = startDuel(w, { x: 60, y: 50 }, { x: 160, y: 50 });
+  const helper = w.addPlayer('c', 'Участковый', 'uchastkovy');
+  helper.alive = true;
+  helper.invulnUntil = 0;
+  // helper softens the victim, killer finishes: helper +1 assist point, killer +2
+  w.applyDamage(victim, helper, 30, 'pistol');
+  w.applyDamage(victim, killer, 34, 'pistol'); // the killer's own earlier damage never counts as an assist
+  w.applyDamage(victim, killer, 500, 'pistol');
+  const kill = w.drainEvents().find((e) => e.t === 'kill');
+  assert.ok(kill && kill.t === 'kill');
+  assert.deepEqual(kill.assists, [helper.slot]);
+  assert.equal(killer.kills, 1);
+  assert.equal(killer.score, SCORING.killPoints);
+  assert.equal(killer.assists, 0);
+  assert.equal(helper.assists, 1);
+  assert.equal(helper.score, SCORING.assistPoints);
+  const st = w.standings();
+  assert.equal(st.find((s) => s.id === 'c')!.assists, 1);
+
+  // chip damage below the threshold is not an assist
+  w.spawnPlayer(victim, false);
+  victim.invulnUntil = 0;
+  w.applyDamage(victim, helper, SCORING.assistMinDamage - 1, 'pistol');
+  w.applyDamage(victim, killer, 500, 'pistol');
+  assert.equal(helper.assists, 1);
+
+  // damage older than the assist window is not an assist
+  w.spawnPlayer(victim, false);
+  victim.invulnUntil = 0;
+  w.applyDamage(victim, helper, 40, 'pistol');
+  for (let i = 0; i < Math.ceil(SCORING.assistWindowMs / TICK_MS) + 2; i++) w.update();
+  victim.alive = true;
+  victim.invulnUntil = 0;
+  w.applyDamage(victim, killer, 500, 'pistol');
+  assert.equal(helper.assists, 1);
+  assert.equal(killer.kills, 3);
+  assert.equal(killer.score, 3 * SCORING.killPoints);
+});
+
+test('scoring: an assist can reach the point limit and end the match', () => {
+  const w = makeWorld();
+  const { p1: killer, p2: victim } = startDuel(w, { x: 60, y: 50 }, { x: 160, y: 50 });
+  const helper = w.addPlayer('c', 'Участковый', 'uchastkovy');
+  helper.alive = true;
+  helper.score = w.config.scoreLimit - SCORING.assistPoints;
+  w.applyDamage(victim, helper, 50, 'pistol');
+  w.applyDamage(victim, killer, 500, 'pistol');
+  assert.equal(w.phase, 'finished');
+  assert.equal(w.endReason, 'score');
+  assert.equal(w.standings()[0]!.id, 'c');
+});
+
+test('supply drops: a full crate appears at a free supply point away from players and expires', () => {
+  const map = testMap();
+  const w = new World(map, new CollisionWorld(map), { lagCompensation: false, config: { countdownMs: 0, readyMs: 0, spawnProtectionMs: 0, supplyFirstMs: 1000, supplyIntervalMs: 60_000, supplyTtlMs: 2000 } });
+  const { p1 } = startDuel(w, { x: 300, y: 80 }, { x: 350, y: 260 }); // p1 stands next to supply point (300,50)
+  let ev = null;
+  for (let i = 0; i < Math.ceil(1100 / TICK_MS) && !ev; i++) {
+    w.update();
+    ev = w.drainEvents().find((e) => e.t === 'supply') ?? null;
+  }
+  assert.ok(ev && ev.t === 'supply', 'supply event');
+  assert.deepEqual([ev.x, ev.y], [120, 70], 'the point next to a player is skipped');
+  const crate = w.pickups.find((pk) => pk.supply)!;
+  assert.ok(crate.active);
+  assert.equal(crate.reserve, WEAPONS[crate.weapon].reserveMax, 'full ammunition');
+  // walking onto it picks it up with full ammo
+  p1.x = crate.x;
+  p1.y = crate.y;
+  w.applyInput('a', input({}));
+  assert.equal(p1.heavy, crate.weapon);
+  assert.equal(p1.heavyReserve, WEAPONS[crate.weapon].reserveMax);
+  assert.equal(crate.active, false, 'claimed crate is used up');
+  w.update();
+  assert.equal(w.pickups.includes(crate), false, 'and removed on the next tick');
+  // an unclaimed crate expires
+  const second = w.dropSupply();
+  assert.ok(second);
+  for (let i = 0; i < Math.ceil(2100 / TICK_MS); i++) w.update();
+  assert.equal(w.pickups.includes(second), false);
 });

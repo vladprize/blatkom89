@@ -3,7 +3,7 @@
  * runs the camera and lighting, and turns session events into feedback (visual, audio, haptics).
  */
 import * as Phaser from 'phaser';
-import { TICK_MS, getMap, WEAPONS } from '@blatkom/shared';
+import { TICK_MS, getMap, WEAPONS, SCORING } from '@blatkom/shared';
 import type { MapDef } from '@blatkom/shared';
 import type { GameSession, RenderPlayer, SessionEvent, RenderPickup } from '../session/types.js';
 import { MapRenderer } from '../render/MapRenderer.js';
@@ -35,7 +35,7 @@ export class GameScene extends Phaser.Scene {
   private fx!: Effects;
   private inputs!: InputManager;
   private readonly views = new Map<number, CharacterView>();
-  private readonly pickupSprites = new Map<number, { img: Phaser.GameObjects.Image; ring: Phaser.GameObjects.Image; marker: Phaser.GameObjects.Image | null }>();
+  private readonly pickupSprites = new Map<number, { img: Phaser.GameObjects.Image; ring: Phaser.GameObjects.Image; marker: Phaser.GameObjects.Image | null; crate: Phaser.GameObjects.Image | null; glow: Phaser.GameObjects.Image | null }>();
   private acc = 0;
   private camX = 0;
   private camY = 0;
@@ -273,20 +273,27 @@ export class GameScene extends Phaser.Scene {
       seen.add(pk.id);
       let s = this.pickupSprites.get(pk.id);
       if (!s) {
-        const ring = this.add.image(pk.x, pk.y, 'fx', 'ring').setScale(0.55).setTint(0xffd36a).setDepth(D.PICKUP).setBlendMode(Phaser.BlendModes.ADD);
+        // «дефицит» crates: an army crate with a red pulsing ring and an emissive glow, readable from afar
+        const crate = pk.supply ? this.add.image(pk.x, pk.y + 3, 'props', 'prop_crate_green_0').setScale(0.55).setDepth(D.PICKUP - 0.05) : null;
+        const glow = pk.supply ? this.add.image(pk.x, pk.y, 'fx', 'glow').setScale(0.9).setTint(0xff7a3a).setBlendMode(Phaser.BlendModes.ADD).setDepth(D.LIGHT + 0.4) : null;
+        const ring = this.add.image(pk.x, pk.y, 'fx', 'ring').setScale(pk.supply ? 0.8 : 0.55).setTint(pk.supply ? 0xff5a3a : 0xffd36a).setDepth(D.PICKUP).setBlendMode(Phaser.BlendModes.ADD);
         const img = this.add.image(pk.x, pk.y, 'props', `pickup_${pk.weapon}`).setScale(0.5).setDepth(D.PICKUP + 0.1);
         const marker = pk.dropped ? null : this.add.image(pk.x, pk.y, 'fx', 'ring').setScale(0.4).setTint(0xd9c7a3).setAlpha(0.18).setDepth(D.DECAL);
-        s = { img, ring, marker };
+        s = { img, ring, marker, crate, glow };
         this.pickupSprites.set(pk.id, s);
       }
-      s.img.setVisible(pk.active).setPosition(pk.x, pk.y).setRotation(Math.sin(time / 600 + pk.id) * 0.25 + (pk.dropped ? 0.6 : 0));
-      s.ring.setVisible(pk.active).setPosition(pk.x, pk.y).setAlpha(0.35 + Math.sin(time / 260 + pk.id) * 0.2);
+      s.img.setVisible(pk.active).setPosition(pk.x, pk.y - (pk.supply ? 2 : 0)).setRotation(Math.sin(time / 600 + pk.id) * 0.25 + (pk.dropped && !pk.supply ? 0.6 : 0));
+      s.ring.setVisible(pk.active).setPosition(pk.x, pk.y).setAlpha((pk.supply ? 0.55 : 0.35) + Math.sin(time / (pk.supply ? 160 : 260) + pk.id) * 0.2);
+      s.crate?.setVisible(pk.active);
+      s.glow?.setVisible(pk.active).setAlpha(0.35 + Math.sin(time / 160) * 0.15);
     }
     for (const [id, s] of this.pickupSprites) {
       if (!seen.has(id)) {
         s.img.destroy();
         s.ring.destroy();
         s.marker?.destroy();
+        s.crate?.destroy();
+        s.glow?.destroy();
         this.pickupSprites.delete(id);
       }
     }
@@ -360,11 +367,18 @@ export class GameScene extends Phaser.Scene {
           this.fx.bloodPool(victim.x, victim.y);
           sfx.play('death', { x: victim.x, y: victim.y });
         }
-        hudBus.emit('killfeed', { killer: killer?.name ?? '—', killerLocal: !!killer?.isLocal, victim: victim?.name ?? '—', victimLocal: !!victim?.isLocal, weapon: e.weapon });
+        const helpers = e.assists.map((slot) => bySlot(slot)).filter((p): p is RenderPlayer => !!p);
+        const assistLocal = helpers.some((p) => p.isLocal);
+        hudBus.emit('killfeed', { killer: killer?.name ?? '—', killerLocal: !!killer?.isLocal, victim: victim?.name ?? '—', victimLocal: !!victim?.isLocal, weapon: e.weapon, assists: helpers.map((p) => p.name), assistLocal });
         if (killer?.isLocal) {
           hudBus.emit('hitmarker', true);
+          hudBus.emit('points', { points: SCORING.killPoints, label: 'УСТРАНЕНИЕ' });
           sfx.play('kill', { volume: 0.8 });
           haptic('notify-success');
+        } else if (assistLocal) {
+          hudBus.emit('points', { points: SCORING.assistPoints, label: 'ПОМОЩЬ' });
+          sfx.play('assist', { volume: 0.8 });
+          haptic('impact-light');
         }
         if (victim?.isLocal) haptic('impact-heavy');
         break;
@@ -395,6 +409,14 @@ export class GameScene extends Phaser.Scene {
       case 'dry': {
         const p = bySlot(e.slot);
         if (p?.isLocal) sfx.play('dry');
+        break;
+      }
+      case 'supply': {
+        this.fx.pickupSparkle(e.x, e.y);
+        this.fx.dust(e.x, e.y);
+        this.lighting.flash(e.x, e.y, 120, 0xff7a3a, 0.8, 400, time);
+        sfx.play('supply', { volume: 0.75 });
+        hudBus.emit('supply', { x: e.x, y: e.y, weapon: e.weapon });
         break;
       }
       case 'matchEnd':

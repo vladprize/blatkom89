@@ -6,7 +6,7 @@ import { displayNameSchema } from '@blatkom/shared';
 import { sfx } from '../../game/audio/Sfx.js';
 import { confirmAsync } from '../../telegram/tg.js';
 
-export function renderSettings(opts: { inGame: boolean; online: OnlineClient | null }): HTMLElement {
+export function renderSettings(opts: { inGame: boolean; online: OnlineClient | null; onResetLocal?: () => void }): HTMLElement {
   const s = getSettings();
   const seg = <T extends string | number | boolean>(label: string, values: Array<[T, string]>, key: keyof Settings) => {
     const box = h('div', { class: 'seg', role: 'group', 'aria-label': label });
@@ -119,6 +119,27 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
             },
           },
           'Удалить мои данные',
+        ),
+      ),
+    );
+  }
+  if (!opts.online && !opts.inGame && opts.onResetLocal) {
+    const reset = opts.onResetLocal;
+    items.push(
+      h(
+        'div',
+        { class: 'panel col' },
+        h('span', { class: 'tag' }, 'Профиль'),
+        h('div', { class: 'muted' }, 'Кличка, опыт и статистика демо-версии хранятся только в этом браузере.'),
+        h(
+          'button',
+          {
+            class: 'btn btn--small btn--ghost',
+            onclick: async () => {
+              if (await confirmAsync('Сбросить кличку, опыт и статистику в этом браузере?')) reset();
+            },
+          },
+          'Сбросить локальный профиль',
         ),
       ),
     );

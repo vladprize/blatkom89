@@ -25,6 +25,7 @@ const COLUMNS: Array<{ key: string | null; label: string }> = [
   { key: 'wins', label: 'Победы' },
   { key: 'losses', label: 'Пораж.' },
   { key: 'kills', label: 'Устранения' },
+  { key: 'assists', label: 'Помощь' },
   { key: 'playtime', label: 'Время в игре' },
 ];
 
@@ -77,6 +78,7 @@ export async function renderPlayers(root: HTMLElement): Promise<void> {
         h('td', { class: 'num' }, num(r.wins)),
         h('td', { class: 'num' }, num(r.losses)),
         h('td', { class: 'num' }, num(r.kills)),
+        h('td', { class: 'num' }, num(r.assists)),
         h('td', { class: 'num' }, playtime(r.playtimeSec)),
       ),
     );

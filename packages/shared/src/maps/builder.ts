@@ -45,6 +45,7 @@ export class MapBuilder {
       overhead: [],
       spawns: [],
       pickups: [],
+      supplyPoints: [],
       ambient: { color: 0x2a3550, level: 0.55 },
       minimapFloor: '#3a3632',
     };
@@ -134,8 +135,14 @@ export class MapBuilder {
     return this;
   }
 
-  pickup(weapon: HeavyWeaponId, x: number, y: number, respawnMs = 20_000): this {
+  pickup(weapon: HeavyWeaponId, x: number, y: number, respawnMs = 18_000): this {
     this.def.pickups.push({ weapon, x, y, respawnMs } satisfies PickupSpawn);
+    return this;
+  }
+
+  /** A spot where a «дефицит» supply crate may appear during the match. */
+  supply(x: number, y: number): this {
+    this.def.supplyPoints.push({ x, y });
     return this;
   }
 

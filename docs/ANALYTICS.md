@@ -72,9 +72,9 @@ Canonical (source of truth): `users`, `profiles`, `sessions`, `matches`, `match_
 in which the user logged in or made any authenticated request / WebSocket connection (written by
 `SessionStore.issue/verify` through `ActivityTracker`, at most once per user per day per process).
 
-Profile counters (`matches_played`, `wins`, `losses`, `kills`, `deaths`, `playtime_sec`, streaks, XP,
-level) are maintained transactionally by the recorder from the same data that is stored per match in
-`match_participants`:
+Profile counters (`matches_played`, `wins`, `losses`, `kills`, `assists`, `deaths`, `playtime_sec`,
+streaks, XP, level) are maintained transactionally by the recorder from the same data that is stored per
+match in `match_participants` (`assists` since migration `003_assists.sql`):
 
 * *played* — the player was in the match when it started; *completed* — still present at the end;
 * *win* — completed, place 1, and ≥2 players present at the end; *loss* — completed, not a win, ≥2 players;

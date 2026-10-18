@@ -91,6 +91,7 @@ export interface NetPlayer {
   heavyMag: number;
   heavyReserve: number;
   kills: number;
+  assists: number;
   deaths: number;
   score: number;
   ack: number;
@@ -106,6 +107,8 @@ export interface NetPickup {
   weapon: HeavyWeaponId;
   active: boolean;
   dropped: boolean;
+  /** «Дефицит» supply crate. */
+  supply: boolean;
   x: number;
   y: number;
 }
@@ -201,7 +204,7 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
     v.setUint16(o + 32, u16(p.spreadHeat * 10000), true);
     v.setUint16(o + 34, p.shotCounter & 0xffff, true);
     v.setUint16(o + 36, u16(p.alive ? 0 : Math.max(0, p.respawnAt - src.time)), true);
-    v.setUint16(o + 38, 0, true);
+    v.setUint16(o + 38, u16(p.assists), true);
     o += PLAYER_BYTES;
   }
   v.setUint8(o, pickups.length);
@@ -209,7 +212,7 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
   for (const pk of pickups) {
     v.setUint16(o, pk.id & 0xffff, true);
     v.setUint8(o + 2, WEAPONS[pk.weapon].index);
-    v.setUint8(o + 3, (pk.active ? 1 : 0) | (pk.dropped ? 2 : 0));
+    v.setUint8(o + 3, (pk.active ? 1 : 0) | (pk.dropped ? 2 : 0) | (pk.supply ? 4 : 0));
     v.setUint16(o + 4, u16(pk.x * POS_SCALE), true);
     v.setUint16(o + 6, u16(pk.y * POS_SCALE), true);
     o += 8;
@@ -305,6 +308,7 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
       spreadHeat: v.getUint16(o + 32, true) / 10000,
       shotCounter: v.getUint16(o + 34, true),
       respawnIn: v.getUint16(o + 36, true),
+      assists: v.getUint16(o + 38, true),
     });
     o += PLAYER_BYTES;
   }
@@ -319,6 +323,7 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
       weapon: weaponAt(v.getUint8(o + 2)) as HeavyWeaponId,
       active: (flags & 1) !== 0,
       dropped: (flags & 2) !== 0,
+      supply: (flags & 4) !== 0,
       x: v.getUint16(o + 4, true) / POS_SCALE,
       y: v.getUint16(o + 6, true) / POS_SCALE,
     });

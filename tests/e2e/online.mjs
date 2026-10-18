@@ -1,6 +1,7 @@
 // Online end-to-end test: two independent browser contexts (separate storage = separate players)
 // create a private room, join it by invite link, play one match through the real server, see the
-// same results, and get XP persisted to PostgreSQL. Optionally logs into the admin dashboard.
+// same results, and get XP persisted to PostgreSQL. A picks a personal nickname in the first-launch
+// dialog; B must see it in the lobby and the results. Optionally logs into the admin dashboard.
 //
 // Usage: node tests/e2e/online.mjs <baseUrl> <outDir> [adminUser] [adminPass]
 // The server should run with a short match (e.g. MATCH_DURATION_SEC=40) and DEV_AUTH_ENABLED=true.
@@ -41,8 +42,19 @@ const phaseOf = (p) => p.page.evaluate(() => window.__blatkom?.game?.scene.getSc
 const A = await player('A', 'petya');
 const B = await player('B', 'valuta');
 
-// ── lobby ─────────────────────────────────────────────────────────────────
+// ── nickname (first launch) ───────────────────────────────────────────────
+const NICK_A = 'Комендант Двора';
 await A.page.goto(base + '/');
+const nickInput = A.page.getByRole('textbox', { name: 'Кличка' });
+await nickInput.waitFor({ timeout: 60000 });
+await nickInput.fill(NICK_A);
+await A.page.getByRole('button', { name: 'Готово' }).click();
+await A.page.getByTestId('menu-nick').filter({ hasText: NICK_A }).waitFor({ timeout: 20000 });
+const stripA = (await A.page.getByTestId('profile-strip').innerText()).replace(/\s+/g, ' ');
+step(`A set the nickname «${NICK_A}» in the first-launch dialog; menu strip: ${stripA}`);
+await A.page.screenshot({ path: `${outDir}/online_menu_A.png` });
+
+// ── lobby ─────────────────────────────────────────────────────────────────
 await A.page.getByRole('button', { name: /Играть с друзьями/ }).click({ timeout: 30000 });
 await A.page.getByRole('button', { name: 'Создать комнату' }).click();
 const code = (await A.page.locator('.code').textContent({ timeout: 20000 })).trim();
@@ -58,6 +70,8 @@ try {
   throw e;
 }
 step('B joined through the invite link; both lobbies show 2 players');
+report.nickInLobbyB = (await B.page.getByText(NICK_A).count()) > 0;
+step(`B's lobby shows A's nickname: ${report.nickInLobbyB}`);
 await A.page.screenshot({ path: `${outDir}/online_lobby_A.png` });
 await B.page.getByRole('button', { name: /^Готов$/ }).click();
 await A.page.getByRole('button', { name: /Начать/ }).click();
@@ -151,6 +165,8 @@ await A.page.waitForTimeout(1500);
 const tableOf = (p) => p.page.locator('table.table tbody').innerText();
 const [ta, tb] = await Promise.all([tableOf(A), tableOf(B)]);
 report.resultsIdentical = ta === tb;
+report.nickInResults = ta.includes(NICK_A);
+report.assistsColumn = /Пом\./i.test(await A.page.locator('table.table thead').innerText());
 report.resultsTable = ta.split('\n').map((l) => l.trim());
 step(`both clients show the results screen; tables identical: ${ta === tb}`);
 await A.page.getByText(/опыта/).waitFor({ timeout: 15000 }).catch(() => problems.push('XP panel did not appear for A'));
@@ -164,7 +180,7 @@ const profileOf = (p) =>
     return r.json();
   });
 const [pa, pb] = await Promise.all([profileOf(A), profileOf(B)]);
-report.profiles = [pa, pb].map((x) => ({ name: x.displayName, level: x.level, xp: x.xp, matchesPlayed: x.matchesPlayed, wins: x.wins, kills: x.kills, deaths: x.deaths }));
+report.profiles = [pa, pb].map((x) => ({ name: x.displayName, level: x.level, xp: x.xp, matchesPlayed: x.matchesPlayed, wins: x.wins, kills: x.kills, assists: x.assists, deaths: x.deaths }));
 step(`profiles persisted: ${JSON.stringify(report.profiles)}`);
 
 // ── admin dashboard ───────────────────────────────────────────────────────
@@ -188,5 +204,12 @@ if (adminUser && adminPass) {
 report.problems = problems;
 console.log(JSON.stringify(report, null, 2));
 await browser.close();
-const ok = report.resultsIdentical && report.profiles.every((p) => p.matchesPlayed >= 1) && deviations.length > 0;
+const ok =
+  report.resultsIdentical &&
+  report.profiles.every((p) => p.matchesPlayed >= 1 && typeof p.assists === 'number') &&
+  report.profiles[0].name === NICK_A &&
+  report.nickInLobbyB &&
+  report.nickInResults &&
+  report.assistsColumn &&
+  deviations.length > 0;
 process.exit(ok ? 0 : 1);

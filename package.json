@@ -20,7 +20,7 @@
     "build:server": "node apps/server/build.mjs",
     "start": "node apps/server/dist/server.js",
     "assets": "tsx tools/art/build-all.ts",
-    "typecheck": "tsc -p packages/shared && tsc -p apps/server && tsc -p apps/web && tsc -p tools",
+    "typecheck": "tsc -p packages/shared && tsc -p apps/server && tsc -p apps/web && tsc -p apps/web/tsconfig.test.json && tsc -p tools",
     "test": "node --import tsx --test --test-reporter=spec \"packages/shared/src/**/*.test.ts\" \"apps/server/src/**/*.test.ts\" \"apps/web/src/**/*.test.ts\"",
     "test:unit": "node --import tsx --test \"packages/shared/src/**/*.test.ts\" \"apps/web/src/**/*.test.ts\"",
     "test:integration": "node --import tsx --test --test-concurrency=1 \"apps/server/src/**/*.test.ts\"",

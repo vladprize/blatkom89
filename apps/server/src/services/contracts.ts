@@ -32,6 +32,7 @@ export interface MatchParticipantResult {
   character: CharacterId;
   place: number;
   kills: number;
+  assists: number;
   deaths: number;
   score: number;
   damageDealt: number;

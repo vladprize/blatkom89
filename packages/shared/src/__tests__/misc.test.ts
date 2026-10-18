@@ -5,7 +5,7 @@ import { makeWorld, startDuel, input, BTN } from './helpers.js';
 import { getMap, getCollision, MAP_ORDER } from '../maps/index.js';
 import { NavGrid } from '../sim/nav.js';
 import { PLAYER_RADIUS } from '../constants/game.js';
-import { levelForXp, totalXpForLevel, xpForMatch, evaluateAchievements, XP_RULES, rankPlaces, isWin } from '../game-rules/progression.js';
+import { levelForXp, totalXpForLevel, xpForMatch, evaluateAchievements, XP_RULES, rankPlaces, isWin, applyMatchProgress, ACHIEVEMENTS } from '../game-rules/progression.js';
 import { World } from '../sim/world.js';
 import { BotBrain } from '../sim/bots.js';
 import { ClientMessageSchema } from '../net/protocol.js';
@@ -75,9 +75,16 @@ for (const id of MAP_ORDER) {
         const b = m.spawns[j]!;
         assert.ok(Math.hypot(a.x - b.x, a.y - b.y) > 60, 'spawns are not stacked');
       }
+    assert.ok(m.pickups.length >= 8, 'plenty of weapon pickups');
     for (const p of m.pickups) {
       const k = nav.nearestWalkable(p.x, p.y, 2);
       assert.ok(k >= 0 && reach[k] === 1, `pickup ${p.x},${p.y} reachable`);
+      assert.equal(c.overlapsCircle(p.x, p.y, 10), false, `pickup ${p.x},${p.y} not inside solids`);
+    }
+    assert.ok(m.supplyPoints.length >= 5, 'supply drop points');
+    for (const p of m.supplyPoints) {
+      assert.equal(c.overlapsCircle(p.x, p.y, 14), false, `supply ${p.x},${p.y} not inside solids`);
+      assert.equal(reach[nav.index(p.x, p.y)], 1, `supply ${p.x},${p.y} reachable`);
     }
   });
 }
@@ -136,8 +143,9 @@ test('bots: a 4-bot match on every map runs and produces eliminations', () => {
 });
 
 test('standings: equal results share a place and a draw is nobody\'s win', () => {
-  assert.deepEqual(rankPlaces([{ score: 3, deaths: 1 }, { score: 3, deaths: 1 }, { score: 1, deaths: 0 }, { score: 1, deaths: 2 }]), [1, 1, 3, 4]);
-  assert.deepEqual(rankPlaces([{ score: 0, deaths: 0 }, { score: 0, deaths: 0 }]), [1, 1]);
+  const r = (score: number, kills: number, deaths: number) => ({ score, kills, deaths });
+  assert.deepEqual(rankPlaces([r(6, 3, 1), r(6, 3, 1), r(6, 2, 0), r(2, 1, 0), r(2, 1, 2)]), [1, 1, 3, 4, 5]);
+  assert.deepEqual(rankPlaces([r(0, 0, 0), r(0, 0, 0)]), [1, 1]);
   const base = { kills: 0, deaths: 0, place: 1, playersAtEnd: 2, completed: true, withFriends: false };
   assert.equal(isWin(base), true);
   assert.equal(isWin({ ...base, sharedPlace: true }), false);
@@ -149,4 +157,32 @@ test('standings: equal results share a place and a draw is nobody\'s win', () =>
   w.addPlayer('a', 'A', 'petya', false);
   w.addPlayer('b', 'B', 'valuta', false);
   assert.deepEqual(w.standings().map((s) => s.place), [1, 1]);
+});
+
+test('progression: applyMatchProgress (shared by the server recorder and the demo profile)', () => {
+  const fresh = { xp: 0, level: 1, matchesCompleted: 0, wins: 0, currentWinStreak: 0 };
+  // first match, sole first place among 4, 6 eliminations and 2 assists
+  const win = applyMatchProgress(fresh, { kills: 6, assists: 2, deaths: 1, place: 1, playersAtEnd: 4, completed: true, withFriends: false }, new Set());
+  assert.equal(win.won, true);
+  assert.equal(win.lost, false);
+  assert.equal(win.streak, 1);
+  assert.deepEqual(win.unlocked.sort(), ['first_match', 'first_win', 'multi_kill']);
+  const matchXp = XP_RULES.completion + 6 * XP_RULES.perKill + 2 * XP_RULES.perAssist + XP_RULES.placement[0]!;
+  const reward = ACHIEVEMENTS.first_match.xpReward + ACHIEVEMENTS.first_win.xpReward + ACHIEVEMENTS.multi_kill.xpReward;
+  assert.equal(win.xpGained, matchXp + reward);
+  assert.equal(win.totalXp, win.xpGained);
+  assert.equal(win.level, levelForXp(win.totalXp).level);
+  assert.equal(win.leveledUp, win.level > 1);
+  // a shared first place is a loss for the streak and unlocks nothing already owned
+  const owned = new Set(win.unlocked);
+  const draw = applyMatchProgress({ ...fresh, xp: win.totalXp, level: win.level, matchesCompleted: 1, wins: 1, currentWinStreak: 1 }, { kills: 1, assists: 0, deaths: 1, place: 1, playersAtEnd: 2, completed: true, withFriends: false, sharedPlace: true }, owned);
+  assert.equal(draw.won, false);
+  assert.equal(draw.lost, true);
+  assert.equal(draw.streak, 0);
+  assert.deepEqual(draw.unlocked, []);
+  // leaving early gives nothing and resets the streak
+  const left = applyMatchProgress({ ...fresh, currentWinStreak: 2 }, { kills: 3, deaths: 0, place: 1, playersAtEnd: 3, completed: false, withFriends: false }, new Set());
+  assert.equal(left.xpGained, 0);
+  assert.equal(left.streak, 0);
+  assert.equal(left.lost, false);
 });

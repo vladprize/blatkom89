@@ -52,6 +52,7 @@ export async function renderPlayer(root: HTMLElement, id: string): Promise<void>
             ['Победы', num(p.wins)],
             ['Поражения', num(p.losses)],
             ['Устранения', num(p.kills)],
+            ['Помощь', num(p.assists)],
             ['Смерти', num(p.deaths)],
             ['K/D', kd],
             ['Серия побед', `${num(p.currentWinStreak)} (лучшая ${num(p.bestWinStreak)})`],
@@ -77,8 +78,8 @@ export async function renderPlayer(root: HTMLElement, id: string): Promise<void>
             h(
               'table',
               { class: 'table' },
-              h('thead', {}, h('tr', {}, ...['Дата', 'Карта', 'Персонаж', 'Место', 'Игроков', 'Устр.', 'Смерти', 'XP', 'Длит.'].map((t) => h('th', {}, t)))),
-              h('tbody', {}, ...d.matches.map((m) => h('tr', {}, h('td', {}, dateTime(m.endedAt)), h('td', {}, MAP_NAMES[m.mapId] ?? m.mapId), h('td', {}, CHARACTER_NAMES[m.character] ?? m.character), h('td', { class: 'num' }, m.won ? '1 🏆' : String(m.place)), h('td', { class: 'num' }, String(m.players)), h('td', { class: 'num' }, String(m.kills)), h('td', { class: 'num' }, String(m.deaths)), h('td', { class: 'num' }, `+${m.xpGained}`), h('td', {}, duration(m.durationMs))))),
+              h('thead', {}, h('tr', {}, ...['Дата', 'Карта', 'Персонаж', 'Место', 'Игроков', 'Устр.', 'Пом.', 'Смерти', 'XP', 'Длит.'].map((t) => h('th', {}, t)))),
+              h('tbody', {}, ...d.matches.map((m) => h('tr', {}, h('td', {}, dateTime(m.endedAt)), h('td', {}, MAP_NAMES[m.mapId] ?? m.mapId), h('td', {}, CHARACTER_NAMES[m.character] ?? m.character), h('td', { class: 'num' }, m.won ? '1 🏆' : String(m.place)), h('td', { class: 'num' }, String(m.players)), h('td', { class: 'num' }, String(m.kills)), h('td', { class: 'num' }, String(m.assists)), h('td', { class: 'num' }, String(m.deaths)), h('td', { class: 'num' }, `+${m.xpGained}`), h('td', {}, duration(m.durationMs))))),
             ),
           )
         : h('div', { class: 'chart-empty' }, 'Завершённых матчей нет'),

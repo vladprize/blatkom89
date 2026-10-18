@@ -413,6 +413,10 @@ test('rematch: after results everyone votes, a new match starts with a new id an
   roomObj.world.finish('time');
   const r1 = await ca.msg('results');
   await cb.msg('results');
+  // the level earned in that match reaches the roster (nameplates and the Tab table in the rematch)
+  const prog = await ca.msg('progress');
+  assert.ok(prog.result.level > 1);
+  await ca.msg('roster', (m) => m.players.some((p) => p.id === a.userId && p.level === prog.result.level));
   ca.send({ type: 'rematch' });
   cb.send({ type: 'rematch' });
   await ca.snap((s) => s.phase === 'active' && rooms.get(room.roomId)!.matchId !== r1.matchId, 6000);

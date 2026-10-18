@@ -2,8 +2,8 @@
  * App shell: screen navigation (HTML/CSS over the canvas), offline practice flow, online flow
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
-import { CHARACTERS, CHARACTER_IDS, MAP_ORDER, getMap, isCharacterId, isMapId } from '@blatkom/shared';
-import type { CharacterId, MapId, BotDifficulty, Standing } from '@blatkom/shared';
+import { CHARACTERS, CHARACTER_IDS, MAP_ORDER, getMap, isCharacterId, isMapId, levelForXp } from '@blatkom/shared';
+import type { CharacterId, MapId, BotDifficulty, Standing, PersonalResult } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
@@ -16,12 +16,20 @@ import { OnlineClient } from '../net/OnlineClient.js';
 import type { LobbyState } from '../net/OnlineClient.js';
 import { analytics } from '../analytics/client.js';
 import { renderSettings } from '../ui/screens/settings.js';
-import { renderProfile } from '../ui/screens/profile.js';
+import { loadOnlineProfile, renderProfileView } from '../ui/screens/profile.js';
+import type { ProfileData } from '../ui/screens/profile.js';
+import { createLocalProfile, localProfileView, recordLocalMatch, renameLocalProfile } from '../profile/localProfile.js';
+import type { LocalProfile } from '../profile/localProfile.js';
+import { clearLocalProfile, loadLocalProfile, saveLocalProfile } from '../profile/localStore.js';
+import { openNicknameDialog, randomNickname } from '../profile/nickname.js';
 import { renderResults } from '../ui/screens/results.js';
 import { renderLobby } from '../ui/screens/lobby.js';
 import { sfx } from '../game/audio/Sfx.js';
 
 type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'error' | 'loading';
+
+/** Profile id whose nickname has been confirmed in the first-launch dialog (online build). */
+const NICK_CONFIRMED_KEY = 'blatkom89.nick-confirmed.v1';
 
 const MAP_BLURB: Record<MapId, string> = {
   factory: 'Проходная, цех №3, склад. Коридоры, укрытия, контроль точек.',
@@ -40,10 +48,16 @@ export class App {
   private pauseEl: HTMLElement | null = null;
   private lastPractice: { mapId: MapId; bots: number; difficulty: BotDifficulty } = { mapId: 'factory', bots: 3, difficulty: 'normal' };
   private resultsShown = false;
+  /** Demo build only: the browser-only profile (nickname, XP, stats). Online, the server owns it. */
+  private localProfile: LocalProfile | null = null;
+  private lastLocalResult: { matchId: string; personal: PersonalResult } | null = null;
+  private nickClose: (() => void) | null = null;
+  private stripEl: HTMLElement | null = null;
 
   constructor() {
     const saved = storageGet('blatkom89.character');
     this.character = saved && isCharacterId(saved) ? saved : 'petya';
+    if (!ONLINE_AVAILABLE) this.localProfile = loadLocalProfile();
     hudBus.on('pause', () => this.togglePause());
     hudBus.on('match-end', () => setTimeout(() => this.onMatchFinished(), 2200));
   }
@@ -62,7 +76,13 @@ export class App {
         onError: (msg, fatal) => (fatal ? this.showError(msg) : toast(msg)),
         onLeft: () => this.goMenu(),
       });
-      void this.online.ensureAuth().catch(() => {});
+      void this.online
+        .ensureAuth()
+        .then(() => {
+          this.refreshStrip();
+          this.maybeAskNickname();
+        })
+        .catch(() => {});
     }
     const params = new URLSearchParams(location.search);
     // deep links: invite (Telegram start_param or ?invite=), direct room, quick test hook
@@ -146,13 +166,14 @@ export class App {
     this.go('menu', false);
     const c = CHARACTERS[this.character];
     const onlineNote = ONLINE_AVAILABLE ? null : h('div', { class: 'muted', style: 'font-size:14px' }, 'Это демо-версия без сервера: доступна тренировка с ботами. Онлайн-матчи работают в Telegram-версии.');
-    const name = this.online?.profile?.displayName;
+    this.stripEl = this.profileStrip();
     const menu = h(
       'div',
       { class: 'screen screen--dim' },
       h(
         'div',
         { class: 'wrap' },
+        this.stripEl,
         h('img', { class: 'logo', src: asset('assets/ui/logo.png'), alt: 'БЛАТКОМ ’89 — районные дела, серьёзные дела' }),
         h(
           'div',
@@ -165,7 +186,7 @@ export class App {
             h('button', { class: 'btn btn--red', onclick: () => this.quickMatch(), disabled: !ONLINE_AVAILABLE }, 'Быстрая игра', h('span', { class: 'sub' }, 'онлайн, до 6 игроков')),
             h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, 'Играть с друзьями', h('span', { class: 'sub' }, 'комната по приглашению')),
             h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, 'Тренировка', h('span', { class: 'sub' }, 'с ботами, без интернета')),
-            h('div', { class: 'row' }, h('button', { class: 'btn grow', onclick: () => this.showProfile(), disabled: !ONLINE_AVAILABLE }, 'Профиль'), h('button', { class: 'btn grow', onclick: () => this.showSettings() }, 'Настройки')),
+            h('div', { class: 'row' }, h('button', { class: 'btn grow', onclick: () => this.showProfile() }, 'Профиль'), h('button', { class: 'btn grow', onclick: () => this.showSettings() }, 'Настройки')),
             onlineNote,
           ),
           h(
@@ -179,7 +200,6 @@ export class App {
               h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 'name' }, c.name), h('div', { class: 'nick' }, `«${c.nickname}»`), h('div', { class: 'hand' }, c.quote)),
             ),
             h('button', { class: 'btn btn--small', onclick: () => this.showCharacters() }, 'Сменить персонажа'),
-            name ? h('div', { class: 'muted' }, `Вы вошли как ${name}`) : null,
           ),
         ),
         h('div', { class: 'grow' }),
@@ -189,6 +209,105 @@ export class App {
       ),
     );
     this.render(menu);
+    this.maybeAskNickname();
+  }
+
+  // ── profile, nickname, level ────────────────────────────────────────────
+  private playerName(): string | null {
+    return this.online ? (this.online.profile?.displayName ?? null) : (this.localProfile?.displayName ?? null);
+  }
+
+  private playerLevel(): number | null {
+    if (this.online) return this.online.profile?.level ?? null;
+    return this.localProfile ? levelForXp(this.localProfile.xp).level : null;
+  }
+
+  /** Top-right strip in the menu: level badge, nickname, XP bar, «✎» to rename. Opens the profile. */
+  private profileStrip(): HTMLElement {
+    const name = this.playerName();
+    const strip = h('div', { class: 'pstrip', 'data-testid': 'profile-strip' });
+    if (!name) {
+      strip.append(h('div', { class: 'lvlbadge' }, h('small', null, 'УР.'), '—'), h('div', { class: 'who' }, h('div', { class: 'nm muted' }, this.online ? 'Вход…' : 'Без клички')));
+      if (!this.online) strip.append(h('button', { class: 'edit', 'aria-label': 'Выбрать кличку', onclick: () => this.editNickname() }, '✎'));
+      return strip;
+    }
+    const xp = this.online ? (this.online.profile?.xp ?? 0) : (this.localProfile?.xp ?? 0);
+    const lvl = levelForXp(xp);
+    const pct = lvl.nextLevelCost > 0 ? Math.round((lvl.intoLevel / lvl.nextLevelCost) * 100) : 100;
+    strip.append(
+      h(
+        'button',
+        { class: 'pstrip__main', onclick: () => this.showProfile(), 'aria-label': `Профиль: ${name}, уровень ${lvl.level}` },
+        h('div', { class: 'lvlbadge' }, h('small', null, 'УР.'), String(this.playerLevel() ?? lvl.level)),
+        h(
+          'div',
+          { class: 'who' },
+          h('div', { class: 'nm', 'data-testid': 'menu-nick' }, name),
+          h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
+          h('div', { class: 'xp' }, lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} опыта` : 'максимальный уровень'),
+        ),
+      ),
+      h('button', { class: 'edit', 'aria-label': 'Сменить кличку', title: 'Сменить кличку', onclick: () => this.editNickname() }, '✎'),
+    );
+    return strip;
+  }
+
+  private refreshStrip() {
+    if (!this.stripEl?.isConnected) return;
+    const next = this.profileStrip();
+    this.stripEl.replaceWith(next);
+    this.stripEl = next;
+  }
+
+  /** First launch: ask for a nickname (demo: before the first profile exists; online: new players). */
+  private maybeAskNickname() {
+    if (this.screen !== 'menu' || this.nickClose) return;
+    if (!this.online) {
+      if (this.localProfile) return;
+      this.nickClose = openNicknameDialog(this.root, {
+        initial: randomNickname(),
+        note: 'Кличку видят соперники — над персонажем, в таблице и в итогах. Опыт и уровень копятся в этом браузере; поменять кличку можно в профиле.',
+        onSave: (name) => this.saveNickname(name),
+        onClose: () => (this.nickClose = null),
+      });
+      return;
+    }
+    const p = this.online.profile;
+    if (!p || p.matchesPlayed > 0 || storageGet(NICK_CONFIRMED_KEY) === p.id) return;
+    this.nickClose = openNicknameDialog(this.root, {
+      initial: p.displayName,
+      onSave: (name) => this.saveNickname(name),
+      onCancel: () => storageSet(NICK_CONFIRMED_KEY, p.id),
+      cancelLabel: 'Оставить как есть',
+      onClose: () => (this.nickClose = null),
+    });
+  }
+
+  private editNickname(after?: () => void) {
+    if (this.nickClose) return;
+    this.nickClose = openNicknameDialog(this.root, {
+      initial: this.playerName() ?? randomNickname(),
+      title: this.playerName() ? 'Сменить кличку' : 'Как тебя звать на районе?',
+      onSave: async (name) => {
+        await this.saveNickname(name);
+        after?.();
+      },
+      onCancel: () => {},
+      onClose: () => (this.nickClose = null),
+    });
+  }
+
+  private async saveNickname(name: string): Promise<void> {
+    if (this.online) {
+      if (name !== this.online.profile?.displayName) await this.online.rename(name);
+      const id = this.online.profile?.id;
+      if (id) storageSet(NICK_CONFIRMED_KEY, id);
+    } else {
+      this.localProfile = this.localProfile ? renameLocalProfile(this.localProfile, name) : createLocalProfile(name);
+      saveLocalProfile(this.localProfile);
+    }
+    this.refreshStrip();
+    toast(`Кличка: ${name}`);
   }
 
   // ── characters ──────────────────────────────────────────────────────────
@@ -314,8 +433,8 @@ export class App {
 
   private startPractice(opts: { mapId: MapId; bots: number; difficulty: BotDifficulty }) {
     this.lastPractice = { ...opts, bots: Math.max(1, Math.min(5, opts.bots || 3)) };
-    const name = this.online?.profile?.displayName ?? CHARACTERS[this.character].name;
-    const session = new OfflineSession({ mapId: opts.mapId, character: this.character, name, bots: this.lastPractice.bots, difficulty: opts.difficulty });
+    const name = this.playerName() ?? CHARACTERS[this.character].name;
+    const session = new OfflineSession({ mapId: opts.mapId, character: this.character, name, level: this.playerLevel(), bots: this.lastPractice.bots, difficulty: opts.difficulty });
     this.beginSession(session);
   }
 
@@ -391,13 +510,28 @@ export class App {
     if (this.screen !== 'results') this.go('results', false);
     const offline = this.session?.mode !== 'online';
     const myId = offline ? 'local' : (this.online?.profile?.id ?? '');
+    // demo build: a finished practice match counts towards the browser-only profile (once per match)
+    const local = offline && !this.online && this.session instanceof OfflineSession;
+    if (local && this.localProfile) {
+      const rec = recordLocalMatch(this.localProfile, { matchId: r.matchId, reason: r.reason, durationMs: r.durationMs, mapId: r.mapId, standings: r.standings, localId: 'local' });
+      if (rec) {
+        this.localProfile = rec.profile;
+        saveLocalProfile(rec.profile);
+        this.lastLocalResult = { matchId: r.matchId, personal: rec.personal };
+        if (rec.personal.leveledUp) sfx.play('kill', { volume: 0.7 });
+      }
+      if (this.lastLocalResult?.matchId === r.matchId) r = { ...r, personal: this.lastLocalResult.personal };
+    }
     const el = renderResults({
       results: r,
       myId,
       offline,
+      localProfile: local && !!this.localProfile,
+      ...(local && !this.localProfile ? { offlineNote: 'Выбери кличку в меню — и тренировки начнут приносить опыт и уровни.' } : {}),
       onRematch: () => {
         if (offline && this.session instanceof OfflineSession) {
           this.resultsShown = false;
+          this.session.setLocalIdentity(this.playerName() ?? CHARACTERS[this.character].name, this.playerLevel());
           this.session.restart();
           this.go('game', false);
           this.root.replaceChildren();
@@ -527,18 +661,32 @@ export class App {
   }
 
   private showProfile(push = true) {
-    if (!this.online) return;
+    if (!this.online && !this.localProfile) return this.editNickname(() => this.showProfile());
     this.go('profile', push);
     const box = h('div', { class: 'wrap' }, this.topbar('Профиль'), this.loading('Загружаем профиль…'));
     this.render(h('div', { class: 'screen screen--dim' }, box));
-    void renderProfile(this.online)
-      .then((el) => box.replaceChildren(this.topbar('Профиль'), el))
+    const load: Promise<ProfileData> = this.online ? loadOnlineProfile(this.online) : Promise.resolve(localProfileView(this.localProfile!, this.character));
+    void load
+      .then((d) => {
+        if (this.screen !== 'profile') return;
+        box.replaceChildren(this.topbar('Профиль'), renderProfileView(d, { local: !this.online, onRename: () => this.editNickname(() => this.screen === 'profile' && this.showProfile(false)) }));
+      })
       .catch((e: Error) => box.replaceChildren(this.topbar('Профиль'), h('div', { class: 'panel' }, `Не удалось загрузить профиль: ${e.message}`)));
   }
 
   private showSettings(push = true) {
     this.go('settings', push);
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Настройки'), renderSettings({ inGame: false, online: this.online }))));
+    const onResetLocal = !this.online && this.localProfile ? () => this.resetLocalProfile() : undefined;
+    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Настройки'), renderSettings({ inGame: false, online: this.online, ...(onResetLocal ? { onResetLocal } : {}) }))));
+  }
+
+  /** Demo build: forget the browser-only profile (the nickname dialog opens again in the menu). */
+  private resetLocalProfile() {
+    clearLocalProfile();
+    this.localProfile = null;
+    this.lastLocalResult = null;
+    toast('Локальный профиль сброшен');
+    this.goMenu();
   }
 
   showError(message: string, retry = true): void {

@@ -3,11 +3,11 @@
  * portrait, weapon & ammo with slots, centre messages, hit markers, scoreboard and touch controls.
  */
 import * as Phaser from 'phaser';
-import { CHARACTERS, getMap, PROP_DEFS, propFootprint, WEAPONS } from '@blatkom/shared';
+import { CHARACTERS, getMap, PROP_DEFS, propFootprint, WEAPONS, SCORING } from '@blatkom/shared';
 import type { MapDef, WeaponId } from '@blatkom/shared';
 import type { GameSession, RenderPlayer } from '../session/types.js';
 import { hudBus } from './hudBus.js';
-import type { KillFeedEntry } from './hudBus.js';
+import type { KillFeedEntry, PointsEntry, SupplyEntry } from './hudBus.js';
 import { touchState, isTouchDevice } from '../input/TouchState.js';
 import { getSettings, storageGet, storageSet } from '../../app/settings.js';
 import { analytics } from '../../analytics/client.js';
@@ -51,6 +51,19 @@ function txt(scene: Phaser.Scene, x: number, y: number, s: string, size: number,
   return scene.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, fontStyle: weight, color, stroke: '#0b0908', strokeThickness: Math.max(2, size / 7) });
 }
 
+/** «до 50 очков», «до 21 очка». */
+function pointsWord(n: number): string {
+  return n % 10 === 1 && n % 100 !== 11 ? 'ОЧКА' : 'ОЧКОВ';
+}
+
+/** Shortens `s` with an ellipsis until the text object fits `maxW` pixels. */
+function fitText(t: Phaser.GameObjects.Text, s: string, maxW: number): Phaser.GameObjects.Text {
+  t.setText(s);
+  let n = s.length;
+  while (t.width > maxW && n > 3) t.setText(s.slice(0, --n) + '…');
+  return t;
+}
+
 function fmtTime(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -79,6 +92,17 @@ export class HudScene extends Phaser.Scene {
   private healthBg!: Phaser.GameObjects.Graphics;
   private portrait!: Phaser.GameObjects.Image;
   private nameText!: Phaser.GameObjects.Text;
+  private levelText!: Phaser.GameObjects.Text;
+  private shownName = '';
+  private shownLevel: number | null | undefined = undefined;
+  // «+2 УСТРАНЕНИЕ» popups, supply banner, edge arrows towards supply crates
+  private popups: Array<{ text: Phaser.GameObjects.Text; born: number }> = [];
+  private banner: Phaser.GameObjects.Container | null = null;
+  private bannerUntil = 0;
+  private supplyPings: Array<{ x: number; y: number; at: number }> = [];
+  private edge!: Phaser.GameObjects.Graphics;
+  private modeLimit = -1;
+  private sbSig = '';
   private feedY0 = 14;
   private tutorial: Phaser.GameObjects.Container | null = null;
   private tutorialState: { moved: boolean; fired: boolean; startX: number; startY: number; startMag: number; shownAt: number } | null = null;
@@ -126,6 +150,13 @@ export class HudScene extends Phaser.Scene {
     this.slotIcons = [];
     this.slotNums = [];
     this.lastShotAt.clear();
+    this.popups = [];
+    this.banner = null;
+    this.supplyPings = [];
+    this.shownName = '';
+    this.shownLevel = undefined;
+    this.modeLimit = -1;
+    this.sbSig = '';
   }
 
   create(): void {
@@ -149,6 +180,9 @@ export class HudScene extends Phaser.Scene {
     hudBus.on('scoreboard', this.onScoreboard, this);
     hudBus.on('phase', this.onPhase, this);
     hudBus.on('radar', this.onRadar, this);
+    hudBus.on('points', this.onPoints, this);
+    hudBus.on('supply', this.onSupply, this);
+    this.edge = this.add.graphics().setDepth(18);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, this.layout, this);
       hudBus.off('killfeed', this.onKillFeed, this);
@@ -156,6 +190,8 @@ export class HudScene extends Phaser.Scene {
       hudBus.off('scoreboard', this.onScoreboard, this);
       hudBus.off('phase', this.onPhase, this);
       hudBus.off('radar', this.onRadar, this);
+      hudBus.off('points', this.onPoints, this);
+      hudBus.off('supply', this.onSupply, this);
       touchState.moveX = touchState.moveY = 0;
       touchState.aimActive = false;
       touchState.fireHeld = false;
@@ -224,6 +260,7 @@ export class HudScene extends Phaser.Scene {
     const c = me?.character ?? 'petya';
     this.portrait = this.add.image(0, 0, this.touch ? `portrait_small_${c}` : `portrait_${c}`).setOrigin(0, 0);
     this.nameText = txt(this, 0, 0, me?.name ?? CHARACTERS[c].name, this.touch ? 12 : 15, BEIGE, '600');
+    this.levelText = txt(this, 0, 0, '', this.touch ? 10 : 12, '#ffd36a', '600');
     this.hpText = txt(this, 0, 0, '100/100', this.touch ? 12 : 15, BEIGE, '500');
     this.hpBar = this.add.graphics();
   }
@@ -534,14 +571,17 @@ export class HudScene extends Phaser.Scene {
   // ── events ─────────────────────────────────────────────────────────────
   private onKillFeed(e: KillFeedEntry) {
     const k = txt(this, 0, 0, e.killer, 14, e.killerLocal ? RED : BLUE, '600');
-    const icon = this.add.image(0, 0, 'fx', `ico_${e.weapon}`).setOrigin(0, 0.5).setScale(0.55);
-    const v = txt(this, 0, 0, e.victim, 14, e.victimLocal ? RED : BLUE, '600');
-    icon.setPosition(k.width + 8, k.height / 2);
-    v.setPosition(icon.x + icon.displayWidth + 8, 0);
+    let right = k.width;
+    // assisters ride along after the killer: «Петя + Валюта [обрез] Михалыч»
+    const a = e.assists.length ? txt(this, right + 5, 3, `+ ${e.assists.join(', ')}`, 11, e.assistLocal ? '#ff8a7a' : '#9fbfdf', '500') : null;
+    if (a) right = a.x + a.width;
+    const icon = this.add.image(right + 8, k.height / 2, 'fx', `ico_${e.weapon}`).setOrigin(0, 0.5).setScale(0.55);
+    const v = txt(this, icon.x + icon.displayWidth + 8, 0, e.victim, 14, e.victimLocal ? RED : BLUE, '600');
     const bgW = v.x + v.width + 10;
     const bg = this.add.graphics();
     bg.fillStyle(PANEL, 0.55).fillRect(-6, -1, bgW, k.height + 2);
-    const c = this.add.container(14, 0, [bg, k, icon, v]);
+    if (e.killerLocal || e.assistLocal || e.victimLocal) bg.fillStyle(e.victimLocal ? 0x8a1a16 : 0xd9c7a3, e.victimLocal ? 0.5 : 0.85).fillRect(-6, -1, 2, k.height + 2);
+    const c = this.add.container(14, 0, a ? [bg, k, a, icon, v] : [bg, k, icon, v]);
     this.feed.unshift({ container: c, born: this.time.now });
     while (this.feed.length > 5) this.feed.pop()!.container.destroy();
   }
@@ -552,12 +592,108 @@ export class HudScene extends Phaser.Scene {
   }
 
   private onScoreboard(show: boolean) {
+    this.sbSig = '';
     this.scoreboardVisible = show;
     this.scoreboard.setVisible(show);
   }
 
   private onRadar(slot: number) {
     this.noteShot(slot, this.time.now);
+  }
+
+  private onPoints(e: PointsEntry) {
+    const big = e.points >= SCORING.killPoints;
+    const t = txt(this, 0, 0, `+${e.points} ${e.label}`, this.touch ? 15 : 19, big ? '#ffd36a' : BEIGE, '700').setOrigin(0.5).setDepth(22).setAlpha(0);
+    this.popups.push({ text: t, born: this.time.now });
+    while (this.popups.length > 3) this.popups.shift()!.text.destroy();
+  }
+
+  private onSupply(e: SupplyEntry) {
+    this.banner?.destroy();
+    const name = WEAPONS[e.weapon].name;
+    const title = this.tape(this.touch ? `ДЕФИЦИТ ЗАВЕЗЛИ: ${name.toUpperCase()}` : 'ДЕФИЦИТ ЗАВЕЗЛИ!', this.touch ? 13 : 17);
+    const parts: Phaser.GameObjects.GameObject[] = [title];
+    if (!this.touch) parts.push(txt(this, 0, 16, `В ящике: ${name.toLowerCase()} с полным боекомплектом — ищи метку на карте`, 13, BEIGE, '500').setOrigin(0.5, 0));
+    this.banner = this.add.container(0, 0, parts).setDepth(23).setAlpha(0);
+    this.bannerUntil = this.time.now + 3400;
+    this.supplyPings.push({ x: e.x, y: e.y, at: this.time.now });
+  }
+
+  /** Popups, the supply banner and minimap pings, advanced every frame. */
+  private updateTransient(time: number) {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    this.popups = this.popups.filter((p, i, all) => {
+      const age = time - p.born;
+      if (age > 1700) {
+        p.text.destroy();
+        return false;
+      }
+      const rise = Math.min(1, age / 500) * 16;
+      const stack = (all.length - 1 - i) * (this.touch ? 18 : 22);
+      p.text.setPosition(W / 2, H * 0.62 - rise - stack);
+      p.text.setAlpha(age < 120 ? age / 120 : age > 1300 ? Math.max(0, 1 - (age - 1300) / 400) : 1);
+      p.text.setScale(age < 160 ? 1.3 - (age / 160) * 0.3 : 1);
+      return true;
+    });
+    if (this.banner) {
+      const left = this.bannerUntil - time;
+      if (left <= 0) {
+        this.banner.destroy();
+        this.banner = null;
+      } else {
+        // below the first-match controls card if it is still up, otherwise under the score box
+        const tut = this.tutorial?.visible ? this.tutorial.getBounds().bottom + 24 : 0;
+        const y = Math.max(tut, this.touch ? 138 : Math.max(H * 0.2, 96));
+        this.banner.setPosition(W / 2, y).setAlpha(left < 400 ? left / 400 : Math.min(1, (3400 - left) / 150));
+      }
+    }
+    this.supplyPings = this.supplyPings.filter((p) => time - p.at < 2400);
+  }
+
+  /** Arrows on the screen edge pointing at «дефицит» crates that are out of view. */
+  private drawSupplyArrows(time: number) {
+    this.edge.clear();
+    const crates = this.session.pickups().filter((pk) => pk.supply && pk.active);
+    if (!crates.length) return;
+    const game = this.scene.get('game');
+    const cam = game?.cameras?.main;
+    if (!cam) return;
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const wv = cam.worldView;
+    const cx = W / 2;
+    const cy = H / 2;
+    // the arrows run along an inner frame that keeps clear of the score box and the bottom panels
+    const left = 34;
+    const right = W - 34;
+    const top = this.touch ? 112 : 78;
+    const bottom = H - (this.touch ? 40 : 104);
+    const pulse = 0.65 + Math.sin(time / 140) * 0.35;
+    for (const pk of crates) {
+      const sx = (pk.x - wv.x) * cam.zoom + cam.x;
+      const sy = (pk.y - wv.y) * cam.zoom + cam.y;
+      if (sx > 24 && sx < W - 24 && sy > 24 && sy < H - 24) continue;
+      const a = Math.atan2(sy - cy, sx - cx);
+      const dx = Math.cos(a);
+      const dy = Math.sin(a);
+      const tx = dx > 1e-6 ? (right - cx) / dx : dx < -1e-6 ? (left - cx) / dx : Infinity;
+      const ty = dy > 1e-6 ? (bottom - cy) / dy : dy < -1e-6 ? (top - cy) / dy : Infinity;
+      const r = Math.max(0, Math.min(tx, ty));
+      let ex = cx + dx * r;
+      let ey = cy + dy * r;
+      // never on top of the minimap: slide below it along the right edge
+      const mmLeft = this.mm.x - 18;
+      const mmBottom = this.mm.y + this.mmH + 30;
+      if (ex > mmLeft && ey < mmBottom) {
+        ex = Math.min(ex, right);
+        ey = mmBottom;
+      }
+      this.edge.fillStyle(0x0b0908, 0.7).fillCircle(ex, ey, 13);
+      this.edge.fillStyle(0xff7a3a, pulse);
+      this.edge.fillTriangle(ex + Math.cos(a) * 11, ey + Math.sin(a) * 11, ex + Math.cos(a + 2.4) * 9, ey + Math.sin(a + 2.4) * 9, ex + Math.cos(a - 2.4) * 9, ey + Math.sin(a - 2.4) * 9);
+      this.edge.lineStyle(1.5, 0xffd36a, pulse).strokeCircle(ex, ey, 13);
+    }
   }
 
   private onPhase(phase: string) {
@@ -570,7 +706,7 @@ export class HudScene extends Phaser.Scene {
     const hud = this.session.hud();
     const players = this.session.players();
     const me = players.find((p) => p.isLocal);
-    const sorted = players.slice().sort((a, b) => b.score - a.score || a.deaths - b.deaths);
+    const sorted = players.slice().sort((a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths);
     const leader = sorted.find((p) => !p.isLocal);
     // score / timer
     this.myScore.setText(String(me?.score ?? 0));
@@ -578,7 +714,10 @@ export class HudScene extends Phaser.Scene {
     const t = hud.phase === 'active' ? hud.timeLeftMs : hud.phase === 'countdown' || hud.phase === 'ready' ? hud.timeLeftMs : 0;
     this.timer.setText(fmtTime(t));
     this.timer.setColor(hud.phase === 'active' && t < 30_000 ? '#ff6a5a' : BEIGE);
-    this.mode.setText(`ДЕЗМАТЧ · ${hud.scoreLimit} УБИЙСТВ`);
+    if (this.modeLimit !== hud.scoreLimit) {
+      this.modeLimit = hud.scoreLimit;
+      this.mode.setText(`ДЕЗМАТЧ · ДО ${hud.scoreLimit} ${pointsWord(hud.scoreLimit)}`);
+    }
     // feed
     let fy = this.feedY0;
     for (const f of this.feed) {
@@ -601,8 +740,17 @@ export class HudScene extends Phaser.Scene {
         const hgt = this.portrait.displayHeight;
         this.portrait.setTexture(key).setDisplaySize(w, hgt);
       }
-      if (me.name && this.nameText.text !== me.name) this.nameText.setText(me.name);
+      if ((me.name && this.shownName !== me.name) || this.shownLevel !== me.level) {
+        this.shownName = me.name;
+        this.shownLevel = me.level;
+        this.levelText.setText(me.level !== null ? `УР. ${me.level}` : '');
+        const room = (this.touch ? 128 : 162) - (me.level !== null ? this.levelText.width + 6 : 0);
+        fitText(this.nameText, me.name || CHARACTERS[me.character].name, room);
+      }
+      this.levelText.setPosition(this.nameText.x + this.nameText.width + 6, this.nameText.y + (this.touch ? 1.5 : 3));
     }
+    this.updateTransient(time);
+    this.drawSupplyArrows(time);
     this.updateTutorial(me, hud.mag, hud.weapon, hud.phase, time);
     // health
     const hp = Math.max(0, hud.hp);
@@ -644,7 +792,19 @@ export class HudScene extends Phaser.Scene {
         this.mmDots.fillStyle(0x4a9be0, 1).fillCircle(ox + p.x * s, oy + p.y * s, 2.5);
       }
     }
-    for (const pk of this.session.pickups()) if (pk.active) this.mmDots.fillStyle(0xffd36a, 0.9).fillRect(ox + pk.x * s - 1, oy + pk.y * s - 1, 2, 2);
+    for (const pk of this.session.pickups()) {
+      if (!pk.active) continue;
+      if (pk.supply) {
+        const blink = Math.floor(time / 250) % 2 === 0;
+        this.mmDots.fillStyle(0x0b0908, 1).fillRect(ox + pk.x * s - 3, oy + pk.y * s - 3, 6, 6);
+        this.mmDots.fillStyle(blink ? 0xff7a3a : 0xffd36a, 1).fillRect(ox + pk.x * s - 2, oy + pk.y * s - 2, 4, 4);
+      } else this.mmDots.fillStyle(0xffd36a, 0.9).fillRect(ox + pk.x * s - 1, oy + pk.y * s - 1, 2, 2);
+    }
+    for (const p of this.supplyPings) {
+      const k = (time - p.at) / 800;
+      const r = 3 + (k % 1) * 12;
+      this.mmDots.lineStyle(1, 0xff7a3a, Math.max(0, 1 - (k % 1))).strokeCircle(ox + p.x * s, oy + p.y * s, r);
+    }
     // centre messages
     this.centre(hud, me, time);
     // hit marker at the crosshair position
@@ -725,27 +885,45 @@ export class HudScene extends Phaser.Scene {
     this.promptText.setText(hud.pickupPrompt && hud.alive ? (this.touch ? `Взять: ${WEAPONS[hud.pickupPrompt].name}` : `[E] — взять ${WEAPONS[hud.pickupPrompt].name.toLowerCase()}`) : '');
   }
 
+  /** Tab table: rebuilt only when its content or the screen width changes. */
   private drawScoreboard(sorted: RenderPlayer[]) {
-    this.scoreboard.removeAll(true);
     const W = this.scale.width;
-    const w = Math.min(460, W - 40);
-    const h = 54 + sorted.length * 28;
+    const sig = `${W}|${sorted.map((p) => `${p.slot}:${p.name}:${p.level}:${p.kills}:${p.assists}:${p.deaths}:${p.score}:${p.isBot}`).join('|')}`;
+    if (sig === this.sbSig) return;
+    this.sbSig = sig;
+    this.scoreboard.removeAll(true);
+    const w = Math.min(560, W - 24);
+    const step = w < 470 ? 38 : 50;
+    const h = 66 + sorted.length * 28;
     const x = (W - w) / 2;
     const y = 80;
     const g = this.add.graphics();
     this.panel(g, x, y, w, h, 0.92);
     this.scoreboard.add(g);
-    const head = txt(this, x + 16, y + 12, 'ИГРОК', 12, '#b8a888', '600');
-    const kd = txt(this, x + w - 150, y + 12, 'УБ / СМ', 12, '#b8a888', '600');
-    const sc = txt(this, x + w - 60, y + 12, 'ОЧКИ', 12, '#b8a888', '600');
-    this.scoreboard.add([head, kd, sc]);
+    const cols: Array<[string, (p: RenderPlayer) => string]> = [
+      ['УР.', (p) => (p.level === null ? '—' : String(p.level))],
+      ['УСТР.', (p) => String(p.kills)],
+      ['ПОМ.', (p) => String(p.assists)],
+      ['СМ.', (p) => String(p.deaths)],
+      ['ОЧКИ', (p) => String(p.score)],
+    ];
+    const colX = (i: number) => x + w - 14 - step / 2 - (cols.length - 1 - i) * step;
+    this.scoreboard.add(txt(this, x + 16, y + 12, 'ИГРОК', 12, '#b8a888', '600'));
+    cols.forEach(([label], i) => this.scoreboard.add(txt(this, colX(i), y + 12, label, 11, i === cols.length - 1 ? BEIGE : '#b8a888', '600').setOrigin(0.5, 0)));
+    const nameRoom = colX(0) - step / 2 - (x + 46) - 6;
     sorted.forEach((p, i) => {
       const ry = y + 40 + i * 28;
+      if (p.isLocal) g.fillStyle(0x8a1a16, 0.35).fillRect(x + 8, ry - 3, w - 16, 28);
       const portrait = this.add.image(x + 16, ry, `portrait_small_${p.character}`).setOrigin(0, 0).setDisplaySize(22, 22);
-      const n = txt(this, x + 46, ry + 1, `${i + 1}. ${p.name}${p.isBot ? ' · бот' : ''}`, 15, p.isLocal ? RED : BEIGE, '500');
-      const k = txt(this, x + w - 150, ry + 1, `${p.kills} / ${p.deaths}`, 15, BEIGE, '500');
-      const s = txt(this, x + w - 60, ry + 1, String(p.score), 15, BEIGE, '700');
-      this.scoreboard.add([portrait, n, k, s]);
+      const n = fitText(txt(this, x + 46, ry + 1, '', 15, p.isLocal ? RED : BEIGE, '500'), `${i + 1}. ${p.name}${p.isBot ? ' · бот' : ''}`, nameRoom);
+      this.scoreboard.add([portrait, n]);
+      cols.forEach(([, get], c) => {
+        const last = c === cols.length - 1;
+        const color = c === 0 ? '#ffd36a' : last ? BEIGE : '#d9cdb2';
+        this.scoreboard.add(txt(this, colX(c), ry + 1, get(p), 15, color, last ? '700' : '500').setOrigin(0.5, 0));
+      });
     });
+    const rule = `Устранение +${SCORING.killPoints} · помощь +${SCORING.assistPoints} (от ${SCORING.assistMinDamage} урона за ${SCORING.assistWindowMs / 1000} с до устранения)`;
+    this.scoreboard.add(fitText(txt(this, W / 2, y + h - 20, '', 11, '#9a9080', '400').setOrigin(0.5, 0), rule, w - 24));
   }
 }

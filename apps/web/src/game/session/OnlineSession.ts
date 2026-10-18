@@ -107,7 +107,9 @@ export class OnlineSession implements GameSession {
         (e.t === 'kill' && (e.victim === this.slot || e.killer === this.slot)) ||
         ((e.t === 'respawn' || e.t === 'pickup' || e.t === 'drop') && e.slot === this.slot) ||
         e.t === 'phase' ||
-        e.t === 'matchEnd';
+        e.t === 'supply' ||
+        e.t === 'matchEnd' ||
+        (e.t === 'kill' && e.assists.includes(this.slot));
       if ((e.t === 'reload' || e.t === 'dry') && e.slot === this.slot) continue; // predicted locally
       if (e.t === 'kill' && e.victim === this.slot) this.killedBy = this.roster.get(e.killer)?.name ?? null;
       if (e.t === 'respawn' && e.slot === this.slot) {
@@ -157,6 +159,7 @@ export class OnlineSession implements GameSession {
     me.heavyMag = np.heavyMag;
     me.heavyReserve = np.heavyReserve;
     me.kills = np.kills;
+    me.assists = np.assists;
     me.deaths = np.deaths;
     me.score = np.score;
     me.walking = np.walking;
@@ -295,8 +298,10 @@ export class OnlineSession implements GameSession {
         walking: src.walking,
         connected: src.connected,
         kills: pb.kills,
+        assists: pb.assists,
         deaths: pb.deaths,
         score: pb.score,
+        level: r?.level ?? null,
       });
     }
   }
@@ -326,8 +331,10 @@ export class OnlineSession implements GameSession {
         walking: me.walking,
         connected: true,
         kills: me.kills,
+        assists: me.assists,
         deaths: me.deaths,
         score: me.score,
+        level: r?.level ?? null,
       });
     }
     return out;
@@ -388,8 +395,8 @@ export class OnlineSession implements GameSession {
     if (!s) return [];
     return s.players
       .map((p) => ({ p, r: this.roster.get(p.slot) }))
-      .sort((x, y) => y.p.score - x.p.score || x.p.deaths - y.p.deaths)
-      .map(({ p, r }, i) => ({ id: r?.id ?? String(p.slot), slot: p.slot, name: r?.name ?? '???', character: r?.character ?? 'petya', isBot: false, kills: p.kills, deaths: p.deaths, score: p.score, damageDealt: 0, bestStreak: 0, place: i + 1 }));
+      .sort((x, y) => y.p.score - x.p.score || y.p.kills - x.p.kills || x.p.deaths - y.p.deaths)
+      .map(({ p, r }, i) => ({ id: r?.id ?? String(p.slot), slot: p.slot, name: r?.name ?? '???', character: r?.character ?? 'petya', isBot: false, kills: p.kills, assists: p.assists, deaths: p.deaths, score: p.score, damageDealt: 0, bestStreak: 0, place: i + 1 }));
   }
 
   results(): ResultsData | null {

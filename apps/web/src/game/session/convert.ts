@@ -37,8 +37,10 @@ export function toRenderPlayer(p: PlayerState, isLocal: boolean, now: number): R
     walking: p.walking,
     connected: p.connected,
     kills: p.kills,
+    assists: p.assists,
     deaths: p.deaths,
     score: p.score,
+    level: null,
   };
 }
 

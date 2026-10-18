@@ -42,9 +42,9 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 | Module | Contents |
 |---|---|
 | `constants/game.ts` | tick rate (60 Hz), snapshot rate (30 Hz), speeds, rewind window, quantisation scales, input limits |
-| `game-rules/` | characters (4, identical stats), weapons (pistol, обрез, автомат, монтировка), match config & phases, XP/levels/achievements |
+| `game-rules/` | characters (4, identical stats), weapons (pistol, обрез, автомат, монтировка), match config & phases, scoring (elimination +2, assist +1), XP/levels/achievements and `applyMatchProgress` — the one progression rule set used by the server recorder and by the demo's browser-only profile |
 | `maps/` | map format (`types.ts`), prop registry (footprints, collision, render layer), `MapBuilder`, the three maps, collision world (grid + rects + circles, ray casts, swept movement) |
-| `sim/world.ts` | deterministic match simulation: movement with sliding, weapons (fire rate, spread, reload, ammo, pickups), lag-compensated hitscan, melee, damage, respawn, spawn selection, scoring, phase machine |
+| `sim/world.ts` | deterministic match simulation: movement with sliding, weapons (fire rate, spread, reload, ammo, pickups), «дефицит» supply drops, lag-compensated hitscan, melee, damage with per-attacker damage log (assists), respawn, spawn selection, scoring, phase machine |
 | `sim/bots.ts`, `sim/nav.ts` | offline bot AI (grid A*, line-of-sight aiming, difficulty levels) |
 | `net/codec.ts`, `net/protocol.ts` | binary input/snapshot codec with bounds checks; zod-validated JSON control messages; close codes |
 | `events/analytics.ts`, `schemas/api.ts` | analytics event schemas, HTTP request/response schemas and types |
@@ -66,7 +66,8 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 ### apps/web
 | Module | Responsibility |
 |---|---|
-| `app/App.ts` | screens: menu, character select, practice setup, friends (create/join), lobby, game, results, profile, settings, errors |
+| `app/App.ts` | screens: menu (profile strip: level, nickname, XP), character select, practice setup, friends (create/join), lobby, game, results, profile, settings, errors; first-launch nickname dialog |
+| `profile/` | nickname dialog and suggestions; the demo build's browser-only profile (`localProfile.ts` pure rules + `localStore.ts` localStorage) — the online build always uses the server profile |
 | `net/` | REST client, `GameConnection` (WS, reconnect with backoff, ping), `OnlineClient` (auth, rooms, lobby state) |
 | `game/session/` | `OfflineSession` (local World + bots), `OnlineSession` (prediction, reconciliation, interpolation, delayed remote events) — both expose the same `GameSession` interface to the scenes |
 | `game/scenes/` | `BootScene` (loading), `GameScene` (fixed-step loop, camera, events → feedback), `HudScene` (HUD, touch controls, scoreboard), `PreviewScene` (animated map behind menus) |

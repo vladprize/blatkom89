@@ -268,5 +268,14 @@ export function buildFactoryMap(): MapDef {
   b.pickup('obrez', 1150, 764);
   b.spawn(1395, 985, -135);
 
+  // ── Extra loot & «дефицит» drop points ───────────────────────────────────
+  b.pickup('obrez', 680, 536, 16_000) // at the turnstiles
+    .pickup('avtomat', 1280, 52, 20_000) // workshop, behind the tanks
+    .pickup('obrez', 52, 616, 16_000) // loading yard, by the fence
+    .pickup('avtomat', 920, 960, 20_000) // plaza, by the bus stop
+    .pickup('avtomat', 384, 496, 20_000) // courtyard, near the crates
+    .pickup('obrez', 952, 568, 16_000); // vehicle gate
+  b.supply(784, 288).supply(544, 744).supply(792, 752).supply(544, 272).supply(920, 112).supply(128, 96);
+
   return b.build();
 }

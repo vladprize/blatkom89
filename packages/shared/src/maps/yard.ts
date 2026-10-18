@@ -150,5 +150,14 @@ export function buildYardMap(): MapDef {
     .spawn(1364, 44, 135)
     .spawn(44, 1044, -45)
     .spawn(1364, 1044, -135);
+  // ── Extra loot & «дефицит» drop points ───────────────────────────────────
+  b.pickup('obrez', 664, 52, 16_000)
+    .pickup('avtomat', 592, 744, 20_000)
+    .pickup('obrez', 992, 544, 16_000)
+    .pickup('avtomat', 400, 544, 20_000)
+    .pickup('obrez', 552, 280, 16_000)
+    .pickup('avtomat', 52, 728, 20_000);
+  b.supply(848, 752).supply(888, 320).supply(1328, 256).supply(1312, 840).supply(88, 248).supply(728, 232);
+
   return b.build();
 }

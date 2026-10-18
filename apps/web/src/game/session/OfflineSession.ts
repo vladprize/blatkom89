@@ -10,6 +10,8 @@ export interface OfflineOptions {
   mapId: MapId;
   character: CharacterId;
   name: string;
+  /** The local player's profile level (nameplate, scoreboard); null/undefined = not shown. */
+  level?: number | null;
   bots: number;
   difficulty: BotDifficulty;
   durationMs?: number;
@@ -29,21 +31,26 @@ export class OfflineSession implements GameSession {
   private alpha = 1;
   private resultsData: ResultsData | null = null;
   private killedBy: string | null = null;
+  private readonly levels = new Map<string, number>();
+  private matchSeq = 0;
 
   constructor(opts: OfflineOptions) {
     this.mapId = opts.mapId;
     this.world = new World(getMap(opts.mapId), getCollision(opts.mapId), {
       lagCompensation: false,
-      config: { readyMs: 0, countdownMs: 3000, durationMs: opts.durationMs ?? 4 * 60_000, scoreLimit: opts.scoreLimit ?? 20, maxPlayers: 8 },
+      config: { readyMs: 0, countdownMs: 3000, durationMs: opts.durationMs ?? 4 * 60_000, scoreLimit: opts.scoreLimit ?? 40, maxPlayers: 8 },
       seed: Math.floor(Math.random() * 1e9),
     });
     this.nav = new NavGrid(this.world.collision);
     this.world.addPlayer(this.localId, opts.name, opts.character, false);
+    if (opts.level) this.levels.set(this.localId, opts.level);
+    this.matchSeq = Math.floor(Math.random() * 1e6);
     const others = CHARACTER_IDS.filter((c) => c !== opts.character);
     const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
     for (let i = 0; i < opts.bots; i++) {
       const id = `bot${i}`;
       this.world.addPlayer(id, names[i % names.length]!, others[i % others.length]!, true);
+      this.levels.set(id, 2 + Math.floor(Math.random() * 14)); // practice bots wear plausible levels
       this.brains.push(new BotBrain(id, this.world, this.nav, opts.difficulty, 1000 + i * 77 + Math.floor(Math.random() * 1000)));
     }
     this.world.beginMatch(true);
@@ -67,7 +74,8 @@ export class OfflineSession implements GameSession {
       if (e.t === 'respawn' && e.slot === this.localSlot()) this.killedBy = null;
       if (e.t === 'matchEnd') {
         this.resultsData = {
-          matchId: 'offline',
+          // unique per match: the demo profile records each finished practice match exactly once
+          matchId: `offline-${Date.now().toString(36)}-${(this.matchSeq++).toString(36)}`,
           reason: e.reason,
           durationMs: this.world.time - this.world.matchStartedAt,
           standings: this.world.standings(),
@@ -87,6 +95,7 @@ export class OfflineSession implements GameSession {
     const out: RenderPlayer[] = [];
     for (const p of this.world.players.values()) {
       const r = toRenderPlayer(p, p.id === this.localId, this.world.time);
+      r.level = this.levels.get(p.id) ?? null;
       const pr = this.prev.get(p.slot);
       if (pr && p.alive) {
         r.x = pr.x + (p.x - pr.x) * this.alpha;
@@ -98,7 +107,7 @@ export class OfflineSession implements GameSession {
   }
 
   pickups(): RenderPickup[] {
-    return this.world.pickups.map((p) => ({ id: p.id, weapon: p.weapon, x: p.x, y: p.y, active: p.active, dropped: p.dropped }));
+    return this.world.pickups.map((p) => ({ id: p.id, weapon: p.weapon, x: p.x, y: p.y, active: p.active, dropped: p.dropped, supply: p.supply }));
   }
 
   drainEvents(): SessionEvent[] {
@@ -152,6 +161,14 @@ export class OfflineSession implements GameSession {
 
   viewTime(): number {
     return this.world.time;
+  }
+
+  /** Nickname/level of the local player (the profile can change between matches). */
+  setLocalIdentity(name: string, level: number | null): void {
+    const me = this.world.players.get(this.localId);
+    if (me) me.name = name;
+    if (level) this.levels.set(this.localId, level);
+    else this.levels.delete(this.localId);
   }
 
   /** Restart the practice match with the same roster. */

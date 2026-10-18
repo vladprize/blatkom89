@@ -9,4 +9,20 @@ export interface KillFeedEntry {
   victim: string;
   victimLocal: boolean;
   weapon: import('@blatkom/shared').WeaponId;
+  /** Names of players credited with an assist. */
+  assists: string[];
+  assistLocal: boolean;
+}
+
+/** Points the local player just earned (floating «+2» popup). */
+export interface PointsEntry {
+  points: number;
+  label: string;
+}
+
+/** A «дефицит» supply crate appeared. */
+export interface SupplyEntry {
+  x: number;
+  y: number;
+  weapon: import('@blatkom/shared').HeavyWeaponId;
 }

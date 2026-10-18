@@ -130,6 +130,8 @@ export interface MapDef {
   overhead: OverheadDef[];
   spawns: SpawnPoint[];
   pickups: PickupSpawn[];
+  /** Open spots where «дефицит» supply crates may be dropped during a match. */
+  supplyPoints: Array<{ x: number; y: number }>;
   /** Ambient light colour multiplier for the night lightmap (0xRRGGBB) and strength 0..1. */
   ambient: { color: number; level: number };
   /** Minimap palette hint. */

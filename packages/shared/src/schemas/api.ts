@@ -46,6 +46,7 @@ export interface PublicProfile {
   wins: number;
   losses: number;
   kills: number;
+  assists: number;
   deaths: number;
   playtimeSec: number;
   currentWinStreak: number;
@@ -89,6 +90,7 @@ export interface MatchHistoryEntry {
   place: number;
   players: number;
   kills: number;
+  assists: number;
   deaths: number;
   xpGained: number;
   won: boolean;
@@ -196,6 +198,7 @@ export interface AdminPlayerRow {
   wins: number;
   losses: number;
   kills: number;
+  assists: number;
   deaths: number;
   playtimeSec: number;
 }

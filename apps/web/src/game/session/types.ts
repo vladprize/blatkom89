@@ -20,8 +20,11 @@ export interface RenderPlayer {
   walking: boolean;
   connected: boolean;
   kills: number;
+  assists: number;
   deaths: number;
   score: number;
+  /** Profile level when known (online roster, local profile, practice bots). */
+  level: number | null;
 }
 
 export interface RenderPickup {
@@ -31,16 +34,19 @@ export interface RenderPickup {
   y: number;
   active: boolean;
   dropped: boolean;
+  /** «Дефицит» supply crate. */
+  supply: boolean;
 }
 
 export type SessionEvent =
   | { t: 'shot'; shooter: number; weapon: WeaponId; ox: number; oy: number; aim: number; pellets: PelletResult[]; predicted: boolean }
   | { t: 'melee'; shooter: number; angle: number; hit: number; predicted: boolean }
   | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: WeaponId }
-  | { t: 'kill'; killer: number; victim: number; weapon: WeaponId }
+  | { t: 'kill'; killer: number; victim: number; weapon: WeaponId; assists: number[] }
   | { t: 'respawn'; slot: number; x: number; y: number }
   | { t: 'pickup'; slot: number; weapon: HeavyWeaponId; ammoOnly: boolean }
   | { t: 'drop'; slot: number; weapon: HeavyWeaponId }
+  | { t: 'supply'; x: number; y: number; weapon: HeavyWeaponId }
   | { t: 'reload'; slot: number; weapon: WeaponId }
   | { t: 'dry'; slot: number }
   | { t: 'phase'; phase: MatchPhase }

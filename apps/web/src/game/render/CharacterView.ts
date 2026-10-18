@@ -18,6 +18,8 @@ export class CharacterView {
   private readonly legs: Phaser.GameObjects.Sprite;
   private readonly torso: Phaser.GameObjects.Sprite;
   private readonly label: Phaser.GameObjects.Text;
+  /** Level badge left of the health bar (gold plate with the number). */
+  private readonly levelTag: Phaser.GameObjects.Text;
   private readonly bar: Phaser.GameObjects.Graphics;
   private character: CharacterId;
   private weapon: WeaponId;
@@ -46,6 +48,10 @@ export class CharacterView {
       .text(p.x, p.y - 25, p.name, { fontFamily: 'Oswald, sans-serif', fontSize: '8px', fontStyle: '500', color: p.isLocal ? LOCAL_TAG : ENEMY_TAG, stroke: '#0b0908', strokeThickness: 2.5, resolution: 4 })
       .setOrigin(0.5, 1)
       .setDepth(D.LABEL);
+    this.levelTag = scene.add
+      .text(p.x, p.y, '', { fontFamily: 'Oswald, sans-serif', fontSize: '7px', fontStyle: '700', color: '#1a1410', resolution: 4 })
+      .setOrigin(0.5, 0.5)
+      .setDepth(D.LABEL + 0.01);
     this.bar = scene.add.graphics().setDepth(D.LABEL);
     this.torso.on(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
       if (this.torsoState !== 'reload' || !this.reloading) this.playIdle();
@@ -103,7 +109,7 @@ export class CharacterView {
     const visible = p.alive;
     if (visible !== this.alive) {
       this.alive = visible;
-      for (const o of [this.shadow, this.legs, this.torso, this.label, this.bar]) o.setVisible(visible);
+      for (const o of [this.shadow, this.legs, this.torso, this.label, this.levelTag, this.bar]) o.setVisible(visible);
       if (visible) this.playIdle();
     }
     if (!visible) return;
@@ -165,7 +171,8 @@ export class CharacterView {
     this.torso.setAlpha(blink);
     this.legs.setAlpha(blink);
 
-    // name + hp
+    // name + level badge + hp (the roster/nickname can change after the view was created)
+    if (this.label.text !== p.name) this.label.setText(p.name);
     this.label.setPosition(Math.round(p.x * 2) / 2, Math.round((p.y - 22) * 2) / 2);
     this.bar.clear();
     const w = 20;
@@ -173,6 +180,14 @@ export class CharacterView {
     const by = Math.round(p.y - 21);
     this.bar.fillStyle(0x0b0908, 0.85).fillRect(bx - 1, by - 1, w + 2, 3.5);
     this.bar.fillStyle(p.isLocal ? 0xd8322a : 0x3d8fd8, 1).fillRect(bx, by, (w * Math.max(0, p.hp)) / 100, 1.5);
+    const lvl = p.level === null ? '' : String(p.level);
+    if (this.levelTag.text !== lvl) this.levelTag.setText(lvl);
+    if (lvl) {
+      const lw = Math.max(7, Math.ceil(this.levelTag.width) + 2);
+      this.bar.fillStyle(0x0b0908, 0.9).fillRect(bx - lw - 3, by - 3.5, lw + 2, 9);
+      this.bar.fillStyle(0xd9b45a, 1).fillRect(bx - lw - 2, by - 2.5, lw, 7);
+      this.levelTag.setPosition(bx - 2 - lw / 2, by + 1).setVisible(true);
+    } else this.levelTag.setVisible(false);
 
     // cigarette smoke for the smokers
     if ((this.character === 'valuta' || this.character === 'mihalych') && now > this.smokeAt) {
@@ -185,7 +200,7 @@ export class CharacterView {
   }
 
   destroy(): void {
-    for (const o of [this.shadow, this.legs, this.torso, this.label, this.bar]) o.destroy();
+    for (const o of [this.shadow, this.legs, this.torso, this.label, this.levelTag, this.bar]) o.destroy();
   }
 }
 
