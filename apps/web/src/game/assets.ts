@@ -30,17 +30,18 @@ export const TORSO_ANIMS: Record<WeaponId, Array<[string, number]>> = {
 export function preloadAssets(scene: Phaser.Scene, base = 'assets/'): void {
   const l = scene.load;
   l.setPath(base);
-  for (const c of CHARACTER_IDS) l.atlas(`char_${c}`, `sprites/char_${c}.png`, `sprites/char_${c}.json`);
-  l.atlas('props', 'sprites/props.png', 'sprites/props.json');
-  l.atlas('fx', 'sprites/fx.png', 'sprites/fx.json');
-  for (const f of FLOOR_KEYS) l.image(`floor_${f}`, `tiles/floor_${f}.png`);
-  for (const w of WALL_KEYS) l.image(`wall_${w}`, `tiles/wall_${w}.png`);
-  l.image('pipe', 'tiles/pipe.png');
+  const v = (p: string) => `${p}?v=${__ASSET_VERSION__}`;
+  for (const c of CHARACTER_IDS) l.atlas(`char_${c}`, v(`sprites/char_${c}.png`), v(`sprites/char_${c}.json`));
+  l.atlas('props', v('sprites/props.png'), v('sprites/props.json'));
+  l.atlas('fx', v('sprites/fx.png'), v('sprites/fx.json'));
+  for (const f of FLOOR_KEYS) l.image(`floor_${f}`, v(`tiles/floor_${f}.png`));
+  for (const w of WALL_KEYS) l.image(`wall_${w}`, v(`tiles/wall_${w}.png`));
+  l.image('pipe', v('tiles/pipe.png'));
   for (const c of CHARACTER_IDS) {
-    l.image(`portrait_${c}`, `portraits/${c}.png`);
-    l.image(`portrait_small_${c}`, `portraits/${c}_small.png`);
+    l.image(`portrait_${c}`, v(`portraits/${c}.png`));
+    l.image(`portrait_small_${c}`, v(`portraits/${c}_small.png`));
   }
-  l.image('logo', 'ui/logo.png');
+  l.image('logo', v('ui/logo.png'));
 }
 
 export function animKey(c: CharacterId, part: string): string {

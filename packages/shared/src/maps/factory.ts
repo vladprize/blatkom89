@@ -22,7 +22,7 @@ export function buildFactoryMap(): MapDef {
     H,
     'concrete_slab',
   )
-    .ambient(0x1c2436, 0.42)
+    .ambient(0x1c2436, 0.46)
     .minimap('#3b3733');
 
   // ── Floors ───────────────────────────────────────────────────────────────

@@ -30,6 +30,8 @@ interface Fixture {
 }
 
 const LIGHT_TEX = 'lightpool';
+/** Light-map resolution in texels per world pixel (the map is smooth, so a quarter of the pixels is plenty). */
+const LIGHT_RES = 0.5;
 const LIGHT_TEX_SIZE = 256;
 /** Peak brightness gain of a map lamp at full intensity (in scene-multiplier units). */
 const LAMP_GAIN = 1.25;
@@ -129,6 +131,9 @@ export class Lighting {
   /** Light-map units per scene-multiplier unit (0.5 with the overbright blend, 1 with multiply). */
   private readonly unit: number;
   private readonly fixtures: Fixture[] = [];
+  /** Pooled off-list images drawn into the light map in one batched pass (one framebuffer bind per frame). */
+  private readonly pool: Phaser.GameObjects.Image[] = [];
+  private used = 0;
   enabled = true;
 
   constructor(
@@ -180,11 +185,15 @@ export class Lighting {
   }
 
   private ensureRT(w: number, h: number) {
-    const W = Math.ceil(w) + 2;
-    const H = Math.ceil(h) + 2;
+    const W = Math.ceil(w * LIGHT_RES) + 2;
+    const H = Math.ceil(h * LIGHT_RES) + 2;
     if (this.rt && this.rt.width === W && this.rt.height === H) return this.rt;
     this.rt?.destroy();
-    this.rt = this.scene.add.renderTexture(0, 0, W, H).setOrigin(0, 0).setDepth(D.LIGHT);
+    this.rt = this.scene.add
+      .renderTexture(0, 0, W, H)
+      .setOrigin(0, 0)
+      .setDepth(D.LIGHT)
+      .setScale(1 / LIGHT_RES);
     this.rt.setBlendMode(this.blend ?? Phaser.BlendModes.MULTIPLY);
     this.rt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
     return this.rt;
@@ -220,8 +229,7 @@ export class Lighting {
     const ox = Math.floor(view.x) - 1;
     const oy = Math.floor(view.y) - 1;
     rt.setPosition(ox, oy);
-    rt.clear();
-    rt.fill(this.ambient, 1);
+    this.used = 0;
     this.map.lights.forEach((l, i) => {
       const a = l.intensity * flick[i]!;
       if (a <= 0.02) return;
@@ -236,17 +244,32 @@ export class Lighting {
       const k = 1 - (now - d.born) / Math.max(1, d.until - d.born);
       this.stamp(rt, d.x - ox, d.y - oy, d.radius, d.color, d.intensity * k, view, d.x, d.y);
     }
+    // one fill + one batched draw instead of a framebuffer switch per light (matters on tiled mobile GPUs)
+    rt.fill(this.ambient, 1);
+    if (this.used > 0) rt.draw(this.pool.slice(0, this.used));
   }
 
   /** Adds a light pool; `gain` is in scene-multiplier units (1 = doubles brightness at the centre with overbright). */
-  private stamp(rt: Phaser.GameObjects.RenderTexture, lx: number, ly: number, radius: number, color: number, gain: number, view: Phaser.Geom.Rectangle, wx: number, wy: number) {
+  private stamp(_rt: Phaser.GameObjects.RenderTexture, lx: number, ly: number, radius: number, color: number, gain: number, view: Phaser.Geom.Rectangle, wx: number, wy: number) {
     if (wx + radius < view.x || wx - radius > view.right || wy + radius < view.y || wy - radius > view.bottom) return;
-    rt.stamp(LIGHT_TEX, undefined, lx, ly, { alpha: Math.min(1, gain * this.unit), tint: color, scale: (radius * 2) / LIGHT_TEX_SIZE, blendMode: Phaser.BlendModes.ADD, originX: 0.5, originY: 0.5 });
+    let img = this.pool[this.used];
+    if (!img) {
+      img = this.scene.make.image({ key: LIGHT_TEX, add: false }).setOrigin(0.5, 0.5).setBlendMode(Phaser.BlendModes.ADD);
+      this.pool.push(img);
+    }
+    this.used++;
+    img
+      .setPosition(lx * LIGHT_RES, ly * LIGHT_RES)
+      .setScale((radius * 2 * LIGHT_RES) / LIGHT_TEX_SIZE)
+      .setTint(color)
+      .setAlpha(Math.min(1, gain * this.unit));
   }
 
   destroy(): void {
     this.rt?.destroy();
     this.rt = null;
+    for (const img of this.pool) img.destroy();
+    this.pool.length = 0;
     for (const f of this.fixtures) {
       f.glow.destroy();
       f.core?.destroy();

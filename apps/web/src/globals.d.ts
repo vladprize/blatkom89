@@ -3,6 +3,8 @@ declare module '*.css';
 declare const __MODE__: 'online' | 'demo';
 declare const __VERSION__: string;
 declare const __DEV__: boolean;
+/** Content hash of public/assets (cache busting for sprites, tiles, fonts, portraits). */
+declare const __ASSET_VERSION__: string;
 
 interface TelegramWebAppUser {
   id: number;

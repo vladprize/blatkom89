@@ -1,0 +1,82 @@
+# БЛАТКОМ ’89 — production-style stack: PostgreSQL + app + Caddy (automatic HTTPS, WebSocket proxy).
+#   1. cp .env.example .env  and fill in: DOMAIN, POSTGRES_PASSWORD, SESSION_SECRET, TELEGRAM_BOT_TOKEN, ...
+#   2. docker compose up -d --build
+#   3. docker compose exec app node server/admin-cli.js create      (first admin, interactive)
+# The database is reachable only inside the compose network (no published port).
+name: blatkom89
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: blatkom
+      POSTGRES_USER: blatkom
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U blatkom -d blatkom']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+    image: blatkom89:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: '8080'
+      PUBLIC_URL: https://${DOMAIN:?set DOMAIN in .env}
+      DATABASE_URL: postgres://blatkom:${POSTGRES_PASSWORD}@db:5432/blatkom
+      STATIC_DIR: /app/web
+      TRUST_PROXY: 'true'
+      DEV_AUTH_ENABLED: 'false'
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - '8080'
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./infra/deployment/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+  # Nightly logical backups (keeps BACKUP_KEEP_DAYS days) into ./backups — enable with:
+  #   docker compose --profile backup up -d
+  backup:
+    image: postgres:16-alpine
+    profiles: ['backup']
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backups:/backups
+      - ./infra/deployment/backup.sh:/backup.sh:ro
+    entrypoint: ['/bin/sh', '/backup.sh']
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

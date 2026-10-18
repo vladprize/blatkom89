@@ -1,6 +1,7 @@
 // Web client build (esbuild). Usage: node apps/web/build.mjs --mode=production|demo|dev [--watch]
 import * as esbuild from 'esbuild';
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,6 +11,9 @@ const mode = args.mode ?? 'production';
 const watch = args.watch === 'true';
 const outDir = join(here, mode === 'demo' ? 'dist-demo' : 'dist');
 const version = JSON.parse(readFileSync(join(here, 'package.json'), 'utf8')).version;
+// Content hash of the generated assets: appended as ?v= so long-lived caches never mix old and new sprites.
+const manifestPath = join(here, 'public/assets/manifest.json');
+const assetVersion = existsSync(manifestPath) ? createHash('sha1').update(readFileSync(manifestPath)).digest('hex').slice(0, 10) : version;
 
 function copyPublic() {
   cpSync(join(here, 'public'), outDir, { recursive: true, filter: (src) => !src.includes('.cache') });
@@ -66,6 +70,7 @@ const options = {
     __MODE__: JSON.stringify(mode === 'demo' ? 'demo' : 'online'),
     __VERSION__: JSON.stringify(version),
     __DEV__: JSON.stringify(mode === 'dev'),
+    __ASSET_VERSION__: JSON.stringify(assetVersion),
     'process.env.NODE_ENV': JSON.stringify(mode === 'dev' ? 'development' : 'production'),
   },
   plugins: [

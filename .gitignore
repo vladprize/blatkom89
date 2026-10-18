@@ -10,3 +10,4 @@ tmp/
 test-results/
 apps/web/public/assets/.cache/
 .env.local.sh
+apps/web/dist-demo/

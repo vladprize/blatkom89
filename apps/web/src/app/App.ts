@@ -315,7 +315,6 @@ export class App {
     const name = this.online?.profile?.displayName ?? CHARACTERS[this.character].name;
     const session = new OfflineSession({ mapId: opts.mapId, character: this.character, name, bots: this.lastPractice.bots, difficulty: opts.difficulty });
     this.beginSession(session);
-    analytics.track('tutorial_completed', { step: 'practice_started' });
   }
 
   private beginSession(session: GameSession) {

@@ -27,7 +27,9 @@ export function toast(text: string): void {
 }
 
 export function asset(path: string): string {
-  return new URL(path, document.baseURI).href;
+  const u = new URL(path, document.baseURI);
+  u.searchParams.set('v', __ASSET_VERSION__);
+  return u.href;
 }
 
 export function portrait(c: string, small = false): HTMLImageElement {

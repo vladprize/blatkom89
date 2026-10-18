@@ -9,7 +9,10 @@ import type { GameSession, RenderPlayer } from '../session/types.js';
 import { hudBus } from './hudBus.js';
 import type { KillFeedEntry } from './hudBus.js';
 import { touchState, isTouchDevice } from '../input/TouchState.js';
-import { getSettings } from '../../app/settings.js';
+import { getSettings, storageGet, storageSet } from '../../app/settings.js';
+import { analytics } from '../../analytics/client.js';
+
+const TUTORIAL_KEY = 'blatkom89.tutorial.v1';
 
 const BEIGE = '#e8dcc0';
 const RED = '#d8392e';
@@ -76,6 +79,9 @@ export class HudScene extends Phaser.Scene {
   private healthBg!: Phaser.GameObjects.Graphics;
   private portrait!: Phaser.GameObjects.Image;
   private nameText!: Phaser.GameObjects.Text;
+  private feedY0 = 14;
+  private tutorial: Phaser.GameObjects.Container | null = null;
+  private tutorialState: { moved: boolean; fired: boolean; startX: number; startY: number; startMag: number; shownAt: number } | null = null;
   private hpText!: Phaser.GameObjects.Text;
   private hpBar!: Phaser.GameObjects.Graphics;
   // weapon
@@ -134,6 +140,7 @@ export class HudScene extends Phaser.Scene {
     this.buildScoreboard();
     this.buildPause();
     if (this.touch) this.buildTouch();
+    this.buildTutorial();
     if (getSettings().showFps) this.fpsText = txt(this, 6, 0, '', 11, '#9a9080', '400').setDepth(100);
     this.layout();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
@@ -239,6 +246,53 @@ export class HudScene extends Phaser.Scene {
     this.promptText = txt(this, 0, 0, '', 14, BEIGE, '600').setOrigin(0.5).setDepth(20);
     this.statusText = txt(this, 0, 0, '', 11, '#9a9080', '500').setOrigin(1, 0).setDepth(20);
     this.hitMarker = this.add.graphics().setDepth(21);
+  }
+
+  /** First match ever: a short controls card until the player has moved and fired (then never again). */
+  private buildTutorial() {
+    this.tutorial = null;
+    this.tutorialState = null;
+    if (storageGet(TUTORIAL_KEY)) return;
+    const lines = this.touch
+      ? ['Левый стик — движение', 'Правый стик — прицел и огонь', '⟳ — перезарядка · ⇄ — смена оружия', 'Подходи к оружию на полу, чтобы взять']
+      : ['WASD — движение · Shift — шагом', 'Мышь — прицел · ЛКМ — огонь', 'R — перезарядка · 1/2/3, Q — оружие', 'E — взять оружие · Tab — счёт · Esc — пауза'];
+    const title = txt(this, 0, 0, 'КАК ВЕСТИ ДЕЛА', 13, '#1a1410', '700').setStroke('#000', 0).setOrigin(0.5, 0);
+    const body = txt(this, 0, 0, lines.join('\n'), this.touch ? 12 : 14, BEIGE, '500').setOrigin(0.5, 0).setAlign('center').setLineSpacing(4);
+    const w = Math.max(title.width, body.width) + 32;
+    const h = title.height + body.height + 26;
+    const g = this.add.graphics();
+    this.panel(g, -w / 2, 0, w, h, 0.86);
+    g.fillStyle(0xd9c7a3, 0.95).fillRect(-title.width / 2 - 8, -6, title.width + 16, title.height + 4);
+    title.setY(-4);
+    body.setY(title.height + 8);
+    this.tutorial = this.add.container(0, 0, [g, title, body]).setDepth(19);
+    this.tutorialState = { moved: false, fired: false, startX: NaN, startY: NaN, startMag: -1, shownAt: 0 };
+  }
+
+  private updateTutorial(me: RenderPlayer | undefined, mag: number, weapon: WeaponId, phase: string, time: number) {
+    const t = this.tutorial;
+    const st = this.tutorialState;
+    if (!t || !st) return;
+    const W = this.scale.width;
+    const H = this.scale.height;
+    t.setPosition(W / 2, this.touch ? H * 0.2 : H * 0.18);
+    if (phase !== 'active' || !me || !me.alive) return;
+    if (!st.shownAt) st.shownAt = time;
+    if (Number.isNaN(st.startX)) {
+      st.startX = me.x;
+      st.startY = me.y;
+    }
+    if (st.startMag < 0 || weapon !== 'pistol') st.startMag = Math.max(st.startMag, mag);
+    if (Math.hypot(me.x - st.startX, me.y - st.startY) > 40) st.moved = true;
+    if (mag < st.startMag) st.fired = true;
+    const done = st.moved && st.fired;
+    if (done || time - st.shownAt > 30_000) {
+      storageSet(TUTORIAL_KEY, '1');
+      if (done) analytics.track('tutorial_completed', { step: 'controls' });
+      this.tweens.add({ targets: t, alpha: 0, duration: 500, onComplete: () => t.destroy() });
+      this.tutorial = null;
+      this.tutorialState = null;
+    }
   }
 
   private buildScoreboard() {
@@ -398,7 +452,11 @@ export class HudScene extends Phaser.Scene {
     this.layoutW = W;
     this.layoutH = H;
     const pad = 14;
-    const cx = W / 2;
+    // on narrow (portrait) screens centre the score/health group in the space left of the minimap
+    const reserved = this.mmW + 4 + pad + 48;
+    const cx = W - reserved < 330 ? Math.max(160, (W - reserved) / 2) : W / 2;
+    // kill feed sits top-left; on narrow screens it moves below the centred score/health panels
+    this.feedY0 = W < 760 ? (this.touch ? pad + 100 : pad + 62) : 14;
     // score box
     this.scoreBg.clear();
     this.scoreBg.fillStyle(0x8a1a16, 0.95).fillRect(cx - 118, pad, 50, 40);
@@ -520,7 +578,7 @@ export class HudScene extends Phaser.Scene {
     this.timer.setColor(hud.phase === 'active' && t < 30_000 ? '#ff6a5a' : BEIGE);
     this.mode.setText(`ДЕЗМАТЧ · ${hud.scoreLimit} УБИЙСТВ`);
     // feed
-    let fy = 14;
+    let fy = this.feedY0;
     for (const f of this.feed) {
       const age = time - f.born;
       f.container.setPosition(14, fy).setAlpha(age > 5000 ? Math.max(0, 1 - (age - 5000) / 800) : 1);
@@ -543,6 +601,7 @@ export class HudScene extends Phaser.Scene {
       }
       if (me.name && this.nameText.text !== me.name) this.nameText.setText(me.name);
     }
+    this.updateTutorial(me, hud.mag, hud.weapon, hud.phase, time);
     // health
     const hp = Math.max(0, hud.hp);
     this.hpText.setText(`${hp}/100`);

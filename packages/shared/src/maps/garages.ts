@@ -20,7 +20,7 @@ export function buildGaragesMap(): MapDef {
     H,
     'asphalt_cracked',
   )
-    .ambient(0x1a2236, 0.38)
+    .ambient(0x1a2236, 0.44)
     .minimap('#34322f');
 
   b.floor('dirt', 16, 128, 304, 736)

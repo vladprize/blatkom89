@@ -20,7 +20,7 @@ export function buildYardMap(): MapDef {
     H,
     'asphalt',
   )
-    .ambient(0x1e2a40, 0.5)
+    .ambient(0x1e2a40, 0.56)
     .minimap('#3a3936');
 
   // Floors: outer street ring is asphalt (base), the courtyard mixes asphalt, dirt, grass and sand.

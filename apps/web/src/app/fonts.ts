@@ -12,7 +12,7 @@ export async function loadFonts(timeoutMs = 3000): Promise<void> {
   const base = new URL('.', document.baseURI).href;
   const loads = FONTS.map(async ([family, path, desc]) => {
     try {
-      const f = new FontFace(family, `url(${base}${path}) format('woff')`, { display: 'swap', ...desc });
+      const f = new FontFace(family, `url(${base}${path}?v=${__ASSET_VERSION__}) format('woff')`, { display: 'swap', ...desc });
       document.fonts.add(f);
       await f.load();
     } catch {

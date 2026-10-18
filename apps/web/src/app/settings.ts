@@ -13,8 +13,19 @@ export interface Settings {
 }
 
 const KEY = 'blatkom89.settings.v1';
+
+/** Weak devices start without the VHS post-processing pass (it can be enabled in settings). */
+function lowEndDevice(): boolean {
+  try {
+    const nav = navigator as Navigator & { deviceMemory?: number };
+    return (nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 3;
+  } catch {
+    return false;
+  }
+}
+
 export const DEFAULT_SETTINGS: Settings = {
-  vhs: 1,
+  vhs: lowEndDevice() ? 0 : 1,
   shake: true,
   sfxVolume: 0.8,
   musicVolume: 0.4,

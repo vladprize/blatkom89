@@ -72,13 +72,27 @@ export function serveStatic(root: string) {
     }
     const ext = extname(target).toLowerCase();
     const type = TYPES[ext] ?? 'application/octet-stream';
-    const hashed = /\.[0-9a-f]{8,}\.(js|css|png|woff2?)$/.test(target) || target.includes(`${sep}assets${sep}`);
+    // esbuild output carries a content hash in the name; game assets are requested with ?v=<content hash>
+    const immutable = /-[A-Z0-9]{8}\.(js|css|woff2?|png)$/.test(target) || /[?&]v=[0-9a-f]{6,}/.test(ctx.req.url ?? '');
+    const etag = `W/"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
+    const isAdmin = target.endsWith(`${sep}admin.html`);
     const headers: Record<string, string> = {
       'content-type': type,
-      'content-length': String(st.size),
-      'cache-control': ext === '.html' ? 'no-cache' : hashed ? 'public, max-age=604800' : 'public, max-age=3600',
+      'cache-control': ext === '.html' ? (isAdmin ? 'no-store' : 'no-cache') : immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=300, must-revalidate',
+      etag,
       ...securityHeaders(ext === '.html'),
     };
+    if (isAdmin) {
+      // the dashboard is never embedded anywhere (clickjacking)
+      headers['content-security-policy'] = headers['content-security-policy']!.replace(/frame-ancestors [^;]+/, "frame-ancestors 'none'");
+      headers['x-frame-options'] = 'DENY';
+    }
+    if (ctx.req.headers['if-none-match'] === etag) {
+      ctx.res.writeHead(304, headers);
+      ctx.res.end();
+      return true;
+    }
+    headers['content-length'] = String(st.size);
     ctx.res.writeHead(200, headers);
     if (ctx.method === 'HEAD') {
       ctx.res.end();

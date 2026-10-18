@@ -1,0 +1,20 @@
+# Caddy terminates HTTPS (automatic Let's Encrypt certificate for $DOMAIN) and proxies HTTP and
+# WebSocket (/ws) traffic to the app. Telegram Mini Apps require a valid HTTPS origin.
+{$DOMAIN} {
+	encode zstd gzip
+
+	# The app sets its own security headers (CSP, frame-ancestors for Telegram Web, etc.).
+	reverse_proxy app:8080 {
+		# WebSocket upgrades are proxied transparently; keep idle game sockets open.
+		flush_interval -1
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

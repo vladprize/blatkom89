@@ -30,3 +30,4 @@ const state = await page.evaluate(() => {
 console.log(JSON.stringify(state));
 console.log(logs.slice(0, 10).join('\n') || 'no errors');
 await browser.close();
+process.exit(logs.some((l) => l.startsWith('[pageerror]')) ? 1 : 0);

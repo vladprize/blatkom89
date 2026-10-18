@@ -17,6 +17,7 @@ import { sfx } from '../audio/Sfx.js';
 import { getSettings, onSettings } from '../../app/settings.js';
 import { hudBus } from './hudBus.js';
 import { haptic } from '../../telegram/tg.js';
+import { toast } from '../../ui/dom.js';
 
 export interface GameSceneData {
   session: GameSession;
@@ -49,6 +50,11 @@ export class GameScene extends Phaser.Scene {
   private readonly debug = new URLSearchParams(location.search);
   /** Practice-only debug camera (`?cam=x,y`), used for art review screenshots. */
   private debugCam: { x: number; y: number } | null = null;
+  /** Adaptive quality: frame-rate samples (one per second) used to drop the VHS pass on slow devices. */
+  private perfFrames = 0;
+  private perfStart = 0;
+  private slowSeconds = 0;
+  private qualityReduced = false;
 
   constructor() {
     super('game');
@@ -62,12 +68,17 @@ export class GameScene extends Phaser.Scene {
     this.pickupSprites.clear();
     this.lastCountdown = -1;
     this.paused = false;
+    this.vhs = null;
+    this.perfFrames = 0;
+    this.perfStart = 0;
+    this.slowSeconds = 0;
+    this.qualityReduced = false;
   }
 
   create(): void {
     const cam = this.cameras.main;
     cam.setZoom(TEX);
-    cam.setBounds(-CAM_PAD, -CAM_PAD, this.map.width + CAM_PAD * 2, this.map.height + CAM_PAD * 2);
+    this.applyCameraBounds();
     cam.setBackgroundColor('#0b0908');
     cam.setRoundPixels(true);
     this.mapView = new MapRenderer(this, this.map);
@@ -84,12 +95,8 @@ export class GameScene extends Phaser.Scene {
       const [x, y] = camParam.split(',').map(Number);
       if (Number.isFinite(x) && Number.isFinite(y)) this.debugCam = { x: x!, y: y! };
     }
-    if (this.game.renderer.type === Phaser.WEBGL && !this.debug.has('novhs')) {
-      cam.setPostPipeline(VhsPipeline);
-      this.vhs = cam.getPostPipeline(VhsPipeline) as VhsPipeline;
-    }
     this.applySettings();
-    this.unsubSettings = onSettings(() => this.applySettings());
+    this.unsubSettings = onSettings(() => this.applySettings(true));
     const me = this.session.players().find((p) => p.isLocal);
     if (me) {
       this.camX = me.x;
@@ -110,10 +117,30 @@ export class GameScene extends Phaser.Scene {
 
   private onResize(size: Phaser.Structs.Size) {
     this.cameras.main.setSize(size.width, size.height);
+    this.applyCameraBounds();
   }
 
-  private applySettings() {
+  /** Lets the camera look past the map edge (by ~30% of the view) so touch controls and HUD never hide the player. */
+  private applyCameraBounds() {
+    const cam = this.cameras.main;
+    const px = Math.max(CAM_PAD, (cam.width / TEX) * 0.3);
+    const py = Math.max(CAM_PAD, (cam.height / TEX) * 0.3);
+    cam.setBounds(-px, -py, this.map.width + px * 2, this.map.height + py * 2);
+  }
+
+  private applySettings(userChange = false) {
     const s = getSettings();
+    // the VHS pass is a full-screen post-process: removed entirely when switched off (saves GPU on phones)
+    const cam = this.cameras.main;
+    const wantVhs = s.vhs > 0 && this.game.renderer.type === Phaser.WEBGL && !this.debug.has('novhs');
+    if (wantVhs && !this.vhs) {
+      cam.setPostPipeline(VhsPipeline);
+      this.vhs = cam.getPostPipeline(VhsPipeline) as VhsPipeline;
+      if (userChange) this.qualityReduced = true; // the player chose it: never auto-disable again
+    } else if (!wantVhs && this.vhs) {
+      cam.resetPostPipeline();
+      this.vhs = null;
+    }
     if (this.vhs) this.vhs.intensity = vhsIntensity(s.vhs);
     this.fx.shakeScale = s.shake ? 1 : 0;
     sfx.setVolume(s.sfxVolume);
@@ -193,6 +220,7 @@ export class GameScene extends Phaser.Scene {
       this.mapView.updateOverhead(me.x, me.y, dt);
     }
     this.mapView.cull(this.cameras.main.worldView);
+    this.adaptQuality(nowMs);
     // crosshair (desktop)
     const pointer = this.input.activePointer;
     if (this.crosshair) {
@@ -217,6 +245,25 @@ export class GameScene extends Phaser.Scene {
     } else if (this.lastCountdown > 0 && hud.phase === 'active') {
       sfx.play('beepHigh');
       this.lastCountdown = -1;
+    }
+  }
+
+  /** If the game runs below ~40 FPS for 6 s with post-processing on, turn the VHS pass off once. */
+  private adaptQuality(nowMs: number) {
+    if (this.qualityReduced || !this.vhs || this.debugCam) return;
+    if (!this.perfStart) this.perfStart = nowMs;
+    this.perfFrames++;
+    const span = nowMs - this.perfStart;
+    if (span < 1000) return;
+    const fps = (this.perfFrames * 1000) / span;
+    this.perfFrames = 0;
+    this.perfStart = nowMs;
+    this.slowSeconds = fps < 40 && !this.paused ? this.slowSeconds + 1 : 0;
+    if (this.slowSeconds >= 6) {
+      this.qualityReduced = true;
+      this.cameras.main.resetPostPipeline();
+      this.vhs = null;
+      toast('Видеоэффекты отключены для плавности — включить можно в настройках');
     }
   }
 
