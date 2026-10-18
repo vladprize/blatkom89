@@ -4,7 +4,7 @@ import type { CharacterId, GadgetId, InputFrame, MapId, Standing, BotDifficulty,
 import type { GameSession, HudState, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
 import { toRenderGadget, toRenderPlayer, worldEventToSession, reloadProgress } from './convert.js';
 
-const BOT_NAMES = ['Борода', 'Гость_312', 'Кооператор', 'Петрович', 'Сантехник', 'Завхоз', 'Прапор', 'Колян'];
+const BOT_NAMES = ['Beardy', 'Comrade_312', 'The Cooperator', 'Petrovich', 'Plumber', 'Quartermaster', 'Praporshchik', 'Kolyan'];
 
 /** Practice bots carry varied gear so the training ground shows what the arsenal holds. */
 const BOT_PRIMARIES: WeaponId[] = ['avtomat', 'obrez', 'ksyuha', 'uzi', 'ppsh', 'mp5', 's12', 'm4', 'g36', 'svd', 'm24', 'm249', 'tommy'];

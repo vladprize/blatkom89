@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Renders the БЛАТКОМ ’89 wordmark (distressed red condensed letters, star with brass knuckles,
+"""Renders the BLATKOM ’89 wordmark (distressed red condensed letters, star with brass knuckles,
 '89 in marker) following the poster reference (references/01-poster.png). Requires Pillow."""
 import math
 import random
@@ -51,7 +51,7 @@ def main():
         f.set_variation_by_axes([700])
     except Exception:
         pass
-    word = 'БЛАТКОМ'
+    word = 'BLATKOM'
     tw = ImageDraw.Draw(img).textbbox((0, 0), word, font=f)
     text = Image.new('RGBA', (tw[2] + 40, tw[3] + 40), (0, 0, 0, 0))
     ImageDraw.Draw(text).text((20, 0), word, font=f, fill=RED)
@@ -104,7 +104,7 @@ def main():
         ft.set_variation_by_axes([500])
     except Exception:
         pass
-    tag = 'Р А Й О Н Н Ы Е   Д Е Л А  —  С Е Р Ь Ё З Н Ы Е   Д Е Л А'
+    tag = 'D I S T R I C T   B U S I N E S S  —  S E R I O U S   B U S I N E S S'
     tb = d.textbbox((0, 0), tag, font=ft)
     d.text((ox + 30 + (text.width - 50 - (tb[2] - tb[0])) / 2, band_y + 4), tag, font=ft, fill=BEIGE)
     bbox = img.getbbox()

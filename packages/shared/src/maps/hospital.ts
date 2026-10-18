@@ -19,9 +19,9 @@ export function buildHospitalMap(): MapDef {
   const XRAY = 0x60e0ff;
   const b = new MapBuilder(
     'hospital',
-    'Больница',
-    'Городская больница №3',
-    'Палаты, операционная, рентген и аптека вдоль длинного коридора; центральный холл с регистратурой. Тесные комнаты и простреливаемый коридор.',
+    'City Hospital No. 3',
+    'The people’s health is the country’s wealth',
+    'Wards, the operating theatre, X-ray and the pharmacy along one long corridor, with the registration hall in the middle. Tight rooms and an open corridor.',
     W,
     H,
     'asphalt_cracked',

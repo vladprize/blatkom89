@@ -4,7 +4,7 @@ import type { MapDef } from './types.js';
 /**
  * «Гастроном» — the neighbourhood grocery store after closing, from the product owner's layout
  * (references/21-map-gastronom.png). Long aisles of shelves and refrigerated counters split the
- * sales floor; the bakery, butcher's and deli counters, the warehouse «Склад», the staff room and
+ * sales floor; the bakery, the butcher’s and the deli counters, the warehouse «Склад», the staff room and
  * the loading dock wrap around it. Spawns: A west (yard), B north (entrance), C east (yard).
  */
 export function buildGastronomMap(): MapDef {
@@ -17,9 +17,9 @@ export function buildGastronomMap(): MapDef {
   const NEON = 0xff4a3a;
   const b = new MapBuilder(
     'gastronom',
-    'Гастроном',
-    'Продукты · напитки · всегда рядом',
-    'Торговый зал с рядами стеллажей и витрин, хлебный, мясной и колбасный отделы, склад и разгрузка. Узкие проходы и засады за прилавками.',
+    'Gastronom',
+    'Groceries · drinks · always nearby',
+    'A sales floor of shelves and counters, the bakery, the butcher’s and the deli, the warehouse and the loading dock. Narrow aisles and ambushes behind the counters.',
     W,
     H,
     'asphalt',

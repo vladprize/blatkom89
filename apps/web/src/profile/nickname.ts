@@ -1,5 +1,5 @@
 /**
- * Nickname helpers: district-style random suggestions and the «Как тебя звать на районе?» dialog
+ * Nickname helpers: district-style random suggestions and the «What do they call you round here?» dialog
  * (first launch, and «✎» in the menu/profile). Validation is the shared `displayNameSchema`,
  * the same one the server applies to PATCH /api/me.
  */
@@ -26,7 +26,7 @@ export interface NicknameDialogOptions {
 
 /** Opens the nickname dialog on top of `root`; returns a function that closes it. */
 export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions): () => void {
-  const input = h('input', { class: 'input input--big', value: o.initial, maxlength: '24', autocomplete: 'off', autocapitalize: 'words', spellcheck: 'false', 'aria-label': 'Кличка' }) as HTMLInputElement;
+  const input = h('input', { class: 'input input--big', value: o.initial, maxlength: '24', autocomplete: 'off', autocapitalize: 'words', spellcheck: 'false', 'aria-label': 'Alias' }) as HTMLInputElement;
   const error = h('div', { class: 'muted', style: 'min-height:18px;font-size:14px;color:#e07a6a' });
   let busy = false;
   let closed = false;
@@ -41,7 +41,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
     if (busy) return;
     const parsed = displayNameSchema.safeParse(input.value);
     if (!parsed.success) {
-      error.textContent = input.value.trim().length < 2 ? 'Минимум 2 символа.' : (parsed.error.issues[0]?.message ?? 'Неверная кличка.');
+      error.textContent = input.value.trim().length < 2 ? 'At least 2 characters.' : (parsed.error.issues[0]?.message ?? 'That alias won’t do.');
       input.focus();
       return;
     }
@@ -52,7 +52,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
       sfx.play('click');
       close();
     } catch (e) {
-      toast((e as Error).message || 'Не удалось сохранить');
+      toast((e as Error).message || 'Couldn’t save it');
     } finally {
       busy = false;
       saveBtn.removeAttribute('disabled');
@@ -69,16 +69,16 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
     }
   };
   input.addEventListener('input', () => (error.textContent = ''));
-  const saveBtn = h('button', { class: 'btn btn--red grow', onclick: () => void save() }, 'Готово');
+  const saveBtn = h('button', { class: 'btn btn--red grow', onclick: () => void save() }, 'Done');
   const overlay = h(
     'div',
-    { class: 'overlay overlay--top', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Кличка' },
+    { class: 'overlay overlay--top', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Alias' },
     h(
       'div',
       { class: 'panel modal col' },
-      h('span', { class: 'tag' }, 'Личное дело'),
-      h('div', { class: 'h2', style: 'margin-top:8px' }, o.title ?? 'Как тебя звать на районе?'),
-      h('div', { class: 'muted', style: 'font-size:15px' }, o.note ?? 'Кличку видят соперники — над персонажем, в таблице и в итогах. Поменять можно в профиле.'),
+      h('span', { class: 'tag' }, 'Personal file'),
+      h('div', { class: 'h2', style: 'margin-top:8px' }, o.title ?? 'What do they call you round here?'),
+      h('div', { class: 'muted', style: 'font-size:15px' }, o.note ?? 'Rivals see your alias — above your character, on the scoreboard and in the results. You can change it in the profile.'),
       input,
       error,
       h(
@@ -94,7 +94,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
               sfx.play('click');
             },
           },
-          'Случайная кличка',
+          'Random alias',
         ),
         o.onCancel
           ? h(
@@ -106,7 +106,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
                   o.onCancel?.();
                 },
               },
-              o.cancelLabel ?? 'Отмена',
+              o.cancelLabel ?? 'Cancel',
             )
           : null,
       ),

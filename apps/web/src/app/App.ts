@@ -35,13 +35,13 @@ type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'lobby' | 'join' 
 const NICK_CONFIRMED_KEY = 'blatkom89.nick-confirmed.v1';
 
 const MAP_BLURB: Partial<Record<MapId, string>> = {
-  factory: 'Проходная, цех №3, склад. Коридоры, укрытия, контроль точек.',
-  garages: 'Ряды гаражей, узкие проходы, засады на ближней дистанции.',
-  yard: 'Панельки, арки и детская площадка. Обходы и средние дистанции.',
-  stroyka: 'Недострой под краном: секции, котлован, штабели кирпича.',
-  dk: 'Зрительный зал, сцена, гримёрки, бильярдная и фойе.',
-  gastronom: 'Ряды стеллажей, прилавки, склад и разгрузка.',
-  hospital: 'Палаты, операционная, рентген и длинный коридор.',
+  factory: 'The checkpoint, Workshop No. 3, the warehouse. Corridors, cover, key points.',
+  garages: 'Rows of garages, narrow lanes, ambushes at close range.',
+  yard: 'Panel blocks, archways and a playground. Flanks and mid-range fights.',
+  stroyka: 'A half-built block under the crane: sections, the pit, stacks of bricks.',
+  dk: 'The auditorium, the stage, dressing rooms, the billiard room and the foyer.',
+  gastronom: 'Aisles of shelves, counters, the warehouse and the loading dock.',
+  hospital: 'Wards, the operating theatre, X-ray and one long corridor.',
 };
 
 export class App {
@@ -84,7 +84,7 @@ export class App {
         onLeft: () => this.goMenu(),
       });
       this.online.onEmailSessionExpired = (email) =>
-        openEmailLogin(this.root, this.online!, { email, note: 'Сессия этого аккаунта истекла — войдите снова.', onDone: () => this.afterAccountSwitch() });
+        openEmailLogin(this.root, this.online!, { email, note: 'This account’s session has expired — please sign in again.', onDone: () => this.afterAccountSwitch() });
       this.online.pingVisit();
       void this.online
         .ensureAuth()
@@ -115,7 +115,7 @@ export class App {
     const room = params.get('room');
     if (room && this.online && /^[A-Za-z0-9_-]{4,32}$/.test(room)) {
       this.go('loading');
-      this.render(this.loading('Подключаемся к комнате…'));
+      this.render(this.loading('Connecting to the room…'));
       void this.online.joinRoom(room, this.onlineCharacter()).catch((e: Error) => this.showError(e.message));
       return;
     }
@@ -133,7 +133,7 @@ export class App {
     if (reset && /^[A-Za-z0-9_-]{20,64}$/.test(reset)) {
       setTimeout(() => openPasswordReset(this.root, online, reset, () => openEmailLogin(this.root, online, { onDone: () => this.afterAccountSwitch() })), 300);
     }
-    if (pay === 'cancel') setTimeout(() => toast('Оплата отменена'), 600);
+    if (pay === 'cancel') setTimeout(() => toast('Payment cancelled'), 600);
     if (pay === 'success' && pid && /^[0-9a-f-]{36}$/i.test(pid)) {
       // the provider confirms the payment to the server separately: wait for it (up to ~2 minutes)
       let tries = 0;
@@ -146,18 +146,18 @@ export class App {
             await online.loadInventory().catch(() => {});
             this.refreshStrip();
             sfx.play('buy');
-            toast(`Зачислено ${st.diamonds} алмазов`);
+            toast(`${st.diamonds} diamonds credited`);
             return;
           }
-          if (st.status === 'failed' || st.status === 'expired') return toast('Платёж не прошёл');
+          if (st.status === 'failed' || st.status === 'expired') return toast('The payment did not go through');
         } catch {
           /* keep polling */
         }
         if (tries < 40) setTimeout(() => void poll(), 3000);
-        else toast('Платёж ещё обрабатывается — алмазы придут автоматически');
+        else toast('The payment is still being processed — the diamonds will arrive automatically');
       };
       setTimeout(() => {
-        toast('Проверяем оплату…');
+        toast('Checking the payment…');
         void poll();
       }, 800);
     }
@@ -229,7 +229,7 @@ export class App {
   }
 
   private topbar(title: string): HTMLElement {
-    return h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: () => this.back(), 'aria-label': 'Назад' }, '← Назад'), h('h1', { class: 'h1' }, title));
+    return h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: () => this.back(), 'aria-label': 'Back' }, '← Back'), h('h1', { class: 'h1' }, title));
   }
 
   private loading(text: string): HTMLElement {
@@ -243,7 +243,7 @@ export class App {
     this.host.showPreview();
     this.go('menu', false);
     const c = CHARACTERS[this.character];
-    const onlineNote = ONLINE_AVAILABLE ? null : h('div', { class: 'muted', style: 'font-size:14px' }, 'Это демо-версия без сервера: доступна тренировка с ботами. Онлайн-матчи работают в Telegram-версии.');
+    const onlineNote = ONLINE_AVAILABLE ? null : h('div', { class: 'muted', style: 'font-size:14px' }, 'This is the demo without a server: practice against bots is available. Online matches work in the online version.');
     this.stripEl = this.profileStrip();
     const menu = h(
       'div',
@@ -252,39 +252,39 @@ export class App {
         'div',
         { class: 'wrap' },
         this.stripEl,
-        h('img', { class: 'logo', src: asset('assets/ui/logo.png'), alt: 'БЛАТКОМ ’89 — районные дела, серьёзные дела' }),
+        h('img', { class: 'logo', src: asset('assets/ui/logo.png'), alt: 'BLATKOM ’89 — district business is serious business' }),
         h(
           'div',
           { class: 'menu' },
           h(
             'div',
             { class: 'panel btn-col' },
-            h('span', { class: 'tag' }, 'Районные дела'),
+            h('span', { class: 'tag' }, 'District Business'),
             h('div', { style: 'height:6px' }),
-            h('button', { class: 'btn btn--red', onclick: () => this.quickMatch(), disabled: !ONLINE_AVAILABLE }, 'Быстрая игра', h('span', { class: 'sub' }, 'онлайн, до 6 игроков')),
-            h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, 'Играть с друзьями', h('span', { class: 'sub' }, 'комната по приглашению')),
-            h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, 'Тренировка', h('span', { class: 'sub' }, 'с ботами, без интернета')),
-            h('button', { class: 'btn', onclick: () => this.showArsenal() }, 'Арсенал', h('span', { class: 'sub' }, 'оружие, улучшения, персонажи')),
-            h('div', { class: 'row' }, h('button', { class: 'btn grow', onclick: () => this.showProfile() }, 'Профиль'), h('button', { class: 'btn grow', onclick: () => this.showSettings() }, 'Настройки')),
+            h('button', { class: 'btn btn--red', onclick: () => this.quickMatch(), disabled: !ONLINE_AVAILABLE }, 'Quick Match', h('span', { class: 'sub' }, 'online, up to 6 comrades')),
+            h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, 'Play with Friends', h('span', { class: 'sub' }, 'a room by invitation')),
+            h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, 'Practice', h('span', { class: 'sub' }, 'against bots, no internet needed')),
+            h('button', { class: 'btn', onclick: () => this.showArsenal() }, 'Arsenal', h('span', { class: 'sub' }, 'weapons, equipment, characters')),
+            h('div', { class: 'row' }, h('button', { class: 'btn grow', onclick: () => this.showProfile() }, 'Profile'), h('button', { class: 'btn grow', onclick: () => this.showSettings() }, 'Settings')),
             onlineNote,
           ),
           h(
             'div',
             { class: 'panel col' },
-            h('span', { class: 'tag' }, 'Персонаж'),
+            h('span', { class: 'tag' }, 'Character'),
             h(
               'div',
               { class: 'charcard', role: 'button', tabindex: '0', onclick: () => this.showCharacters(), onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && this.showCharacters() },
               portrait(this.character),
               h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 'name' }, c.name), h('div', { class: 'nick' }, `«${c.nickname}»`), h('div', { class: 'hand' }, c.quote)),
             ),
-            h('button', { class: 'btn btn--small', onclick: () => this.showCharacters() }, 'Сменить персонажа'),
+            h('button', { class: 'btn btn--small', onclick: () => this.showCharacters() }, 'Change character'),
           ),
         ),
         h('div', { class: 'grow' }),
         ONLINE_AVAILABLE
-          ? h('div', { class: 'footer' }, `БЛАТКОМ ’89 · v${VERSION} · Играть бесплатно, покупки — по желанию · `, h('a', { href: asset('privacy.html'), target: '_blank', style: 'color:inherit' }, 'Конфиденциальность'))
-          : h('div', { class: 'footer' }, `БЛАТКОМ ’89 · v${VERSION} · Демо: игра идёт прямо в браузере, никакие данные не собираются и не отправляются.`),
+          ? h('div', { class: 'footer' }, `BLATKOM ’89 · v${VERSION} · Free to play, purchases optional · `, h('a', { href: asset('privacy.html'), target: '_blank', style: 'color:inherit' }, 'Privacy'))
+          : h('div', { class: 'footer' }, `BLATKOM ’89 · v${VERSION} · Demo: the game runs right in your browser; no data is collected or sent anywhere.`),
       ),
     );
     this.render(menu);
@@ -306,8 +306,8 @@ export class App {
     const name = this.playerName();
     const strip = h('div', { class: 'pstrip', 'data-testid': 'profile-strip' });
     if (!name) {
-      strip.append(h('div', { class: 'lvlbadge' }, h('small', null, 'УР.'), '—'), h('div', { class: 'who' }, h('div', { class: 'nm muted' }, this.online ? 'Вход…' : 'Без клички')));
-      if (!this.online) strip.append(h('button', { class: 'edit', 'aria-label': 'Выбрать кличку', onclick: () => this.editNickname() }, '✎'));
+      strip.append(h('div', { class: 'lvlbadge' }, h('small', null, 'LVL'), '—'), h('div', { class: 'who' }, h('div', { class: 'nm muted' }, this.online ? 'Signing in…' : 'No alias')));
+      if (!this.online) strip.append(h('button', { class: 'edit', 'aria-label': 'Choose an alias', onclick: () => this.editNickname() }, '✎'));
       return strip;
     }
     const xp = this.online ? (this.online.profile?.xp ?? 0) : (this.localProfile?.xp ?? 0);
@@ -316,20 +316,20 @@ export class App {
     strip.append(
       h(
         'button',
-        { class: 'pstrip__main', onclick: () => this.showProfile(), 'aria-label': `Профиль: ${name}, уровень ${lvl.level}` },
-        h('div', { class: 'lvlbadge' }, h('small', null, 'УР.'), String(this.playerLevel() ?? lvl.level)),
+        { class: 'pstrip__main', onclick: () => this.showProfile(), 'aria-label': `Profile: ${name}, level ${lvl.level}` },
+        h('div', { class: 'lvlbadge' }, h('small', null, 'LVL'), String(this.playerLevel() ?? lvl.level)),
         h(
           'div',
           { class: 'who' },
           h('div', { class: 'nm', 'data-testid': 'menu-nick' }, name),
           h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
-          h('div', { class: 'xp' }, lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} опыта` : 'максимальный уровень'),
+          h('div', { class: 'xp' }, lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} XP` : 'max level'),
         ),
       ),
-      h('button', { class: 'edit', 'aria-label': 'Сменить кличку', title: 'Сменить кличку', onclick: () => this.editNickname() }, '✎'),
+      h('button', { class: 'edit', 'aria-label': 'Change alias', title: 'Change alias', onclick: () => this.editNickname() }, '✎'),
     );
     const inv = this.online?.inventory;
-    if (inv) strip.append(h('button', { class: 'pstrip__wallet', onclick: () => this.showArsenal(), 'aria-label': `Жетоны ${inv.tokens}, алмазы ${inv.diamonds}` }, amount(inv.tokens, 'tokens'), amount(inv.diamonds, 'diamonds')));
+    if (inv) strip.append(h('button', { class: 'pstrip__wallet', onclick: () => this.showArsenal(), 'aria-label': `Talons ${inv.tokens}, diamonds ${inv.diamonds}` }, amount(inv.tokens, 'tokens'), amount(inv.diamonds, 'diamonds')));
     return strip;
   }
 
@@ -347,7 +347,7 @@ export class App {
       if (this.localProfile) return;
       this.nickClose = openNicknameDialog(this.root, {
         initial: randomNickname(),
-        note: 'Кличку видят соперники — над персонажем, в таблице и в итогах. Опыт и уровень копятся в этом браузере; поменять кличку можно в профиле.',
+        note: 'Your opponents see your alias — above your character, on the scoreboard and in the match report. XP and levels are kept in this browser; you can change the alias in your profile.',
         onSave: (name) => this.saveNickname(name),
         onClose: () => (this.nickClose = null),
       });
@@ -356,10 +356,10 @@ export class App {
     const p = this.online.profile;
     if (!p || p.matchesPlayed > 0 || storageGet(NICK_CONFIRMED_KEY) === p.id) return;
     this.nickClose = openNicknameDialog(this.root, {
-      initial: /^Гость_/.test(p.displayName) ? randomNickname() : p.displayName,
+      initial: /^(Гость|Guest|Comrade)_/.test(p.displayName) ? randomNickname() : p.displayName,
       onSave: (name) => this.saveNickname(name),
       onCancel: () => storageSet(NICK_CONFIRMED_KEY, p.id),
-      cancelLabel: 'Оставить как есть',
+      cancelLabel: 'Keep it as is',
       onClose: () => (this.nickClose = null),
     });
   }
@@ -371,11 +371,11 @@ export class App {
     if (p.matchesPlayed > 0 || storageGet(NICK_CONFIRMED_KEY) === p.id) return;
     await new Promise<void>((resolve) => {
       this.nickClose = openNicknameDialog(this.root, {
-        initial: /^Гость_/.test(p.displayName) ? randomNickname() : p.displayName,
-        note: 'Тебя позвали в комнату. Кличку увидят остальные игроки — над персонажем, в таблице и в итогах.',
+        initial: /^(Гость|Guest|Comrade)_/.test(p.displayName) ? randomNickname() : p.displayName,
+        note: 'You’ve been invited to a room. The other players will see your alias — above your character, on the scoreboard and in the match report.',
         onSave: (name) => this.saveNickname(name),
         onCancel: () => storageSet(NICK_CONFIRMED_KEY, p.id),
-        cancelLabel: 'Оставить как есть',
+        cancelLabel: 'Keep it as is',
         onClose: () => {
           this.nickClose = null;
           resolve();
@@ -388,7 +388,7 @@ export class App {
     if (this.nickClose) return;
     this.nickClose = openNicknameDialog(this.root, {
       initial: this.playerName() ?? randomNickname(),
-      title: this.playerName() ? 'Сменить кличку' : 'Как тебя звать на районе?',
+      title: this.playerName() ? 'Change alias' : 'What do they call you round here?',
       onSave: async (name) => {
         await this.saveNickname(name);
         after?.();
@@ -408,7 +408,7 @@ export class App {
       saveLocalProfile(this.localProfile);
     }
     this.refreshStrip();
-    toast(`Кличка: ${name}`);
+    toast(`Nickname: ${name}`);
   }
 
   // ── characters ──────────────────────────────────────────────────────────
@@ -416,7 +416,7 @@ export class App {
     this.go('characters', push);
     let selected = initial ?? this.character;
     this.host.previewScene()?.setFocus(selected);
-    const grid = h('div', { class: 'chars', role: 'radiogroup', 'aria-label': 'Персонажи' });
+    const grid = h('div', { class: 'chars', role: 'radiogroup', 'aria-label': 'Characters' });
     const dossier = h('div', { class: 'panel dossier' });
     const actions = h('div', { class: 'row' });
     const draw = () => {
@@ -445,13 +445,13 @@ export class App {
       const locked = !this.ownsCharacter(selected);
       const price = locked ? characterPriceNote(selected, this.online?.inventory ?? null) : null;
       dossier.replaceChildren(
-        h('span', { class: 'tag' }, 'Личное дело'),
+        h('span', { class: 'tag' }, 'Personal File'),
         h(
           'div',
           { class: 'col' },
           h('div', { class: 'h1' }, c.name, ' ', h('span', { style: 'color:var(--red)' }, `«${c.nickname}»`)),
-          h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, 'Роль: '), c.role),
-          h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, 'Характер: '), c.personality),
+          h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, 'Role: '), c.role),
+          h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, 'Temper: '), c.personality),
           h('div', { class: 'quote' }, `«${c.quote}»`),
           h('div', { class: 'lore' }, c.lore),
           price ? h('div', { class: 'badge badge--host', style: 'align-self:flex-start' }, price) : null,
@@ -461,23 +461,23 @@ export class App {
           { class: 'col', style: 'gap:0' },
           ...(
             [
-              ['Имя', c.name],
-              ['Кличка', c.nickname],
-              ['Вид', c.species],
-              ['Район', c.district],
-              ['Дело', c.business],
-              ['Оружие', c.weaponsNote],
+              ['Name', c.name],
+              ['Alias', c.nickname],
+              ['Species', c.species],
+              ['District', c.district],
+              ['Business', c.business],
+              ['Weapons', c.weaponsNote],
             ] as const
           ).map(([k, v]) => h('div', { class: 'field' }, h('b', null, k), h('span', null, v))),
-          h('div', { class: 'muted', style: 'font-size:13px;margin-top:8px' }, 'Все персонажи равны по характеристикам — различаются только внешность и характер.'),
+          h('div', { class: 'muted', style: 'font-size:13px;margin-top:8px' }, 'All characters have the same stats — only their looks and temper differ.'),
         ),
       );
       actions.replaceChildren(
         locked
-          ? h('button', { class: 'btn btn--red grow', onclick: () => this.showArsenal(true, 'characters') }, 'Открыть в Арсенале')
-          : h('button', { class: 'btn btn--red grow', onclick: confirm }, 'Выбрать'),
+          ? h('button', { class: 'btn btn--red grow', onclick: () => this.showArsenal(true, 'characters') }, 'Unlock in the Arsenal')
+          : h('button', { class: 'btn btn--red grow', onclick: confirm }, 'Choose'),
       );
-      if (locked) actions.append(h('button', { class: 'btn grow', onclick: () => this.startPractice({ ...this.lastPractice, character: selected }) }, 'Опробовать в тренировке'));
+      if (locked) actions.append(h('button', { class: 'btn grow', onclick: () => this.startPractice({ ...this.lastPractice, character: selected }) }, 'Try in practice'));
     };
     const confirm = () => {
       if (!this.ownsCharacter(selected)) return;
@@ -489,7 +489,7 @@ export class App {
     };
     draw();
     if (this.online) void this.online.loadInventory().then(() => this.screen === 'characters' && draw()).catch(() => {});
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Выбор персонажа'), grid, dossier, actions)));
+    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Choose a Character'), grid, dossier, actions)));
   }
 
   // ── arsenal (loadout, shop, case, diamonds) ─────────────────────────────
@@ -503,7 +503,7 @@ export class App {
       onWallet: () => this.refreshStrip(),
       onCharacter: (c) => this.showCharacters(true, c),
     });
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Арсенал'), el)));
+    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Arsenal'), el)));
   }
 
   // ── practice ────────────────────────────────────────────────────────────
@@ -535,16 +535,16 @@ export class App {
     const content = h(
       'div',
       { class: 'wrap' },
-      this.topbar('Тренировка'),
-      h('div', { class: 'panel col' }, h('span', { class: 'tag' }, 'Карта'), maps),
+      this.topbar('Practice'),
+      h('div', { class: 'panel col' }, h('span', { class: 'tag' }, 'Map'), maps),
       h(
         'div',
         { class: 'panel col' },
-        h('span', { class: 'tag' }, 'Соперники'),
-        h('div', { class: 'muted' }, 'Количество ботов'),
+        h('span', { class: 'tag' }, 'Opponents'),
+        h('div', { class: 'muted' }, 'Number of bots'),
         seg([1, 2, 3, 4, 5], () => bots, (v) => (bots = v), String),
-        h('div', { class: 'muted' }, 'Сложность'),
-        seg<BotDifficulty>(['easy', 'normal', 'hard'], () => diff, (v) => (diff = v), (v) => ({ easy: 'Лёгкие', normal: 'Нормальные', hard: 'Злые' })[v]),
+        h('div', { class: 'muted' }, 'Difficulty'),
+        seg<BotDifficulty>(['easy', 'normal', 'hard'], () => diff, (v) => (diff = v), (v) => ({ easy: 'Easy', normal: 'Normal', hard: 'Vicious' })[v]),
       ),
       h(
         'button',
@@ -555,7 +555,7 @@ export class App {
             this.startPractice({ mapId, bots, difficulty: diff });
           },
         },
-        'Начать',
+        'Start',
       ),
     );
     this.render(h('div', { class: 'screen screen--dim' }, content));
@@ -579,7 +579,7 @@ export class App {
     const parts: string[] = [];
     if (t.weapon) parts.push(WEAPONS[t.weapon].name + (t.mods?.length ? ` + ${t.mods.map((m) => MODS[m].name.toLowerCase()).join(', ')}` : ''));
     if (t.gadget) parts.push(GADGETS[t.gadget].name);
-    return parts.join(' и ');
+    return parts.join(' and ');
   }
 
   private startPractice(opts: { mapId: MapId; bots: number; difficulty: BotDifficulty; tryOn?: TryOn; character?: CharacterId }) {
@@ -596,7 +596,7 @@ export class App {
     });
     if (opts.tryOn) {
       const label = App.tryOnLabel(opts.tryOn);
-      setTimeout(() => toast(`Примерка: ${label}${opts.tryOn!.gadget ? ' — клавиша G' : ''}`), 1200);
+      setTimeout(() => toast(`Trying on: ${label}${opts.tryOn!.gadget ? ' — G key' : ''}`), 1200);
     }
     this.beginSession(session);
   }
@@ -606,7 +606,7 @@ export class App {
     this.session = session;
     this.resultsShown = false;
     this.go('game');
-    this.root.replaceChildren(h('div', { class: 'rotate-hint panel', style: 'position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);pointer-events:none;opacity:.85' }, 'Поверните телефон горизонтально'));
+    this.root.replaceChildren(h('div', { class: 'rotate-hint panel', style: 'position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);pointer-events:none;opacity:.85' }, 'Turn your phone sideways'));
     setTimeout(() => this.root.querySelector('.rotate-hint')?.remove(), 4000);
     enterGameMode();
     this.host.startGame(session);
@@ -639,11 +639,11 @@ export class App {
       h(
         'div',
         { class: 'panel modal col' },
-        h('span', { class: 'tag' }, offline ? 'Пауза' : 'Меню'),
-        h('div', { class: 'muted', style: 'margin-top:6px' }, offline ? 'Тренировка на паузе.' : 'Матч продолжается — вы управляете персонажем после возврата.'),
-        h('button', { class: 'btn btn--red', onclick: () => this.togglePause() }, 'Продолжить'),
-        h('button', { class: 'btn', onclick: () => (this.togglePause(), this.showSettingsOverlay()) }, 'Настройки'),
-        h('button', { class: 'btn', onclick: () => this.leaveMatch() }, offline ? 'Выйти в меню' : 'Покинуть матч'),
+        h('span', { class: 'tag' }, offline ? 'Pause' : 'Menu'),
+        h('div', { class: 'muted', style: 'margin-top:6px' }, offline ? 'Practice is paused.' : 'The match goes on — you take control again when you come back.'),
+        h('button', { class: 'btn btn--red', onclick: () => this.togglePause() }, 'Resume'),
+        h('button', { class: 'btn', onclick: () => (this.togglePause(), this.showSettingsOverlay()) }, 'Settings'),
+        h('button', { class: 'btn', onclick: () => this.leaveMatch() }, offline ? 'Back to menu' : 'Leave the match'),
       ),
     );
     this.root.append(this.pauseEl);
@@ -652,7 +652,7 @@ export class App {
   private showSettingsOverlay() {
     const wrapEl = h('div', { class: 'overlay' });
     const close = () => wrapEl.remove();
-    wrapEl.append(h('div', { class: 'panel modal col', style: 'max-height:90vh;overflow:auto' }, renderSettings({ inGame: true, online: this.online }), h('button', { class: 'btn btn--red', onclick: close }, 'Готово')));
+    wrapEl.append(h('div', { class: 'panel modal col', style: 'max-height:90vh;overflow:auto' }, renderSettings({ inGame: true, online: this.online }), h('button', { class: 'btn btn--red', onclick: close }, 'Done')));
     this.root.append(wrapEl);
   }
 
@@ -690,7 +690,7 @@ export class App {
       myId,
       offline,
       localProfile: local && !!this.localProfile,
-      ...(local && !this.localProfile ? { offlineNote: 'Выбери кличку в меню — и тренировки начнут приносить опыт и уровни.' } : {}),
+      ...(local && !this.localProfile ? { offlineNote: 'Pick a nickname in the menu and practice will start earning you XP and levels.' } : {}),
       onRematch: () => {
         if (offline && this.session instanceof OfflineSession) {
           this.resultsShown = false;
@@ -700,7 +700,7 @@ export class App {
           this.root.replaceChildren();
         } else {
           this.online?.rematch();
-          toast('Голос за реванш принят');
+          toast('Rematch vote counted');
         }
       },
       onMenu: () => this.leaveMatch(),
@@ -712,7 +712,7 @@ export class App {
   private async quickMatch() {
     if (!this.online) return;
     this.go('loading');
-    this.render(this.loading('Ищем матч…'));
+    this.render(this.loading('Looking for a match…'));
     try {
       await this.online.quickMatch(this.onlineCharacter());
     } catch (e) {
@@ -727,16 +727,16 @@ export class App {
     const maps = h('div', { class: 'seg' });
     const drawMaps = () => maps.replaceChildren(...MAP_ORDER.map((id) => h('button', { 'aria-pressed': String(id === mapId), onclick: () => ((mapId = id), drawMaps()) }, getMap(id).name)));
     drawMaps();
-    const code = h('input', { class: 'input', placeholder: 'Код приглашения', maxlength: '16', autocapitalize: 'off', autocomplete: 'off', inputmode: 'text', 'aria-label': 'Код приглашения' });
+    const code = h('input', { class: 'input', placeholder: 'Invite code', maxlength: '16', autocapitalize: 'off', autocomplete: 'off', inputmode: 'text', 'aria-label': 'Invite code' });
     const content = h(
       'div',
       { class: 'wrap' },
-      this.topbar('Играть с друзьями'),
+      this.topbar('Play with Friends'),
       h(
         'div',
         { class: 'panel col' },
-        h('span', { class: 'tag' }, 'Своя комната'),
-        h('div', { class: 'muted' }, 'Создайте комнату и отправьте друзьям ссылку-приглашение.'),
+        h('span', { class: 'tag' }, 'Your Own Room'),
+        h('div', { class: 'muted' }, 'Create a room and send your friends the invite link.'),
         maps,
         h(
           'button',
@@ -744,7 +744,7 @@ export class App {
             class: 'btn btn--red',
             onclick: async () => {
               this.go('loading');
-              this.render(this.loading('Создаём комнату…'));
+              this.render(this.loading('Creating the room…'));
               try {
                 await this.online!.createRoom(mapId, this.onlineCharacter());
               } catch (e) {
@@ -752,13 +752,13 @@ export class App {
               }
             },
           },
-          'Создать комнату',
+          'Create a room',
         ),
       ),
       h(
         'div',
         { class: 'panel col' },
-        h('span', { class: 'tag' }, 'По коду'),
+        h('span', { class: 'tag' }, 'By Code'),
         code,
         h(
           'button',
@@ -766,11 +766,11 @@ export class App {
             class: 'btn',
             onclick: () => {
               const v = code.value.trim();
-              if (!/^[A-Za-z0-9]{6,16}$/.test(v)) return toast('Неверный код');
+              if (!/^[A-Za-z0-9]{6,16}$/.test(v)) return toast('Invalid code');
               this.joinInvite(v);
             },
           },
-          'Войти по коду',
+          'Join by code',
         ),
       ),
     );
@@ -780,24 +780,24 @@ export class App {
   private joinInvite(code: string) {
     if (!this.online) return;
     this.go('join');
-    this.render(this.loading('Проверяем приглашение…'));
+    this.render(this.loading('Checking the invitation…'));
     void this.online
       .resolveInvite(code)
       .then(async (info) => {
         analytics.track('invite_opened', { code, result: info.status });
         if (info.status === 'joinable' || info.status === 'in_progress') {
           await this.ensureNicknameBeforeJoin();
-          this.render(this.loading(`Входим в комнату${info.hostName ? ` (${info.hostName})` : ''}…`));
+          this.render(this.loading(`Entering the room${info.hostName ? ` (${info.hostName})` : ''}…`));
           await this.online!.joinRoom(info.roomId!, this.onlineCharacter());
           return;
         }
         const msg: Record<string, string> = {
-          full: 'Комната заполнена.',
-          finished: 'Матч уже закончился.',
-          expired: 'Приглашение устарело — комната закрыта.',
-          not_found: 'Приглашение не найдено.',
+          full: 'The room is full.',
+          finished: 'That match is already over.',
+          expired: 'The invitation has expired — the room is closed.',
+          not_found: 'Invitation not found.',
         };
-        this.showError(msg[info.status] ?? 'Не удалось войти по приглашению.', false);
+        this.showError(msg[info.status] ?? 'Could not join with this invitation.', false);
       })
       .catch((e: Error) => this.showError(e.message));
   }
@@ -827,23 +827,23 @@ export class App {
   private showProfile(push = true) {
     if (!this.online && !this.localProfile) return this.editNickname(() => this.showProfile());
     this.go('profile', push);
-    const box = h('div', { class: 'wrap' }, this.topbar('Профиль'), this.loading('Загружаем профиль…'));
+    const box = h('div', { class: 'wrap' }, this.topbar('Profile'), this.loading('Loading the profile…'));
     this.render(h('div', { class: 'screen screen--dim' }, box));
     const load: Promise<ProfileData> = this.online ? loadOnlineProfile(this.online) : Promise.resolve(localProfileView(this.localProfile!, this.character));
     void load
       .then((d) => {
         if (this.screen !== 'profile') return;
-        box.replaceChildren(this.topbar('Профиль'));
+        box.replaceChildren(this.topbar('Profile'));
         if (this.online) box.append(renderAccountPanel(this.online, { root: this.root, onChanged: () => (this.refreshStrip(), this.screen === 'profile' && this.showProfile(false)) }));
         box.append(renderProfileView(d, { local: !this.online, onRename: () => this.editNickname(() => this.screen === 'profile' && this.showProfile(false)) }));
       })
-      .catch((e: Error) => box.replaceChildren(this.topbar('Профиль'), h('div', { class: 'panel' }, `Не удалось загрузить профиль: ${e.message}`)));
+      .catch((e: Error) => box.replaceChildren(this.topbar('Profile'), h('div', { class: 'panel' }, `Could not load the profile: ${e.message}`)));
   }
 
   private showSettings(push = true) {
     this.go('settings', push);
     const onResetLocal = !this.online && this.localProfile ? () => this.resetLocalProfile() : undefined;
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Настройки'), renderSettings({ inGame: false, online: this.online, ...(onResetLocal ? { onResetLocal } : {}) }))));
+    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Settings'), renderSettings({ inGame: false, online: this.online, ...(onResetLocal ? { onResetLocal } : {}) }))));
   }
 
   /** Demo build: forget the browser-only profile (the nickname dialog opens again in the menu). */
@@ -851,7 +851,7 @@ export class App {
     clearLocalProfile();
     this.localProfile = null;
     this.lastLocalResult = null;
-    toast('Локальный профиль сброшен');
+    toast('Local profile reset');
     this.goMenu();
   }
 
@@ -865,17 +865,17 @@ export class App {
         h(
           'div',
           { class: 'panel modal col' },
-          h('span', { class: 'tag' }, 'Неполадка'),
+          h('span', { class: 'tag' }, 'Malfunction'),
           h('div', { style: 'font-size:18px;margin-top:8px' }, message),
-          retry ? h('button', { class: 'btn', onclick: () => location.reload() }, 'Повторить') : null,
-          h('button', { class: 'btn btn--red', onclick: () => this.goMenu() }, 'В меню'),
+          retry ? h('button', { class: 'btn', onclick: () => location.reload() }, 'Retry') : null,
+          h('button', { class: 'btn btn--red', onclick: () => this.goMenu() }, 'To menu'),
         ),
       ),
     );
   }
 
   static standingsName(s: Standing): string {
-    return s.isBot ? `${s.name} · бот` : s.name;
+    return s.isBot ? `${s.name} · bot` : s.name;
   }
 
   static fmt = fmtDuration;

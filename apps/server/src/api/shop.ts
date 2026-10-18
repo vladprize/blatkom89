@@ -19,7 +19,7 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
   const hookLimiter = new RateLimiter(120, 2);
   const byUser = (ctx: Parameters<typeof currentUser>[0]) => currentUser(ctx).userId;
   const pg = () => {
-    if (!deps.sql) throw new HttpError(503, 'persistence_unavailable', 'Сервис временно недоступен');
+    if (!deps.sql) throw new HttpError(503, 'persistence_unavailable', 'The service is temporarily unavailable');
     return pgContext(deps.sql, deps.env, deps.log);
   };
   /** Maps rule refusals to 409 with a Russian message the client can show as is. */
@@ -65,7 +65,7 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
   });
 
   router.post('/api/shop/case', auth, rateLimit(shopLimiter, byUser), async (ctx) => {
-    if (!deps.env.CASES_ENABLED) throw new HttpError(403, 'cases_disabled', 'Кейсы на этом сервере отключены');
+    if (!deps.env.CASES_ENABLED) throw new HttpError(403, 'cases_disabled', 'Cases are switched off on this server');
     const user = currentUser(ctx);
     await ctx.body(CaseOpenRequest, 1024);
     const { entry, inventory } = await guard(() => pg().economy.openCase(user.userId));
@@ -88,7 +88,7 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
   });
 
   router.get('/api/pay/:id', auth, async (ctx) => {
-    if (!/^[0-9a-f-]{36}$/i.test(ctx.params.id ?? '')) throw new HttpError(404, 'not_found', 'Платёж не найден');
+    if (!/^[0-9a-f-]{36}$/i.test(ctx.params.id ?? '')) throw new HttpError(404, 'not_found', 'Payment not found');
     ctx.json(200, await pg().payments.status(currentUser(ctx).userId, ctx.params.id!));
   });
 

@@ -9,8 +9,8 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 const page = await (await browser.newContext({ viewport: { width: 1500, height: 1000 } })).newPage();
 page.on('pageerror', (e) => console.log('pageerror', e.message));
 await page.goto(pathToFileURL(resolve(file)).href);
-await page.getByRole('textbox', { name: 'Кличка' }).waitFor({ timeout: 60000 });
-await page.getByRole('button', { name: 'Готово' }).click();
+await page.getByRole('textbox', { name: 'Alias' }).waitFor({ timeout: 60000 });
+await page.getByRole('button', { name: 'Done' }).click();
 await page.evaluate(() => localStorage.setItem('blatkom89.tutorial.v1', '1'));
 await page.evaluate((mapId) => window.__blatkom.app.startPractice({ mapId, bots: 1, difficulty: 'easy' }), mapId);
 await page.waitForFunction(() => window.__blatkom?.game?.scene.getScene('game')?.session?.phase?.() === 'active', null, { timeout: 60000 });

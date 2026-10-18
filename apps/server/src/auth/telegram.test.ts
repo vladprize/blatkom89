@@ -63,6 +63,6 @@ test('telegram: stale and future auth_date are rejected', () => {
 
 test('telegram: display names are sanitized for the game', () => {
   assert.equal(displayNameFromTelegram({ id: 1, firstName: 'Петя 🐓', lastName: 'Комендант', languageCode: null }), 'Петя Комендант');
-  assert.equal(displayNameFromTelegram({ id: 12345678, firstName: '🔥', lastName: null, languageCode: null }), 'Игрок 5678');
+  assert.equal(displayNameFromTelegram({ id: 12345678, firstName: '🔥', lastName: null, languageCode: null }), 'Comrade 5678');
   assert.ok(displayNameFromTelegram({ id: 2, firstName: 'А'.repeat(60), lastName: null, languageCode: null }).length <= 24);
 });

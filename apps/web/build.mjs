@@ -81,15 +81,15 @@ function writeSingleFile(meta) {
   const table = assetTable();
   const licences = readFileSync(join(here, 'public/THIRD_PARTY_LICENSES.txt'), 'utf8').replace(/--/g, '—');
   const html = `<!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#0d0b0a" />
-<title>БЛАТКОМ ’89</title>
+<title>BLATKOM ’89</title>
 <link rel="icon" href="${table['ui/icon.png']}" />
 <!--
-БЛАТКОМ ’89 v${version} — single-file offline demo (practice with bots). No data is collected.
+BLATKOM ’89 v${version} — single-file offline demo (practice with bots). No data is collected.
 ${licences}
 -->
 <style>${css}</style>
@@ -97,8 +97,8 @@ ${licences}
 <body>
 <div id="game"></div>
 <div id="ui" class="ui"></div>
-<div id="boot" class="boot"><div class="boot__tape">БЛАТКОМ ’89</div><div class="boot__bar"><i></i></div><div class="boot__hint">Загрузка кассеты…</div></div>
-<noscript>Для игры нужен JavaScript.</noscript>
+<div id="boot" class="boot"><div class="boot__tape">BLATKOM ’89</div><div class="boot__bar"><i></i></div><div class="boot__hint">Rewinding the tape…</div></div>
+<noscript>The game needs JavaScript, comrade.</noscript>
 <script>window.__BLATKOM_ASSETS__=${JSON.stringify(table).replace(/</g, '\\u003c')};</script>
 <script type="module">${js}</script>
 </body>
@@ -123,7 +123,7 @@ const options = {
   sourcemap: mode === 'dev' ? 'linked' : false,
   metafile: true,
   legalComments: 'none',
-  banner: { js: `/*! БЛАТКОМ ’89 v${version}. Includes Phaser 3.90.0 — Copyright (c) 2024 Richard Davey, Phaser Studio Inc., MIT License; see THIRD_PARTY_LICENSES.txt */` },
+  banner: { js: `/*! BLATKOM ’89 v${version}. Includes Phaser 3.90.0 — Copyright (c) 2024 Richard Davey, Phaser Studio Inc., MIT License; see THIRD_PARTY_LICENSES.txt */` },
   logLevel: 'warning',
   logOverride: { 'duplicate-object-key': 'silent', 'equals-negative-zero': 'silent', 'suspicious-boolean-not': 'silent' },
   alias: { phaser: 'phaser/dist/phaser.esm.js' },

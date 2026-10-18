@@ -94,7 +94,7 @@ export class OnlineClient {
         const email = storageGet(EMAIL_MODE_KEY);
         if (email && e instanceof ApiError && e.status === 401) {
           this.onEmailSessionExpired?.(email);
-          throw new Error('Сессия истекла — войдите по почте ещё раз.');
+          throw new Error('Session expired — sign in with your email again.');
         }
       }
     }
@@ -104,7 +104,7 @@ export class OnlineClient {
       device = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
       storageSet(DEVICE_KEY, device);
     }
-    const name = telegramUserName() ?? `Гость_${device.slice(0, 3).toUpperCase()}`;
+    const name = telegramUserName() ?? `Comrade_${device.slice(0, 3).toUpperCase()}`;
     try {
       const res = await this.api.authGuest(name, device, storageGet(VISITOR_KEY) ?? undefined);
       this.setToken(res.token);
@@ -112,7 +112,7 @@ export class OnlineClient {
       this.profile = res.profile;
       return res.profile;
     } catch (e) {
-      if (e instanceof ApiError && (e.status === 403 || e.status === 404)) throw new Error('На этом сервере вход возможен только через Telegram. Откройте игру из бота.');
+      if (e instanceof ApiError && (e.status === 403 || e.status === 404)) throw new Error('On this server you can only sign in through Telegram. Open the game from the bot.');
       throw e;
     }
   }
@@ -258,7 +258,7 @@ export class OnlineClient {
         onStatus: (st, reason) => {
           if (this.session) this.session.status = st === 'open' ? 'online' : st === 'reconnecting' || st === 'connecting' ? 'reconnecting' : 'lost';
           if (st === 'closed' && reason !== 'user' && this.conn === conn) {
-            const msg = reason === 'room_full' ? 'Комната заполнена.' : reason === 'room not found' ? 'Комната не найдена.' : reason === 'replaced' ? 'Вы подключились с другого устройства.' : 'Соединение с сервером потеряно.';
+            const msg = reason === 'room_full' ? 'The room is full.' : reason === 'room not found' ? 'Room not found.' : reason === 'replaced' ? 'You connected from another device.' : 'Lost the line to the server.';
             this.cleanup();
             this.cb.onError(msg, true);
           }
@@ -342,7 +342,7 @@ export class OnlineClient {
         this.cb.onError(m.message, m.code === 'unauthorized' || m.code === 'room_not_found' || m.code === 'room_full' || m.code === 'version_mismatch');
         break;
       case 'kicked':
-        this.cb.onError('Отключено сервером.', true);
+        this.cb.onError('Disconnected by the server.', true);
         break;
       default:
         break;

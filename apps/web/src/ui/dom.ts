@@ -45,12 +45,7 @@ export function fmtDuration(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-/** Russian plural: plural(5, ['очко', 'очка', 'очков']) → 'очков'. */
-export function plural(n: number, forms: readonly [string, string, string]): string {
-  const a = Math.abs(n) % 100;
-  const b = a % 10;
-  if (a > 10 && a < 20) return forms[2];
-  if (b > 1 && b < 5) return forms[1];
-  if (b === 1) return forms[0];
-  return forms[2];
+/** English plural: plural(5, 'point') → 'points'; plural(2, 'match', 'matches') → 'matches'. */
+export function plural(n: number, one: string, many = `${one}s`): string {
+  return Math.abs(n) === 1 ? one : many;
 }

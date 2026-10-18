@@ -13,9 +13,9 @@ export function buildYardMap(): MapDef {
   const WINDOW = 0xffc777;
   const b = new MapBuilder(
     'yard',
-    'Советский двор',
-    'Здесь всё начинается',
-    'Панельки, проходы, детская площадка, лавочки, мусорные контейнеры. Баланс для быстрых и динамичных матчей.',
+    'Soviet Courtyard',
+    'Where it all begins',
+    'Panel blocks, archways and a playground. Flanks and mid-range fights.',
     W,
     H,
     'asphalt',

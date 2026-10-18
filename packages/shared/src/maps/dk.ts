@@ -17,9 +17,9 @@ export function buildDkMap(): MapDef {
   const STAGE = 0xff8a5a;
   const b = new MapBuilder(
     'dk',
-    'Дом культуры',
-    'Искусство — народу',
-    'Зрительный зал с рядами кресел, сцена, гримёрки, кафе и бильярдная. Коридоры, двери и длинные простреливаемые проходы.',
+    'House of Culture',
+    'Art belongs to the people',
+    'An auditorium with rows of seats, the stage, dressing rooms, a café and a billiard room. Doors, corridors and long lines of fire.',
     W,
     H,
     'paving',

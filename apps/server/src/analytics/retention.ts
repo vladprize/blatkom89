@@ -22,6 +22,10 @@ export const RETENTION_DAYS = {
   invitations: 7,
   /** Admin audit log, by created_at. */
   adminAudit: 365,
+  /** Password-reset links (valid for an hour), counted from expiry. */
+  passwordResets: 7,
+  /** Anonymous visitor funnel: visitor_days by day, visitors by their last visit. */
+  visitors: 400,
 } as const;
 
 export type RetentionDays = { [K in keyof typeof RETENTION_DAYS]: number };
@@ -50,6 +54,9 @@ export async function purgeExpired(sql: Sql, now = new Date(), days: RetentionDa
   const adminSessions = cutoff(days.adminSessions);
   const invitations = cutoff(days.invitations);
   const audit = cutoff(days.adminAudit);
+  const resets = cutoff(days.passwordResets);
+  const visitorDay = cutoff(days.visitors).toISOString().slice(0, 10);
+  const visitors = cutoff(days.visitors);
   return {
     analyticsEvents: await batched(
       async () => (await sql`DELETE FROM analytics_events WHERE ctid IN (SELECT ctid FROM analytics_events WHERE occurred_at < ${events} LIMIT ${BATCH})`).count,
@@ -70,6 +77,12 @@ export async function purgeExpired(sql: Sql, now = new Date(), days: RetentionDa
     ),
     invitations: await batched(async () => (await sql`DELETE FROM invitations WHERE ctid IN (SELECT ctid FROM invitations WHERE expires_at < ${invitations} LIMIT ${BATCH})`).count),
     adminAudit: await batched(async () => (await sql`DELETE FROM admin_audit_log WHERE ctid IN (SELECT ctid FROM admin_audit_log WHERE created_at < ${audit} LIMIT ${BATCH})`).count),
+    passwordResets: await batched(async () => (await sql`DELETE FROM password_resets WHERE ctid IN (SELECT ctid FROM password_resets WHERE expires_at < ${resets} LIMIT ${BATCH})`).count),
+    visitors: await batched(
+      async () =>
+        (await sql`DELETE FROM visitor_days WHERE ctid IN (SELECT ctid FROM visitor_days WHERE day < ${visitorDay}::date LIMIT ${BATCH})`).count +
+        (await sql`DELETE FROM visitors WHERE ctid IN (SELECT ctid FROM visitors WHERE last_seen_at < ${visitors} LIMIT ${BATCH})`).count,
+    ),
   };
 }
 

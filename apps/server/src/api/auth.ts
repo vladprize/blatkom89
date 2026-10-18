@@ -11,12 +11,12 @@ import { pgContext } from '../services/persistence.js';
 import { sendResetMail } from '../auth/email.js';
 
 const REASONS: Record<string, string> = {
-  malformed: 'Повреждённые данные авторизации',
-  missing_hash: 'Нет подписи Telegram',
-  bad_signature: 'Подпись Telegram не прошла проверку',
-  stale: 'Данные авторизации устарели — перезапустите мини-приложение',
-  future: 'Неверное время авторизации',
-  no_user: 'Нет данных пользователя Telegram',
+  malformed: 'Damaged sign-in data',
+  missing_hash: 'No Telegram signature',
+  bad_signature: 'The Telegram signature didn’t check out',
+  stale: 'The sign-in data has gone stale — restart the mini app',
+  future: 'Wrong sign-in time',
+  no_user: 'No Telegram user data',
 };
 
 export const registerAuthRoutes: RouteModule = (router, deps) => {
@@ -34,18 +34,18 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
   const byUser = (ctx: Parameters<typeof currentUser>[0]) => currentUser(ctx).userId;
   const visitLimiter = new RateLimiter(30, 30 / 60);
   const unavailable = () => {
-    throw new HttpError(503, 'persistence_unavailable', 'Сервис временно недоступен');
+    throw new HttpError(503, 'persistence_unavailable', 'The service is temporarily unavailable');
   };
 
   router.post('/api/auth/telegram', rateLimit(limiter), async (ctx) => {
     if (!deps.sql) return unavailable();
     const body = await ctx.body(TelegramAuthRequest, 16 * 1024);
-    if (!env.TELEGRAM_BOT_TOKEN) throw new HttpError(503, 'telegram_not_configured', 'Вход через Telegram не настроен на сервере');
+    if (!env.TELEGRAM_BOT_TOKEN) throw new HttpError(503, 'telegram_not_configured', 'Telegram sign-in isn’t set up on this server');
     const pg = pgContext(deps.sql, env, deps.log);
     const v = validateInitData(body.initData, env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_AUTH_MAX_AGE_SEC);
     if (!v.ok) {
       deps.log.info('telegram auth rejected', { reason: v.reason, ip: ctx.ip });
-      throw new HttpError(401, 'invalid_init_data', REASONS[v.reason] ?? 'Ошибка авторизации');
+      throw new HttpError(401, 'invalid_init_data', REASONS[v.reason] ?? 'Sign-in error');
     }
     const platform = body.platform ?? null;
     const up = await pg.users.upsertTelegram(v.user, platform);
@@ -54,13 +54,13 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'telegram' }, evCtx);
     if (up.isNew) services.analytics.server('profile_created', { method: 'telegram' }, evCtx);
     const profile = await pg.profiles.get(up.userId);
-    if (!profile) throw new HttpError(500, 'internal', 'Профиль не найден');
+    if (!profile) throw new HttpError(500, 'internal', 'Profile not found');
     const res: AuthResponse = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew };
     ctx.json(200, res);
   });
 
   router.post('/api/auth/guest', rateLimit(limiter), async (ctx) => {
-    if (!guestEnabled) throw new HttpError(403, 'guest_auth_disabled', 'Вход без Telegram отключён на этом сервере');
+    if (!guestEnabled) throw new HttpError(403, 'guest_auth_disabled', 'Signing in without Telegram is switched off on this server');
     if (!deps.sql) return unavailable();
     const body = await ctx.body(GuestAuthRequest, 4 * 1024);
     const pg = pgContext(deps.sql, env, deps.log);
@@ -69,7 +69,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     const existing = await pg.users.findGuest(deviceKey);
     if (!existing && (!newGuestPerIp.take(ctx.ip) || !newGuestGlobal.take('all'))) {
       deps.log.warn('guest sign-up rate limited', { ip: ctx.ip });
-      throw new HttpError(429, 'rate_limited', 'Слишком много новых игроков подряд — попробуйте через несколько минут', { 'retry-after': '60' });
+      throw new HttpError(429, 'rate_limited', 'Too many new players in a row — try again in a few minutes', { 'retry-after': '60' });
     }
     const platform = body.platform ?? null;
     const up = await pg.users.upsertGuest(deviceKey, body.name, platform);
@@ -80,13 +80,13 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'guest' }, evCtx);
     if (up.isNew) services.analytics.server('profile_created', { method: 'guest' }, evCtx);
     const profile = await pg.profiles.get(up.userId);
-    if (!profile) throw new HttpError(500, 'internal', 'Профиль не найден');
+    if (!profile) throw new HttpError(500, 'internal', 'Profile not found');
     const res: AuthResponse = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew };
     ctx.json(200, res);
   });
 
   router.post('/api/auth/dev', rateLimit(limiter), async (ctx) => {
-    if (!env.DEV_AUTH_ENABLED || env.NODE_ENV === 'production') throw new HttpError(403, 'dev_auth_disabled', 'Вход для разработки отключён');
+    if (!env.DEV_AUTH_ENABLED || env.NODE_ENV === 'production') throw new HttpError(403, 'dev_auth_disabled', 'Developer sign-in is switched off');
     if (!deps.sql) return unavailable();
     const body = await ctx.body(DevAuthRequest, 4 * 1024);
     const pg = pgContext(deps.sql, env, deps.log);
@@ -98,7 +98,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'dev' }, evCtx);
     if (up.isNew) services.analytics.server('profile_created', { method: 'dev' }, evCtx);
     const profile = await pg.profiles.get(up.userId);
-    if (!profile) throw new HttpError(500, 'internal', 'Профиль не найден');
+    if (!profile) throw new HttpError(500, 'internal', 'Profile not found');
     const res: AuthResponse & { deviceId: string } = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew, deviceId };
     ctx.json(200, res);
   });
@@ -119,15 +119,15 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
   router.post('/api/auth/email/login', rateLimit(emailLimiter), async (ctx) => {
     if (!deps.sql) return unavailable();
     const body = await ctx.body(EmailLoginRequest, 4 * 1024);
-    if (!emailAccountLimiter.take(body.email)) throw new HttpError(429, 'rate_limited', 'Слишком много попыток — подождите несколько минут', { 'retry-after': '120' });
+    if (!emailAccountLimiter.take(body.email)) throw new HttpError(429, 'rate_limited', 'Too many attempts — wait a few minutes', { 'retry-after': '120' });
     const pg = pgContext(deps.sql, env, deps.log);
     const userId = await pg.emailAuth.verify(body.email, body.password);
-    if (!userId) throw new HttpError(401, 'bad_credentials', 'Неверная почта или пароль');
+    if (!userId) throw new HttpError(401, 'bad_credentials', 'Wrong email or password');
     const platform = body.platform ?? null;
     const s = await pg.sessions.issue(userId, 'email', platform, body.clientVersion ?? null);
     services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'email' }, { userId, sessionId: s.sessionId, platform });
     const profile = await pg.profiles.get(userId);
-    if (!profile) throw new HttpError(500, 'internal', 'Профиль не найден');
+    if (!profile) throw new HttpError(500, 'internal', 'Profile not found');
     const res: AuthResponse = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: false };
     ctx.json(200, res);
   });
@@ -138,8 +138,8 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     const body = await ctx.body(EmailLinkRequest, 4 * 1024);
     const pg = pgContext(deps.sql, env, deps.log);
     const r = await pg.emailAuth.link(user.userId, body.email, body.password);
-    if (r === 'already_linked') throw new HttpError(409, 'already_linked', 'Почта уже привязана к этому аккаунту');
-    if (r === 'email_taken') throw new HttpError(409, 'email_taken', 'Эта почта уже привязана к другому аккаунту');
+    if (r === 'already_linked') throw new HttpError(409, 'already_linked', 'An email is already registered to this account');
+    if (r === 'email_taken') throw new HttpError(409, 'email_taken', 'This email is already registered to another account');
     services.analytics.server('email_linked', {}, user);
     ctx.json(200, await pg.profiles.get(user.userId));
   });
@@ -149,15 +149,15 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     const user = currentUser(ctx);
     const body = await ctx.body(PasswordChangeRequest, 4 * 1024);
     const ok = await pgContext(deps.sql, env, deps.log).emailAuth.changePassword(user.userId, body.current, body.password);
-    if (!ok) throw new HttpError(401, 'bad_credentials', 'Текущий пароль не подходит');
+    if (!ok) throw new HttpError(401, 'bad_credentials', 'The current password doesn’t match');
     ctx.json(200, { ok: true });
   });
 
   router.post('/api/auth/email/reset-request', rateLimit(emailLimiter), async (ctx) => {
     if (!deps.sql) return unavailable();
     const body = await ctx.body(PasswordResetRequest, 2 * 1024);
-    if (!env.RESEND_API_KEY || !env.MAIL_FROM) throw new HttpError(503, 'mail_not_configured', 'Сброс пароля по почте пока не подключён — напишите администрации игры');
-    if (!emailAccountLimiter.take(`reset:${body.email}`)) throw new HttpError(429, 'rate_limited', 'Письмо уже отправлено — проверьте почту', { 'retry-after': '300' });
+    if (!env.RESEND_API_KEY || !env.MAIL_FROM) throw new HttpError(503, 'mail_not_configured', 'Password reset by email isn’t connected yet — write to the game’s administration');
+    if (!emailAccountLimiter.take(`reset:${body.email}`)) throw new HttpError(429, 'rate_limited', 'The letter is already on its way — check your inbox', { 'retry-after': '300' });
     const pg = pgContext(deps.sql, env, deps.log);
     const r = await pg.emailAuth.createReset('email', { email: body.email });
     if (r) await sendResetMail(env, body.email, `${env.PUBLIC_URL.replace(/\/$/, '')}/?reset=${r.token}`, deps.log);
@@ -169,7 +169,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     if (!deps.sql) return unavailable();
     const body = await ctx.body(PasswordResetConfirm, 2 * 1024);
     const userId = await pgContext(deps.sql, env, deps.log).emailAuth.consumeReset(body.token, body.password);
-    if (!userId) throw new HttpError(400, 'bad_token', 'Ссылка устарела или уже использована');
+    if (!userId) throw new HttpError(400, 'bad_token', 'The link has expired or was already used');
     ctx.json(200, { ok: true });
   });
 

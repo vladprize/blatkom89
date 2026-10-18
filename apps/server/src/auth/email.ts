@@ -89,8 +89,8 @@ export async function sendResetMail(env: { RESEND_API_KEY?: string | undefined; 
       body: JSON.stringify({
         from: env.MAIL_FROM,
         to: [to],
-        subject: 'БЛАТКОМ ’89 — новый пароль',
-        text: `Кто-то (надеемся, вы) попросил сменить пароль от аккаунта БЛАТКОМ ’89.\n\nНовый пароль можно задать по ссылке (действует 1 час):\n${link}\n\nЕсли это были не вы — просто удалите письмо.`,
+        subject: 'BLATKOM ’89 — a new password',
+        text: `Someone (hopefully you) asked to change the password of a BLATKOM ’89 account.\n\nYou can set a new password with this link (valid for 1 hour):\n${link}\n\nIf it wasn’t you, just delete this letter — nothing will change.`,
       }),
     });
     if (!res.ok) log.warn('reset mail failed', { status: res.status });

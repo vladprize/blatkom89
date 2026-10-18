@@ -26,14 +26,14 @@ const shot = (n) => page.screenshot({ path: `${outDir}/${n}.png` });
 
 try {
   await page.goto(pathToFileURL(resolve(file)).href);
-  const input = page.getByRole('textbox', { name: 'Кличка' });
+  const input = page.getByRole('textbox', { name: 'Alias' });
   await input.waitFor({ timeout: 60000 });
-  await input.fill('Тест');
-  await page.getByRole('button', { name: 'Готово' }).click();
+  await input.fill('Tester');
+  await page.getByRole('button', { name: 'Done' }).click();
   await page.evaluate(() => localStorage.setItem('blatkom89.tutorial.v1', '1'));
-  await page.getByRole('button', { name: /Тренировка/ }).click();
+  await page.getByRole('button', { name: /Practice/ }).click();
   await page.getByRole('button', { name: '1', exact: true }).click();
-  await page.getByRole('button', { name: 'Начать' }).click();
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
   await page.waitForFunction(() => window.__blatkom?.game?.scene.getScene('game')?.session?.phase?.() === 'active', null, { timeout: 60000 });
   await sleep(600);
 

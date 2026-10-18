@@ -102,5 +102,5 @@ export function displayNameFromTelegram(u: TelegramUser): string {
     .trim()
     .slice(0, 24)
     .trim();
-  return cleaned.length >= 2 ? cleaned : `Игрок ${String(u.id).slice(-4)}`;
+  return cleaned.length >= 2 ? cleaned : `Comrade ${String(u.id).slice(-4)}`;
 }

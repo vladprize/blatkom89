@@ -52,9 +52,9 @@ function txt(scene: Phaser.Scene, x: number, y: number, s: string, size: number,
   return scene.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, fontStyle: weight, color, stroke: '#0b0908', strokeThickness: Math.max(2, size / 7) });
 }
 
-/** «до 50 очков», «до 21 очка». */
+/** «to 50 points», «to 1 point». */
 function pointsWord(n: number): string {
-  return n % 10 === 1 && n % 100 !== 11 ? 'ОЧКА' : 'ОЧКОВ';
+  return n === 1 ? 'POINT' : 'POINTS';
 }
 
 /** Shortens `s` with an ellipsis until the text object fits `maxW` pixels. */
@@ -103,7 +103,7 @@ export class HudScene extends Phaser.Scene {
   private levelText!: Phaser.GameObjects.Text;
   private shownName = '';
   private shownLevel: number | null | undefined = undefined;
-  // «+2 УСТРАНЕНИЕ» popups, supply banner, edge arrows towards supply crates
+  // «+2 ELIMINATION» popups, supply banner, edge arrows towards supply crates
   private popups: Array<{ text: Phaser.GameObjects.Text; born: number }> = [];
   private banner: Phaser.GameObjects.Container | null = null;
   private bannerUntil = 0;
@@ -246,7 +246,7 @@ export class HudScene extends Phaser.Scene {
     this.myScore = txt(this, 0, 0, '0', 26, BEIGE, '700').setOrigin(0.5);
     this.leadScore = txt(this, 0, 0, '0', 26, BEIGE, '700').setOrigin(0.5);
     this.timer = txt(this, 0, 0, '00:00', 24, BEIGE, '600').setOrigin(0.5, 0);
-    this.mode = txt(this, 0, 0, 'ДЕЗМАТЧ', 10, '#b8a888', '500').setOrigin(0.5, 0);
+    this.mode = txt(this, 0, 0, 'DEATHMATCH', 10, '#b8a888', '500').setOrigin(0.5, 0);
   }
 
   private buildMinimap() {
@@ -314,9 +314,9 @@ export class HudScene extends Phaser.Scene {
     this.tutorialState = null;
     if (storageGet(TUTORIAL_KEY)) return;
     const lines = this.touch
-      ? ['Левый стик — движение', 'Правый стик — прицел и огонь', '⟳ — перезарядка · ⇄ — смена оружия', 'Кнопка с гранатой — снаряжение', 'Оружие и аптечки подбираются на ходу']
-      : ['WASD — движение · Shift — шагом', 'Мышь — прицел · ЛКМ — огонь', 'R — перезарядка · 1/2/3, Q — оружие', 'G — граната / снаряжение', 'E — взять оружие · Tab — счёт · Esc — пауза'];
-    const title = txt(this, 0, 0, 'КАК ВЕСТИ ДЕЛА', 13, '#1a1410', '700').setStroke('#000', 0).setOrigin(0.5, 0);
+      ? ['Left stick — move', 'Right stick — aim and fire', '⟳ — reload · ⇄ — switch weapon', 'Grenade button — equipment', 'Weapons and medkits are picked up on the move']
+      : ['WASD — move · Shift — walk quietly', 'Mouse — aim · Left click — fire', 'R — reload · 1/2/3, Q — weapons', 'G — grenade / equipment', 'E — pick up · Tab — score · Esc — pause'];
+    const title = txt(this, 0, 0, 'HOW BUSINESS IS DONE', 13, '#1a1410', '700').setStroke('#000', 0).setOrigin(0.5, 0);
     const body = txt(this, 0, 0, lines.join('\n'), this.touch ? 12 : 14, BEIGE, '500').setOrigin(0.5, 0).setAlign('center').setLineSpacing(4);
     const w = Math.max(title.width, body.width) + 32;
     const h = title.height + body.height + 26;
@@ -606,7 +606,7 @@ export class HudScene extends Phaser.Scene {
   private onKillFeed(e: KillFeedEntry) {
     const k = txt(this, 0, 0, e.killer, 14, e.killerLocal ? RED : BLUE, '600');
     let right = k.width;
-    // assisters ride along after the killer: «Петя + Валюта [обрез] Михалыч»
+    // assisters ride along after the killer: «Petya + Valyuta [sawn-off] Mikhalych»
     const a = e.assists.length ? txt(this, right + 5, 3, `+ ${e.assists.join(', ')}`, 11, e.assistLocal ? '#ff8a7a' : '#9fbfdf', '500') : null;
     if (a) right = a.x + a.width;
     const icon = fitIcon(this.add.image(right + 8, k.height / 2, 'weapons', `ico_${e.weapon}`).setOrigin(0, 0.5), `ico_${e.weapon}`, 46, 15, 0.8);
@@ -646,9 +646,9 @@ export class HudScene extends Phaser.Scene {
   private onSupply(e: SupplyEntry) {
     this.banner?.destroy();
     const name = WEAPONS[e.weapon].name;
-    const title = this.tape(this.touch ? `ДЕФИЦИТ ЗАВЕЗЛИ: ${name.toUpperCase()}` : 'ДЕФИЦИТ ЗАВЕЗЛИ!', this.touch ? 13 : 17);
+    const title = this.tape(this.touch ? `DEFICIT GOODS: ${name.toUpperCase()}` : 'DEFICIT GOODS DELIVERED!', this.touch ? 13 : 17);
     const parts: Phaser.GameObjects.GameObject[] = [title];
-    if (!this.touch) parts.push(txt(this, 0, 16, `В ящике: ${name.toLowerCase()} с полным боекомплектом — ищи метку на карте`, 13, BEIGE, '500').setOrigin(0.5, 0));
+    if (!this.touch) parts.push(txt(this, 0, 16, `In the crate: ${name} with a full load of ammo — look for the marker on the map`, 13, BEIGE, '500').setOrigin(0.5, 0));
     this.banner = this.add.container(0, 0, parts).setDepth(23).setAlpha(0);
     this.bannerUntil = this.time.now + 3400;
     this.supplyPings.push({ x: e.x, y: e.y, at: this.time.now });
@@ -686,7 +686,7 @@ export class HudScene extends Phaser.Scene {
     this.supplyPings = this.supplyPings.filter((p) => time - p.at < 2400);
   }
 
-  /** Arrows on the screen edge pointing at «дефицит» crates that are out of view. */
+  /** Arrows on the screen edge pointing at «deficit goods» crates that are out of view. */
   private drawSupplyArrows(time: number) {
     this.edge.clear();
     const crates = this.session.pickups().filter((pk) => pk.supply && pk.active);
@@ -751,7 +751,7 @@ export class HudScene extends Phaser.Scene {
     this.timer.setColor(hud.phase === 'active' && t < 30_000 ? '#ff6a5a' : BEIGE);
     if (this.modeLimit !== hud.scoreLimit) {
       this.modeLimit = hud.scoreLimit;
-      this.mode.setText(`ДЕЗМАТЧ · ДО ${hud.scoreLimit} ${pointsWord(hud.scoreLimit)}`);
+      this.mode.setText(`DEATHMATCH · FIRST TO ${hud.scoreLimit} ${pointsWord(hud.scoreLimit)}`);
     }
     // feed
     let fy = this.feedY0;
@@ -778,7 +778,7 @@ export class HudScene extends Phaser.Scene {
       if ((me.name && this.shownName !== me.name) || this.shownLevel !== me.level) {
         this.shownName = me.name;
         this.shownLevel = me.level;
-        this.levelText.setText(me.level !== null ? `УР. ${me.level}` : '');
+        this.levelText.setText(me.level !== null ? `LVL ${me.level}` : '');
         const room = (this.touch ? 128 : 162) - (me.level !== null ? this.levelText.width + 6 : 0);
         fitText(this.nameText, me.name || CHARACTERS[me.character].name, room);
       }
@@ -806,7 +806,7 @@ export class HudScene extends Phaser.Scene {
     const def = WEAPONS[hud.weapon];
     this.ammoText.setText(def.kind === 'melee' ? '—' : `${hud.mag}/${hud.reserve < 0 ? '∞' : hud.reserve}`);
     this.ammoText.setColor(def.kind !== 'melee' && hud.mag === 0 ? '#ff6a5a' : BEIGE);
-    this.weaponName.setText(hud.reloading ? 'ПЕРЕЗАРЯДКА…' : def.name.toUpperCase());
+    this.weaponName.setText(hud.reloading ? 'RELOADING…' : def.name.toUpperCase());
     if (!this.touch) this.drawSlots(hud.weapon, [hud.sidearm, hud.melee, hud.heavy]);
     this.updateGadget(hud, time);
     // flashbang: full white, then fades over the last 0.7 s; the ears ring while it lasts
@@ -869,7 +869,7 @@ export class HudScene extends Phaser.Scene {
     }
     // status
     const conn = hud.connection;
-    this.statusText.setText(conn === 'offline' ? 'ТРЕНИРОВКА' : conn === 'reconnecting' ? 'ПЕРЕПОДКЛЮЧЕНИЕ…' : conn === 'lost' ? 'НЕТ СВЯЗИ' : hud.ping !== null ? `${hud.ping} мс` : '');
+    this.statusText.setText(conn === 'offline' ? 'PRACTICE' : conn === 'reconnecting' ? 'RECONNECTING…' : conn === 'lost' ? 'LINE IS DEAD' : hud.ping !== null ? `${hud.ping} ms` : '');
     this.statusText.setColor(conn === 'online' ? ((hud.ping ?? 0) > 150 ? '#e8a040' : '#8fae78') : conn === 'offline' ? '#9a9080' : '#ff6a5a');
     // touch interact button only when a weapon can be swapped
     if (this.interactBtn) {
@@ -946,28 +946,28 @@ export class HudScene extends Phaser.Scene {
   private centre(hud: ReturnType<GameSession['hud']>, me: RenderPlayer | undefined, time: number) {
     let big = '';
     let sub = '';
-    if (hud.phase === 'ready') big = 'ПРИГОТОВИТЬСЯ';
+    if (hud.phase === 'ready') big = 'GET READY';
     else if (hud.phase === 'countdown') {
       big = String(Math.max(1, Math.ceil(hud.phaseRemainingMs / 1000)));
-      sub = 'Районные дела — серьёзные дела';
-    } else if (hud.phase === 'active' && time < this.goUntil) big = 'ВПЕРЁД!';
+      sub = 'District business is serious business';
+    } else if (hud.phase === 'active' && time < this.goUntil) big = 'FORWARD!';
     else if (hud.phase === 'finished') {
-      big = 'МАТЧ ОКОНЧЕН';
+      big = 'MATCH OVER';
     } else if (me && !me.alive && hud.phase === 'active') {
-      big = 'ВАС УСТРАНИЛИ';
-      sub = `${hud.killedBy ? `Завалил: ${hud.killedBy} · ` : ''}возвращение через ${(hud.respawnInMs / 1000).toFixed(1)} с`;
+      big = 'ELIMINATED';
+      sub = `${hud.killedBy ? `Dropped by ${hud.killedBy} · ` : ''}back in ${(hud.respawnInMs / 1000).toFixed(1)} s`;
     }
     if (hud.connection === 'reconnecting') {
-      big = 'СВЯЗЬ ПОТЕРЯНА';
-      sub = 'Переподключение…';
+      big = 'CONNECTION LOST';
+      sub = 'Reconnecting…';
     }
     this.bigText.setText(big).setFontSize(big.length > 3 ? (this.touch ? 34 : 44) : 72);
-    this.bigText.setColor(big === 'ВАС УСТРАНИЛИ' || big === 'СВЯЗЬ ПОТЕРЯНА' ? '#ff5a4a' : BEIGE);
+    this.bigText.setColor(big === 'ELIMINATED' || big === 'CONNECTION LOST' ? '#ff5a4a' : BEIGE);
     this.subText.setText(sub);
     let prompt = '';
-    if (hud.alive && hud.pickupPrompt) prompt = this.touch ? `Взять: ${WEAPONS[hud.pickupPrompt].name}` : `[E] — взять ${WEAPONS[hud.pickupPrompt].name.toLowerCase()}`;
+    if (hud.alive && hud.pickupPrompt) prompt = this.touch ? `Take: ${WEAPONS[hud.pickupPrompt].name}` : `[E] — pick up the ${WEAPONS[hud.pickupPrompt].name}`;
     // a placed C4 waits for the second press
-    else if (hud.alive && hud.c4Armed) prompt = this.touch ? 'Кнопка снаряжения — взорвать C4' : '[G] — взорвать C4';
+    else if (hud.alive && hud.c4Armed) prompt = this.touch ? 'Equipment button — detonate the C4' : '[G] — detonate the C4';
     this.promptText.setText(prompt);
   }
 
@@ -987,21 +987,21 @@ export class HudScene extends Phaser.Scene {
     this.panel(g, x, y, w, h, 0.92);
     this.scoreboard.add(g);
     const cols: Array<[string, (p: RenderPlayer) => string]> = [
-      ['УР.', (p) => (p.level === null ? '—' : String(p.level))],
-      ['УСТР.', (p) => String(p.kills)],
-      ['ПОМ.', (p) => String(p.assists)],
-      ['СМ.', (p) => String(p.deaths)],
-      ['ОЧКИ', (p) => String(p.score)],
+      ['LVL', (p) => (p.level === null ? '—' : String(p.level))],
+      ['ELIM', (p) => String(p.kills)],
+      ['AST', (p) => String(p.assists)],
+      ['DTH', (p) => String(p.deaths)],
+      ['PTS', (p) => String(p.score)],
     ];
     const colX = (i: number) => x + w - 14 - step / 2 - (cols.length - 1 - i) * step;
-    this.scoreboard.add(txt(this, x + 16, y + 12, 'ИГРОК', 12, '#b8a888', '600'));
+    this.scoreboard.add(txt(this, x + 16, y + 12, 'PLAYER', 12, '#b8a888', '600'));
     cols.forEach(([label], i) => this.scoreboard.add(txt(this, colX(i), y + 12, label, 11, i === cols.length - 1 ? BEIGE : '#b8a888', '600').setOrigin(0.5, 0)));
     const nameRoom = colX(0) - step / 2 - (x + 46) - 6;
     sorted.forEach((p, i) => {
       const ry = y + 40 + i * 28;
       if (p.isLocal) g.fillStyle(0x8a1a16, 0.35).fillRect(x + 8, ry - 3, w - 16, 28);
       const portrait = this.add.image(x + 16, ry, `portrait_small_${p.character}`).setOrigin(0, 0).setDisplaySize(22, 22);
-      const n = fitText(txt(this, x + 46, ry + 1, '', 15, p.isLocal ? RED : BEIGE, '500'), `${i + 1}. ${p.name}${p.isBot ? ' · бот' : ''}`, nameRoom);
+      const n = fitText(txt(this, x + 46, ry + 1, '', 15, p.isLocal ? RED : BEIGE, '500'), `${i + 1}. ${p.name}${p.isBot ? ' · bot' : ''}`, nameRoom);
       this.scoreboard.add([portrait, n]);
       cols.forEach(([, get], c) => {
         const last = c === cols.length - 1;
@@ -1009,7 +1009,7 @@ export class HudScene extends Phaser.Scene {
         this.scoreboard.add(txt(this, colX(c), ry + 1, get(p), 15, color, last ? '700' : '500').setOrigin(0.5, 0));
       });
     });
-    const rule = `Устранение +${SCORING.killPoints} · помощь +${SCORING.assistPoints} (от ${SCORING.assistMinDamage} урона за ${SCORING.assistWindowMs / 1000} с до устранения)`;
+    const rule = `Elimination +${SCORING.killPoints} · assist +${SCORING.assistPoints} (${SCORING.assistMinDamage}+ damage within ${SCORING.assistWindowMs / 1000} s before the elimination)`;
     this.scoreboard.add(fitText(txt(this, W / 2, y + h - 20, '', 11, '#9a9080', '400').setOrigin(0.5, 0), rule, w - 24));
   }
 }

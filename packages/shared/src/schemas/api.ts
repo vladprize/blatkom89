@@ -17,7 +17,7 @@ export const displayNameSchema = z
   .trim()
   .min(2)
   .max(MAX_NAME_LENGTH)
-  .regex(/^[\p{L}\p{N} _.\-’']+$/u, 'Имя может содержать буквы, цифры, пробел, _ . -');
+  .regex(/^[\p{L}\p{N} _.\-’']+$/u, 'A name may contain letters, digits, spaces and _ . -');
 
 export const TelegramAuthRequest = z
   .object({ initData: z.string().min(10).max(8192), platform: PlatformSchema.optional(), clientVersion: z.string().max(32).optional() })
@@ -45,8 +45,8 @@ export const GuestAuthRequest = z
   .strict();
 /** Optional anonymous browser id (see VisitRequest) that links a sign-up to the visitor funnel. */
 const visitorIdSchema = z.string().regex(/^[A-Za-z0-9_-]{16,64}$/);
-export const emailSchema = z.string().trim().toLowerCase().max(254).email('Неверный адрес почты');
-export const passwordSchema = z.string().min(8, 'Пароль — минимум 8 символов').max(128);
+export const emailSchema = z.string().trim().toLowerCase().max(254).email('That is not a valid email address');
+export const passwordSchema = z.string().min(8, 'The password needs at least 8 characters').max(128);
 
 /** Email sign-in for an existing account (any device). `deviceId` binds this browser's guest key to the account. */
 export const EmailLoginRequest = z

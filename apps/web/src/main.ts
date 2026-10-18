@@ -27,5 +27,5 @@ async function main() {
 main().catch((e: Error) => {
   console.error(e);
   const boot = document.getElementById('boot');
-  if (boot) boot.innerHTML = `<div class="boot__tape">ОШИБКА</div><div class="boot__hint">${String(e.message).replace(/[<>&]/g, '')}</div>`;
+  if (boot) boot.innerHTML = `<div class="boot__tape">BREAKDOWN</div><div class="boot__hint">${String(e.message).replace(/[<>&]/g, '')}</div>`;
 });

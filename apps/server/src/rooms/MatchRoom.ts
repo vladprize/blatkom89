@@ -322,7 +322,7 @@ export class MatchRoom {
         this.broadcastRoster();
         return;
       case 'character': {
-        if (!c.gear.characters.has(msg.character)) return this.error(c, 'invalid_state', 'Этот персонаж ещё не открыт');
+        if (!c.gear.characters.has(msg.character)) return this.error(c, 'invalid_state', 'This character isn’t unlocked yet');
         c.character = msg.character;
         const p = this.world.players.get(c.user.userId);
         if (p && (this.world.phase === 'waiting' || !p.alive)) p.character = msg.character;
@@ -330,15 +330,15 @@ export class MatchRoom {
         return;
       }
       case 'map':
-        if (c.user.userId !== this.hostId) return this.error(c, 'not_host', 'Только хозяин комнаты меняет карту');
-        if (this.world.phase !== 'waiting') return this.error(c, 'invalid_state', 'Матч уже идёт');
+        if (c.user.userId !== this.hostId) return this.error(c, 'not_host', 'Only the room’s host changes the map');
+        if (this.world.phase !== 'waiting') return this.error(c, 'invalid_state', 'The match is already on');
         if (!isMapId(msg.mapId)) return;
         this.changeMap(msg.mapId);
         return;
       case 'start':
-        if (c.user.userId !== this.hostId) return this.error(c, 'not_host', 'Только хозяин комнаты запускает матч');
-        if (this.world.phase !== 'waiting') return this.error(c, 'invalid_state', 'Матч уже идёт');
-        if (this.connectedCount < this.config.minPlayers) return this.error(c, 'invalid_state', `Нужно минимум ${this.config.minPlayers} игрока`);
+        if (c.user.userId !== this.hostId) return this.error(c, 'not_host', 'Only the room’s host starts the match');
+        if (this.world.phase !== 'waiting') return this.error(c, 'invalid_state', 'The match is already on');
+        if (this.connectedCount < this.config.minPlayers) return this.error(c, 'invalid_state', `At least ${this.config.minPlayers} players needed`);
         this.startMatch();
         return;
       case 'loadout': {

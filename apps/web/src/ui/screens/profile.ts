@@ -1,4 +1,4 @@
-/** Profile screen («Досье»): nickname, level and XP, statistics, achievements, recent matches. */
+/** Profile screen («Dossier»): nickname, level and XP, statistics, achievements, recent matches. */
 import { h, fmtDuration } from '../dom.js';
 import { getMap, CHARACTERS } from '@blatkom/shared';
 import type { AchievementStatus, MatchHistoryEntry, PublicProfile } from '@blatkom/shared';
@@ -29,58 +29,58 @@ export function renderProfileView(d: ProfileData, o: { local: boolean; onRename:
     h(
       'div',
       { class: 'panel col' },
-      h('span', { class: 'tag' }, 'Досье'),
+      h('span', { class: 'tag' }, 'Dossier'),
       h(
         'div',
         { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' },
-        h('div', { class: 'lvlbadge lvlbadge--big', title: 'Уровень' }, h('small', null, 'УР.'), String(p.level)),
+        h('div', { class: 'lvlbadge lvlbadge--big', title: 'Level' }, h('small', null, 'LVL'), String(p.level)),
         h('div', { class: 'h1 grow nick-line', 'data-testid': 'profile-name' }, p.displayName),
-        h('button', { class: 'btn btn--small', onclick: o.onRename, 'aria-label': 'Сменить кличку' }, '✎ Кличка'),
+        h('button', { class: 'btn btn--small', onclick: o.onRename, 'aria-label': 'Change alias' }, '✎ Alias'),
       ),
       h('div', { class: 'xpbar', role: 'progressbar', 'aria-valuenow': String(pct), 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('i', { style: `width:${pct}%` })),
-      h('div', { class: 'muted' }, p.xpForNextLevel > 0 ? `${p.xpIntoLevel} / ${p.xpForNextLevel} опыта до ${p.level + 1}-го уровня · всего ${p.xp}` : `Максимальный уровень · ${p.xp} опыта`),
-      o.local ? h('div', { class: 'muted', style: 'font-size:14px' }, 'Локальный профиль: хранится только в этом браузере. Опыт идёт за тренировки с ботами.') : null,
+      h('div', { class: 'muted' }, p.xpForNextLevel > 0 ? `${p.xpIntoLevel} / ${p.xpForNextLevel} XP to level ${p.level + 1} · ${p.xp} in total` : `Top level · ${p.xp} XP`),
+      o.local ? h('div', { class: 'muted', style: 'font-size:14px' }, 'Local profile: kept only in this browser. XP comes from practice against bots.') : null,
     ),
     h(
       'div',
       { class: 'panel col' },
-      h('span', { class: 'tag' }, 'Статистика'),
+      h('span', { class: 'tag' }, 'Statistics'),
       h(
         'div',
         { class: 'stats', style: 'margin-top:6px' },
-        stat(p.matchesPlayed, 'матчей'),
-        stat(p.wins, 'побед'),
-        stat(p.losses, 'поражений'),
-        stat(p.kills, 'устранений'),
-        stat(p.assists, 'помощи'),
-        stat(p.deaths, 'смертей'),
-        stat(kd, 'У/С'),
-        stat(p.bestWinStreak, 'лучшая серия'),
-        stat(`${hours} ч ${mins} мин`, 'в игре'),
+        stat(p.matchesPlayed, 'matches'),
+        stat(p.wins, 'wins'),
+        stat(p.losses, 'losses'),
+        stat(p.kills, 'eliminations'),
+        stat(p.assists, 'assists'),
+        stat(p.deaths, 'deaths'),
+        stat(kd, 'E/D'),
+        stat(p.bestWinStreak, 'best streak'),
+        stat(`${hours} h ${mins} min`, 'on the job'),
       ),
     ),
     h(
       'div',
       { class: 'panel col' },
-      h('span', { class: 'tag' }, `Достижения · ${unlocked}/${d.achievements.length}`),
+      h('span', { class: 'tag' }, `Achievements · ${unlocked}/${d.achievements.length}`),
       h('div', { style: 'height:4px' }),
-      d.achievements.length === 0 ? h('div', { class: 'muted' }, 'Нет данных') : null,
+      d.achievements.length === 0 ? h('div', { class: 'muted' }, 'No data') : null,
       ...d.achievements.map((a) => h('div', { class: `ach ${a.unlockedAt ? '' : 'locked'}` }, h('div', { class: 'ico' }, a.unlockedAt ? '★' : '☆'), h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 't' }, a.title), h('div', { class: 'muted' }, a.description)))),
     ),
     h(
       'div',
       { class: 'panel col' },
-      h('span', { class: 'tag' }, 'Последние матчи'),
+      h('span', { class: 'tag' }, 'Recent matches'),
       h('div', { style: 'height:4px' }),
       d.history.length === 0
-        ? h('div', { class: 'muted' }, 'Ещё не было сыгранных матчей.')
+        ? h('div', { class: 'muted' }, 'No matches played yet.')
         : h(
             'div',
             { class: 'table-scroll' },
             h(
               'table',
               { class: 'table' },
-              h('thead', null, h('tr', null, h('th', null, 'Карта'), h('th', null, 'Персонаж'), h('th', { class: 'num' }, 'Место'), h('th', { class: 'num' }, 'Устр.'), h('th', { class: 'num' }, 'Пом.'), h('th', { class: 'num' }, 'См.'), h('th', { class: 'num' }, 'Опыт'), h('th', { class: 'num' }, 'Время'))),
+              h('thead', null, h('tr', null, h('th', null, 'Map'), h('th', null, 'Character'), h('th', { class: 'num' }, 'Place'), h('th', { class: 'num' }, 'Elim'), h('th', { class: 'num' }, 'Ast'), h('th', { class: 'num' }, 'Dth'), h('th', { class: 'num' }, 'XP'), h('th', { class: 'num' }, 'Time'))),
               h(
                 'tbody',
                 null,

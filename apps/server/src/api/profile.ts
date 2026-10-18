@@ -11,14 +11,14 @@ export const registerProfileRoutes: RouteModule = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
   const writeLimiter = new RateLimiter(10, 10 / 60);
   const pg = () => {
-    if (!deps.sql) throw new HttpError(503, 'persistence_unavailable', 'Сервис временно недоступен');
+    if (!deps.sql) throw new HttpError(503, 'persistence_unavailable', 'The service is temporarily unavailable');
     return pgContext(deps.sql, deps.env, deps.log);
   };
 
   router.get('/api/me', auth, async (ctx) => {
     const user = currentUser(ctx);
     const profile = await pg().profiles.get(user.userId);
-    if (!profile) throw new HttpError(404, 'not_found', 'Профиль не найден');
+    if (!profile) throw new HttpError(404, 'not_found', 'Profile not found');
     ctx.json(200, profile);
   });
 
@@ -27,7 +27,7 @@ export const registerProfileRoutes: RouteModule = (router, deps) => {
     const body = await ctx.body(UpdateProfileRequest, 4 * 1024);
     if (body.preferredCharacter) {
       const inv = await pg().economy.inventory(user.userId);
-      if (!inv.characters.includes(body.preferredCharacter)) throw new HttpError(409, 'not_owned', 'Этот персонаж ещё не открыт');
+      if (!inv.characters.includes(body.preferredCharacter)) throw new HttpError(409, 'not_owned', 'This character isn’t unlocked yet');
     }
     await pg().profiles.update(user.userId, body);
     const profile = await pg().profiles.get(user.userId);

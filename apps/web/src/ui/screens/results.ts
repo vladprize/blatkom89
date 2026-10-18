@@ -1,5 +1,5 @@
 import { h, portrait, fmtDuration, plural } from '../dom.js';
-import { amount } from './shop.js';
+import { amount, tokenWord } from './shop.js';
 import { ACHIEVEMENTS, getMap, levelForXp, SCORING } from '@blatkom/shared';
 import type { ResultsData } from '../../game/session/types.js';
 
@@ -18,7 +18,7 @@ export function renderResults(o: {
   const top = r.standings[0];
   const draw = !!top && r.standings.length > 1 && r.standings[1]!.place === top.place;
   const winner = draw ? undefined : top;
-  const reason = r.reason === 'score' ? 'Достигнут лимит очков' : r.reason === 'time' ? 'Время вышло' : 'Матч прерван';
+  const reason = r.reason === 'score' ? 'Score limit reached' : r.reason === 'time' ? 'Time’s up' : 'Match called off';
   const me = r.standings.find((s) => s.id === o.myId);
   const personal = r.personal;
   const xpPanel = () => {
@@ -28,15 +28,15 @@ export function renderResults(o: {
     return h(
       'div',
       { class: 'panel col xpgain' },
-      h('span', { class: 'tag' }, 'Опыт'),
-      h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, h('div', { class: 'lvlbadge' }, h('small', null, 'УР.'), String(personal.level)), h('div', { class: 'h1 grow' }, `+${personal.xpGained} опыта`)),
+      h('span', { class: 'tag' }, 'Experience'),
+      h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, h('div', { class: 'lvlbadge' }, h('small', null, 'LVL'), String(personal.level)), h('div', { class: 'h1 grow' }, `+${personal.xpGained} XP`)),
       h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
-      h('div', { class: 'muted' }, personal.leveledUp ? `Новый уровень — ${personal.level}!` : lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} до ${personal.level + 1}-го уровня` : 'Максимальный уровень'),
+      h('div', { class: 'muted' }, personal.leveledUp ? `Promoted — level ${personal.level}!` : lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} to level ${personal.level + 1}` : 'Top level'),
       personal.tokensGained !== undefined
-        ? h('div', { class: 'row tokens-gain' }, h('b', null, '+', amount(personal.tokensGained, 'tokens')), h('span', { class: 'muted' }, `${plural(personal.tokensGained, ['жетон', 'жетона', 'жетонов'])} · всего ${personal.totalTokens ?? 0} — тратятся в Арсенале`))
+        ? h('div', { class: 'row tokens-gain' }, h('b', null, '+', amount(personal.tokensGained, 'tokens')), h('span', { class: 'muted' }, `${tokenWord(personal.tokensGained)} · ${personal.totalTokens ?? 0} in total — spend them in the Arsenal`))
         : null,
       ...personal.newAchievements.map((a) => h('div', { class: 'ach' }, h('div', { class: 'ico' }, '★'), h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 't' }, ACHIEVEMENTS[a].title), h('div', { class: 'muted' }, ACHIEVEMENTS[a].description)))),
-      o.localProfile ? h('div', { class: 'muted', style: 'font-size:14px' }, 'Локальный профиль — хранится в этом браузере.') : null,
+      o.localProfile ? h('div', { class: 'muted', style: 'font-size:14px' }, 'Local profile — kept in this browser.') : null,
     );
   };
   return h(
@@ -45,7 +45,7 @@ export function renderResults(o: {
     h(
       'div',
       { class: 'wrap' },
-      h('div', { class: 'row' }, h('span', { class: 'tag' }, 'Итоги матча'), h('span', { class: 'muted' }, `${getMap(r.mapId).name} · ${fmtDuration(r.durationMs)} · ${reason}`)),
+      h('div', { class: 'row' }, h('span', { class: 'tag' }, 'Match report'), h('span', { class: 'muted' }, `${getMap(r.mapId).name} · ${fmtDuration(r.durationMs)} · ${reason}`)),
       winner
         ? h(
             'div',
@@ -54,13 +54,13 @@ export function renderResults(o: {
             h(
               'div',
               { class: 'col', style: 'gap:2px' },
-              h('div', { class: 'muted' }, 'Хозяин района'),
+              h('div', { class: 'muted' }, 'Boss of the district'),
               h('div', { class: 'h1' }, winner.name),
-              h('div', { class: 'hand' }, `${winner.score} ${plural(winner.score, ['очко', 'очка', 'очков'])} · ${winner.kills} ${plural(winner.kills, ['устранение', 'устранения', 'устранений'])} · помощь: ${winner.assists}`),
+              h('div', { class: 'hand' }, `${winner.score} ${plural(winner.score, 'point')} · ${winner.kills} ${plural(winner.kills, 'elimination')} · ${winner.assists} ${plural(winner.assists, 'assist')}`),
             ),
           )
         : draw
-          ? h('div', { class: 'panel col' }, h('div', { class: 'h1' }, 'Ничья'), h('div', { class: 'hand' }, 'Район остался без хозяина — разберётесь в реванше.'))
+          ? h('div', { class: 'panel col' }, h('div', { class: 'h1' }, 'Draw'), h('div', { class: 'hand' }, 'The district is left without a boss — settle it in the rematch.'))
           : null,
       h(
         'div',
@@ -68,7 +68,7 @@ export function renderResults(o: {
         h(
           'table',
           { class: 'table' },
-          h('thead', null, h('tr', null, h('th', null, '#'), h('th', null, 'Игрок'), h('th', { class: 'num' }, 'Устр.'), h('th', { class: 'num' }, 'Пом.'), h('th', { class: 'num' }, 'Смерти'), h('th', { class: 'num' }, 'Очки'))),
+          h('thead', null, h('tr', null, h('th', null, '#'), h('th', null, 'Player'), h('th', { class: 'num' }, 'Elim'), h('th', { class: 'num' }, 'Ast'), h('th', { class: 'num' }, 'Deaths'), h('th', { class: 'num' }, 'Points'))),
           h(
             'tbody',
             null,
@@ -77,7 +77,7 @@ export function renderResults(o: {
                 'tr',
                 { class: s.id === o.myId ? 'me' : '' },
                 h('td', null, String(s.place)),
-                h('td', null, s.isBot ? `${s.name} · бот` : s.name),
+                h('td', null, s.isBot ? `${s.name} · bot` : s.name),
                 h('td', { class: 'num' }, String(s.kills)),
                 h('td', { class: 'num' }, String(s.assists)),
                 h('td', { class: 'num' }, String(s.deaths)),
@@ -87,9 +87,9 @@ export function renderResults(o: {
           ),
         ),
       ),
-      h('div', { class: 'muted', style: 'font-size:14px' }, `Очки: устранение +${SCORING.killPoints}, помощь +${SCORING.assistPoints} (от ${SCORING.assistMinDamage} урона по сопернику за ${SCORING.assistWindowMs / 1000} с до его устранения).`),
-      personal ? xpPanel() : o.offline ? h('div', { class: 'muted' }, o.offlineNote ?? 'Тренировка не влияет на онлайн-профиль и опыт.') : h('div', { class: 'muted' }, me ? 'Сохраняем результаты…' : ''),
-      h('div', { class: 'row' }, h('button', { class: 'btn btn--red grow', onclick: o.onRematch }, o.offline ? 'Ещё раз' : 'Реванш'), h('button', { class: 'btn grow', onclick: o.onMenu }, 'В меню')),
+      h('div', { class: 'muted', style: 'font-size:14px' }, `Points: elimination +${SCORING.killPoints}, assist +${SCORING.assistPoints} (${SCORING.assistMinDamage}+ damage to the opponent within ${SCORING.assistWindowMs / 1000} s before they are eliminated).`),
+      personal ? xpPanel() : o.offline ? h('div', { class: 'muted' }, o.offlineNote ?? 'Practice doesn’t count towards the online profile or XP.') : h('div', { class: 'muted' }, me ? 'Filing the results…' : ''),
+      h('div', { class: 'row' }, h('button', { class: 'btn btn--red grow', onclick: o.onRematch }, o.offline ? 'Again' : 'Rematch'), h('button', { class: 'btn grow', onclick: o.onMenu }, 'To menu')),
     ),
   );
 }

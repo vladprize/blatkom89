@@ -84,12 +84,12 @@ export function attachGateway(server: Server, rooms: RoomManager, services: Serv
       ws.off('message', onFirst);
       const user = await services.sessions.verify(hello.token).catch(() => null);
       if (!user) {
-        ws.send(JSON.stringify({ type: 'error', code: 'unauthorized', message: 'Сессия недействительна' }));
+        ws.send(JSON.stringify({ type: 'error', code: 'unauthorized', message: 'Session is not valid' }));
         return ws.close(WS_CLOSE.UNAUTHORIZED, 'unauthorized');
       }
       const room = rooms.get(hello.roomId);
       if (!room) {
-        ws.send(JSON.stringify({ type: 'error', code: 'room_not_found', message: 'Комната не найдена' }));
+        ws.send(JSON.stringify({ type: 'error', code: 'room_not_found', message: 'Room not found' }));
         return ws.close(WS_CLOSE.ROOM_NOT_FOUND, 'room not found');
       }
       const viaInvite = room.isPrivate;
@@ -101,7 +101,7 @@ export function attachGateway(server: Server, rooms: RoomManager, services: Serv
       if (ws.readyState !== 1) return;
       const result = room.join(user, ws, hello.character, viaInvite, gear);
       if (result === 'room_full' || result === 'room_closed') {
-        ws.send(JSON.stringify({ type: 'error', code: result, message: result === 'room_full' ? 'Комната заполнена' : 'Матч завершён' }));
+        ws.send(JSON.stringify({ type: 'error', code: result, message: result === 'room_full' ? 'The room is full' : 'The match is over' }));
         return ws.close(result === 'room_full' ? WS_CLOSE.ROOM_FULL : WS_CLOSE.ROOM_CLOSED, result);
       }
       joined = true;

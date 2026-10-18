@@ -15,9 +15,9 @@ export function buildFactoryMap(): MapDef {
   const RED = 0xff3a2a;
   const b = new MapBuilder(
     'factory',
-    'Заводская проходная',
-    'Работаем круглосуточно',
-    'Промышленные помещения, металлические конструкции, коридоры и открытые участки. Контроль ключевых точек.',
+    'Factory Checkpoint',
+    'Working round the clock',
+    'Workshops, steel structures, corridors and open ground. Hold the key points.',
     W,
     H,
     'concrete_slab',

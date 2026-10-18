@@ -28,7 +28,7 @@ export const registerRoomRoutes: RouteModule = (router, { env, services, rooms }
     try {
       room = rooms.create(body.mapId, body.isPrivate, user.userId);
     } catch {
-      throw new HttpError(503, 'capacity', 'Сервер переполнен, попробуйте позже');
+      throw new HttpError(503, 'capacity', 'The server is full, try again later');
     }
     let inviteCode: string | null = null;
     let inviteUrl: string | null = null;
@@ -55,14 +55,14 @@ export const registerRoomRoutes: RouteModule = (router, { env, services, rooms }
 
   router.get('/api/rooms/:id', auth, (ctx) => {
     const room = rooms.get(ctx.params.id ?? '');
-    if (!room) throw new HttpError(404, 'room_not_found', 'Комната не найдена');
+    if (!room) throw new HttpError(404, 'room_not_found', 'Room not found');
     const user = currentUser(ctx);
     ctx.json(200, { ...room.info(), joinable: room.isJoinable(user.userId), mapName: getMap(room.mapId).name });
   });
 
   router.get('/api/invites/:code', rateLimit(lookupLimiter), async (ctx) => {
     const code = ctx.params.code ?? '';
-    if (!/^[A-Za-z0-9]{6,16}$/.test(code)) throw new HttpError(400, 'bad_code', 'Неверный код приглашения');
+    if (!/^[A-Za-z0-9]{6,16}$/.test(code)) throw new HttpError(400, 'bad_code', 'Invalid invitation code');
     const resolved = await services.invites.resolve(code);
     let info: InviteInfo = { code, status: 'not_found', roomId: null, mapId: null, players: 0, maxPlayers: 0, hostName: null };
     if (resolved) {

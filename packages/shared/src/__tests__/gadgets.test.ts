@@ -43,7 +43,7 @@ test('equipment: arms ids share one wire index space with weapons', () => {
   assert.ok(WEAPON_IDS.length + GADGET_IDS.length <= 255);
 });
 
-test('Ф-1: thrown, slides, explodes after the fuse; the thrower gets the kill; charges and cooldown', () => {
+test('F-1 grenade: thrown, slides, explodes after the fuse; the thrower gets the kill; charges and cooldown', () => {
   const { w, p1, p2 } = duel('f1', { x: 40, y: 50 }, { x: 235, y: 62 });
   assert.equal(p1.gadgetCharges, GADGETS.f1.charges);
   useGadget(w, 'a');
@@ -65,7 +65,7 @@ test('Ф-1: thrown, slides, explodes after the fuse; the thrower gets the kill; 
   assert.equal(p1.hp, MAX_HP, 'the thrower was out of the blast');
 });
 
-test('Ф-1: bounces off walls and charges refill on respawn', () => {
+test('F-1 grenade: bounces off walls and charges refill on respawn', () => {
   // wall block x 190..210; a throw from x=150 towards it comes back
   const { w, p1 } = duel('f1', { x: 160, y: 150 }, { x: 350, y: 260 });
   useGadget(w, 'a', 0);
@@ -79,7 +79,7 @@ test('Ф-1: bounces off walls and charges refill on respawn', () => {
   assert.equal(p1.gadgetCharges, GADGETS.f1.charges);
 });
 
-test('Коктейль Молотова: shatters on a wall, burns everyone inside over time, walls protect', () => {
+test('Molotov cocktail: shatters on a wall, burns everyone inside over time, walls protect', () => {
   const { w, p2 } = duel('molotov', { x: 120, y: 150 }, { x: 175, y: 120 });
   const p3 = w.addPlayer('c', 'Сыч', 'mihalych', false, PISTOL_ONLY);
   w.spawnPlayer(p3, false);
@@ -97,7 +97,7 @@ test('Коктейль Молотова: shatters on a wall, burns everyone insi
   assert.equal(w.gadgets.length, 0, 'burnt out');
 });
 
-test('дымовая: a cloud blocks sight lines (bots, turrets) for its duration', () => {
+test('smoke grenade: a cloud blocks sight lines (bots, turrets) for its duration', () => {
   // (thrown along the bottom edge of the test arena)
   const { w, p1 } = duel('smoke', { x: 40, y: 250 }, { x: 350, y: 250 });
   useGadget(w, 'a', 0);
@@ -113,7 +113,7 @@ test('дымовая: a cloud blocks sight lines (bots, turrets) for its duratio
   assert.equal(p1.gadgetCharges, 1);
 });
 
-test('светошумовая: blinds longer when close and facing it; walls protect', () => {
+test('flashbang: blinds longer when close and facing it; walls protect', () => {
   const { w, p2 } = duel('flash', { x: 40, y: 50 }, { x: 150, y: 70 });
   const p3 = w.addPlayer('c', 'Сыч', 'mihalych', false, PISTOL_ONLY);
   w.spawnPlayer(p3, false);
@@ -132,7 +132,7 @@ test('светошумовая: blinds longer when close and facing it; walls pr
   assert.ok(p3.flashedUntil <= w.time, 'the wall block shields the third player');
 });
 
-test('мина: arms, ignores its owner, a stepping opponent sets it off', () => {
+test('mine: arms, ignores its owner, a stepping opponent sets it off', () => {
   const { w, p1, p2 } = duel('mine', { x: 60, y: 250 }, { x: 330, y: 250 });
   assert.equal(p1.gadgetCharges, GADGETS.mine.charges);
   useGadget(w, 'a', 0);
@@ -171,7 +171,7 @@ test('C4: placed with the button, detonated with the same button after arming', 
   assert.equal(p1.kills, 1);
 });
 
-test('турель: deploys, shoots a visible opponent, can be shot down, credits the owner', () => {
+test('turret: deploys, shoots a visible opponent, can be shot down, credits the owner', () => {
   const { w, p1, p2 } = duel('turret', { x: 40, y: 250 }, { x: 300, y: 250 });
   useGadget(w, 'a', 0);
   const t = w.gadgets[0]!;

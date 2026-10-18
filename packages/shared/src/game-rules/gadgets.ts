@@ -37,13 +37,13 @@ export interface GadgetDef {
 
 const D = (d: Omit<GadgetDef, 'id' | 'index'>) => d;
 const DEFS: Record<GadgetId, Omit<GadgetDef, 'id' | 'index'>> = {
-  f1: D({ name: 'Граната Ф-1', blurb: 'Классическая «лимонка»: взрывается через 1,8 с. Отскакивает от стен.', use: 'throw', charges: 2, throwSpeed: 520, fuseMs: 1800, radius: 100, damage: 110, durationMs: 0, selfFactor: 0.6, cooldownMs: 700 }),
-  smoke: D({ name: 'Дымовая граната', blurb: 'Облако дыма на 9 с: внутри вас не видно, боты теряют цель.', use: 'throw', charges: 2, throwSpeed: 480, fuseMs: 1000, radius: 96, damage: 0, durationMs: 9000, selfFactor: 0, cooldownMs: 700 }),
-  flash: D({ name: 'Светошумовая', blurb: 'Ослепляет всех, кто смотрит в её сторону, на пару секунд.', use: 'throw', charges: 2, throwSpeed: 540, fuseMs: 1400, radius: 260, damage: 0, durationMs: 2600, selfFactor: 1, cooldownMs: 700 }),
-  molotov: D({ name: 'Коктейль Молотова', blurb: 'Разбивается о стену или пол — 5 с огня, жжёт всех внутри.', use: 'throw', charges: 1, throwSpeed: 500, fuseMs: 900, radius: 72, damage: 7, durationMs: 5000, selfFactor: 0.5, cooldownMs: 700 }),
-  mine: D({ name: 'Мина', blurb: 'Ставится под ноги и взводится за секунду. Срабатывает на соперника рядом.', use: 'place', charges: 2, throwSpeed: 0, fuseMs: 1200, radius: 78, damage: 120, durationMs: 60_000, selfFactor: 0.6, cooldownMs: 600 }),
-  c4: D({ name: 'C4', blurb: 'Заряд на дистанционном подрыве: поставить — кнопка, взорвать — та же кнопка.', use: 'place', charges: 1, throwSpeed: 0, fuseMs: 500, radius: 120, damage: 150, durationMs: 45_000, selfFactor: 0.6, cooldownMs: 400 }),
-  turret: D({ name: 'Турель', blurb: 'Самодельная турель: 20 с стреляет по соперникам в поле зрения. Её можно сломать.', use: 'deploy', charges: 1, throwSpeed: 0, fuseMs: 600, radius: 320, damage: 7, durationMs: 20_000, selfFactor: 0, cooldownMs: 600 }),
+  f1: D({ name: 'F-1 Grenade', blurb: 'The classic “limonka”: goes off after 1.8 s. Bounces off walls.', use: 'throw', charges: 2, throwSpeed: 520, fuseMs: 1800, radius: 100, damage: 110, durationMs: 0, selfFactor: 0.6, cooldownMs: 700 }),
+  smoke: D({ name: 'Smoke Grenade', blurb: 'A cloud of smoke for 9 s: nobody sees you inside, bots lose their target.', use: 'throw', charges: 2, throwSpeed: 480, fuseMs: 1000, radius: 96, damage: 0, durationMs: 9000, selfFactor: 0, cooldownMs: 700 }),
+  flash: D({ name: 'Flashbang', blurb: 'Blinds everyone looking its way for a couple of seconds.', use: 'throw', charges: 2, throwSpeed: 540, fuseMs: 1400, radius: 260, damage: 0, durationMs: 2600, selfFactor: 1, cooldownMs: 700 }),
+  molotov: D({ name: 'Molotov Cocktail', blurb: 'Shatters on a wall or the floor — 5 s of fire that burns everyone inside.', use: 'throw', charges: 1, throwSpeed: 500, fuseMs: 900, radius: 72, damage: 7, durationMs: 5000, selfFactor: 0.5, cooldownMs: 700 }),
+  mine: D({ name: 'Mine', blurb: 'Placed at your feet, armed in a second. Goes off when an enemy comes near.', use: 'place', charges: 2, throwSpeed: 0, fuseMs: 1200, radius: 78, damage: 120, durationMs: 60_000, selfFactor: 0.6, cooldownMs: 600 }),
+  c4: D({ name: 'C4', blurb: 'A remote charge: one press to place it, the same button to blow it.', use: 'place', charges: 1, throwSpeed: 0, fuseMs: 500, radius: 120, damage: 150, durationMs: 45_000, selfFactor: 0.6, cooldownMs: 400 }),
+  turret: D({ name: 'Turret', blurb: 'A home-made turret: fires at enemies in sight for 20 s. It can be destroyed.', use: 'deploy', charges: 1, throwSpeed: 0, fuseMs: 600, radius: 320, damage: 7, durationMs: 20_000, selfFactor: 0, cooldownMs: 600 }),
 };
 
 export const GADGETS: Record<GadgetId, GadgetDef> = Object.fromEntries(GADGET_IDS.map((id, index) => [id, { ...DEFS[id], id, index }])) as Record<GadgetId, GadgetDef>;

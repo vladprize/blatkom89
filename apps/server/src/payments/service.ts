@@ -35,9 +35,9 @@ export class PaymentService {
 
   async checkout(userId: string, packId: string, method: 'card' | 'crypto'): Promise<CheckoutResponse> {
     const pack = diamondPack(packId);
-    if (!pack) throw new HttpError(400, 'bad_pack', 'Нет такого набора алмазов');
+    if (!pack) throw new HttpError(400, 'bad_pack', 'No such diamond pack');
     const provider = method === 'card' ? this.card : this.crypto;
-    if (!provider) throw new HttpError(503, 'payments_not_configured', method === 'card' ? 'Оплата картой пока не подключена' : 'Оплата криптовалютой пока не подключена');
+    if (!provider) throw new HttpError(503, 'payments_not_configured', method === 'card' ? 'Card payments aren’t connected yet' : 'Crypto payments aren’t connected yet');
     const providerName: Provider = method === 'card' ? 'stripe' : 'nowpayments';
     const [row] = await this.sql<Array<{ id: string }>>`
       INSERT INTO payments (user_id, provider, pack_id, diamonds, amount_cents, status)
@@ -58,13 +58,13 @@ export class PaymentService {
     } catch (e) {
       await this.sql`UPDATE payments SET status = 'failed', updated_at = now() WHERE id = ${id}`;
       this.log.error('checkout failed', { paymentId: id, provider: providerName, err: e as Error });
-      throw new HttpError(502, 'payment_provider_error', 'Платёжная система не ответила — попробуйте позже');
+      throw new HttpError(502, 'payment_provider_error', 'The payment system didn’t answer — try again later');
     }
   }
 
   async status(userId: string, paymentId: string): Promise<PaymentStatusResponse> {
     const rows = await this.sql<PaymentRow[]>`SELECT * FROM payments WHERE id = ${paymentId} AND user_id = ${userId}`;
-    if (!rows[0]) throw new HttpError(404, 'not_found', 'Платёж не найден');
+    if (!rows[0]) throw new HttpError(404, 'not_found', 'Payment not found');
     return { status: rows[0].status, diamonds: rows[0].diamonds };
   }
 

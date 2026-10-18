@@ -13,9 +13,9 @@ export function buildGaragesMap(): MapDef {
   const WARM = 0xffcf8a;
   const b = new MapBuilder(
     'garages',
-    'Гаражный кооператив',
-    'Свои гаражи — свои законы',
-    'Ряды гаражей, узкие проходы, открытые проезды. Ближние дистанции, засады и внезапные встречи.',
+    'Garage Cooperative',
+    'Our garages, our laws',
+    'Rows of garages, narrow lanes and ambushes at close range.',
     W,
     H,
     'asphalt_cracked',

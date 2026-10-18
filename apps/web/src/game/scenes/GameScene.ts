@@ -275,7 +275,7 @@ export class GameScene extends Phaser.Scene {
       this.qualityReduced = true;
       this.cameras.main.resetPostPipeline();
       this.vhs = null;
-      toast('Видеоэффекты отключены для плавности — включить можно в настройках');
+      toast('Video effects switched off to keep things smooth — turn them back on in the settings');
     }
   }
 
@@ -460,7 +460,7 @@ export class GameScene extends Phaser.Scene {
         sfx.play('heal', { x: e.x, y: e.y, volume: p?.isLocal ? 1 : 0.6 });
         if (p?.isLocal) {
           haptic('notify-success');
-          hudBus.emit('points', { points: e.amount, label: 'ЗДОРОВЬЯ', heal: true });
+          hudBus.emit('points', { points: e.amount, label: 'HEALTH', heal: true });
         }
         break;
       }
@@ -496,11 +496,11 @@ export class GameScene extends Phaser.Scene {
         hudBus.emit('killfeed', { killer: killer?.name ?? '—', killerLocal: !!killer?.isLocal, victim: victim?.name ?? '—', victimLocal: !!victim?.isLocal, weapon: e.weapon, assists: helpers.map((p) => p.name), assistLocal });
         if (killer?.isLocal) {
           hudBus.emit('hitmarker', true);
-          hudBus.emit('points', { points: SCORING.killPoints, label: 'УСТРАНЕНИЕ' });
+          hudBus.emit('points', { points: SCORING.killPoints, label: 'ELIMINATION' });
           sfx.play('kill', { volume: 0.8 });
           haptic('notify-success');
         } else if (assistLocal) {
-          hudBus.emit('points', { points: SCORING.assistPoints, label: 'ПОМОЩЬ' });
+          hudBus.emit('points', { points: SCORING.assistPoints, label: 'ASSIST' });
           sfx.play('assist', { volume: 0.8 });
           haptic('impact-light');
         }

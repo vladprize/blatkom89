@@ -23,7 +23,7 @@ export function renderLobby(o: {
     if (!invite) return;
     try {
       await navigator.clipboard.writeText(invite);
-      toast('Ссылка скопирована');
+      toast('Link copied');
     } catch {
       toast(invite);
     }
@@ -36,12 +36,12 @@ export function renderLobby(o: {
         'div',
         { class: 'player' },
         portrait(p.character, true),
-        h('div', { class: 'n' }, p.name, ' ', h('span', { class: 'muted', style: 'font-size:14px' }, `${CHARACTERS[p.character].name} · ур. ${p.level}`)),
-        p.isHost ? h('span', { class: 'badge badge--host' }, 'хозяин') : null,
-        !p.connected ? h('span', { class: 'badge badge--off' }, 'нет связи') : p.ready ? h('span', { class: 'badge badge--ok' }, 'готов') : h('span', { class: 'badge' }, 'не готов'),
+        h('div', { class: 'n' }, p.name, ' ', h('span', { class: 'muted', style: 'font-size:14px' }, `${CHARACTERS[p.character].name} · lvl ${p.level}`)),
+        p.isHost ? h('span', { class: 'badge badge--host' }, 'host') : null,
+        !p.connected ? h('span', { class: 'badge badge--off' }, 'no signal') : p.ready ? h('span', { class: 'badge badge--ok' }, 'ready') : h('span', { class: 'badge' }, 'not ready'),
       ),
     ),
-    ...Array.from({ length: Math.max(0, s.maxPlayers - s.players.length) }, () => h('div', { class: 'player muted', style: 'opacity:.45' }, h('div', { class: 'n' }, 'Свободное место'))),
+    ...Array.from({ length: Math.max(0, s.maxPlayers - s.players.length) }, () => h('div', { class: 'player muted', style: 'opacity:.45' }, h('div', { class: 'n' }, 'Free seat'))),
   );
   const maps = h(
     'div',
@@ -54,32 +54,32 @@ export function renderLobby(o: {
     h(
       'div',
       { class: 'wrap' },
-      h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: o.onLeave }, '← Выйти'), h('h1', { class: 'h1' }, s.isPrivate ? 'Комната' : 'Быстрая игра')),
+      h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: o.onLeave }, '← Leave'), h('h1', { class: 'h1' }, s.isPrivate ? 'Room' : 'Quick game')),
       s.isPrivate && invite
         ? h(
             'div',
             { class: 'panel col' },
-            h('span', { class: 'tag' }, 'Приглашение'),
+            h('span', { class: 'tag' }, 'Invitation'),
             s.inviteCode ? h('div', { class: 'code' }, s.inviteCode) : null,
             h('div', { class: 'muted', style: 'word-break:break-all;font-size:14px' }, invite),
             h(
               'div',
               { class: 'row' },
-              h('button', { class: 'btn btn--red grow', onclick: () => (shareInvite(invite, 'Районные дела ждут. Заходи в БЛАТКОМ ’89!') ? null : void copy()) }, o.inTelegram ? 'Позвать друзей' : 'Поделиться'),
-              h('button', { class: 'btn grow', onclick: () => void copy() }, 'Копировать'),
+              h('button', { class: 'btn btn--red grow', onclick: () => (shareInvite(invite, 'District business won’t wait. Come on down to BLATKOM ’89!') ? null : void copy()) }, o.inTelegram ? 'Call the lads' : 'Share'),
+              h('button', { class: 'btn grow', onclick: () => void copy() }, 'Copy'),
             ),
           )
         : null,
-      h('div', { class: 'panel col' }, h('span', { class: 'tag' }, `Игроки ${connected}/${s.maxPlayers}`), players),
-      h('div', { class: 'panel col' }, h('span', { class: 'tag' }, 'Карта'), maps, h('div', { class: 'muted' }, s.isHost ? 'Вы хозяин комнаты: выбираете карту и запускаете матч.' : 'Карту выбирает хозяин комнаты.')),
+      h('div', { class: 'panel col' }, h('span', { class: 'tag' }, `Players ${connected}/${s.maxPlayers}`), players),
+      h('div', { class: 'panel col' }, h('span', { class: 'tag' }, 'Map'), maps, h('div', { class: 'muted' }, s.isHost ? 'You host the room: you pick the map and start the match.' : 'The host picks the map.')),
       h(
         'div',
         { class: 'row' },
-        h('button', { class: 'btn grow', onclick: o.onCharacter }, 'Персонаж: ', CHARACTERS[o.character].name),
-        h('button', { class: `btn grow ${me?.ready ? '' : 'btn--red'}`, onclick: () => o.onReady(!me?.ready) }, me?.ready ? 'Не готов' : 'Готов'),
-        s.isHost ? h('button', { class: 'btn btn--red grow', disabled: connected < 2, onclick: o.onStart }, connected < 2 ? 'Ждём игроков…' : allReady ? 'Начать' : 'Начать без ожидания') : null,
+        h('button', { class: 'btn grow', onclick: o.onCharacter }, 'Character: ', CHARACTERS[o.character].name),
+        h('button', { class: `btn grow ${me?.ready ? '' : 'btn--red'}`, onclick: () => o.onReady(!me?.ready) }, me?.ready ? 'Not ready' : 'Ready'),
+        s.isHost ? h('button', { class: 'btn btn--red grow', disabled: connected < 2, onclick: o.onStart }, connected < 2 ? 'Waiting for players…' : allReady ? 'Start' : 'Start without waiting') : null,
       ),
-      h('div', { class: 'muted center' }, connected < 2 ? 'Нужно минимум 2 игрока.' : allReady ? 'Все готовы — матч начнётся автоматически.' : 'Матч начнётся, когда все будут готовы.'),
+      h('div', { class: 'muted center' }, connected < 2 ? 'At least 2 players needed.' : allReady ? 'Everyone’s ready — the match starts by itself.' : 'The match starts when everyone is ready.'),
     ),
   );
 }

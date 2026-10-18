@@ -1,5 +1,5 @@
 /**
- * «Арсенал»: the loadout (weapons, equipment, modifications), the weapon / equipment / character
+ * The Arsenal: the loadout (weapons, equipment, modifications), the weapon / equipment / character
  * shop, the rare-weapon case and diamond packs. Prices and rules are the shared ones; every purchase
  * is decided by the server. In the demo build (no server) the catalog is read-only, but anything can
  * be tried on in practice.
@@ -61,16 +61,16 @@ export interface ArsenalOptions {
   onCharacter?: (c: CharacterId) => void;
 }
 
-const RARITY_LABEL: Record<Rarity, string> = { rare: 'Редкое', epic: 'Эпическое', legendary: 'Легендарное' };
-const SLOT_LABEL = { 1: 'Пистолет', 2: 'Ближний бой', 3: 'Основное', 4: 'Снаряжение' } as const;
-const MOUNT_LABEL: Record<ModMount, string> = { muzzle: 'Дуло', optic: 'Прицел', rail: 'Цевьё', mag: 'Магазин' };
+const RARITY_LABEL: Record<Rarity, string> = { rare: 'Rare', epic: 'Epic', legendary: 'Legendary' };
+const SLOT_LABEL = { 1: 'Sidearm', 2: 'Melee', 3: 'Primary', 4: 'Equipment' } as const;
+const MOUNT_LABEL: Record<ModMount, string> = { muzzle: 'Muzzle', optic: 'Sight', rail: 'Rail', mag: 'Magazine' };
 
-export const tokenWord = (n: number) => plural(n, ['жетон', 'жетона', 'жетонов']);
-export const diamondWord = (n: number) => plural(n, ['алмаз', 'алмаза', 'алмазов']);
+export const tokenWord = (n: number) => plural(n, 'talon');
+export const diamondWord = (n: number) => plural(n, 'diamond');
 
 /** Currency icon (CSS-drawn: a brass token or a blue diamond) — no emoji font needed. */
 export function cur(c: 'tokens' | 'diamonds'): HTMLElement {
-  return h('i', { class: `cur cur--${c}`, 'aria-label': c === 'tokens' ? 'жетонов' : 'алмазов' });
+  return h('i', { class: `cur cur--${c}`, 'aria-label': c === 'tokens' ? 'talons' : 'diamonds' });
 }
 
 export function amount(n: number, c: 'tokens' | 'diamonds'): HTMLElement {
@@ -78,7 +78,7 @@ export function amount(n: number, c: 'tokens' | 'diamonds'): HTMLElement {
 }
 
 export function priceLabel(p: ShopPrice): HTMLElement {
-  if (p.currency === 'tokens') return h('span', { class: 'amt' }, cur('tokens'), String(p.amount), p.level > 1 ? ` · с ${p.level} ур.` : '');
+  if (p.currency === 'tokens') return h('span', { class: 'amt' }, cur('tokens'), String(p.amount), p.level > 1 ? ` · from LV ${p.level}` : '');
   return h('span', { class: 'amt' }, cur('diamonds'), String(p.amount), h('small', null, ` $${(p.amount / DIAMONDS_PER_USD).toFixed(2)}`));
 }
 
@@ -101,7 +101,7 @@ function modImg(m: ModId, cls = 'micon'): HTMLImageElement {
   return h('img', { class: cls, src: asset(`assets/ui/mods/${m}.png`), alt: '', draggable: 'false' });
 }
 
-const secs = (ms: number) => `${(ms / 1000).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} с`;
+const secs = (ms: number) => `${(ms / 1000).toLocaleString('en-GB', { maximumFractionDigits: 1 })} s`;
 
 /** Per-shot damage incl. pellets and splash, at close range. */
 function shotDamage(d: WeaponDef): number {
@@ -119,56 +119,56 @@ function statBars(w: WeaponId, mods?: readonly ModId[]): HTMLElement {
   const rows: Array<[string, number, string, number]> = [];
   // the last column compares with the unmodified weapon: +1 better, -1 worse
   const cmp = (a: number, b: number, higherIsBetter = true) => (Math.abs(a - b) < 1e-6 ? 0 : (a > b) === higherIsBetter ? 1 : -1);
-  rows.push(['Урон', Math.min(1, shotDamage(d) / 140), `${Math.round(shotDamage(d))}${d.pellets > 1 ? ` (${d.pellets}×${d.damage})` : ''}`, 0]);
+  rows.push(['Damage', Math.min(1, shotDamage(d) / 140), `${Math.round(shotDamage(d))}${d.pellets > 1 ? ` (${d.pellets}×${d.damage})` : ''}`, 0]);
   if (d.kind !== 'melee') {
-    rows.push(['Темп', Math.min(1, 1000 / d.fireIntervalMs / 16), `${(60000 / d.fireIntervalMs).toFixed(0)}/мин`, 0]);
-    rows.push(['Дальность', Math.min(1, d.range / 950), d.range < 300 ? 'ближняя' : d.range < 600 ? 'средняя' : 'дальняя', cmp(d.range, base.range)]);
-    rows.push(['Точность', Math.max(0.05, Math.min(1, 1 - d.spread / 0.16)), `${Math.round(Math.max(0.05, Math.min(1, 1 - d.spread / 0.16)) * 100)}%`, cmp(d.spread, base.spread, false)]);
-    rows.push(['Магазин', Math.min(1, d.magazine / 100), String(d.magazine), cmp(d.magazine, base.magazine)]);
-    rows.push(['Перезарядка', Math.max(0.05, Math.min(1, 1 - d.reloadMs / 4000)), secs(d.reloadMs), cmp(d.reloadMs, base.reloadMs, false)]);
+    rows.push(['Rate', Math.min(1, 1000 / d.fireIntervalMs / 16), `${(60000 / d.fireIntervalMs).toFixed(0)}/min`, 0]);
+    rows.push(['Range', Math.min(1, d.range / 950), d.range < 300 ? 'short' : d.range < 600 ? 'medium' : 'long', cmp(d.range, base.range)]);
+    rows.push(['Accuracy', Math.max(0.05, Math.min(1, 1 - d.spread / 0.16)), `${Math.round(Math.max(0.05, Math.min(1, 1 - d.spread / 0.16)) * 100)}%`, cmp(d.spread, base.spread, false)]);
+    rows.push(['Magazine', Math.min(1, d.magazine / 100), String(d.magazine), cmp(d.magazine, base.magazine)]);
+    rows.push(['Reload', Math.max(0.05, Math.min(1, 1 - d.reloadMs / 4000)), secs(d.reloadMs), cmp(d.reloadMs, base.reloadMs, false)]);
   } else {
-    rows.push(['Темп', Math.min(1, 1000 / d.fireIntervalMs / 3.4), `${(60000 / d.fireIntervalMs).toFixed(0)}/мин`, 0]);
-    rows.push(['Досягаемость', Math.min(1, d.meleeRange / 44), `${d.meleeRange}`, 0]);
+    rows.push(['Rate', Math.min(1, 1000 / d.fireIntervalMs / 3.4), `${(60000 / d.fireIntervalMs).toFixed(0)}/min`, 0]);
+    rows.push(['Reach', Math.min(1, d.meleeRange / 44), `${d.meleeRange}`, 0]);
   }
-  rows.push(['Подвижность', Math.max(0, Math.min(1, (d.moveSpeed - 0.75) / 0.3)), `${Math.round(d.moveSpeed * 100)}%`, cmp(d.moveSpeed, base.moveSpeed)]);
+  rows.push(['Mobility', Math.max(0, Math.min(1, (d.moveSpeed - 0.75) / 0.3)), `${Math.round(d.moveSpeed * 100)}%`, cmp(d.moveSpeed, base.moveSpeed)]);
   const falloff = d.kind === 'hitscan' && d.range > 0 ? damageFalloff(d, d.range) : 1;
   const k = hitsToKill(d);
   return h(
     'div',
     { class: 'wstats' },
     ...rows.map(([label, v, t, c]) => h('div', { class: `wstat ${c > 0 ? 'up' : c < 0 ? 'down' : ''}` }, h('span', null, label), h('div', { class: 'bar' }, h('i', { style: `width:${Math.round(v * 100)}%` })), h('b', null, t))),
-    h('div', { class: 'muted', style: 'font-size:13px' }, `${k === 1 ? 'Устраняет с одного попадания вблизи' : `Устраняет за ${k} ${plural(k, ['попадание', 'попадания', 'попаданий'])} вблизи`}${falloff < 0.99 ? `, на дальней — урон ×${falloff.toFixed(2)}` : ''}${d.silenced ? ' · без следа на мини-карте' : ''}${d.laser ? ' · лазерный луч видят все' : ''}${d.projectile ? ` · взрыв ${d.projectile.radius} px, задевает и вас` : ''}`),
+    h('div', { class: 'muted', style: 'font-size:13px' }, `${k === 1 ? 'Eliminates with one hit up close' : `Eliminates in ${k} ${plural(k, 'hit')} up close`}${falloff < 0.99 ? `; at long range damage ×${falloff.toFixed(2)}` : ''}${d.silenced ? ' · leaves no trace on the minimap' : ''}${d.laser ? ' · everyone sees the laser beam' : ''}${d.projectile ? ` · ${d.projectile.radius} px blast that catches you too` : ''}`),
   );
 }
 
 /** Short facts about a piece of equipment. */
 function gadgetFacts(id: GadgetId): string[] {
   const g = GADGETS[id];
-  const out = [`${g.charges} ${plural(g.charges, ['заряд', 'заряда', 'зарядов'])} на жизнь`];
+  const out = [`${g.charges} ${plural(g.charges, 'charge')} per life`];
   switch (id) {
     case 'f1':
-      out.push(`взрыв через ${secs(g.fuseMs)}`, `урон до ${g.damage}, радиус ${g.radius}`);
+      out.push(`goes off after ${secs(g.fuseMs)}`, `up to ${g.damage} damage, radius ${g.radius}`);
       break;
     case 'smoke':
-      out.push(`дым через ${secs(g.fuseMs)} на ${secs(g.durationMs)}`, `радиус ${g.radius}`);
+      out.push(`smoke after ${secs(g.fuseMs)} for ${secs(g.durationMs)}`, `radius ${g.radius}`);
       break;
     case 'flash':
-      out.push(`срабатывает через ${secs(g.fuseMs)}`, `слепит до ${secs(g.durationMs)}, радиус ${g.radius}`, 'отвернитесь — и вас не ослепит');
+      out.push(`goes off after ${secs(g.fuseMs)}`, `blinds for up to ${secs(g.durationMs)}, radius ${g.radius}`, 'turn away and it won’t blind you');
       break;
     case 'molotov':
-      out.push(`огонь ${secs(g.durationMs)}, радиус ${g.radius}`, `${Math.round((g.damage * 1000) / 250)} урона в секунду`);
+      out.push(`burns for ${secs(g.durationMs)}, radius ${g.radius}`, `${Math.round((g.damage * 1000) / 250)} damage per second`);
       break;
     case 'mine':
-      out.push(`взводится за ${secs(g.fuseMs)}`, `урон до ${g.damage}, радиус ${g.radius}`);
+      out.push(`arms in ${secs(g.fuseMs)}`, `up to ${g.damage} damage, radius ${g.radius}`);
       break;
     case 'c4':
-      out.push('взрыв по второму нажатию', `урон до ${g.damage}, радиус ${g.radius}`);
+      out.push('blows on the second press', `up to ${g.damage} damage, radius ${g.radius}`);
       break;
     case 'turret':
-      out.push(`стреляет ${secs(g.durationMs)}, видит на ${g.radius}`, `${g.damage} урона за выстрел, её можно сломать`);
+      out.push(`fires for ${secs(g.durationMs)}, sees ${g.radius} px`, `${g.damage} damage per shot; it can be destroyed`);
       break;
   }
-  if (g.selfFactor > 0 && g.damage > 0) out.push(`задевает и вас (${Math.round(g.selfFactor * 100)}%)`);
+  if (g.selfFactor > 0 && g.damage > 0) out.push(`hurts you too (${Math.round(g.selfFactor * 100)}%)`);
   return out;
 }
 
@@ -189,7 +189,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   const loadout = (): Loadout => inv?.loadout ?? { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', gadget: 'f1', mods: {} };
   const fail = (e: unknown) => {
     sfx.play('dry');
-    toast(e instanceof ApiError || e instanceof Error ? e.message : 'Не получилось');
+    toast(e instanceof ApiError || e instanceof Error ? e.message : 'That didn’t work');
   };
   const act = async (f: () => Promise<unknown>, ok?: string) => {
     if (busy) return;
@@ -210,31 +210,31 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       draw();
     }
   };
-  const save = (next: Loadout, ok = 'Сохранено — со следующего появления') => {
+  const save = (next: Loadout, ok = 'Saved — applies from your next spawn') => {
     if (!online || !inv) return;
     void act(() => online.setLoadout(next), ok);
   };
 
   const drawWallet = () => {
     if (!online) {
-      walletEl.replaceChildren(h('div', { class: 'muted' }, 'Демо-версия: каталог для просмотра. Жетоны, алмазы и покупки работают в онлайн-версии; любое оружие и снаряжение можно «примерить» в тренировке.'));
+      walletEl.replaceChildren(h('div', { class: 'muted' }, 'Demo version: the catalogue is for browsing. Talons, diamonds and purchases work in the online version; any weapon or piece of equipment can be tried on in practice.'));
       return;
     }
     walletEl.replaceChildren(
-      h('div', { class: 'coin', title: 'Жетоны — за матчи онлайн' }, cur('tokens'), h('b', null, inv ? String(inv.tokens) : '…'), h('span', null, 'жетоны')),
-      h('div', { class: 'coin', title: 'Алмазы — покупаются за деньги' }, cur('diamonds'), h('b', null, inv ? String(inv.diamonds) : '…'), h('span', null, 'алмазы')),
-      h('button', { class: 'btn btn--small', onclick: () => ((tab = 'diamonds'), draw()) }, 'Пополнить'),
+      h('div', { class: 'coin', title: 'Talons — earned in online matches' }, cur('tokens'), h('b', null, inv ? String(inv.tokens) : '…'), h('span', null, 'talons')),
+      h('div', { class: 'coin', title: 'Diamonds — bought for money' }, cur('diamonds'), h('b', null, inv ? String(inv.diamonds) : '…'), h('span', null, 'diamonds')),
+      h('button', { class: 'btn btn--small', onclick: () => ((tab = 'diamonds'), draw()) }, 'Top up'),
     );
   };
 
   const drawTabs = () => {
     const tabs: Array<[ArsenalTab, string]> = [
-      ['loadout', 'Комплект'],
-      ['weapons', 'Оружие'],
-      ['gear', 'Снаряжение'],
-      ['characters', 'Персонажи'],
-      ['case', 'Кейс'],
-      ['diamonds', 'Алмазы'],
+      ['loadout', 'Kit'],
+      ['weapons', 'Weapons'],
+      ['gear', 'Equipment'],
+      ['characters', 'Characters'],
+      ['case', 'Case'],
+      ['diamonds', 'Diamonds'],
     ];
     tabsEl.replaceChildren(...tabs.map(([id, label]) => h('button', { role: 'tab', 'aria-pressed': String(tab === id), onclick: () => ((tab = id), sfx.play('click'), draw()) }, label)));
   };
@@ -268,9 +268,9 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           'div',
           { class: 'slotpick' },
           ...options.map((w) => h('button', { class: `wbtn ${w === current ? 'on' : ''} ${w === focus ? 'focus' : ''}`, 'aria-pressed': String(w === current), title: WEAPONS[w].name, onclick: () => (w === current ? ((focus = w), draw()) : pick(slot, w)) }, weaponImg(w, 'wimg wimg--s'), h('span', null, WEAPONS[w].name))),
-          slot === 3 ? h('button', { class: `wbtn ${current === null ? 'on' : ''}`, 'aria-pressed': String(current === null), onclick: () => pick(3, null) }, h('span', { class: 'none' }, '—'), h('span', null, 'Только пистолет')) : null,
+          slot === 3 ? h('button', { class: `wbtn ${current === null ? 'on' : ''}`, 'aria-pressed': String(current === null), onclick: () => pick(3, null) }, h('span', { class: 'none' }, '—'), h('span', null, 'Sidearm only')) : null,
         ),
-        options.length < list.length ? h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((tab = 'weapons'), draw()) }, `Ещё ${list.length - options.length} в магазине →`) : null,
+        options.length < list.length ? h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((tab = 'weapons'), draw()) }, `${list.length - options.length} more in the shop →`) : null,
       );
     });
     const gadgetOptions = GADGET_IDS.filter(ownedGadget);
@@ -282,9 +282,9 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         'div',
         { class: 'slotpick' },
         ...gadgetOptions.map((g) => h('button', { class: `wbtn ${g === l.gadget ? 'on' : ''}`, 'aria-pressed': String(g === l.gadget), title: GADGETS[g].name, onclick: () => g !== l.gadget && save({ ...l, gadget: g }) }, gadgetImg(g, 'wimg wimg--s'), h('span', null, GADGETS[g].name))),
-        h('button', { class: `wbtn ${l.gadget === null ? 'on' : ''}`, 'aria-pressed': String(l.gadget === null), onclick: () => l.gadget !== null && save({ ...l, gadget: null }) }, h('span', { class: 'none' }, '—'), h('span', null, 'Без снаряжения')),
+        h('button', { class: `wbtn ${l.gadget === null ? 'on' : ''}`, 'aria-pressed': String(l.gadget === null), onclick: () => l.gadget !== null && save({ ...l, gadget: null }) }, h('span', { class: 'none' }, '—'), h('span', null, 'No equipment')),
       ),
-      gadgetOptions.length < GADGET_IDS.length ? h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((tab = 'gear'), draw()) }, `Ещё ${GADGET_IDS.length - gadgetOptions.length} в магазине →`) : null,
+      gadgetOptions.length < GADGET_IDS.length ? h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((tab = 'gear'), draw()) }, `${GADGET_IDS.length - gadgetOptions.length} more in the shop →`) : null,
     );
     const fw = focus && owned(focus) ? focus : (l.primary ?? l.sidearm);
     return h('div', { class: 'col' }, h('div', { class: 'slots' }, ...slotCards, gadgetCard), modsPanel(fw, l), statBars(fw, l.mods[fw]));
@@ -294,7 +294,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   const modsPanel = (fw: WeaponId, l: Loadout): HTMLElement => {
     const fit = modsFor(WEAPONS[fw]);
     const equipped = l.mods[fw] ?? [];
-    const head = h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, weaponImg(fw), h('div', { class: 'col grow', style: 'gap:2px' }, h('div', { class: 'h2' }, WEAPONS[fw].name), h('div', { class: 'muted' }, fit.length ? 'На каждое крепление — одна модификация. Покупаются за жетоны для конкретного оружия, у каждой есть плюс и минус. Выберите оружие в слотах выше, чтобы настроить его.' : 'К этому оружию модификаций нет. Выберите другое оружие в слотах выше.')));
+    const head = h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, weaponImg(fw), h('div', { class: 'col grow', style: 'gap:2px' }, h('div', { class: 'h2' }, WEAPONS[fw].name), h('div', { class: 'muted' }, fit.length ? 'One modification per mount. They are bought with talons for a particular weapon, and each has a plus and a minus. Pick a weapon in the slots above to set it up.' : 'This weapon takes no modifications. Pick another weapon in the slots above.')));
     const setMods = (list: ModId[], ok: string) => save({ ...l, mods: { ...l.mods, [fw]: sanitizeMods(list, fw) } }, ok);
     const rows = fit.map((m) => {
       const def = MODS[m];
@@ -302,8 +302,8 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       const have = inv ? (inv.mods[fw]?.includes(m) ?? false) : false;
       const q = inv ? modQuote(inv, fw, m) : 'not_owned';
       let main: HTMLElement;
-      if (on) main = h('button', { class: 'btn btn--small', disabled: !online, onclick: () => setMods(equipped.filter((x) => x !== m), `${def.name} снят`) }, 'Снять');
-      else if (have) main = h('button', { class: 'btn btn--small btn--red', disabled: !online, onclick: () => setMods([m, ...equipped.filter((x) => MODS[x].mount !== def.mount)], `${def.name} установлен`) }, 'Поставить');
+      if (on) main = h('button', { class: 'btn btn--small', disabled: !online, onclick: () => setMods(equipped.filter((x) => x !== m), `${def.name} removed`) }, 'Remove');
+      else if (have) main = h('button', { class: 'btn btn--small btn--red', disabled: !online, onclick: () => setMods([m, ...equipped.filter((x) => MODS[x].mount !== def.mount)], `${def.name} fitted`) }, 'Fit');
       else
         main = h(
           'button',
@@ -313,8 +313,8 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
             title: typeof q === 'string' ? REFUSAL_TEXT[q] : '',
             onclick: () => {
               if (!online) return;
-              if (q === 'funds') return void toast('Не хватает жетонов — они даются за матчи онлайн');
-              void act(() => online.buyMod(fw, m), `${def.name} куплен и установлен`);
+              if (q === 'funds') return void toast('Not enough talons — you earn them in online matches');
+              void act(() => online.buyMod(fw, m), `${def.name} bought and fitted`);
             },
           },
           amount(MOD_PRICES[m], 'tokens'),
@@ -323,11 +323,11 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         'div',
         { class: `modrow ${on ? 'on' : ''}` },
         modImg(m),
-        h('div', { class: 'col', style: 'gap:2px' }, h('div', null, h('b', null, def.name), h('span', { class: 'muted' }, ` · ${MOUNT_LABEL[def.mount]}`), on ? h('span', { class: 'badge badge--ok', style: 'margin-left:8px' }, 'Стоит') : null), h('div', { class: 'plus' }, `+ ${def.plus}`), h('div', { class: 'minus' }, `− ${def.minus}`)),
-        h('div', { class: 'acts' }, main, h('button', { class: 'btn btn--small btn--ghost', onclick: () => o.onTry({ weapon: fw, mods: [m, ...equipped.filter((x) => MODS[x].mount !== def.mount)] }) }, 'Примерить')),
+        h('div', { class: 'col', style: 'gap:2px' }, h('div', null, h('b', null, def.name), h('span', { class: 'muted' }, ` · ${MOUNT_LABEL[def.mount]}`), on ? h('span', { class: 'badge badge--ok', style: 'margin-left:8px' }, 'Fitted') : null), h('div', { class: 'plus' }, `+ ${def.plus}`), h('div', { class: 'minus' }, `− ${def.minus}`)),
+        h('div', { class: 'acts' }, main, h('button', { class: 'btn btn--small btn--ghost', onclick: () => o.onTry({ weapon: fw, mods: [m, ...equipped.filter((x) => MODS[x].mount !== def.mount)] }) }, 'Try on')),
       );
     });
-    return h('div', { class: 'panel col' }, h('span', { class: 'tag' }, 'Модификации'), head, ...rows);
+    return h('div', { class: 'panel col' }, h('span', { class: 'tag' }, 'Modifications'), head, ...rows);
   };
 
   // ── shop helpers ──────────────────────────────────────────────────────
@@ -335,8 +335,8 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   const buyButton = (kind: ShopKind, id: WeaponId | CharacterId | GadgetId, price: ShopPrice): HTMLElement => {
     if (!online || !inv) return h('button', { class: 'btn btn--small', disabled: true }, priceLabel(price));
     const r = buyRefusal(inv, kind, id);
-    if (r === 'owned') return h('span', { class: 'badge badge--ok' }, 'Есть');
-    const label: HTMLElement | string = r === 'level' ? `С ${price.level} уровня` : priceLabel(price);
+    if (r === 'owned') return h('span', { class: 'badge badge--ok' }, 'Owned');
+    const label: HTMLElement | string = r === 'level' ? `From level ${price.level}` : priceLabel(price);
     return h(
       'button',
       {
@@ -344,7 +344,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         disabled: r === 'level',
         onclick: () => {
           if (r === 'funds') {
-            toast(price.currency === 'tokens' ? 'Не хватает жетонов — они даются за матчи онлайн' : 'Не хватает алмазов');
+            toast(price.currency === 'tokens' ? 'Not enough talons — you earn them in online matches' : 'Not enough diamonds');
             if (price.currency === 'diamonds') ((tab = 'diamonds'), draw());
             return;
           }
@@ -353,8 +353,8 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
             return void act(async () => {
               const after = await online.buy('gadget', id);
               await online.setLoadout({ ...after.loadout, gadget: id as GadgetId });
-            }, `${itemName(kind, id)} — в снаряжении`);
-          void act(() => online.buy(kind, id), kind === 'weapon' ? `${itemName(kind, id)} — ваш` : `${itemName(kind, id)} в деле`);
+            }, `${itemName(kind, id)} — now in your kit`);
+          void act(() => online.buy(kind, id), kind === 'weapon' ? `${itemName(kind, id)} — yours now` : `${itemName(kind, id)} joins the business`);
         },
       },
       label,
@@ -368,18 +368,18 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     return h(
       'div',
       { class: `panel col wcard ${owned(w) ? 'owned' : ''}` },
-      h('span', { class: 'tag' }, `${SLOT_LABEL[d.slot]}${d.tier === 'rare' ? ' · из кейса' : ''}`),
+      h('span', { class: 'tag' }, `${SLOT_LABEL[d.slot]}${d.tier === 'rare' ? ' · from the case' : ''}`),
       h('div', { class: 'wpic' }, weaponImg(w)),
       h('div', { class: 'h2' }, d.name),
       h('div', { class: 'muted' }, d.blurb),
       statBars(w),
-      fit.length ? h('div', { class: 'modfit' }, 'Модификации:', ...fit.map((m) => h('span', { class: 'chip', title: `${MODS[m].name}: ${MODS[m].plus}; ${MODS[m].minus}` }, modImg(m, ''), MODS[m].name))) : null,
+      fit.length ? h('div', { class: 'modfit' }, 'Modifications:', ...fit.map((m) => h('span', { class: 'chip', title: `${MODS[m].name}: ${MODS[m].plus}; ${MODS[m].minus}` }, modImg(m, ''), MODS[m].name))) : null,
       h(
         'div',
         { class: 'row' },
-        price ? buyButton('weapon', w, price) : owned(w) ? h('span', { class: 'badge badge--ok' }, 'Есть') : h('span', { class: 'badge' }, d.tier === 'rare' ? 'Только из кейса' : 'Бесплатно'),
-        h('button', { class: 'btn btn--small btn--ghost', onclick: () => o.onTry({ weapon: w }) }, 'Примерить'),
-        owned(w) && online ? h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((focus = w), (tab = 'loadout'), draw()) }, 'Настроить') : null,
+        price ? buyButton('weapon', w, price) : owned(w) ? h('span', { class: 'badge badge--ok' }, 'Owned') : h('span', { class: 'badge' }, d.tier === 'rare' ? 'Case only' : 'Free'),
+        h('button', { class: 'btn btn--small btn--ghost', onclick: () => o.onTry({ weapon: w }) }, 'Try on'),
+        owned(w) && online ? h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((focus = w), (tab = 'loadout'), draw()) }, 'Set up') : null,
       ),
     );
   };
@@ -393,11 +393,11 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     return h(
       'div',
       { class: 'col' },
-      h('div', { class: 'muted' }, 'Платное оружие — не сильнее бесплатного, а другое: каждое со своими плюсами и минусами. Любое можно сначала примерить в тренировке.'),
-      group('Бесплатное', 'есть у всех', [...FREE_WEAPONS]),
-      group('За жетоны', 'жетоны дают за каждый матч онлайн', tokenNoLevel),
-      group('За жетоны с уровня', 'открываются по мере роста', tokenLevel),
-      group('За алмазы', '$1.99 – $4.99', forDiamonds),
+      h('div', { class: 'muted' }, 'Paid weapons aren’t stronger than the free ones — just different, each with its own pluses and minuses. Any of them can be tried on in practice first.'),
+      group('Free', 'everyone has these', [...FREE_WEAPONS]),
+      group('For talons', 'talons come with every online match', tokenNoLevel),
+      group('For talons, by level', 'unlock as you rise through the ranks', tokenLevel),
+      group('For diamonds', '$1.99 – $4.99', forDiamonds),
     );
   };
 
@@ -407,7 +407,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     return h(
       'div',
       { class: 'col' },
-      h('div', { class: 'muted' }, 'Снаряжение — четвёртый слот: гранаты, мины, заряд C4 и турель. С собой берётся один вид, заряды пополняются при каждом появлении. На компьютере — клавиша G, на телефоне — отдельная кнопка.'),
+      h('div', { class: 'muted' }, 'Equipment is the fourth slot: grenades, mines, a C4 charge and the turret. You carry one kind; the charges are refilled every time you spawn. On a computer it’s the G key, on a phone a button of its own.'),
       h(
         'div',
         { class: 'cards' },
@@ -419,7 +419,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           return h(
             'div',
             { class: `panel col wcard ${mine ? 'owned' : ''}` },
-            h('span', { class: 'tag' }, d.use === 'throw' ? 'Бросок' : d.use === 'place' ? 'Установка' : 'Развёртывание'),
+            h('span', { class: 'tag' }, d.use === 'throw' ? 'Throw' : d.use === 'place' ? 'Place' : 'Deploy'),
             h('div', { class: 'wpic' }, gadgetImg(g)),
             h('div', { class: 'h2' }, d.name),
             h('div', { class: 'muted' }, d.blurb),
@@ -427,9 +427,9 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
             h(
               'div',
               { class: 'row' },
-              price ? buyButton('gadget', g, price) : h('span', { class: 'badge badge--ok' }, 'Бесплатно'),
-              mine && online ? (inSlot ? h('span', { class: 'badge badge--ok' }, 'В снаряжении') : h('button', { class: 'btn btn--small', onclick: () => save({ ...l, gadget: g }, `${d.name} — в снаряжении`) }, 'Взять')) : null,
-              h('button', { class: 'btn btn--small btn--ghost', onclick: () => o.onTry({ gadget: g }) }, 'Примерить'),
+              price ? buyButton('gadget', g, price) : h('span', { class: 'badge badge--ok' }, 'Free'),
+              mine && online ? (inSlot ? h('span', { class: 'badge badge--ok' }, 'In your kit') : h('button', { class: 'btn btn--small', onclick: () => save({ ...l, gadget: g }, `${d.name} — now in your kit`) }, 'Take')) : null,
+              h('button', { class: 'btn btn--small btn--ghost', onclick: () => o.onTry({ gadget: g }) }, 'Try on'),
             ),
           );
         }),
@@ -442,7 +442,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     h(
       'div',
       { class: 'col' },
-      h('div', { class: 'muted' }, 'Все персонажи равны по характеристикам — различаются внешностью и историей. Половина открывается опытом и жетонами, половина — за алмазы.'),
+      h('div', { class: 'muted' }, 'All characters have the same stats — they differ in looks and backstory. Half are unlocked with experience and talons, half with diamonds.'),
       h(
         'div',
         { class: 'cards' },
@@ -457,7 +457,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
             h('div', { class: 'row', style: 'flex-wrap:nowrap;margin-top:6px' }, portrait(c), h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 'h2' }, d.name), h('div', { class: 'nick' }, `«${d.nickname}»`), h('div', { class: 'muted' }, d.role))),
             h('div', { class: 'quote' }, `«${d.quote}»`),
             h('div', { class: 'lore' }, d.lore),
-            h('div', { class: 'row' }, buyButton('character', c, price), o.onCharacter ? h('button', { class: 'btn btn--small btn--ghost', onclick: () => o.onCharacter!(c) }, 'Посмотреть') : null),
+            h('div', { class: 'row' }, buyButton('character', c, price), o.onCharacter ? h('button', { class: 'btn btn--small btn--ghost', onclick: () => o.onCharacter!(c) }, 'View') : null),
           );
         }),
       ),
@@ -473,7 +473,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     const confirmAndOpen = () => {
       if (!online || !inv) return;
       if (inv.diamonds < CASE_PRICE) {
-        toast('Не хватает алмазов');
+        toast('Not enough diamonds');
         tab = 'diamonds';
         draw();
         return;
@@ -484,9 +484,9 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         h(
           'div',
           { class: 'panel modal col' },
-          h('span', { class: 'tag' }, 'Подтверждение'),
-          h('div', { style: 'margin-top:8px' }, `Открыть кейс за ${CASE_PRICE} ${diamondWord(CASE_PRICE)} ($${(CASE_PRICE / DIAMONDS_PER_USD).toFixed(2)})?`),
-          h('div', { class: 'muted' }, 'Внутри — случайное редкое оружие, которого у вас ещё нет. Шансы указаны в списке. Покупка необратима.'),
+          h('span', { class: 'tag' }, 'Confirmation'),
+          h('div', { style: 'margin-top:8px' }, `Open the case for ${CASE_PRICE} ${diamondWord(CASE_PRICE)} ($${(CASE_PRICE / DIAMONDS_PER_USD).toFixed(2)})?`),
+          h('div', { class: 'muted' }, 'Inside is a random rare weapon you don’t own yet. The odds are listed below. The purchase is final.'),
           h(
             'label',
             { class: 'check' },
@@ -497,7 +497,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
                 if (btn) btn.disabled = !(e.target as HTMLInputElement).checked;
               },
             }),
-            ' Мне есть 18 лет',
+            ' I am 18 or older',
           ),
           h(
             'button',
@@ -514,9 +514,9 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
                 });
               },
             },
-            'Открыть',
+            'Open',
           ),
-          h('button', { class: 'btn', onclick: close }, 'Отмена'),
+          h('button', { class: 'btn', onclick: close }, 'Cancel'),
         ),
       );
       root.append(ov);
@@ -529,33 +529,33 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         ? h(
             'div',
             { class: `panel col reveal reveal--${shown.rarity}` },
-            h('span', { class: 'tag' }, 'Из кейса'),
+            h('span', { class: 'tag' }, 'From the case'),
             h('div', { class: 'h1' }, WEAPONS[shown.weapon].name),
             h('div', { class: 'wpic wpic--big' }, weaponImg(shown.weapon)),
-            h('div', { class: 'muted' }, `${RARITY_LABEL[shown.rarity]} · уже в вашем арсенале`),
-            h('div', { class: 'row' }, h('button', { class: 'btn btn--small', onclick: () => ((reveal = null), (focus = shown.weapon), (tab = 'loadout'), draw()) }, 'В комплект'), h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((reveal = null), draw()) }, 'Закрыть')),
+            h('div', { class: 'muted' }, `${RARITY_LABEL[shown.rarity]} · already in your arsenal`),
+            h('div', { class: 'row' }, h('button', { class: 'btn btn--small', onclick: () => ((reveal = null), (focus = shown.weapon), (tab = 'loadout'), draw()) }, 'Add to kit'), h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((reveal = null), draw()) }, 'Close')),
           )
         : null,
       h(
         'div',
         { class: 'panel col' },
-        h('span', { class: 'tag' }, 'Кейс «Дефицит»'),
-        h('div', { class: 'row', style: 'margin-top:6px' }, h('div', { class: 'crate' }), h('div', { class: 'col grow', style: 'gap:4px' }, h('div', { class: 'h2' }, 'Редкое оружие · ', amount(CASE_PRICE, 'diamonds')), h('div', { class: 'muted' }, 'Одно из 10 редких стволов. Повторов не бывает: уже полученное оружие из кейса не выпадает, шансы остальных пересчитываются. Когда коллекция собрана, кейс больше не продаётся.'))),
+        h('span', { class: 'tag' }, 'The Defitsit Case'),
+        h('div', { class: 'row', style: 'margin-top:6px' }, h('div', { class: 'crate' }), h('div', { class: 'col grow', style: 'gap:4px' }, h('div', { class: 'h2' }, 'Rare weapon · ', amount(CASE_PRICE, 'diamonds')), h('div', { class: 'muted' }, 'One of 10 rare guns. No duplicates: a weapon you already got from the case never drops again, and the odds of the rest are recalculated. Once the collection is complete, the case is no longer sold.'))),
         !enabled
-          ? h('div', { class: 'badge badge--off' }, 'Кейсы на этом сервере отключены')
+          ? h('div', { class: 'badge badge--off' }, 'Cases are disabled on this server')
           : left === 0
-            ? h('div', { class: 'badge badge--ok' }, 'Коллекция собрана!')
-            : h('button', { class: 'btn btn--red', disabled: !online, onclick: confirmAndOpen }, online ? h('span', null, 'Открыть за ', amount(CASE_PRICE, 'diamonds')) : 'Доступно в онлайн-версии'),
-        h('div', { class: 'muted', style: 'font-size:13px' }, 'Только для совершеннолетних. В некоторых странах платные кейсы запрещены — там их не стоит покупать. Шансы ниже — честные и проверяются сервером.'),
+            ? h('div', { class: 'badge badge--ok' }, 'Collection complete!')
+            : h('button', { class: 'btn btn--red', disabled: !online, onclick: confirmAndOpen }, online ? h('span', null, 'Open for ', amount(CASE_PRICE, 'diamonds')) : 'Available in the online version'),
+        h('div', { class: 'muted', style: 'font-size:13px' }, 'Adults only. Paid cases are banned in some countries — don’t buy them there. The odds below are honest and enforced by the server.'),
       ),
       h(
         'div',
         { class: 'panel col' },
-        h('span', { class: 'tag' }, 'Шансы'),
+        h('span', { class: 'tag' }, 'Odds'),
         h(
           'table',
           { class: 'table', style: 'margin-top:6px' },
-          h('thead', null, h('tr', null, h('th', null, 'Оружие'), h('th', null, 'Редкость'), h('th', { class: 'num' }, 'Шанс'))),
+          h('thead', null, h('tr', null, h('th', null, 'Weapon'), h('th', null, 'Rarity'), h('th', { class: 'num' }, 'Chance'))),
           h(
             'tbody',
             null,
@@ -565,12 +565,12 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
                 { class: e.odds === 0 ? 'got' : '' },
                 h('td', null, h('div', { class: 'row', style: 'flex-wrap:nowrap;gap:8px' }, weaponImg(e.weapon, 'wimg wimg--xs'), WEAPONS[e.weapon].name)),
                 h('td', { class: `rar rar--${e.rarity}` }, RARITY_LABEL[e.rarity]),
-                h('td', { class: 'num' }, e.odds === 0 && have.has(e.weapon) ? 'есть' : `${e.odds.toFixed(e.odds < 10 ? 1 : 0)}%`),
+                h('td', { class: 'num' }, e.odds === 0 && have.has(e.weapon) ? 'owned' : `${e.odds.toFixed(e.odds < 10 ? 1 : 0)}%`),
               ),
             ),
           ),
         ),
-        h('div', { class: 'muted', style: 'font-size:13px' }, `Базовые шансы (без полученного): ${CASE_TABLE.map((e) => `${WEAPONS[e.weapon].name} ${e.chance}%`).join(', ')}.`),
+        h('div', { class: 'muted', style: 'font-size:13px' }, `Base odds (before anything is collected): ${CASE_TABLE.map((e) => `${WEAPONS[e.weapon].name} ${e.chance}%`).join(', ')}.`),
       ),
       h('div', { class: 'cards' }, ...CASE_TABLE.map((e) => weaponCard(e.weapon))),
     );
@@ -578,11 +578,11 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
 
   // ── diamonds ──────────────────────────────────────────────────────────
   const diamondsTab = (): HTMLElement => {
-    if (!online) return h('div', { class: 'panel' }, 'Покупка алмазов работает в онлайн-версии игры.');
-    if (o.inTelegram) return h('div', { class: 'panel col' }, h('span', { class: 'tag' }, 'Алмазы'), h('div', { style: 'margin-top:8px' }, 'Покупка алмазов внутри Telegram скоро появится (через Telegram Stars).'));
+    if (!online) return h('div', { class: 'panel' }, 'Buying diamonds works in the online version of the game.');
+    if (o.inTelegram) return h('div', { class: 'panel col' }, h('span', { class: 'tag' }, 'Diamonds'), h('div', { style: 'margin-top:8px' }, 'Buying diamonds inside Telegram is coming soon (via Telegram Stars).'));
     const methods: Array<['card' | 'crypto', string]> = [];
-    if (cfg?.card) methods.push(['card', 'Картой']);
-    if (cfg?.crypto) methods.push(['crypto', 'Криптой']);
+    if (cfg?.card) methods.push(['card', 'By card']);
+    if (cfg?.crypto) methods.push(['crypto', 'With crypto']);
     const buyPack = (packId: string, method: 'card' | 'crypto') =>
       void act(async () => {
         const r = await online.api.checkout(packId, method);
@@ -599,11 +599,11 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       h(
         'div',
         { class: 'panel col' },
-        h('span', { class: 'tag' }, 'Алмазы'),
-        h('div', { style: 'margin-top:8px' }, '100 алмазов = $1. Алмазы тратятся на оружие, персонажей и кейсы. Жетоны за деньги не продаются — их зарабатывают в матчах и тратят на оружие, снаряжение и модификации.'),
+        h('span', { class: 'tag' }, 'Diamonds'),
+        h('div', { style: 'margin-top:8px' }, '100 diamonds = $1. Diamonds buy weapons, characters and cases. Talons are never sold for money — you earn them in matches and spend them on weapons, equipment and modifications.'),
         methods.length === 0
-          ? h('div', { class: 'badge', style: 'align-self:flex-start' }, 'Оплата пока не подключена — скоро')
-          : h('div', { class: 'muted' }, 'Оплата на защищённой странице платёжной системы. Алмазы зачисляются автоматически после подтверждения платежа.'),
+          ? h('div', { class: 'badge', style: 'align-self:flex-start' }, 'Payments are not connected yet — coming soon')
+          : h('div', { class: 'muted' }, 'You pay on the payment provider’s secure page. The diamonds are credited automatically once the payment is confirmed.'),
       ),
       h(
         'div',
@@ -614,11 +614,11 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
             { class: 'panel col pack' },
             h('div', { class: 'h1' }, amount(p.diamonds, 'diamonds')),
             h('div', { class: 'h2' }, `$${(p.usdCents / 100).toFixed(2)}`),
-            ...(methods.length ? methods.map(([m, label]) => h('button', { class: 'btn btn--small btn--red', onclick: () => buyPack(p.id, m) }, label)) : [h('button', { class: 'btn btn--small', disabled: true }, 'Скоро')]),
+            ...(methods.length ? methods.map(([m, label]) => h('button', { class: 'btn btn--small btn--red', onclick: () => buyPack(p.id, m) }, label)) : [h('button', { class: 'btn btn--small', disabled: true }, 'Soon')]),
           ),
         ),
       ),
-      h('div', { class: 'muted', style: 'font-size:13px' }, 'Покупки привязаны к аккаунту. Чтобы не потерять их при смене устройства, привяжите почту в профиле.'),
+      h('div', { class: 'muted', style: 'font-size:13px' }, 'Purchases belong to your account. To keep them when you change devices, link an email in your profile.'),
     );
   };
 
@@ -637,7 +637,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         inv = i;
         draw();
       })
-      .catch((e: Error) => toast(`Арсенал: ${e.message}`));
+      .catch((e: Error) => toast(`Arsenal: ${e.message}`));
     void online.api
       .shopConfig()
       .then((c) => {
@@ -654,7 +654,7 @@ export function characterPriceNote(c: CharacterId, inv: Inventory | null): strin
   const p = CHARACTER_PRICES[c];
   if (!p) return null;
   if (inv?.characters.includes(c)) return null;
-  return p.currency === 'tokens' ? `Открывается с ${p.level} уровня за ${p.amount} ${tokenWord(p.amount)}` : `Открывается за ${p.amount} ${diamondWord(p.amount)} ($${(p.amount / DIAMONDS_PER_USD).toFixed(2)})`;
+  return p.currency === 'tokens' ? `Unlocks at level ${p.level} for ${p.amount} ${tokenWord(p.amount)}` : `Unlocks for ${p.amount} ${diamondWord(p.amount)} ($${(p.amount / DIAMONDS_PER_USD).toFixed(2)})`;
 }
 
 export { diamondWord as diamondsPlural };

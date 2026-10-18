@@ -44,46 +44,46 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
   const graphics = h(
     'div',
     { class: 'panel col' },
-    h('span', { class: 'tag' }, 'Изображение'),
-    seg('VHS-эффект (зерно, полосы, виньетка)', [
-      [0, 'Выкл'],
-      [1, 'Слабый'],
-      [2, 'Сильный'],
+    h('span', { class: 'tag' }, 'Picture'),
+    seg('VHS effect (grain, tracking lines, vignette)', [
+      [0, 'Off'],
+      [1, 'Worn tape'],
+      [2, 'Tenth copy'],
     ], 'vhs'),
-    seg('Тряска камеры', [
-      [true, 'Вкл'],
-      [false, 'Выкл'],
+    seg('Camera shake', [
+      [true, 'On'],
+      [false, 'Off'],
     ], 'shake'),
-    seg('Счётчик FPS', [
-      [false, 'Скрыт'],
-      [true, 'Показать'],
+    seg('FPS counter', [
+      [false, 'Hidden'],
+      [true, 'Show'],
     ], 'showFps'),
   );
-  const sound = h('div', { class: 'panel col' }, h('span', { class: 'tag' }, 'Звук'), slider('Громкость эффектов', 'sfxVolume', 0, 1, 0.05));
+  const sound = h('div', { class: 'panel col' }, h('span', { class: 'tag' }, 'Sound'), slider('Effects volume', 'sfxVolume', 0, 1, 0.05));
   const controls = h(
     'div',
     { class: 'panel col' },
-    h('span', { class: 'tag' }, 'Управление'),
-    seg('Огонь правым стиком при полном отклонении', [
-      [true, 'Вкл'],
-      [false, 'Только кнопка'],
+    h('span', { class: 'tag' }, 'Controls'),
+    seg('Right stick fires when pushed all the way', [
+      [true, 'On'],
+      [false, 'Button only'],
     ], 'autoFire'),
-    seg('Левша (стики поменять местами)', [
-      [false, 'Нет'],
-      [true, 'Да'],
+    seg('Left-handed (swap the sticks)', [
+      [false, 'No'],
+      [true, 'Yes'],
     ], 'leftHanded'),
-    slider('Размер стиков', 'stickScale', 0.7, 1.4, 0.05),
-    h('div', { class: 'muted', style: 'font-size:14px' }, 'Компьютер: WASD — движение, мышь — прицел, ЛКМ — огонь, R — перезарядка, Q/колесо/1-3 — оружие, E — подобрать, Shift — шагом, Tab — счёт, Esc — меню.'),
+    slider('Stick size', 'stickScale', 0.7, 1.4, 0.05),
+    h('div', { class: 'muted', style: 'font-size:14px' }, 'Computer: WASD — move, mouse — aim, left click — fire, R — reload, Q / wheel / 1-3 — weapons, G / middle click — equipment, E — pick up, Shift — walk quietly, Tab — score, Esc — menu.'),
   );
   const items: HTMLElement[] = [graphics, sound, controls];
   if (opts.online && !opts.inGame) {
-    const input = h('input', { class: 'input', value: opts.online.profile?.displayName ?? '', maxlength: '24', 'aria-label': 'Имя в игре' }) as HTMLInputElement;
+    const input = h('input', { class: 'input', value: opts.online.profile?.displayName ?? '', maxlength: '24', 'aria-label': 'In-game name' }) as HTMLInputElement;
     items.push(
       h(
         'div',
         { class: 'panel col' },
-        h('span', { class: 'tag' }, 'Профиль'),
-        h('div', { class: 'muted' }, 'Имя в игре'),
+        h('span', { class: 'tag' }, 'Profile'),
+        h('div', { class: 'muted' }, 'In-game name'),
         input,
         h(
           'button',
@@ -91,34 +91,34 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
             class: 'btn btn--small',
             onclick: async () => {
               const parsed = displayNameSchema.safeParse(input.value);
-              if (!parsed.success) return toast(parsed.error.issues[0]?.message ?? 'Неверное имя');
+              if (!parsed.success) return toast(parsed.error.issues[0]?.message ?? 'That name won’t do');
               try {
                 await opts.online!.rename(parsed.data);
-                toast('Имя сохранено');
+                toast('Name saved');
               } catch (e) {
                 toast((e as Error).message);
               }
             },
           },
-          'Сохранить имя',
+          'Save name',
         ),
         h(
           'button',
           {
             class: 'btn btn--small btn--ghost',
             onclick: async () => {
-              if (!(await confirmAsync('Удалить профиль и всю статистику без возможности восстановления?'))) return;
+              if (!(await confirmAsync('Delete the profile and all statistics for good? There’s no getting it back.'))) return;
               try {
                 await opts.online!.api.deleteAccount();
                 opts.online!.forgetLocalSession();
-                toast('Профиль удалён');
+                toast('Profile deleted');
                 setTimeout(() => location.reload(), 800);
               } catch (e) {
                 toast((e as Error).message);
               }
             },
           },
-          'Удалить мои данные',
+          'Delete my data',
         ),
       ),
     );
@@ -129,17 +129,17 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
       h(
         'div',
         { class: 'panel col' },
-        h('span', { class: 'tag' }, 'Профиль'),
-        h('div', { class: 'muted' }, 'Кличка, опыт и статистика демо-версии хранятся только в этом браузере.'),
+        h('span', { class: 'tag' }, 'Profile'),
+        h('div', { class: 'muted' }, 'The demo’s alias, experience and statistics are kept only in this browser.'),
         h(
           'button',
           {
             class: 'btn btn--small btn--ghost',
             onclick: async () => {
-              if (await confirmAsync('Сбросить кличку, опыт и статистику в этом браузере?')) reset();
+              if (await confirmAsync('Reset the alias, experience and statistics in this browser?')) reset();
             },
           },
-          'Сбросить локальный профиль',
+          'Reset local profile',
         ),
       ),
     );

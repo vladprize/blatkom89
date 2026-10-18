@@ -15,9 +15,9 @@ export function buildStroykaMap(): MapDef {
   const RED = 0xff3a2a;
   const b = new MapBuilder(
     'stroyka',
-    'Стройка',
-    'Строим будущее вместе',
-    'Недострой под краном: бетонные коробки, штабели кирпича и котлован посередине. Ближний бой в секциях и простреливаемые проходы.',
+    'Construction Site',
+    'Building the future together',
+    'A half-built block under the crane: concrete sections, a pit in the middle and stacks of bricks. Close quarters inside, open lanes outside.',
     W,
     H,
     'dirt',

@@ -45,7 +45,7 @@ export class StripeProvider {
       'line_items[0][quantity]': '1',
       'line_items[0][price_data][currency]': 'usd',
       'line_items[0][price_data][unit_amount]': String(i.pack.usdCents),
-      'line_items[0][price_data][product_data][name]': `${i.pack.diamonds} алмазов — БЛАТКОМ ’89`,
+      'line_items[0][price_data][product_data][name]': `${i.pack.diamonds} diamonds — BLATKOM ’89`,
     });
     const res = await this.fetchImpl('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',

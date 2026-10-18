@@ -223,13 +223,13 @@ export function modQuote(inv: Inventory, w: WeaponId, m: ModId): { cost: number 
 }
 
 export const REFUSAL_TEXT: Record<BuyRefusal, string> = {
-  owned: 'Уже есть',
-  level: 'Нужен уровень повыше',
-  funds: 'Не хватает средств',
-  not_for_sale: 'Не продаётся',
-  not_fit: 'Не подходит к этому оружию',
-  not_owned: 'Сначала купите оружие',
-  collection_complete: 'Коллекция кейса собрана',
+  owned: 'Already yours',
+  level: 'You need a higher level',
+  funds: 'Not enough funds',
+  not_for_sale: 'Not for sale',
+  not_fit: 'Doesn’t fit this weapon',
+  not_owned: 'Buy the weapon first',
+  collection_complete: 'The case collection is complete',
 };
 
 /** Every purchasable item, for catalog screens and tests. */

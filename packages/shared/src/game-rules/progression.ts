@@ -97,25 +97,25 @@ export const WIN_STREAK_TARGET = 3;
 export const MULTI_KILL_TARGET = 5;
 
 export const ACHIEVEMENTS: Record<AchievementId, AchievementDef> = {
-  first_match: { id: 'first_match', title: 'Первое дело', description: 'Доиграть первый матч.', xpReward: 25 },
-  first_win: { id: 'first_win', title: 'Авторитет', description: 'Победить в матче.', xpReward: 50 },
-  ten_matches: { id: 'ten_matches', title: 'Свой человек', description: 'Доиграть 10 матчей.', xpReward: 75 },
+  first_match: { id: 'first_match', title: 'First Job', description: 'Finish your first match.', xpReward: 25 },
+  first_win: { id: 'first_win', title: 'Avtoritet', description: 'Win a match.', xpReward: 50 },
+  ten_matches: { id: 'ten_matches', title: 'One of Us', description: 'Finish 10 matches.', xpReward: 75 },
   win_streak: {
     id: 'win_streak',
-    title: 'Держит район',
-    description: `Победить ${WIN_STREAK_TARGET} матча подряд.`,
+    title: 'Runs the District',
+    description: `Win ${WIN_STREAK_TARGET} matches in a row.`,
     xpReward: 100,
   },
   multi_kill: {
     id: 'multi_kill',
-    title: 'Разборка',
-    description: `${MULTI_KILL_TARGET} устранений за один матч.`,
+    title: 'Showdown',
+    description: `${MULTI_KILL_TARGET} eliminations in one match.`,
     xpReward: 50,
   },
   played_with_friends: {
     id: 'played_with_friends',
-    title: 'Свои люди',
-    description: 'Сыграть матч с друзьями по приглашению.',
+    title: 'Our Crowd',
+    description: 'Play a match with friends you invited.',
     xpReward: 25,
   },
 };

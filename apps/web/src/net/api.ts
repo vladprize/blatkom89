@@ -33,10 +33,10 @@ export class ApiError extends Error {
 }
 
 const MESSAGES: Record<string, string> = {
-  unauthorized: 'Сессия устарела. Перезапустите игру.',
-  rate_limited: 'Слишком часто. Подождите немного.',
-  capacity: 'Сервер переполнен, попробуйте позже.',
-  room_not_found: 'Комната не найдена.',
+  unauthorized: 'Your session has gone stale. Restart the game.',
+  rate_limited: 'Easy, comrade — too many requests. Wait a moment.',
+  capacity: 'The server is packed like a tram at rush hour. Try again later.',
+  room_not_found: 'Room not found.',
 };
 
 export class Api {
@@ -51,7 +51,7 @@ export class Api {
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch {
-      throw new ApiError(0, 'network', 'Нет связи с сервером. Проверьте интернет.');
+      throw new ApiError(0, 'network', 'No line to the server. Check your internet.');
     }
     if (res.status === 204) return undefined as T;
     let data: unknown = null;
@@ -63,7 +63,7 @@ export class Api {
     if (!res.ok) {
       const err = (data as { error?: { code?: string; message?: string } } | null)?.error;
       const code = err?.code ?? `http_${res.status}`;
-      throw new ApiError(res.status, code, MESSAGES[code] ?? err?.message ?? `Ошибка сервера (${res.status})`);
+      throw new ApiError(res.status, code, MESSAGES[code] ?? err?.message ?? `Server error (${res.status})`);
     }
     return data as T;
   }
