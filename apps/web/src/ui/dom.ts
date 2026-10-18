@@ -1,4 +1,6 @@
 /** Tiny DOM helpers (no framework). All text goes through textContent — no innerHTML with data. */
+import { inlineAsset } from '../app/inline.js';
+
 type Child = Node | string | number | null | undefined | false;
 type Attrs = Record<string, string | number | boolean | ((ev: Event) => void) | undefined | null>;
 
@@ -27,6 +29,8 @@ export function toast(text: string): void {
 }
 
 export function asset(path: string): string {
+  const inl = inlineAsset(path);
+  if (typeof inl === 'string') return inl;
   const u = new URL(path, document.baseURI);
   u.searchParams.set('v', __ASSET_VERSION__);
   return u.href;

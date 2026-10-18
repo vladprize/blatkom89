@@ -183,7 +183,9 @@ export class App {
           ),
         ),
         h('div', { class: 'grow' }),
-        h('div', { class: 'footer' }, `БЛАТКОМ ’89 · v${VERSION} · Бесплатно. Без доната. · `, h('a', { href: asset('privacy.html'), target: '_blank', style: 'color:inherit' }, 'Конфиденциальность')),
+        ONLINE_AVAILABLE
+          ? h('div', { class: 'footer' }, `БЛАТКОМ ’89 · v${VERSION} · Бесплатно. Без доната. · `, h('a', { href: asset('privacy.html'), target: '_blank', style: 'color:inherit' }, 'Конфиденциальность'))
+          : h('div', { class: 'footer' }, `БЛАТКОМ ’89 · v${VERSION} · Демо: игра идёт прямо в браузере, никакие данные не собираются и не отправляются.`),
       ),
     );
     this.render(menu);

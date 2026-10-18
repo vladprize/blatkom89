@@ -2,6 +2,7 @@
 import * as Phaser from 'phaser';
 import { CHARACTER_IDS, WEAPONS } from '@blatkom/shared';
 import type { CharacterId, WeaponId } from '@blatkom/shared';
+import { inlineAsset } from '../app/inline.js';
 
 export const FLOOR_KEYS = [
   'concrete_slab',
@@ -30,10 +31,19 @@ export const TORSO_ANIMS: Record<WeaponId, Array<[string, number]>> = {
 export function preloadAssets(scene: Phaser.Scene, base = 'assets/'): void {
   const l = scene.load;
   l.setPath(base);
-  const v = (p: string) => `${p}?v=${__ASSET_VERSION__}`;
-  for (const c of CHARACTER_IDS) l.atlas(`char_${c}`, v(`sprites/char_${c}.png`), v(`sprites/char_${c}.json`));
-  l.atlas('props', v('sprites/props.png'), v('sprites/props.json'));
-  l.atlas('fx', v('sprites/fx.png'), v('sprites/fx.json'));
+  // URL with a content-hash query, or the embedded data URI in single-file builds
+  const v = (p: string): string => {
+    const inl = inlineAsset(p);
+    return typeof inl === 'string' ? inl : `${p}?v=${__ASSET_VERSION__}`;
+  };
+  // atlas JSON: an embedded object is handed to Phaser directly
+  const j = (p: string): string | object => {
+    const inl = inlineAsset(p);
+    return inl && typeof inl === 'object' ? inl : `${p}?v=${__ASSET_VERSION__}`;
+  };
+  for (const c of CHARACTER_IDS) l.atlas(`char_${c}`, v(`sprites/char_${c}.png`), j(`sprites/char_${c}.json`));
+  l.atlas('props', v('sprites/props.png'), j('sprites/props.json'));
+  l.atlas('fx', v('sprites/fx.png'), j('sprites/fx.json'));
   for (const f of FLOOR_KEYS) l.image(`floor_${f}`, v(`tiles/floor_${f}.png`));
   for (const w of WALL_KEYS) l.image(`wall_${w}`, v(`tiles/wall_${w}.png`));
   l.image('pipe', v('tiles/pipe.png'));

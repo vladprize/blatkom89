@@ -276,6 +276,8 @@ export class HudScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     t.setPosition(W / 2, this.touch ? H * 0.2 : H * 0.18);
+    // stays out of the way of the countdown and the «go» flash in the centre of the screen
+    t.setVisible(phase === 'active' && time > this.goUntil);
     if (phase !== 'active' || !me || !me.alive) return;
     if (!st.shownAt) st.shownAt = time;
     if (Number.isNaN(st.startX)) {

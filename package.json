@@ -16,6 +16,7 @@
     "build": "npm run build:web && npm run build:server",
     "build:web": "node apps/web/build.mjs --mode=production",
     "build:demo": "node apps/web/build.mjs --mode=demo",
+    "build:demo:single": "node apps/web/build.mjs --mode=demo --single",
     "build:server": "node apps/server/build.mjs",
     "start": "node apps/server/dist/server.js",
     "assets": "tsx tools/art/build-all.ts",

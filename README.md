@@ -22,8 +22,9 @@ npm install                      # Node.js ≥ 22.12
 cp .env.example .env             # DATABASE_URL, SESSION_SECRET, DEV_AUTH_ENABLED=true
 npm run dev                      # сборка клиента в watch-режиме + сервер с перезапуском → http://localhost:8080
 ```
-Без сервера: `npm run build:demo` и откройте `apps/web/dist-demo/index.html` через любой статический
-сервер — доступна тренировка с ботами. В браузере: `?play=offline&map=factory&bots=3` сразу запускает матч.
+Без сервера: `npm run build:demo:single` собирает `apps/web/dist-demo/blatkom89-demo.html` — один файл
+(код, графика, шрифты внутри), который открывается двойным щелчком или с любого хостинга; доступна
+тренировка с ботами. Параметры `?play=offline&map=factory&bots=3` сразу запускают матч.
 
 Управление: WASD/стрелки — движение, мышь — прицел, ЛКМ или пробел — огонь, R — перезарядка,
 1/2/3, Q или колесо — оружие, E — подобрать, Shift — шаг, Tab — таблица, Esc — пауза. На телефоне: левый стик — движение, правый —
@@ -36,6 +37,7 @@ npm run dev                      # сборка клиента в watch-режи
 | `npm run dev` | разработка (клиент + сервер, автоперезапуск) |
 | `npm run build` | production-сборка клиента (`apps/web/dist`) и сервера (`apps/server/dist`) |
 | `npm run build:demo` | офлайн-демо без сервера (`apps/web/dist-demo`) |
+| `npm run build:demo:single` | то же одним самодостаточным HTML-файлом (`blatkom89-demo.html`) |
 | `npm start` | запуск собранного сервера |
 | `npm run assets` | заново сгенерировать спрайты/тайлы/эффекты (`tools/art`) |
 | `npm run typecheck` | TypeScript strict по всем пакетам |
