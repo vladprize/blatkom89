@@ -1,5 +1,6 @@
-// In-game map screenshots from the single-file demo.
-// Usage: node mapshot.mjs <demo.html> <outDir> <mapId> [x,y,x,y...] — full overview + zoomed views at the given points
+// Map review screenshots from the single-file demo build: the whole map at 1 texel per world px
+// and gameplay-zoom views around the given points (bots frozen, HUD hidden).
+// Usage: node tests/e2e/mapshot.mjs <path-to-blatkom89-demo.html> <outDir> <mapId> [x y x y …]
 import { chromium } from 'playwright';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
