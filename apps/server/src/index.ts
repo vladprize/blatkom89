@@ -1,6 +1,6 @@
 /** Server entry point: HTTP API + static client + WebSocket game rooms on one port. */
 import { createServer } from 'node:http';
-import { loadEnv } from './config/env.js';
+import { loadEnv, matchConfigFromEnv } from './config/env.js';
 import { createLogger } from './logging/logger.js';
 import { createDb } from './database/db.js';
 import { migrate } from './database/migrate.js';
@@ -18,7 +18,7 @@ if (applied.length) log.info('migrations applied', { applied });
 
 const persistence = await createPersistence({ sql, env, log });
 const services = persistence.services;
-const rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS });
+const rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env) });
 const handler = createApp({ env, sql, log, services, rooms });
 const server = createServer((req, res) => {
   handler(req, res).catch((e: Error) => log.error('fatal request error', { err: e }));

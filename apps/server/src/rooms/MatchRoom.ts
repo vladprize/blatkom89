@@ -22,6 +22,7 @@ import {
   WS_CLOSE,
   DEFAULT_MATCH_CONFIG,
   isMapId,
+  rankPlaces,
 } from '@blatkom/shared';
 import type {
   CharacterId,
@@ -160,6 +161,7 @@ export class MatchRoom {
       existing.ws = ws;
       existing.connected = true;
       existing.queue = [];
+      existing.lastQueuedSeq = 0; // a reloaded client restarts its input sequence
       existing.tokens = INPUT_BUCKET_MAX;
       const p = this.world.players.get(user.userId);
       if (p) {
@@ -390,18 +392,21 @@ export class MatchRoom {
     this.resultsSent = true;
     const standings: Standing[] = this.world.standings();
     const durationMs = Math.max(0, this.world.time - this.world.matchStartedAt);
+    // deliver the deciding shot/kill events before the results screen
+    this.flush();
     this.broadcast({ type: 'results', matchId: this.matchId, reason, durationMs, standings, mapId: this.mapId });
     const matchId = this.matchId;
     const presentAtEnd = standings.filter((s) => this.clients.get(s.id)?.connected);
+    const presentPlaces = rankPlaces(presentAtEnd);
     const participants = standings
       .filter((s) => !s.isBot && this.clients.has(s.id))
       .map((s) => {
         const c = this.clients.get(s.id)!;
-        const presentPlace = presentAtEnd.findIndex((x) => x.id === s.id);
+        const presentIdx = presentAtEnd.findIndex((x) => x.id === s.id);
         return {
           userId: s.id,
           character: c.character,
-          place: presentPlace >= 0 ? presentPlace + 1 : standings.length,
+          place: presentIdx >= 0 ? presentPlaces[presentIdx]! : standings.length,
           kills: s.kills,
           deaths: s.deaths,
           score: s.score,

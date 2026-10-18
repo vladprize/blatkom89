@@ -30,6 +30,11 @@ const EnvSchema = z.object({
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   SERVER_VERSION: z.string().default('0.1.0'),
   MAX_ROOMS: z.coerce.number().int().min(1).max(10000).default(500),
+  /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 25 eliminations, 2–6 players. */
+  MATCH_DURATION_SEC: z.coerce.number().int().min(30).max(900).default(240),
+  MATCH_SCORE_LIMIT: z.coerce.number().int().min(1).max(200).default(25),
+  MATCH_MIN_PLAYERS: z.coerce.number().int().min(2).max(6).default(2),
+  MATCH_MAX_PLAYERS: z.coerce.number().int().min(2).max(6).default(6),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -41,10 +46,16 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error(`Invalid environment: ${issues}`);
   }
   const env = parsed.data;
+  if (env.MATCH_MIN_PLAYERS > env.MATCH_MAX_PLAYERS) throw new Error('MATCH_MIN_PLAYERS must not exceed MATCH_MAX_PLAYERS');
   if (env.NODE_ENV === 'production') {
     if (env.DEV_AUTH_ENABLED) throw new Error('DEV_AUTH_ENABLED must be false in production');
     if (!env.TELEGRAM_BOT_TOKEN) throw new Error('TELEGRAM_BOT_TOKEN is required in production');
     if (/change-me|example|secret/i.test(env.SESSION_SECRET)) throw new Error('SESSION_SECRET looks like a placeholder');
   }
   return env;
+}
+
+/** Match configuration derived from the environment (see MATCH_* variables). */
+export function matchConfigFromEnv(env: Env): { durationMs: number; scoreLimit: number; minPlayers: number; maxPlayers: number } {
+  return { durationMs: env.MATCH_DURATION_SEC * 1000, scoreLimit: env.MATCH_SCORE_LIMIT, minPlayers: env.MATCH_MIN_PLAYERS, maxPlayers: env.MATCH_MAX_PLAYERS };
 }

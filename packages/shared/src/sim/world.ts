@@ -21,6 +21,7 @@ import {
 import type { CharacterId } from '../game-rules/characters.js';
 import type { MatchConfig, MatchPhase } from '../game-rules/match.js';
 import { DEFAULT_MATCH_CONFIG } from '../game-rules/match.js';
+import { rankPlaces } from '../game-rules/progression.js';
 import type { HeavyWeaponId, WeaponDef, WeaponId } from '../game-rules/weapons.js';
 import { WEAPONS, damageFalloff, isHeavy } from '../game-rules/weapons.js';
 import type { CollisionWorld } from '../maps/collision.js';
@@ -895,6 +896,7 @@ export class World {
     const list = [...this.players.values()].sort(
       (a, b) => b.score - a.score || a.deaths - b.deaths || b.damageDealt - a.damageDealt || a.joinedAt - b.joinedAt,
     );
+    const places = rankPlaces(list);
     return list.map((p, i) => ({
       id: p.id,
       slot: p.slot,
@@ -906,7 +908,7 @@ export class World {
       score: p.score,
       damageDealt: p.damageDealt,
       bestStreak: p.bestStreak,
-      place: i + 1,
+      place: places[i]!,
     }));
   }
 }

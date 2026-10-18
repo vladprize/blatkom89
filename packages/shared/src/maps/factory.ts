@@ -123,7 +123,9 @@ export function buildFactoryMap(): MapDef {
     .decal({ kind: 'text', x: 1000, y: 262, text: 'СЛАВА ТРУДУ!', size: 26, color: '#c8312a', alpha: 0.6 })
     .decal({ kind: 'star', x: 870, y: 262, r: 12, color: '#c8312a', alpha: 0.6 })
     .decal({ kind: 'star', x: 1130, y: 262, r: 12, color: '#c8312a', alpha: 0.6 })
-    .decal({ kind: 'stain', x: 1120, y: 250, r: 22, color: '#14110e', alpha: 0.45, seed: 3 });
+    .decal({ kind: 'stain', x: 1120, y: 250, r: 22, color: '#14110e', alpha: 0.45, seed: 3 })
+    .decal({ kind: 'text', x: 1060, y: 352, text: 'БЕРЕГИ ОБОРУДОВАНИЕ — ЭТО НАШЕ БУДУЩЕЕ!', size: 8, color: '#d9c7a3', alpha: 0.45 })
+    .decal({ kind: 'stain', x: 790, y: 150, r: 18, color: '#0d0c0a', alpha: 0.5, seed: 21 });
   b.overhead({ kind: 'pipe', x: 700, y: 236, w: 724, h: 12 })
     .overhead({ kind: 'pipe', x: 1150, y: 16, w: 12, h: 352 });
   b.light(800, 110, 175, COLD, 0.85)
@@ -151,7 +153,10 @@ export function buildFactoryMap(): MapDef {
     .prop('lamp_post', 60, 500);
   b.overhead({ kind: 'pipe', x: 324, y: 260, w: 12, h: 104 });
   b.decal({ kind: 'stain', x: 280, y: 450, r: 30, color: '#12100d', alpha: 0.4, seed: 7 })
-    .decal({ kind: 'hazard', x: 280, y: 344, w: 100, h: 5, alpha: 0.7 });
+    .decal({ kind: 'hazard', x: 280, y: 344, w: 100, h: 5, alpha: 0.7 })
+    .decal({ kind: 'text', x: 200, y: 522, text: 'НАШ ЗАВОД — НАША ГОРДОСТЬ!', size: 11, color: '#d9c7a3', alpha: 0.45 })
+    .decal({ kind: 'line', x: 640, y: 456, w: 120, h: 34, color: '#9e2a22', alpha: 0.5 })
+    .decal({ kind: 'text', x: 700, y: 473, text: 'СТОЙ! ПРЕДЪЯВИ ПРОПУСК', size: 8, color: '#e8dcc0', alpha: 0.65 });
   b.light(180, 282, 190, SODIUM, 0.85, { fixture: 'street' }).light(546, 420, 180, SODIUM, 0.8, { fixture: 'street' });
   b.spawn(40, 290, 0);
 
@@ -214,7 +219,14 @@ export function buildFactoryMap(): MapDef {
   b.decal({ kind: 'line', x: 360, y: 600, w: 4, h: 260, color: '#d9c7a3', alpha: 0.35 })
     .decal({ kind: 'line', x: 480, y: 600, w: 4, h: 260, color: '#d9c7a3', alpha: 0.35 })
     .decal({ kind: 'stain', x: 420, y: 870, r: 24, color: '#0f0d0b', alpha: 0.5, seed: 5 });
-  b.light(200, 600, 200, SODIUM, 0.9, { fixture: 'street' }).light(480, 920, 180, SODIUM, 0.8, { fixture: 'street' });
+  b.light(200, 600, 200, SODIUM, 0.9, { fixture: 'street' })
+    .light(480, 920, 180, SODIUM, 0.8, { fixture: 'street' })
+    .light(330, 780, 160, SODIUM, 0.75, { fixture: 'street', flicker: 'soft' })
+    .light(110, 880, 140, WARM, 0.7);
+  b.decal({ kind: 'text', x: 420, y: 612, text: 'ПОГРУЗКА', size: 16, color: '#d9c7a3', alpha: 0.4 })
+    .decal({ kind: 'hazard', x: 360, y: 860, w: 124, h: 6, alpha: 0.7 })
+    .decal({ kind: 'stain', x: 150, y: 800, r: 26, color: '#0f0d0b', alpha: 0.45, seed: 31 });
+  b.prop('pallet', 560, 760).prop('pallet', 560, 784, 90).prop('crate_green', 90, 780);
   b.pickup('avtomat', 300, 784);
   b.spawn(40, 985, -45);
 
@@ -247,7 +259,12 @@ export function buildFactoryMap(): MapDef {
     .prop('crate_green', 1260, 916)
     .prop('pallet', 1300, 960)
     .prop('scrap_pile', 1040, 960);
-  b.light(1150, 780, 180, WARM, 0.85, { flicker: 'soft' }).light(1340, 880, 150, WARM, 0.75);
+  b.light(1150, 780, 180, WARM, 0.85, { flicker: 'soft' }).light(1340, 880, 150, WARM, 0.75).light(1040, 660, 130, WARM, 0.6, { flicker: 'broken' });
+  b.decal({ kind: 'text', x: 1190, y: 850, text: 'СКЛАД №2', size: 24, color: '#d9c7a3', alpha: 0.3 })
+    .decal({ kind: 'hazard', x: 1100, y: 616, w: 60, h: 6, alpha: 0.75 })
+    .decal({ kind: 'line', x: 1004, y: 690, w: 4, h: 300, color: '#c9a227', alpha: 0.4 })
+    .decal({ kind: 'line', x: 1396, y: 690, w: 4, h: 300, color: '#c9a227', alpha: 0.4 });
+  b.prop('pallet', 1160, 690).prop('pallet', 1390, 760, 90).prop('workbench', 1050, 880);
   b.pickup('obrez', 1150, 764);
   b.spawn(1395, 985, -135);
 

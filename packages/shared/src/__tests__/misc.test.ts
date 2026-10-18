@@ -5,7 +5,7 @@ import { makeWorld, startDuel, input, BTN } from './helpers.js';
 import { getMap, getCollision, MAP_ORDER } from '../maps/index.js';
 import { NavGrid } from '../sim/nav.js';
 import { PLAYER_RADIUS } from '../constants/game.js';
-import { levelForXp, totalXpForLevel, xpForMatch, evaluateAchievements, XP_RULES } from '../game-rules/progression.js';
+import { levelForXp, totalXpForLevel, xpForMatch, evaluateAchievements, XP_RULES, rankPlaces, isWin } from '../game-rules/progression.js';
 import { World } from '../sim/world.js';
 import { BotBrain } from '../sim/bots.js';
 import { ClientMessageSchema } from '../net/protocol.js';
@@ -133,4 +133,20 @@ test('bots: a 4-bot match on every map runs and produces eliminations', () => {
     }
     assert.ok(kills > 0, `${id}: bots got ${kills} kills in 90s`);
   }
+});
+
+test('standings: equal results share a place and a draw is nobody\'s win', () => {
+  assert.deepEqual(rankPlaces([{ score: 3, deaths: 1 }, { score: 3, deaths: 1 }, { score: 1, deaths: 0 }, { score: 1, deaths: 2 }]), [1, 1, 3, 4]);
+  assert.deepEqual(rankPlaces([{ score: 0, deaths: 0 }, { score: 0, deaths: 0 }]), [1, 1]);
+  const base = { kills: 0, deaths: 0, place: 1, playersAtEnd: 2, completed: true, withFriends: false };
+  assert.equal(isWin(base), true);
+  assert.equal(isWin({ ...base, sharedPlace: true }), false);
+  assert.equal(isWin({ ...base, playersAtEnd: 1 }), false);
+  assert.equal(isWin({ ...base, completed: false }), false);
+  assert.ok(!evaluateAchievements({ matchesCompleted: 1, wins: 0, currentWinStreak: 0 }, { ...base, sharedPlace: true }, new Set()).includes('first_win'));
+  // a fresh world where nobody scored: everyone shares first place
+  const w = new World(getMap('factory'), getCollision('factory'));
+  w.addPlayer('a', 'A', 'petya', false);
+  w.addPlayer('b', 'B', 'valuta', false);
+  assert.deepEqual(w.standings().map((s) => s.place), [1, 1]);
 });

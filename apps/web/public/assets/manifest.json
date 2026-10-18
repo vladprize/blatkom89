@@ -1,6 +1,11 @@
 {
  "generated": "tools/art/build-all.ts",
  "files": {
+  "fonts/caveat.woff": "e0f59bb0aa",
+  "fonts/oswald.woff": "f718d4c516",
+  "fonts/permanentmarker.woff": "effc103f6e",
+  "fonts/ptsansnarrow-bold.woff": "a42ecb23ed",
+  "fonts/ptsansnarrow-regular.woff": "82a0600b53",
   "portraits/mihalych.png": "30868d6790",
   "portraits/mihalych_small.png": "8f37db7841",
   "portraits/petya.png": "ca73d94d30",
@@ -18,8 +23,8 @@
   "sprites/char_valuta.json": "df33f51f77",
   "sprites/char_valuta.png": "abcd57313b",
   "sprites/characters.meta.json": "4fef8714e9",
-  "sprites/fx.json": "9eda22740e",
-  "sprites/fx.png": "597a17fc58",
+  "sprites/fx.json": "8afa09c00b",
+  "sprites/fx.png": "86225c815f",
   "sprites/props.json": "f984260316",
   "sprites/props.png": "86f139e044",
   "tiles/floor_asphalt.png": "ed1e3ea06d",
@@ -42,6 +47,9 @@
   "tiles/wall_fence_chain.png": "b901896731",
   "tiles/wall_fence_concrete.png": "b018bb4dec",
   "tiles/wall_panel.png": "65679d6bfc",
-  "tiles/wall_roof_flat.png": "d51aabbb1f"
+  "tiles/wall_roof_flat.png": "d51aabbb1f",
+  "ui/icon.png": "41d35ebefc",
+  "ui/logo.png": "5591c5b43f",
+  "ui/logo_small.png": "b37c0e4ae5"
  }
 }

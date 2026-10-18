@@ -47,6 +47,8 @@ export type ClientEventName = (typeof CLIENT_EVENTS)[number];
 const short = z.string().max(120);
 const platform = z.enum(['telegram_ios', 'telegram_android', 'telegram_desktop', 'telegram_web', 'telegram_other', 'browser_mobile', 'browser_desktop', 'unknown']);
 export type Platform = z.infer<typeof platform>;
+/** Client-reported platform (not cryptographically verified; used for analytics breakdowns only). */
+export const PlatformSchema = platform;
 
 export const CLIENT_EVENT_PROPS = {
   app_opened: z.object({ platform, startParam: z.string().max(64).optional(), referrer: short.optional() }).strict(),

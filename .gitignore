@@ -9,3 +9,4 @@ coverage/
 tmp/
 test-results/
 apps/web/public/assets/.cache/
+.env.local.sh

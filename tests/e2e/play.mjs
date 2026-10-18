@@ -1,0 +1,32 @@
+// Scripted offline play session with screenshots. Usage: node tests/e2e/play.mjs <url> <outPrefix> [w] [h]
+import { chromium } from 'playwright';
+const [url, out, w = '1280', h = '720'] = process.argv.slice(2);
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const page = await (await browser.newContext({ viewport: { width: Number(w), height: Number(h) } })).newPage();
+const logs = [];
+page.on('pageerror', (e) => logs.push('[pageerror] ' + e.message));
+page.on('console', (m) => m.type() === 'error' && logs.push('[console] ' + m.text()));
+await page.goto(url);
+await page.waitForFunction(() => window.__blatkom?.game?.scene.getScene('game')?.session?.phase?.() === 'active', null, { timeout: 60000 });
+const W = Number(w), H = Number(h);
+await page.mouse.move(W * 0.75, H * 0.55);
+await page.keyboard.down('KeyS');
+await page.waitForTimeout(900);
+await page.keyboard.up('KeyS');
+await page.mouse.down();
+await page.waitForTimeout(450);
+await page.screenshot({ path: `${out}_firing.png` });
+await page.mouse.up();
+await page.keyboard.down('KeyD');
+await page.waitForTimeout(1500);
+await page.keyboard.up('KeyD');
+await page.screenshot({ path: `${out}_moved.png` });
+await page.waitForTimeout(6000);
+await page.screenshot({ path: `${out}_later.png` });
+const state = await page.evaluate(() => {
+  const s = window.__blatkom.game.scene.getScene('game').session;
+  return { hud: s.hud(), standings: s.standings().map((x) => `${x.name}:${x.kills}/${x.deaths}`) };
+});
+console.log(JSON.stringify(state));
+console.log(logs.slice(0, 10).join('\n') || 'no errors');
+await browser.close();

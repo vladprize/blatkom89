@@ -43,6 +43,23 @@ export interface MatchPerformance {
   completed: boolean;
   /** At least one other human was in a private (invite) room. */
   withFriends: boolean;
+  /** Another player finished with exactly the same result (a draw for this place). */
+  sharedPlace?: boolean;
+}
+
+/** A win is a sole first place in a match that had at least one opponent at the end. */
+export function isWin(p: MatchPerformance): boolean {
+  return p.completed && p.place === 1 && !p.sharedPlace && p.playersAtEnd >= 2;
+}
+
+/** Competition ranking ("1, 1, 3"): equal score and deaths share a place. */
+export function rankPlaces<T extends { score: number; deaths: number }>(sorted: readonly T[]): number[] {
+  const places: number[] = [];
+  sorted.forEach((s, i) => {
+    const prev = sorted[i - 1];
+    places.push(prev && prev.score === s.score && prev.deaths === s.deaths ? places[i - 1]! : i + 1);
+  });
+  return places;
 }
 
 export function xpForMatch(p: MatchPerformance): number {
@@ -117,7 +134,7 @@ export function evaluateAchievements(
     if (cond && !owned.has(id)) out.push(id);
   };
   add('first_match', match.completed && after.matchesCompleted >= 1);
-  add('first_win', match.completed && match.place === 1 && match.playersAtEnd >= 2);
+  add('first_win', isWin(match));
   add('ten_matches', after.matchesCompleted >= 10);
   add('win_streak', after.currentWinStreak >= WIN_STREAK_TARGET);
   add('multi_kill', match.kills >= MULTI_KILL_TARGET);

@@ -70,11 +70,20 @@ export function bloodSplat(size: number, seed: number, pool = false): Img {
     const r = pool ? size * (0.16 + noise2(i, 3, seed) * 0.12) : size * (0.03 + noise2(i, 3, seed) * (i < 3 ? 0.14 : 0.05));
     blobs.push([c + along - (pool ? 0 : size * 0.12), c + lat, r]);
   }
+  // A few satellite droplets flung along the travel direction (splats only).
+  if (!pool)
+    for (let i = 0; i < 6; i++) {
+      const t = 0.55 + noise2(i, 7, seed) * 0.4;
+      blobs.push([c + t * size * 0.42 - size * 0.12, c + (noise2(i, 8, seed) - 0.5) * size * 0.5, size * (0.012 + noise2(i, 9, seed) * 0.02)]);
+    }
   for (let v = 0; v < size; v++)
     for (let u = 0; u < size; u++) {
-      let f = 0;
-      for (const [bx, by, r] of blobs) f = Math.max(f, 1 - Math.sqrt((u - bx) ** 2 + (v - by) ** 2) / r);
-      f += (noise2(u, v, seed + 5) - 0.5) * 0.25;
+      // Signed field: >0 inside the nearest blob. Starts at -Infinity so empty space stays empty
+      // (noise only roughens the edges instead of speckling the whole square).
+      let f = -Infinity;
+      for (const [bx, by, r] of blobs) f = Math.max(f, 1 - Math.sqrt((u + 0.5 - bx) ** 2 + (v + 0.5 - by) ** 2) / Math.max(r, 0.6));
+      if (f < -0.3) continue;
+      f += (noise2(u, v, seed + 5) - 0.5) * 0.3;
       if (f <= 0) continue;
       const k = Math.min(3, Math.floor(f * 4));
       const col = cols[3 - k]!;
