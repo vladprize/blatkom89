@@ -6,15 +6,16 @@ import { hex, noise2 } from './lib/raster.js';
 import type { RGBA } from './lib/raster.js';
 import type { Material, Prim, V3, PatternCtx } from './lib/model.js';
 import { MAT } from './characters.js';
+import { propPrims2, PROP_VARIANTS2 } from './props2.js';
 
-const H = (...c: string[]): RGBA[] => c.map((x) => hex(x));
+export const H = (...c: string[]): RGBA[] => c.map((x) => hex(x));
 
-const box = (c: V3, size: V3, mat: Material, group?: string, bevel = 0.6, yaw = 0): Prim => ({ k: 'box', c: [c[0], c[1], c[2] - size[2] / 2], h: [size[0] / 2, size[1] / 2, size[2] / 2], mat, group, bevel, yaw });
-const cyl = (x: number, y: number, r: number, z1: number, mat: Material, group?: string, bevel = 0.8): Prim => ({ k: 'cyl', c: [x, y, 0], r, z0: 0, z1, mat, group, bevel });
-const cap = (a: V3, b: V3, r: number, mat: Material, group?: string, r2?: number): Prim => ({ k: 'cap', a, b, r, r2, mat, group });
-const ell = (c: V3, r: V3, mat: Material, group?: string, yaw = 0): Prim => ({ k: 'ell', c, r, mat, group, yaw });
+export const box = (c: V3, size: V3, mat: Material, group?: string, bevel = 0.6, yaw = 0): Prim => ({ k: 'box', c: [c[0], c[1], c[2] - size[2] / 2], h: [size[0] / 2, size[1] / 2, size[2] / 2], mat, group, bevel, yaw });
+export const cyl = (x: number, y: number, r: number, z1: number, mat: Material, group?: string, bevel = 0.8): Prim => ({ k: 'cyl', c: [x, y, 0], r, z0: 0, z1, mat, group, bevel });
+export const cap = (a: V3, b: V3, r: number, mat: Material, group?: string, r2?: number): Prim => ({ k: 'cap', a, b, r, r2, mat, group });
+export const ell = (c: V3, r: V3, mat: Material, group?: string, yaw = 0): Prim => ({ k: 'ell', c, r, mat, group, yaw });
 
-const M = {
+export const M = {
   wood: { ramp: H('#2c1c10', '#46301c', '#624428', '#7e5a36', '#987048'), pattern: (c: PatternCtx) => (Math.abs((c.lx * 2 + 40) % 8) < 0.9 ? -1.2 : (noise2(c.u, c.v, 3) - 0.5) * 0.8) } as Material,
   woodPale: { ramp: H('#3a2c1c', '#5a462e', '#7a6040', '#967a52') } as Material,
   green: { ramp: H('#161e16', '#243022', '#344632', '#4a5e44', '#627a58') } as Material,
@@ -43,7 +44,7 @@ const DOOR_COLORS = ['#3a5a3a', '#34506e', '#6e3a24', '#5a5a52', '#6e5a24'];
 const CAR_COLORS = ['#b8ac88', '#7a2420', '#3c5a74', '#d4d0c4', '#4a5a3a'];
 const CONTAINER_COLORS = ['#7a3220', '#2c4a6e', '#3a5a3a', '#6a6a62'];
 
-function ridged(base: string, axis: 'x' | 'y', period = 3): Material {
+export function ridged(base: string, axis: 'x' | 'y', period = 3): Material {
   const r = rampFrom(base);
   return { ramp: r, pattern: (c) => (Math.floor(((axis === 'x' ? c.lx : c.ly) + 200) * (2 / period)) % 2 ? -1 : 0.3) };
 }
@@ -341,8 +342,11 @@ export function propPrims(type: string, w: number, h: number, variant = 0): Prim
       p.push(cyl(0, 0, w / 2 - 1, 14, { ramp: rampFrom('#3a4a3a') }, 'p'));
       p.push(cap([0, 0, 12], [5, 0, 10], 1, M.steelDark, 'spout'));
       break;
-    default:
+    default: {
+      const more = propPrims2(type, w, h, variant);
+      if (more) return more;
       p.push(box([0, 0, 8], [w - 1, h - 1, 8], { ramp: H('#ff00ff') }, 'missing'));
+    }
   }
   return p;
 }
@@ -353,4 +357,5 @@ export const PROP_VARIANTS: Record<string, number> = {
   car_zhiguli: 5,
   car_volga: 4,
   garage_shell: 3,
+  ...PROP_VARIANTS2,
 };

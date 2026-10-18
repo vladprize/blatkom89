@@ -1,7 +1,7 @@
 import type { WeaponId } from '../game-rules/weapons.js';
 import type { PropType } from './props.js';
 
-export const MAP_IDS = ['factory', 'garages', 'yard'] as const;
+export const MAP_IDS = ['factory', 'garages', 'yard', 'stroyka', 'dk', 'gastronom', 'hospital'] as const;
 export type MapId = (typeof MAP_IDS)[number];
 
 export type FloorType =
@@ -17,7 +17,13 @@ export type FloorType =
   | 'dirt'
   | 'grass'
   | 'sand'
-  | 'gravel';
+  | 'gravel'
+  | 'carpet_red'
+  | 'parquet'
+  | 'tile_green'
+  | 'tile_beige'
+  | 'marble'
+  | 'paving';
 
 export type WallStyle =
   | 'brick'
@@ -28,7 +34,8 @@ export type WallStyle =
   | 'fence_concrete'
   | 'roof_flat'
   | 'roof_garage'
-  | 'roof_booth';
+  | 'roof_booth'
+  | 'plaster';
 
 export interface Rect {
   x: number;
@@ -76,9 +83,15 @@ export type DecalPlacement =
   | { kind: 'hazard'; x: number; y: number; w: number; h: number; alpha?: number }
   | { kind: 'stain'; x: number; y: number; r: number; color: string; alpha?: number; seed?: number }
   | { kind: 'star'; x: number; y: number; r: number; color: string; alpha?: number }
-  | { kind: 'line'; x: number; y: number; w: number; h: number; color: string; alpha?: number }
+  | { kind: 'line'; x: number; y: number; w: number; h: number; color: string; alpha?: number; layer?: 'floor' | 'roof' }
   | { kind: 'hopscotch'; x: number; y: number; angle?: number }
-  | { kind: 'manhole'; x: number; y: number };
+  | { kind: 'manhole'; x: number; y: number }
+  /** A flight of stairs (steps across the short side), seen from above. */
+  | { kind: 'stairs'; x: number; y: number; w: number; h: number; alpha?: number }
+  /** Dashed outline of a zone (danger zone under the crane, parking bays). */
+  | { kind: 'dashrect'; x: number; y: number; w: number; h: number; color: string; alpha?: number }
+  /** A painted cross (red cross of the hospital, first-aid posts). */
+  | { kind: 'cross'; x: number; y: number; r: number; color: string; alpha?: number };
 
 export interface LightDef {
   x: number;
@@ -92,13 +105,15 @@ export interface LightDef {
 }
 
 export interface OverheadDef {
-  kind: 'tree' | 'pipe' | 'canopy' | 'wires' | 'bush';
+  /** 'crane': a tower crane jib from (x, y) at `angle` degrees, `w` long, with a hook and a load at `h` along it. */
+  kind: 'tree' | 'pipe' | 'canopy' | 'wires' | 'bush' | 'crane';
   x: number;
   y: number;
   w: number;
   h: number;
   rot?: Rotation;
   seed?: number;
+  angle?: number;
 }
 
 export interface SpawnPoint {

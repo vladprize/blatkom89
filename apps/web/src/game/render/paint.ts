@@ -243,6 +243,157 @@ export function solidRect(scene: Phaser.Scene, key: string, w: number, h: number
   return addTexture(scene, key, c);
 }
 
+/** A flight of stairs seen from above: treads across the short side, dark nosings, stringers. */
+export function stairsDecal(scene: Phaser.Scene, key: string, w: number, h: number, seed: number): string {
+  const W = Math.max(2, Math.round(w * S));
+  const H = Math.max(2, Math.round(h * S));
+  const [c, g] = canvas(W, H);
+  const r = rng(seed);
+  const vertical = H >= W; // the flight runs along the long side
+  const len = vertical ? H : W;
+  const across = vertical ? W : H;
+  const tread = 10;
+  for (let p = 0; p < len; p += tread) {
+    // each tread a little lighter towards the top of the flight (it is higher, nearer the light)
+    const k = 0.75 + (1 - p / len) * 0.35 + (r() - 0.5) * 0.06;
+    const base = [110, 104, 94].map((v) => Math.round(v * k));
+    g.fillStyle = `rgb(${base[0]},${base[1]},${base[2]})`;
+    if (vertical) g.fillRect(0, p, across, tread);
+    else g.fillRect(p, 0, tread, across);
+    g.fillStyle = 'rgba(20,18,16,0.95)';
+    if (vertical) g.fillRect(0, p + tread - 2, across, 2);
+    else g.fillRect(p + tread - 2, 0, 2, across);
+    g.fillStyle = 'rgba(220,210,190,0.35)';
+    if (vertical) g.fillRect(0, p, across, 1);
+    else g.fillRect(p, 0, 1, across);
+  }
+  // stringers (side rails)
+  g.fillStyle = 'rgba(30,28,26,0.95)';
+  if (vertical) {
+    g.fillRect(0, 0, 3, H);
+    g.fillRect(W - 3, 0, 3, H);
+  } else {
+    g.fillRect(0, 0, W, 3);
+    g.fillRect(0, H - 3, W, 3);
+  }
+  wear(g, W, H, seed, 0.15);
+  return addTexture(scene, key, c);
+}
+
+/** Dashed outline of a zone (2 world px thick). */
+export function dashedRect(scene: Phaser.Scene, key: string, w: number, h: number, color: string, seed: number): string {
+  const W = Math.max(4, Math.round(w * S));
+  const H = Math.max(4, Math.round(h * S));
+  const [c, g] = canvas(W, H);
+  g.fillStyle = color;
+  const t = 4;
+  const dash = 16;
+  const gap = 10;
+  for (let x = 0; x < W; x += dash + gap) {
+    g.fillRect(x, 0, Math.min(dash, W - x), t);
+    g.fillRect(x, H - t, Math.min(dash, W - x), t);
+  }
+  for (let y = 0; y < H; y += dash + gap) {
+    g.fillRect(0, y, t, Math.min(dash, H - y));
+    g.fillRect(W - t, y, t, Math.min(dash, H - y));
+  }
+  wear(g, W, H, seed, 0.35);
+  return addTexture(scene, key, c);
+}
+
+/** A painted cross (hospital, first aid). */
+export function paintedCross(scene: Phaser.Scene, key: string, r: number, color: string, seed: number): string {
+  const D = Math.max(4, Math.round(r * 2 * S));
+  const [c, g] = canvas(D, D);
+  const arm = Math.round(D * 0.3);
+  g.fillStyle = color;
+  g.fillRect(Math.round((D - arm) / 2), 0, arm, D);
+  g.fillRect(0, Math.round((D - arm) / 2), D, arm);
+  wear(g, D, D, seed, 0.3);
+  return addTexture(scene, key, c);
+}
+
+/** Margin behind the mast for the counter-jib (world px); the mast is at this x of the texture. */
+export const CRANE_TAIL = 80;
+
+/**
+ * A tower crane seen from above: lattice jib pointing +x from the mast (at CRANE_TAIL), the
+ * counter-jib with concrete counterweights behind it, the cab, the trolley and a load of bricks
+ * hanging `loadAt` px along the jib.
+ */
+export function craneJib(scene: Phaser.Scene, key: string, len: number, loadAt: number, seed: number): string {
+  const W = Math.round((len + CRANE_TAIL + 6) * S);
+  const H = 34 * S;
+  const [c, g] = canvas(W, H);
+  const r = rng(seed);
+  const cy = H / 2;
+  const x0 = CRANE_TAIL * S;
+  const half = 5 * S;
+  const yellow = '#c8901c';
+  const yellowDark = '#7a5410';
+  // jib: two chords and the lattice between them (see-through)
+  g.fillStyle = yellowDark;
+  g.fillRect(x0, cy - half, len * S, 3);
+  g.fillRect(x0, cy + half - 3, len * S, 3);
+  g.fillStyle = yellow;
+  g.fillRect(x0, cy - half, len * S, 2);
+  g.fillRect(x0, cy + half - 3, len * S, 2);
+  const step = 10;
+  for (let x = x0; x < x0 + len * S - step; x += step) {
+    g.strokeStyle = x % (step * 2) ? yellow : yellowDark;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(x, cy - half + 2);
+    g.lineTo(x + step, cy + half - 3);
+    g.stroke();
+    g.fillStyle = yellowDark;
+    g.fillRect(x, cy - half + 2, 1, half * 2 - 4);
+  }
+  // tip with a red aviation lamp
+  g.fillStyle = '#5a3c0c';
+  g.fillRect(x0 + len * S - 6, cy - half - 2, 6, half * 2 + 4);
+  g.fillStyle = '#ff3a2a';
+  g.fillRect(x0 + len * S - 4, cy - 2, 4, 4);
+  // counter-jib: walkway with counterweight blocks
+  g.fillStyle = '#3a3430';
+  g.fillRect(4 * S, cy - half + 2, x0 - 4 * S, half * 2 - 4);
+  g.fillStyle = yellow;
+  g.fillRect(4 * S, cy - half, x0 - 4 * S, 2);
+  g.fillRect(4 * S, cy + half - 2, x0 - 4 * S, 2);
+  for (let i = 0; i < 3; i++) {
+    const bx = 6 * S + i * 9 * S;
+    g.fillStyle = '#6e6a62';
+    g.fillRect(bx, cy - half - 3 * S, 8 * S, half * 2 + 6 * S);
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fillRect(bx, cy + half + 3 * S - 3, 8 * S, 3);
+    g.fillStyle = 'rgba(255,255,255,0.15)';
+    g.fillRect(bx, cy - half - 3 * S, 8 * S, 2);
+  }
+  // cab at the mast top
+  g.fillStyle = '#b8862a';
+  g.fillRect(x0 - 7 * S, cy - 9 * S, 12 * S, 8 * S);
+  g.fillStyle = '#1c2a32';
+  g.fillRect(x0 + 1 * S, cy - 8 * S, 3 * S, 6 * S);
+  g.fillStyle = 'rgba(0,0,0,0.4)';
+  g.fillRect(x0 - 7 * S, cy - 2 * S, 12 * S, 1 * S);
+  // trolley and the hanging load: a pallet of bricks
+  const lx = x0 + loadAt * S;
+  g.fillStyle = '#2a2622';
+  g.fillRect(lx - 4 * S, cy - half - 1, 8 * S, half * 2 + 2);
+  g.fillStyle = '#5a3c22';
+  g.fillRect(lx - 11 * S, cy - 8 * S, 22 * S, 16 * S);
+  for (let by = 0; by < 4; by++)
+    for (let bx = 0; bx < 5; bx++) {
+      const k = 0.8 + r() * 0.35;
+      g.fillStyle = `rgb(${Math.round(150 * k)},${Math.round(56 * k)},${Math.round(36 * k)})`;
+      g.fillRect(lx - 10 * S + bx * 4 * S, cy - 7 * S + by * 3.5 * S, 4 * S - 1, 3.5 * S - 1);
+    }
+  g.fillStyle = 'rgba(20,18,16,0.9)';
+  g.fillRect(lx - 1, cy - 8 * S, 2, 16 * S);
+  wear(g, W, H, seed, 0.08);
+  return addTexture(scene, key, c);
+}
+
 /** Laundry line with hanging clothes (top-down). */
 export function laundry(scene: Phaser.Scene, key: string, w: number, h: number, seed: number): string {
   const [c, g] = canvas(w * S, h * S);

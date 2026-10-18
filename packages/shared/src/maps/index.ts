@@ -1,6 +1,10 @@
 import { buildFactoryMap } from './factory.js';
 import { buildGaragesMap } from './garages.js';
 import { buildYardMap } from './yard.js';
+import { buildStroykaMap } from './stroyka.js';
+import { buildDkMap } from './dk.js';
+import { buildGastronomMap } from './gastronom.js';
+import { buildHospitalMap } from './hospital.js';
 import { CollisionWorld } from './collision.js';
 import type { MapDef, MapId } from './types.js';
 import { MAP_IDS } from './types.js';
@@ -14,6 +18,10 @@ const builders: Record<MapId, () => MapDef> = {
   factory: buildFactoryMap,
   garages: buildGaragesMap,
   yard: buildYardMap,
+  stroyka: buildStroykaMap,
+  dk: buildDkMap,
+  gastronom: buildGastronomMap,
+  hospital: buildHospitalMap,
 };
 
 const mapCache = new Map<MapId, MapDef>();
@@ -41,4 +49,4 @@ export function isMapId(v: unknown): v is MapId {
   return typeof v === 'string' && (MAP_IDS as readonly string[]).includes(v);
 }
 
-export const MAP_ORDER: readonly MapId[] = ['factory', 'garages', 'yard'];
+export const MAP_ORDER: readonly MapId[] = ['factory', 'stroyka', 'dk', 'gastronom', 'hospital', 'garages', 'yard'];

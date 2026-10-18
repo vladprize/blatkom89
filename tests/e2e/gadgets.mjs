@@ -102,6 +102,19 @@ try {
   };
   // aim due east of the player (the camera is clamped at the map edge, so find the player on screen)
   const aimEast = async () => {
+    // the camera eases after a teleport: wait until it has caught up with the player
+    await page.waitForFunction(
+      () => {
+        const sc = window.__blatkom.game.scene.getScene('game');
+        const me = sc.session.world.players.get('local');
+        const cam = sc.cameras.main;
+        const cx = Math.min(Math.max(me.x, cam.worldView.width / 2), sc.session.world.map.width - cam.worldView.width / 2);
+        const cy = Math.min(Math.max(me.y, cam.worldView.height / 2), sc.session.world.map.height - cam.worldView.height / 2);
+        return Math.abs(cam.midPoint.x - cx) < 3 && Math.abs(cam.midPoint.y - cy) < 3;
+      },
+      null,
+      { timeout: 5000 },
+    ).catch(() => {});
     const at = await page.evaluate(() => {
       const sc = window.__blatkom.game.scene.getScene('game');
       const me = sc.session.world.players.get('local');

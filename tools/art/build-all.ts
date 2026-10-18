@@ -67,9 +67,9 @@ function buildFx() {
 }
 
 function buildTiles() {
-  const floors: FloorKey[] = ['concrete_slab', 'concrete_dirty', 'concrete_painted', 'linoleum_checker', 'tile_white', 'wood', 'metal_plate', 'asphalt', 'asphalt_cracked', 'dirt', 'grass', 'sand', 'gravel'];
+  const floors: FloorKey[] = ['concrete_slab', 'concrete_dirty', 'concrete_painted', 'linoleum_checker', 'tile_white', 'wood', 'metal_plate', 'asphalt', 'asphalt_cracked', 'dirt', 'grass', 'sand', 'gravel', 'carpet_red', 'parquet', 'tile_green', 'tile_beige', 'marble', 'paving'];
   for (const f of floors) floorTexture(f).savePng(join(OUT, `tiles/floor_${f}.png`));
-  const walls: WallKey[] = ['brick', 'concrete', 'panel', 'corrugated', 'fence_concrete', 'roof_flat', 'fence_chain'];
+  const walls: WallKey[] = ['brick', 'concrete', 'panel', 'corrugated', 'fence_concrete', 'roof_flat', 'fence_chain', 'plaster'];
   for (const w of walls) wallTexture(w).savePng(join(OUT, `tiles/wall_${w}.png`));
   pipeTexture().savePng(join(OUT, 'tiles/pipe.png'));
   return { floors: floors.length, walls: walls.length };

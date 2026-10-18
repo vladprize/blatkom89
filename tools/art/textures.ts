@@ -96,7 +96,13 @@ export type FloorKey =
   | 'dirt'
   | 'grass'
   | 'sand'
-  | 'gravel';
+  | 'gravel'
+  | 'carpet_red'
+  | 'parquet'
+  | 'tile_green'
+  | 'tile_beige'
+  | 'marble'
+  | 'paving';
 
 export function floorTexture(kind: FloorKey): Img {
   const img = new Img(T, T);
@@ -249,11 +255,92 @@ export function floorTexture(kind: FloorKey): Img {
       });
       break;
     }
+    case 'carpet_red': {
+      // worn theatre carpet: deep red pile with a small diamond ornament every 32 texels
+      const c0 = hex('#6a1814');
+      const gold = hex('#8a5a26');
+      fill((u, v) => {
+        const du = Math.abs((u % 32) - 16);
+        const dv = Math.abs((v % 32) - 16);
+        const d = du + dv;
+        if (d === 9 || (d < 3 && (u + v) % 2 === 0)) return q(gold, step(0.85 + noise2(u, v, 201) * 0.2, u, v, 4, 0.7, 1.1));
+        const pile = noise2(u, v, 202) * 0.12 + (pfbm(u, v, T, 64, 203) - 0.5) * 0.3;
+        return q(c0, step(0.92 + pile, u, v, 5, 0.6, 1.2));
+      });
+      stains(img, 204, 4, hex('#3a0c0a'), 8, 24, 0.45);
+      break;
+    }
+    case 'parquet': {
+      // basket-weave parquet: 32-texel squares of four planks, alternating direction
+      const c0 = hex('#6a4426');
+      fill((u, v) => {
+        const sq = (Math.floor(u / 32) + Math.floor(v / 32)) % 2;
+        const along = sq ? u : v;
+        const across = sq ? v : u;
+        const plank = Math.floor((across % 32) / 8);
+        const seam = across % 8 === 0 || (along % 32 === 0) ? 0.62 : 1;
+        const id = Math.floor(u / 32) * 17 + Math.floor(v / 32) * 31 + plank * 7;
+        const grain = pnoise(along / 10, (across % 8) / 2, Math.round(T / 10), 205 + plank) * 0.22;
+        return q(c0, step((0.84 + noise2(id, 0, 206) * 0.2 + grain) * seam, u, v, 5, 0.5, 1.22));
+      });
+      stains(img, 207, 3, hex('#3a2414'), 10, 26, 0.35);
+      break;
+    }
+    case 'tile_green': {
+      // hospital tiles: pale green-grey 16-texel squares, grey grout, scuffs
+      const c0 = hex('#6c8476');
+      fill((u, v) => {
+        if (u % 16 === 0 || v % 16 === 0) return q(hex('#3c4640'), 1);
+        const tile = Math.floor(u / 16) * 29 + Math.floor(v / 16) * 13;
+        return q(c0, step(0.88 + noise2(tile, 0, 211) * 0.12 + pfbm(u, v, T, 64, 212) * 0.14 + (noise2(u, v, 213) - 0.5) * 0.06, u, v, 4, 0.72, 1.18));
+      });
+      stains(img, 214, 6, hex('#3e4a40'), 6, 20, 0.35);
+      crackLines(img, 215, 2, hex('#3a443e'), 24);
+      break;
+    }
+    case 'tile_beige': {
+      // shop floor: cream 32-texel tiles in two shades
+      const a = hex('#8e7e5e');
+      const b = hex('#7a6a4e');
+      fill((u, v) => {
+        if (u % 32 === 0 || v % 32 === 0) return q(hex('#463c2c'), 1);
+        const c = (Math.floor(u / 32) + Math.floor(v / 32)) % 2 ? a : b;
+        return q(c, step(0.9 + pfbm(u, v, T, 64, 221) * 0.16 + (noise2(u, v, 222) - 0.5) * 0.06, u, v, 4, 0.74, 1.16));
+      });
+      stains(img, 223, 6, hex('#4a3e2a'), 6, 22, 0.4);
+      break;
+    }
+    case 'marble': {
+      // foyer: big cream and grey slabs with veins
+      const a = hex('#8a8070');
+      const b = hex('#6a645a');
+      fill((u, v) => {
+        if (u % 64 === 0 || v % 64 === 0) return q(hex('#3e3a34'), 1);
+        const c = (Math.floor(u / 64) + Math.floor(v / 64)) % 2 ? a : b;
+        const vein = Math.abs(pnoise(u / 18 + v / 40, v / 18, Math.round(T / 18), 231) - 0.5) < 0.015 ? 0.9 : 1;
+        return q(c, step((0.9 + pfbm(u, v, T, 64, 232) * 0.16) * vein, u, v, 5, 0.7, 1.15));
+      });
+      break;
+    }
+    case 'paving': {
+      // pavement slabs with dark joints and moss in the cracks
+      const c0 = hex('#55534c');
+      fill((u, v) => {
+        const su = u % 32;
+        const sv = v % 32;
+        const slab = Math.floor(u / 32) * 13 + Math.floor(v / 32) * 7;
+        if (su === 0 || sv === 0) return noise2(u, v, 241) > 0.7 ? q(hex('#2e3a22'), 1) : q(hex('#2a2824'), 1);
+        return q(c0, step(0.86 + noise2(slab, 0, 242) * 0.16 + pfbm(u, v, T, 64, 243) * 0.18 + (noise2(u, v, 244) - 0.5) * 0.08, u, v, 5, 0.66, 1.2));
+      });
+      crackLines(img, 245, 4, hex('#24221e'), 40);
+      stains(img, 246, 5, hex('#2a2822'), 8, 24, 0.4);
+      break;
+    }
   }
   return img;
 }
 
-export type WallKey = 'brick' | 'concrete' | 'panel' | 'corrugated' | 'fence_concrete' | 'roof_flat' | 'fence_chain';
+export type WallKey = 'brick' | 'concrete' | 'panel' | 'corrugated' | 'fence_concrete' | 'roof_flat' | 'fence_chain' | 'plaster';
 
 /** 128x128 tileable wall-top textures. */
 export function wallTexture(kind: WallKey): Img {
@@ -295,6 +382,12 @@ export function wallTexture(kind: WallKey): Img {
         }
         case 'fence_chain': {
           c = (u + v) % 6 === 0 || (u - v + 600) % 6 === 0 ? hex('#8a8e94') : [0, 0, 0, 0];
+          break;
+        }
+        case 'plaster': {
+          // the top of a painted interior partition: cream plaster with a darker cap line
+          const cap = v % 64 === 0 ? 0.7 : 1;
+          c = q(hex('#8e8676'), step((0.88 + noise2(u, v, 151) * 0.1 + (pnoise(u / 12, v / 12, 11, 152) - 0.5) * 0.16) * cap, u, v, 5, 0.66, 1.18));
           break;
         }
       }

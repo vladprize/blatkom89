@@ -90,7 +90,14 @@ export class PreviewScene extends Phaser.Scene {
     });
     // name tags are not needed in the backdrop
     this.children.list.filter((o) => o instanceof Phaser.GameObjects.Text).forEach((o) => (o as Phaser.GameObjects.Text).setVisible(false));
-    this.scale.on(Phaser.Scale.Events.RESIZE, (s: Phaser.Structs.Size) => this.cameras.main.setSize(s.width, s.height));
+    // the backdrop is stopped while a match runs: the resize listener must go with it (a stale one
+    // throws on the next resize and stops Phaser from notifying the game and HUD scenes)
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.onResize, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this));
+  }
+
+  private onResize(s: Phaser.Structs.Size): void {
+    this.cameras.main?.setSize(s.width, s.height);
   }
 
   setFocus(c: CharacterId | null): void {

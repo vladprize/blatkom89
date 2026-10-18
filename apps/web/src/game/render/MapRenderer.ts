@@ -7,10 +7,10 @@ import * as Phaser from 'phaser';
 import { PROP_DEFS, propFootprint } from '@blatkom/shared';
 import type { FloorType, MapDef, PropPlacement, WallRect } from '@blatkom/shared';
 import { D } from './depth.js';
-import { paintedText, paintedArrow, hazardStripes, paintedStar, stain, hopscotch, manhole, solidRect, laundry, clutterSheet } from './paint.js';
+import { paintedText, paintedArrow, hazardStripes, paintedStar, stain, hopscotch, manhole, solidRect, laundry, clutterSheet, stairsDecal, dashedRect, paintedCross, craneJib, CRANE_TAIL } from './paint.js';
 import type { ClutterFrame } from './paint.js';
 
-const PROP_VARIANTS: Record<string, number> = { garage: 5, container: 4, car_zhiguli: 5, car_volga: 4, garage_shell: 3 };
+const PROP_VARIANTS: Record<string, number> = { garage: 5, container: 4, car_zhiguli: 5, car_volga: 4, garage_shell: 3, shelf: 6, fridge_case: 3, counter: 4, coat_rack: 2, ambulance: 3, produce_stall: 3 };
 const TEX_SCALE = 0.5;
 
 type ClutterSet = { area: number; frames: Array<[ClutterFrame, number]> };
@@ -32,6 +32,12 @@ const CLUTTER: Record<FloorType, ClutterSet | null> = {
   dirt: GREEN,
   grass: GREEN,
   sand: { area: 2600, frames: [['leaf_0', 1], ['butt_0', 1], ['bottle_0', 0.5], ['weeds_0', 1], ['can_0', 0.5]] },
+  carpet_red: { ...INDOOR, area: 4200 },
+  parquet: { ...INDOOR, area: 3600 },
+  tile_green: { area: 3400, frames: [['paper_0', 3], ['paper_1', 2], ['card_0', 1], ['butt_0', 1], ['tape_0', 0.5]] },
+  tile_beige: { area: 3000, frames: [['paper_0', 3], ['paper_1', 2], ['news_0', 1], ['card_0', 1.5], ['can_0', 1], ['bottle_0', 0.5], ['leaf_0', 0.3]] },
+  marble: { ...INDOOR, area: 5200 },
+  paving: { ...STREET, area: 2600 },
 };
 
 interface Cullable {
@@ -44,6 +50,15 @@ interface Overhead {
   rect: Phaser.Geom.Rectangle;
   baseAlpha: number;
   current: number;
+  /** Custom cover test (a crane jib is a long diagonal strip, not its bounding box). */
+  covers?: (x: number, y: number) => boolean;
+}
+
+function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
 }
 
 function hash(a: number, b: number, c = 0): number {
@@ -204,8 +219,25 @@ export class MapRenderer {
           break;
         }
         case 'line': {
-          const key = solidRect(this.scene, this.nextKey('line'), d.w, d.h, d.color, seed, 0.6);
-          this.scene.add.image(d.x, d.y, key).setOrigin(0, 0).setScale(TEX_SCALE).setAlpha(d.alpha ?? 0.6).setDepth(D.DECAL);
+          // roof-layer lines are banners and signboards: less worn, drawn over walls and tall props
+          const roof = d.layer === 'roof';
+          const key = solidRect(this.scene, this.nextKey('line'), d.w, d.h, d.color, seed, roof ? 0.12 : 0.6);
+          this.scene.add.image(d.x, d.y, key).setOrigin(0, 0).setScale(TEX_SCALE).setAlpha(d.alpha ?? 0.6).setDepth(roof ? D.ROOF_DECAL - 0.01 : D.DECAL);
+          break;
+        }
+        case 'stairs': {
+          const key = stairsDecal(this.scene, this.nextKey('stairs'), d.w, d.h, seed);
+          this.scene.add.image(d.x, d.y, key).setOrigin(0, 0).setScale(TEX_SCALE).setAlpha(d.alpha ?? 1).setDepth(D.DECAL - 0.02);
+          break;
+        }
+        case 'dashrect': {
+          const key = dashedRect(this.scene, this.nextKey('dash'), d.w, d.h, d.color, seed);
+          this.scene.add.image(d.x, d.y, key).setOrigin(0, 0).setScale(TEX_SCALE).setAlpha(d.alpha ?? 0.8).setDepth(D.DECAL);
+          break;
+        }
+        case 'cross': {
+          const key = paintedCross(this.scene, this.nextKey('cross'), d.r, d.color, seed);
+          this.scene.add.image(d.x, d.y, key).setScale(TEX_SCALE).setAlpha(d.alpha ?? 0.8).setDepth(D.DECAL);
           break;
         }
         case 'hopscotch': {
@@ -335,7 +367,22 @@ export class MapRenderer {
     for (const [i, o] of this.map.overhead.entries()) {
       let obj: Phaser.GameObjects.Image | Phaser.GameObjects.TileSprite;
       let alpha = 1;
+      let covers: Overhead['covers'];
       switch (o.kind) {
+        case 'crane': {
+          const key = craneJib(this.scene, this.nextKey('crane'), o.w, o.h, o.seed ?? i);
+          const ang = Phaser.Math.DegToRad(o.angle ?? 0);
+          const ox = CRANE_TAIL / (o.w + CRANE_TAIL + 6);
+          // the jib is high up: its shadow falls far from it
+          this.scene.add.image(o.x + 16, o.y + 22, key).setOrigin(ox, 0.5).setScale(TEX_SCALE).setRotation(ang).setTintFill(0x000000).setAlpha(0.3).setDepth(D.SHADOW);
+          obj = this.scene.add.image(o.x, o.y, key).setOrigin(ox, 0.5).setScale(TEX_SCALE).setRotation(ang);
+          const ax = o.x - Math.cos(ang) * CRANE_TAIL;
+          const ay = o.y - Math.sin(ang) * CRANE_TAIL;
+          const bx = o.x + Math.cos(ang) * o.w;
+          const by = o.y + Math.sin(ang) * o.w;
+          covers = (x, y) => segDist(x, y, ax, ay, bx, by) < 22;
+          break;
+        }
         case 'tree': {
           const size = Math.max(o.w, o.h);
           const frame = size < 64 ? 'tree_0' : size < 80 ? 'tree_1' : 'tree_2';
@@ -381,7 +428,9 @@ export class MapRenderer {
         }
       }
       obj.setDepth(D.OVERHEAD).setAlpha(alpha);
-      this.overheads.push({ obj, rect: new Phaser.Geom.Rectangle(o.x, o.y, o.w, o.h), baseAlpha: alpha, current: alpha });
+      const entry: Overhead = { obj, rect: new Phaser.Geom.Rectangle(o.x, o.y, o.w, o.h), baseAlpha: alpha, current: alpha };
+      if (covers) entry.covers = covers;
+      this.overheads.push(entry);
     }
   }
 
@@ -390,7 +439,7 @@ export class MapRenderer {
     const k = Math.min(1, dtMs / 120);
     for (const o of this.overheads) {
       const r = o.rect;
-      const inside = x > r.x - 8 && x < r.right + 8 && y > r.y - 8 && y < r.bottom + 8;
+      const inside = o.covers ? o.covers(x, y) : x > r.x - 8 && x < r.right + 8 && y > r.y - 8 && y < r.bottom + 8;
       const target = inside ? o.baseAlpha * 0.28 : o.baseAlpha;
       o.current += (target - o.current) * k;
       o.obj.setAlpha(o.current);
