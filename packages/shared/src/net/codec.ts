@@ -7,7 +7,9 @@ import { MATCH_PHASES } from '../game-rules/match.js';
 import type { MatchPhase } from '../game-rules/match.js';
 import { WEAPONS, WEAPON_BY_INDEX } from '../game-rules/weapons.js';
 import type { WeaponId } from '../game-rules/weapons.js';
-import type { InputFrame, PelletResult, PickupState, PlayerState, WorldEvent } from '../sim/world.js';
+import { GADGETS, GADGET_IDS, armsAt, armsIndex } from '../game-rules/gadgets.js';
+import type { ArmsId, GadgetId } from '../game-rules/gadgets.js';
+import type { GadgetState, InputFrame, PelletResult, PickupState, PlayerState, WorldEvent } from '../sim/world.js';
 import { clamp, dequantizeAngle, quantizeAngle } from '../sim/math.js';
 
 export const MSG_INPUT = 1;
@@ -30,7 +32,7 @@ export function encodeInputs(inputs: readonly InputFrame[]): ArrayBuffer {
     v.setInt8(o + 4, clamp(Math.round(f.moveX), -127, 127));
     v.setInt8(o + 5, clamp(Math.round(f.moveY), -127, 127));
     v.setUint16(o + 6, f.aim & 0xffff, true);
-    v.setUint8(o + 8, f.buttons & 0x1f);
+    v.setUint8(o + 8, f.buttons & 0x3f);
     v.setUint8(o + 9, clamp(f.slot | 0, 0, 3));
     v.setUint32(o + 10, Math.max(0, Math.round(f.viewTime)) >>> 0, true);
     o += INPUT_BYTES;
@@ -52,7 +54,7 @@ export function decodeInputs(data: ArrayBuffer | Uint8Array): InputFrame[] {
   for (let i = 0; i < n; i++) {
     const buttons = v.getUint8(o + 8);
     const slot = v.getUint8(o + 9);
-    if (buttons > 0x1f || slot > 3) throw new ProtocolError('bad input flags');
+    if (buttons > 0x3f || slot > 3) throw new ProtocolError('bad input flags');
     const mx = v.getInt8(o + 4);
     const my = v.getInt8(o + 5);
     if (mx === -128 || my === -128) throw new ProtocolError('bad move axis');
@@ -103,6 +105,31 @@ export interface NetPlayer {
   spreadHeat: number;
   shotCounter: number;
   respawnIn: number;
+  /** Equipment type and charges left (slot 4). */
+  gadget: GadgetId | null;
+  gadgetCharges: number;
+  /** Blinded by a flashbang for this many more ms. */
+  flashedRemaining: number;
+  /** The weapon in hand has a laser sight (visible to everyone). */
+  laser: boolean;
+}
+
+export interface NetGadget {
+  id: number;
+  kind: GadgetId;
+  /** Owner's slot. */
+  owner: number;
+  phase: 'moving' | 'armed' | 'active';
+  /** Mine: triggered (about to blow). */
+  triggered: boolean;
+  x: number;
+  y: number;
+  /** Turret aim (radians). */
+  aim: number;
+  /** Turret health. */
+  hp: number;
+  /** Time left in the current phase (ms): fuse, arming, burning, smoke or turret life. */
+  leftMs: number;
 }
 
 export interface NetPickup {
@@ -120,7 +147,9 @@ export interface NetPickup {
 
 export interface NetShot {
   shooter: number;
-  weapon: WeaponId;
+  /** A weapon, or 'turret' for a turret's shot (then ox/oy is the turret). */
+  weapon: ArmsId;
+  turret: boolean;
   shotId: number;
   ox: number;
   oy: number;
@@ -142,6 +171,7 @@ export interface Snapshot {
   pickups: NetPickup[];
   shots: NetShot[];
   melees: NetMelee[];
+  gadgets: NetGadget[];
 }
 
 export interface SnapshotSource {
@@ -151,11 +181,14 @@ export interface SnapshotSource {
   phaseRemaining: number;
   players: Iterable<PlayerState>;
   pickups: readonly PickupState[];
+  gadgets: readonly GadgetState[];
   events: readonly WorldEvent[];
   now: number;
 }
 
-const PLAYER_BYTES = 42;
+const PLAYER_BYTES = 46;
+const GADGET_BYTES = 15;
+const GADGET_PHASES = ['moving', 'armed', 'active'] as const;
 
 const u16 = (x: number) => clamp(Math.round(x), 0, 65535);
 const i16 = (x: number) => clamp(Math.round(x), -32768, 32767);
@@ -166,9 +199,10 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
   const shots = src.events.filter((e): e is Extract<WorldEvent, { t: 'shot' }> => e.t === 'shot');
   const melees = src.events.filter((e): e is Extract<WorldEvent, { t: 'melee' }> => e.t === 'melee');
   const pickups = src.pickups.filter((p) => p.active || !p.dropped);
-  let size = 1 + 4 + 4 + 1 + 4 + 1 + players.length * PLAYER_BYTES + 1 + pickups.length * 8 + 2 + 1;
+  const gadgets = src.gadgets.slice(0, 255);
+  let size = 1 + 4 + 4 + 1 + 4 + 1 + players.length * PLAYER_BYTES + 1 + pickups.length * 8 + 2 + 1 + 1;
   for (const s of shots) size += 10 + s.pellets.length * 6;
-  size += melees.length * 4;
+  size += melees.length * 4 + gadgets.length * GADGET_BYTES;
   const buf = new ArrayBuffer(size);
   const v = new DataView(buf);
   let o = 0;
@@ -186,7 +220,8 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
       (p.reloadWeapon ? 4 : 0) |
       (src.now < p.invulnUntil ? 8 : 0) |
       (p.walking ? 16 : 0) |
-      (p.heavy ? 32 : 0);
+      (p.heavy ? 32 : 0) |
+      (p.mods[p.weapon]?.includes('laser') ? 64 : 0);
     v.setUint8(o, p.slot);
     v.setUint8(o + 1, flags);
     v.setUint16(o + 2, u16(p.x * POS_SCALE), true);
@@ -212,6 +247,9 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
     v.setUint16(o + 38, u16(p.assists), true);
     v.setUint8(o + 40, WEAPONS[p.sidearm].index);
     v.setUint8(o + 41, WEAPONS[p.melee].index);
+    v.setUint8(o + 42, p.gadget ? GADGETS[p.gadget].index : 255);
+    v.setUint8(o + 43, u8c(p.gadgetCharges));
+    v.setUint16(o + 44, u16(Math.max(0, p.flashedUntil - src.time)), true);
     o += PLAYER_BYTES;
   }
   v.setUint8(o, pickups.length);
@@ -228,12 +266,12 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
   o += 2;
   for (const s of shots) {
     v.setUint8(o, s.shooter);
-    v.setUint8(o + 1, WEAPONS[s.weapon].index);
+    v.setUint8(o + 1, armsIndex(s.weapon));
     v.setUint16(o + 2, s.shotId & 0xffff, true);
     v.setUint16(o + 4, u16(s.ox * POS_SCALE), true);
     v.setUint16(o + 6, u16(s.oy * POS_SCALE), true);
     v.setUint8(o + 8, s.pellets.length);
-    v.setUint8(o + 9, 0);
+    v.setUint8(o + 9, s.turret ? 1 : 0);
     o += 10;
     for (const pl of s.pellets) {
       v.setUint16(o, quantizeAngle(pl.angle), true);
@@ -251,6 +289,22 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
     v.setUint8(o + 3, m.hit < 0 ? 255 : m.hit);
     o += 4;
   }
+  v.setUint8(o, gadgets.length);
+  o += 1;
+  for (const g of gadgets) {
+    const left = g.phase === 'active' || (g.phase === 'armed' && src.time >= g.fuseAt) ? g.endsAt - src.time : g.fuseAt - src.time;
+    v.setUint16(o, g.id & 0xffff, true);
+    v.setUint8(o + 2, GADGETS[g.kind].index);
+    v.setUint8(o + 3, g.ownerSlot);
+    v.setUint8(o + 4, GADGET_PHASES.indexOf(g.phase) | (g.triggeredAt > 0 ? 8 : 0));
+    v.setUint16(o + 5, u16(g.x * POS_SCALE), true);
+    v.setUint16(o + 7, u16(g.y * POS_SCALE), true);
+    v.setUint16(o + 9, quantizeAngle(g.aim), true);
+    v.setUint8(o + 11, u8c(g.hp));
+    v.setUint16(o + 12, u16(Math.max(0, left) / 10), true);
+    v.setUint8(o + 14, 0);
+    o += GADGET_BYTES;
+  }
   if (o !== size) throw new Error(`snapshot size mismatch ${o} != ${size}`);
   return buf;
 }
@@ -259,6 +313,18 @@ function weaponAt(i: number): WeaponId {
   const w = WEAPON_BY_INDEX[i];
   if (!w) throw new ProtocolError('bad weapon index');
   return w;
+}
+
+function armsFrom(i: number): ArmsId {
+  const a = armsAt(i);
+  if (!a) throw new ProtocolError('bad arms index');
+  return a;
+}
+
+function gadgetAt(i: number): GadgetId {
+  const g = GADGET_IDS[i];
+  if (!g) throw new ProtocolError('bad gadget index');
+  return g;
 }
 
 export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
@@ -281,6 +347,7 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
     pickups: [],
     shots: [],
     melees: [],
+    gadgets: [],
   };
   const np = v.getUint8(14);
   o = 15;
@@ -318,6 +385,10 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
       shotCounter: v.getUint16(o + 34, true),
       respawnIn: v.getUint16(o + 36, true),
       assists: v.getUint16(o + 38, true),
+      gadget: v.getUint8(o + 42) === 255 ? null : gadgetAt(v.getUint8(o + 42)),
+      gadgetCharges: v.getUint8(o + 43),
+      flashedRemaining: v.getUint16(o + 44, true),
+      laser: (flags & 64) !== 0,
     });
     o += PLAYER_BYTES;
   }
@@ -348,7 +419,8 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
     need(10);
     const shot: NetShot = {
       shooter: v.getUint8(o),
-      weapon: weaponAt(v.getUint8(o + 1)),
+      weapon: armsFrom(v.getUint8(o + 1)),
+      turret: (v.getUint8(o + 9) & 1) !== 0,
       shotId: v.getUint16(o + 2, true),
       ox: v.getUint16(o + 4, true) / POS_SCALE,
       oy: v.getUint16(o + 6, true) / POS_SCALE,
@@ -378,6 +450,28 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
     const hit = v.getUint8(o + 3);
     snap.melees.push({ shooter: v.getUint8(o), angle: dequantizeAngle(v.getUint16(o + 1, true)), hit: hit === 255 ? -1 : hit });
     o += 4;
+  }
+  need(1);
+  const ng = v.getUint8(o);
+  o += 1;
+  for (let i = 0; i < ng; i++) {
+    need(GADGET_BYTES);
+    const ph = v.getUint8(o + 4);
+    const phase = GADGET_PHASES[ph & 3];
+    if (!phase) throw new ProtocolError('bad gadget phase');
+    snap.gadgets.push({
+      id: v.getUint16(o, true),
+      kind: gadgetAt(v.getUint8(o + 2)),
+      owner: v.getUint8(o + 3),
+      phase,
+      triggered: (ph & 8) !== 0,
+      x: v.getUint16(o + 5, true) / POS_SCALE,
+      y: v.getUint16(o + 7, true) / POS_SCALE,
+      aim: dequantizeAngle(v.getUint16(o + 9, true)),
+      hp: v.getUint8(o + 11),
+      leftMs: v.getUint16(o + 12, true) * 10,
+    });
+    o += GADGET_BYTES;
   }
   return snap;
 }

@@ -378,8 +378,8 @@ export class MatchRoom {
     const roster = [...this.world.players.values()];
     this.mapId = mapId;
     this.world = this.createWorld();
-    // loadouts (owned weapons and upgrades) carry over to the new map
-    for (const p of roster) this.world.addPlayer(p.id, p.name, p.character, p.isBot, { sidearm: p.sidearm, melee: p.melee, primary: p.primary, mods: p.mods }).connected = p.connected;
+    // loadouts (owned weapons, modifications and equipment) carry over to the new map
+    for (const p of roster) this.world.addPlayer(p.id, p.name, p.character, p.isBot, { sidearm: p.sidearm, melee: p.melee, primary: p.primary, gadget: p.gadget, mods: p.mods }).connected = p.connected;
     this.broadcastRoster();
   }
 
@@ -557,6 +557,7 @@ export class MatchRoom {
       phaseRemaining: w.phase === 'active' ? w.matchTimeLeftMs : w.phaseEndsAt ? Math.max(0, w.phaseEndsAt - w.time) : 0,
       players: w.players.values(),
       pickups: w.pickups,
+      gadgets: w.gadgets,
       events: this.pendingShots,
       now: w.time,
     });

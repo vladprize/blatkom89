@@ -2,7 +2,8 @@
 import { z } from 'zod';
 import { CHARACTER_IDS } from '../game-rules/characters.js';
 import type { CharacterId } from '../game-rules/characters.js';
-import { WEAPON_IDS, UPGRADE_STATS } from '../game-rules/weapons.js';
+import { WEAPON_IDS, MOD_IDS } from '../game-rules/weapons.js';
+import { GADGET_IDS } from '../game-rules/gadgets.js';
 import type { WeaponId } from '../game-rules/weapons.js';
 import type { Currency, DiamondPack, Inventory, Rarity } from '../game-rules/economy.js';
 import { MAP_IDS } from '../maps/types.js';
@@ -68,9 +69,19 @@ export const VisitRequest = z
   .strict();
 
 // ── Economy ────────────────────────────────────────────────────────────────
-export const BuyRequest = z.object({ kind: z.enum(['weapon', 'character']), id: z.string().regex(/^[a-z_]{2,24}$/) }).strict();
-export const UpgradeRequest = z.object({ weapon: z.enum(WEAPON_IDS), stat: z.enum(UPGRADE_STATS) }).strict();
-export const LoadoutRequest = z.object({ sidearm: z.enum(WEAPON_IDS), melee: z.enum(WEAPON_IDS), primary: z.enum(WEAPON_IDS).nullable() }).strict();
+export const BuyRequest = z.object({ kind: z.enum(['weapon', 'character', 'gadget']), id: z.string().regex(/^[a-z0-9_]{2,24}$/) }).strict();
+/** Buy a modification for one weapon (tokens). */
+export const ModBuyRequest = z.object({ weapon: z.enum(WEAPON_IDS), mod: z.enum(MOD_IDS) }).strict();
+export const LoadoutRequest = z
+  .object({
+    sidearm: z.enum(WEAPON_IDS),
+    melee: z.enum(WEAPON_IDS),
+    primary: z.enum(WEAPON_IDS).nullable(),
+    gadget: z.enum(GADGET_IDS).nullable().optional(),
+    /** Equipped modifications per weapon (validated against ownership and mounts). */
+    mods: z.record(z.enum(WEAPON_IDS), z.array(z.enum(MOD_IDS)).max(4)).optional(),
+  })
+  .strict();
 /** Opening a paid case requires an explicit adult confirmation (see docs/ECONOMY.md). */
 export const CaseOpenRequest = z.object({ confirmAge: z.literal(true) }).strict();
 export const CheckoutRequest = z.object({ packId: z.string().regex(/^[a-z0-9]{2,16}$/), method: z.enum(['card', 'crypto']) }).strict();
@@ -101,7 +112,7 @@ export interface LedgerEntry {
   currency: Currency;
   delta: number;
   balanceAfter: number;
-  reason: 'match' | 'purchase' | 'upgrade' | 'case' | 'topup' | 'grant' | 'refund';
+  reason: 'match' | 'purchase' | 'mod' | 'case' | 'topup' | 'grant' | 'refund';
   ref: string | null;
 }
 

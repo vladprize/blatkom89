@@ -5,12 +5,16 @@ import type { CharacterId } from '../game-rules/characters.js';
 import type { MatchConfig, MatchPhase } from '../game-rules/match.js';
 import { MAP_IDS } from '../maps/types.js';
 import type { MapId } from '../maps/types.js';
-import type { WeaponId, WeaponMods } from '../game-rules/weapons.js';
+import type { ModId, WeaponId } from '../game-rules/weapons.js';
+import type { ArmsId, GadgetId } from '../game-rules/gadgets.js';
 import type { Standing } from '../sim/world.js';
 import type { AchievementId } from '../game-rules/progression.js';
 
-/** v2: match points with assists, «дефицит» supply drops. v3: loadouts (29 weapons), rockets, medkits. */
-export const PROTOCOL_VERSION = 3;
+/**
+ * v2: match points with assists, «дефицит» supply drops. v3: loadouts, rockets, medkits.
+ * v4: the owner's arsenal (32 weapons), modifications, equipment (grenades, mines, C4, turret).
+ */
+export const PROTOCOL_VERSION = 4;
 
 const roomId = z.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 
@@ -46,20 +50,26 @@ export interface RosterEntry {
   isHost: boolean;
   isBot: boolean;
   level: number;
-  /** Upgrade levels of the player's weapons (client-side prediction of their own weapons). */
-  mods?: Partial<Record<WeaponId, WeaponMods>>;
+  /** Equipped modifications of the player's weapons (client-side prediction of their own weapons). */
+  mods?: Partial<Record<WeaponId, ModId[]>>;
 }
 
 export type GameEvent =
-  | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: WeaponId }
-  | { t: 'kill'; killer: number; victim: number; weapon: WeaponId; assists: number[] }
+  | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: ArmsId }
+  | { t: 'kill'; killer: number; victim: number; weapon: ArmsId; assists: number[] }
   | { t: 'respawn'; slot: number; x: number; y: number }
   | { t: 'pickup'; slot: number; weapon: WeaponId; ammoOnly: boolean }
   | { t: 'drop'; slot: number; weapon: WeaponId }
   | { t: 'supply'; x: number; y: number; weapon: WeaponId }
   | { t: 'heal'; slot: number; amount: number; x: number; y: number }
   | { t: 'rocket'; id: number; shooter: number; weapon: WeaponId; x: number; y: number; angle: number; speed: number; range: number }
-  | { t: 'boom'; id: number; shooter: number; weapon: WeaponId; x: number; y: number; radius: number }
+  | { t: 'boom'; id: number; shooter: number; weapon: ArmsId; x: number; y: number; radius: number }
+  | { t: 'gadget'; id: number; kind: GadgetId; slot: number; x: number; y: number }
+  | { t: 'flashbang'; x: number; y: number }
+  | { t: 'ignite'; id: number; x: number; y: number; radius: number }
+  | { t: 'smoke'; id: number; x: number; y: number; radius: number }
+  | { t: 'beep'; id: number; x: number; y: number }
+  | { t: 'turretDown'; id: number; x: number; y: number }
   | { t: 'reload'; slot: number; weapon: WeaponId }
   | { t: 'dry'; slot: number }
   | { t: 'phase'; phase: MatchPhase }
@@ -71,7 +81,7 @@ export interface PersonalResult {
   level: number;
   leveledUp: boolean;
   newAchievements: AchievementId[];
-  /** Tokens earned in this match (spent in the shop on weapons, characters and upgrades). */
+  /** Tokens earned in this match (spent in the shop on weapons, characters, modifications and equipment). */
   tokensGained?: number;
   totalTokens?: number;
 }

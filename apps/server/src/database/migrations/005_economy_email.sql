@@ -1,5 +1,5 @@
--- Economy (tokens, diamonds, shop items, upgrades, cases, payments), email sign-in and the
--- visitor funnel. See packages/shared/src/game-rules/economy.ts and docs/ECONOMY.md.
+-- Economy (tokens, diamonds, shop items, modifications, equipment, cases, payments), email
+-- sign-in and the visitor funnel. See packages/shared/src/game-rules/economy.ts and docs/ECONOMY.md.
 
 -- Character and map ids are validated by the application (shared zod enums); the database keeps a
 -- format check only, so new characters and maps do not need a migration each.
@@ -13,7 +13,7 @@ ALTER TABLE matches ADD CONSTRAINT matches_map_id_check CHECK (map_id ~ '^[a-z_]
 -- ── Wallet ────────────────────────────────────────────────────────────────
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tokens integer NOT NULL DEFAULT 0 CHECK (tokens >= 0);
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS diamonds integer NOT NULL DEFAULT 0 CHECK (diamonds >= 0);
--- spawn loadout {sidearm, melee, primary}; validated against ownership on every read
+-- spawn loadout {sidearm, melee, primary, gadget, mods}; validated against ownership on every read
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS loadout jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE match_participants ADD COLUMN IF NOT EXISTS tokens_awarded integer NOT NULL DEFAULT 0 CHECK (tokens_awarded >= 0);
 
@@ -24,7 +24,7 @@ CREATE TABLE currency_ledger (
   currency      text NOT NULL CHECK (currency IN ('tokens', 'diamonds')),
   delta         integer NOT NULL CHECK (delta <> 0),
   balance_after integer NOT NULL CHECK (balance_after >= 0),
-  reason        text NOT NULL CHECK (reason IN ('match', 'purchase', 'upgrade', 'case', 'topup', 'grant', 'refund')),
+  reason        text NOT NULL CHECK (reason IN ('match', 'purchase', 'mod', 'case', 'topup', 'grant', 'refund')),
   ref           text,
   admin_id      uuid REFERENCES admin_users(id) ON DELETE SET NULL,
   created_at    timestamptz NOT NULL DEFAULT now()
@@ -34,25 +34,26 @@ CREATE INDEX currency_ledger_time_idx ON currency_ledger (created_at);
 -- a payment is credited at most once
 CREATE UNIQUE INDEX currency_ledger_topup_once ON currency_ledger (ref) WHERE reason = 'topup';
 
--- Owned weapons and characters (the free ones are implicit and never stored).
+-- Owned weapons, characters and equipment (the free ones are implicit and never stored).
 CREATE TABLE user_items (
   user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  item_id     text NOT NULL CHECK (item_id ~ '^[a-z_]{2,24}$'),
-  kind        text NOT NULL CHECK (kind IN ('weapon', 'character')),
+  item_id     text NOT NULL CHECK (item_id ~ '^[a-z0-9_]{2,24}$'),
+  kind        text NOT NULL CHECK (kind IN ('weapon', 'character', 'gadget')),
   source      text NOT NULL CHECK (source IN ('tokens', 'diamonds', 'case', 'grant')),
   acquired_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, kind, item_id)
 );
 CREATE INDEX user_items_item_idx ON user_items (kind, item_id);
 
-CREATE TABLE weapon_upgrades (
-  user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  weapon_id  text NOT NULL CHECK (weapon_id ~ '^[a-z_]{2,24}$'),
-  stat       text NOT NULL CHECK (stat IN ('dmg', 'rate', 'reload', 'mag')),
-  level      integer NOT NULL CHECK (level BETWEEN 1 AND 3),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (user_id, weapon_id, stat)
+-- Modifications bought for a specific weapon (which ones are equipped lives in profiles.loadout).
+CREATE TABLE weapon_mods (
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  weapon_id   text NOT NULL CHECK (weapon_id ~ '^[a-z0-9_]{2,24}$'),
+  mod_id      text NOT NULL CHECK (mod_id ~ '^[a-z0-9_]{2,24}$'),
+  acquired_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, weapon_id, mod_id)
 );
+CREATE INDEX weapon_mods_mod_idx ON weapon_mods (mod_id);
 
 CREATE TABLE case_openings (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -84,7 +84,7 @@ export type ServerEventName =
   | 'map_played'
   | 'invite_created'
   | 'shop_purchase'
-  | 'upgrade_bought'
+  | 'mod_bought'
   | 'case_opened'
   | 'payment_completed'
   | 'email_linked';
@@ -102,7 +102,7 @@ export interface Analytics {
   error(e: { source: 'client' | 'server'; component: string; category: string; message: string; clientVersion?: string | null; sessionId?: string | null; userId?: string | null }): void;
 }
 
-/** What a player brings into a room: validated spawn loadout (with upgrades) and owned characters. */
+/** What a player brings into a room: validated spawn loadout (with modifications and equipment) and owned characters. */
 export interface PlayerGear {
   loadout: Loadout;
   characters: ReadonlySet<CharacterId>;

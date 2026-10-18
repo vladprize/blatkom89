@@ -3,8 +3,8 @@
  * All prices and rules come from packages/shared/src/game-rules/economy.ts; the server never trusts
  * client-side ownership, balances or prices.
  */
-import { BuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, UpgradeRequest, WEAPON_PRICES, CHARACTER_PRICES, UPGRADE_COSTS, CASE_PRICE } from '@blatkom/shared';
-import type { CaseResult, ShopConfig, WeaponId, CharacterId } from '@blatkom/shared';
+import { BuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, priceOf } from '@blatkom/shared';
+import type { CaseResult, Loadout, ShopConfig } from '@blatkom/shared';
 import type { RouteModule } from '../app.js';
 import { HttpError, readBody } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
@@ -51,17 +51,16 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
     const user = currentUser(ctx);
     const body = await ctx.body(BuyRequest, 1024);
     const inv = await guard(() => pg().economy.buy(user.userId, body.kind, body.id));
-    const price = body.kind === 'weapon' ? WEAPON_PRICES[body.id as WeaponId] : CHARACTER_PRICES[body.id as CharacterId];
+    const price = priceOf(body.kind, body.id);
     if (price) deps.services.analytics.server('shop_purchase', { kind: body.kind, item: body.id, currency: price.currency, amount: price.amount }, user);
     ctx.json(200, inv);
   });
 
-  router.post('/api/shop/upgrade', auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+  router.post('/api/shop/mod', auth, rateLimit(shopLimiter, byUser), async (ctx) => {
     const user = currentUser(ctx);
-    const body = await ctx.body(UpgradeRequest, 1024);
-    const inv = await guard(() => pg().economy.upgrade(user.userId, body.weapon, body.stat));
-    const level = inv.upgrades[body.weapon]?.[body.stat] ?? 0;
-    deps.services.analytics.server('upgrade_bought', { weapon: body.weapon, stat: body.stat, level, cost: UPGRADE_COSTS[level] ?? 0 }, user);
+    const body = await ctx.body(ModBuyRequest, 1024);
+    const inv = await guard(() => pg().economy.buyMod(user.userId, body.weapon, body.mod));
+    deps.services.analytics.server('mod_bought', { weapon: body.weapon, mod: body.mod, cost: MOD_PRICES[body.mod] }, user);
     ctx.json(200, inv);
   });
 
@@ -77,8 +76,8 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
 
   router.post('/api/me/loadout', auth, rateLimit(shopLimiter, byUser), async (ctx) => {
     const user = currentUser(ctx);
-    const body = await ctx.body(LoadoutRequest, 1024);
-    ctx.json(200, await pg().economy.setLoadout(user.userId, body));
+    const body = await ctx.body(LoadoutRequest, 4096);
+    ctx.json(200, await pg().economy.setLoadout(user.userId, body as Pick<Loadout, 'sidearm' | 'melee' | 'primary'> & Partial<Pick<Loadout, 'gadget' | 'mods'>>));
   });
 
   // ── Diamonds for real money ───────────────────────────────────────────────

@@ -1,6 +1,6 @@
 /**
- * Economy persistence (PostgreSQL): wallet, owned items, upgrades, cases, loadouts and diamond
- * top-ups. Every balance change locks the player's profile row (SELECT … FOR UPDATE), checks the
+ * Economy persistence (PostgreSQL): wallet, owned items (weapons, characters, equipment),
+ * modifications, cases, loadouts and diamond top-ups. Every balance change locks the player's profile row (SELECT … FOR UPDATE), checks the
  * rules from packages/shared/src/game-rules/economy.ts and writes a currency_ledger row in the same
  * transaction, so concurrent requests can never overspend or double-credit.
  */
@@ -10,18 +10,24 @@ import {
   CHARACTER_IDS,
   DEFAULT_LOADOUT,
   FREE_CHARACTERS,
+  FREE_GADGETS,
   FREE_WEAPONS,
+  GADGET_IDS,
+  MOD_IDS,
   REFUSAL_TEXT,
-  UPGRADE_STATS,
   buyRefusal,
   drawCase,
   isCharacterId,
+  isGadgetId,
+  isModId,
   isWeaponId,
+  modQuote,
+  modsFor,
   priceOf,
   sanitizeLoadout,
-  upgradeQuote,
+  WEAPONS,
 } from '@blatkom/shared';
-import type { BuyRefusal, CaseEntry, CharacterId, Currency, Inventory, LedgerEntry, Loadout, UpgradeStat, WeaponId, WeaponMods } from '@blatkom/shared';
+import type { BuyRefusal, CaseEntry, CharacterId, Currency, GadgetId, Inventory, LedgerEntry, Loadout, ModId, ShopKind, WeaponId } from '@blatkom/shared';
 import type postgres from 'postgres';
 import type { Sql } from '../database/db.js';
 import type { Logger } from '../logging/logger.js';
@@ -53,30 +59,34 @@ export class EconomyRepo implements Economy {
     private readonly log: Logger,
   ) {}
 
-  /** Builds the inventory from the wallet row, owned items and upgrades. */
+  /** Builds the inventory from the wallet row, owned items and modifications. */
   private async load(tx: Tx, userId: string, wallet: WalletRow): Promise<Inventory> {
-    const items = await tx<Array<{ kind: 'weapon' | 'character'; item_id: string }>>`SELECT kind, item_id FROM user_items WHERE user_id = ${userId}`;
-    const ups = await tx<Array<{ weapon_id: string; stat: UpgradeStat; level: number }>>`SELECT weapon_id, stat, level FROM weapon_upgrades WHERE user_id = ${userId}`;
+    const items = await tx<Array<{ kind: ShopKind; item_id: string }>>`SELECT kind, item_id FROM user_items WHERE user_id = ${userId}`;
+    const modRows = await tx<Array<{ weapon_id: string; mod_id: string }>>`SELECT weapon_id, mod_id FROM weapon_mods WHERE user_id = ${userId}`;
     const weapons = new Set<WeaponId>(FREE_WEAPONS);
     const characters = new Set<CharacterId>(FREE_CHARACTERS);
+    const gadgets = new Set<GadgetId>(FREE_GADGETS);
     for (const it of items) {
       if (it.kind === 'weapon' && isWeaponId(it.item_id)) weapons.add(it.item_id);
       if (it.kind === 'character' && isCharacterId(it.item_id)) characters.add(it.item_id);
+      if (it.kind === 'gadget' && isGadgetId(it.item_id)) gadgets.add(it.item_id);
     }
-    const upgrades: Partial<Record<WeaponId, WeaponMods>> = {};
-    for (const u of ups) {
-      if (!isWeaponId(u.weapon_id) || !weapons.has(u.weapon_id) || !(UPGRADE_STATS as readonly string[]).includes(u.stat)) continue;
-      (upgrades[u.weapon_id] ??= {})[u.stat] = u.level;
+    const mods: Partial<Record<WeaponId, ModId[]>> = {};
+    for (const r of modRows) {
+      if (!isWeaponId(r.weapon_id) || !weapons.has(r.weapon_id) || !isModId(r.mod_id) || !modsFor(WEAPONS[r.weapon_id]).includes(r.mod_id)) continue;
+      (mods[r.weapon_id] ??= []).push(r.mod_id);
     }
+    for (const w of Object.keys(mods) as WeaponId[]) mods[w] = MOD_IDS.filter((m) => mods[w]!.includes(m));
     const raw = wallet.loadout && typeof wallet.loadout === 'object' ? (wallet.loadout as Record<string, unknown>) : {};
-    const loadout = sanitizeLoadout({ ...DEFAULT_LOADOUT, ...raw, mods: upgrades }, (w) => weapons.has(w));
+    const loadout = sanitizeLoadout({ ...DEFAULT_LOADOUT, ...raw }, { weapon: (w) => weapons.has(w), gadget: (g) => gadgets.has(g), mod: (w, m) => mods[w]?.includes(m) ?? false });
     return {
       tokens: wallet.tokens,
       diamonds: wallet.diamonds,
       level: wallet.level,
       weapons: [...weapons],
       characters: CHARACTER_IDS.filter((c) => characters.has(c)),
-      upgrades,
+      gadgets: GADGET_IDS.filter((g) => gadgets.has(g)),
+      mods,
       loadout,
     };
   }
@@ -107,12 +117,12 @@ export class EconomyRepo implements Economy {
     return { loadout: inv.loadout, characters: new Set(inv.characters) };
   }
 
-  async buy(userId: string, kind: 'weapon' | 'character', id: string): Promise<Inventory> {
-    if (kind === 'weapon' ? !isWeaponId(id) : !isCharacterId(id)) throw new EconomyError('not_for_sale');
+  async buy(userId: string, kind: ShopKind, id: string): Promise<Inventory> {
+    if (kind === 'weapon' ? !isWeaponId(id) : kind === 'character' ? !isCharacterId(id) : !isGadgetId(id)) throw new EconomyError('not_for_sale');
     return this.sql.begin(async (tx) => {
       const wallet = await this.lockWallet(tx, userId);
       const inv = await this.load(tx, userId, wallet);
-      const refusal = buyRefusal(inv, kind, id as WeaponId | CharacterId);
+      const refusal = buyRefusal(inv, kind, id);
       if (refusal) throw new EconomyError(refusal);
       const price = priceOf(kind, id)!;
       await this.debit(tx, userId, price.currency, price.amount, price.currency === 'tokens' ? wallet.tokens : wallet.diamonds, 'purchase', `${kind}:${id}`);
@@ -122,17 +132,22 @@ export class EconomyRepo implements Economy {
     });
   }
 
-  async upgrade(userId: string, weapon: WeaponId, stat: UpgradeStat): Promise<Inventory> {
+  /** Buys a modification for one weapon (tokens) and equips it (replacing the one on the same mount). */
+  async buyMod(userId: string, weapon: WeaponId, mod: ModId): Promise<Inventory> {
     return this.sql.begin(async (tx) => {
       const wallet = await this.lockWallet(tx, userId);
       const inv = await this.load(tx, userId, wallet);
-      const q = upgradeQuote(inv, weapon, stat);
+      const q = modQuote(inv, weapon, mod);
       if (typeof q === 'string') throw new EconomyError(q);
-      await this.debit(tx, userId, 'tokens', q.cost, wallet.tokens, 'upgrade', `${weapon}:${stat}:${q.level}`);
-      await tx`
-        INSERT INTO weapon_upgrades (user_id, weapon_id, stat, level) VALUES (${userId}, ${weapon}, ${stat}, ${q.level})
-        ON CONFLICT (user_id, weapon_id, stat) DO UPDATE SET level = EXCLUDED.level, updated_at = now()`;
-      return this.load(tx, userId, { ...wallet, tokens: wallet.tokens - q.cost });
+      await this.debit(tx, userId, 'tokens', q.cost, wallet.tokens, 'mod', `${weapon}:${mod}`);
+      await tx`INSERT INTO weapon_mods (user_id, weapon_id, mod_id) VALUES (${userId}, ${weapon}, ${mod}) ON CONFLICT DO NOTHING`;
+      // equip right away: the new one takes its mount on this weapon
+      const l = inv.loadout;
+      const equipped = [mod, ...(l.mods[weapon] ?? [])];
+      const stored = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: { ...l.mods, [weapon]: equipped } };
+      await tx`UPDATE profiles SET loadout = ${tx.json(stored)}, updated_at = now() WHERE user_id = ${userId}`;
+      this.log.info('mod purchase', { userId, weapon, mod, cost: q.cost });
+      return this.load(tx, userId, { ...wallet, tokens: wallet.tokens - q.cost, loadout: stored });
     });
   }
 
@@ -153,14 +168,20 @@ export class EconomyRepo implements Economy {
     });
   }
 
-  /** Stores the spawn loadout (weapons the player does not own fall back to the free defaults). */
-  async setLoadout(userId: string, raw: Pick<Loadout, 'sidearm' | 'melee' | 'primary'>): Promise<Inventory> {
+  /**
+   * Stores the spawn loadout. Anything the player does not own falls back to the free default;
+   * `gadget`/`mods` left out keep their current values.
+   */
+  async setLoadout(userId: string, raw: Pick<Loadout, 'sidearm' | 'melee' | 'primary'> & Partial<Pick<Loadout, 'gadget' | 'mods'>>): Promise<Inventory> {
     return this.sql.begin(async (tx) => {
       const wallet = await this.lockWallet(tx, userId);
       const inv = await this.load(tx, userId, wallet);
       const owned = new Set(inv.weapons);
-      const l = sanitizeLoadout({ ...raw, mods: {} }, (w) => owned.has(w));
-      const stored = { sidearm: l.sidearm, melee: l.melee, primary: l.primary };
+      const l = sanitizeLoadout(
+        { ...raw, gadget: raw.gadget === undefined ? inv.loadout.gadget : raw.gadget, mods: raw.mods ?? inv.loadout.mods },
+        { weapon: (w) => owned.has(w), gadget: (g) => inv.gadgets.includes(g), mod: (w, m) => inv.mods[w]?.includes(m) ?? false },
+      );
+      const stored = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods };
       await tx`UPDATE profiles SET loadout = ${tx.json(stored)}, updated_at = now() WHERE user_id = ${userId}`;
       return this.load(tx, userId, { ...wallet, loadout: stored });
     });
@@ -182,8 +203,8 @@ export class EconomyRepo implements Economy {
   }
 
   /** Grants an item without payment (administrator). */
-  async grantItem(userId: string, kind: 'weapon' | 'character', id: string): Promise<void> {
-    if (kind === 'weapon' ? !isWeaponId(id) : !isCharacterId(id)) throw new EconomyError('not_for_sale');
+  async grantItem(userId: string, kind: ShopKind, id: string): Promise<void> {
+    if (kind === 'weapon' ? !isWeaponId(id) : kind === 'character' ? !isCharacterId(id) : !isGadgetId(id)) throw new EconomyError('not_for_sale');
     await this.sql`INSERT INTO profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
     await this.sql`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${id}, ${kind}, 'grant') ON CONFLICT DO NOTHING`;
   }

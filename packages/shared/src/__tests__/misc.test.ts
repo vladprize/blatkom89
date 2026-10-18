@@ -37,7 +37,7 @@ test('codec: snapshot round-trip keeps state within quantization', () => {
   const { p1 } = startDuel(w, { x: 60.3, y: 50.7 }, { x: 160, y: 50 });
   w.applyInput('a', input({ buttons: BTN.FIRE, aimRad: 0.5 }));
   const events = w.drainEvents();
-  const buf = encodeSnapshot({ tick: w.tick, time: w.time, phase: w.phase, phaseRemaining: 1000, players: w.players.values(), pickups: w.pickups, events, now: w.time });
+  const buf = encodeSnapshot({ tick: w.tick, time: w.time, phase: w.phase, phaseRemaining: 1000, players: w.players.values(), pickups: w.pickups, gadgets: w.gadgets, events, now: w.time });
   const s = decodeSnapshot(buf);
   assert.equal(s.players.length, 2);
   const np = s.players.find((p) => p.slot === p1.slot)!;

@@ -33,6 +33,10 @@ DETECT = {
     'lobster': '15-lobster-baryga.png',
     'piranya': '16-piranya-bezumec.png',
 }
+# Sheets whose portrait panel has a different layout: explicit square inside the frame.
+MANUAL = {
+    'oryol': ('18-oryol-pendos.png', (1306, 78, 1505, 277)),
+}
 # Inner area of the portrait panel on the first four 1536x1024 sheets (inside the dashed frame).
 BOX = (1340, 74, 1460, 194)
 
@@ -75,6 +79,10 @@ def main() -> None:
         sheet = Image.open(ROOT / 'references' / name).convert('RGB')
         assert sheet.size == (1536, 1024), f'unexpected sheet size {sheet.size} for {name}'
         save(cid, sheet.crop(frame_box(sheet)))
+    for cid, (name, box) in MANUAL.items():
+        sheet = Image.open(ROOT / 'references' / name).convert('RGB')
+        assert sheet.size == (1536, 1024), f'unexpected sheet size {sheet.size} for {name}'
+        save(cid, sheet.crop(box))
 
 
 if __name__ == '__main__':

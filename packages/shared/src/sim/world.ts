@@ -23,8 +23,10 @@ import type { CharacterId } from '../game-rules/characters.js';
 import type { MatchConfig, MatchPhase } from '../game-rules/match.js';
 import { DEFAULT_MATCH_CONFIG, SCORING } from '../game-rules/match.js';
 import { rankPlaces } from '../game-rules/progression.js';
-import type { WeaponDef, WeaponId, WeaponMods } from '../game-rules/weapons.js';
+import type { ModId, WeaponDef, WeaponId, WeaponMods } from '../game-rules/weapons.js';
 import { WEAPONS, applyMods, damageFalloff, isHeavy } from '../game-rules/weapons.js';
+import type { ArmsId, GadgetId } from '../game-rules/gadgets.js';
+import { FIRE_TICK_MS, GADGETS, MINE_TRIGGER, THROW_BOUNCE, THROW_FRICTION, TURRET } from '../game-rules/gadgets.js';
 import type { Loadout } from '../game-rules/loadout.js';
 import { DEFAULT_LOADOUT, sanitizeLoadout } from '../game-rules/loadout.js';
 import type { CollisionWorld } from '../maps/collision.js';
@@ -39,6 +41,8 @@ export const BTN = {
   WALK: 4,
   INTERACT: 8,
   NEXT_WEAPON: 16,
+  /** Throw / place / deploy the equipment (slot 4); detonates a placed C4. */
+  GADGET: 32,
 } as const;
 
 export interface InputFrame {
@@ -84,7 +88,13 @@ export interface PlayerState {
   sidearm: WeaponId;
   melee: WeaponId;
   primary: WeaponId | null;
-  mods: Partial<Record<WeaponId, WeaponMods>>;
+  mods: Partial<Record<WeaponId, ModId[]>>;
+  /** Equipment type (slot 4), charges left in this life and the anti-spam cooldown (world time). */
+  gadget: GadgetId | null;
+  gadgetCharges: number;
+  gadgetReadyAt: number;
+  /** Blinded by a flashbang until this world time. */
+  flashedUntil: number;
   /** Sidearm magazine (its reserve is infinite). */
   sideMag: number;
   /** Slot-3 weapon currently carried (loadout primary or a map pickup). */
@@ -149,17 +159,24 @@ export interface PelletResult {
 }
 
 export type WorldEvent =
-  | { t: 'shot'; shooter: number; weapon: WeaponId; shotId: number; ox: number; oy: number; pellets: PelletResult[] }
+  | { t: 'shot'; shooter: number; weapon: ArmsId; shotId: number; ox: number; oy: number; pellets: PelletResult[]; turret?: boolean }
   | { t: 'melee'; shooter: number; angle: number; hit: number }
-  | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: WeaponId }
-  | { t: 'kill'; killer: number; victim: number; weapon: WeaponId; assists: number[] }
+  | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: ArmsId }
+  | { t: 'kill'; killer: number; victim: number; weapon: ArmsId; assists: number[] }
   | { t: 'respawn'; slot: number; x: number; y: number }
   | { t: 'pickup'; slot: number; weapon: WeaponId; ammoOnly: boolean }
   | { t: 'drop'; slot: number; weapon: WeaponId }
   | { t: 'supply'; x: number; y: number; weapon: WeaponId }
   | { t: 'heal'; slot: number; amount: number; x: number; y: number }
   | { t: 'rocket'; id: number; shooter: number; weapon: WeaponId; x: number; y: number; angle: number; speed: number; range: number }
-  | { t: 'boom'; id: number; shooter: number; weapon: WeaponId; x: number; y: number; radius: number }
+  | { t: 'boom'; id: number; shooter: number; weapon: ArmsId; x: number; y: number; radius: number }
+  /** Equipment thrown, placed or deployed (sound, hand animation). */
+  | { t: 'gadget'; id: number; kind: GadgetId; slot: number; x: number; y: number }
+  | { t: 'flashbang'; x: number; y: number }
+  | { t: 'ignite'; id: number; x: number; y: number; radius: number }
+  | { t: 'smoke'; id: number; x: number; y: number; radius: number }
+  | { t: 'beep'; id: number; x: number; y: number }
+  | { t: 'turretDown'; id: number; x: number; y: number }
   | { t: 'reload'; slot: number; weapon: WeaponId }
   | { t: 'dry'; slot: number }
   | { t: 'phase'; phase: MatchPhase }
@@ -206,6 +223,34 @@ export interface ProjectileState {
   selfFactor: number;
 }
 
+/**
+ * Equipment in the world: thrown grenades (moving), placed mines/C4 and deploying turrets (armed),
+ * burning fire, smoke clouds and working turrets (active).
+ */
+export interface GadgetState {
+  id: number;
+  kind: GadgetId;
+  ownerId: string;
+  ownerSlot: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  phase: 'moving' | 'armed' | 'active';
+  born: number;
+  /** Throwables: detonation / activation time; placed charges and turrets: when they arm. */
+  fuseAt: number;
+  /** End of a lingering effect or expiry of a placed charge / turret (0 = none yet). */
+  endsAt: number;
+  hp: number;
+  aim: number;
+  nextTickAt: number;
+  ammo: number;
+  shots: number;
+  /** Mine: when it was triggered (0 = waiting). */
+  triggeredAt: number;
+}
+
 interface HistoryFrame {
   time: number;
   data: Float32Array; // per slot: x, y, alive
@@ -214,7 +259,7 @@ interface HistoryFrame {
 const MAX_SLOTS = 8;
 
 /** Weapons a «дефицит» supply crate can contain. */
-export const SUPPLY_POOL: readonly WeaponId[] = ['avtomat', 'obrez', 'ksyuha', 'toz', 'svd', 'pkm', 'rpg', 'val', 'sayga'];
+export const SUPPLY_POOL: readonly WeaponId[] = ['avtomat', 'obrez', 'ksyuha', 's12', 'mp5', 'm4', 'g36', 'svd', 'm249', 'rpg'];
 
 export function createPlayerState(id: string, slot: number, name: string, character: CharacterId, isBot: boolean, now: number, seed: number): PlayerState {
   return {
@@ -241,6 +286,10 @@ export function createPlayerState(id: string, slot: number, name: string, charac
     melee: 'montirovka',
     primary: null,
     mods: {},
+    gadget: null,
+    gadgetCharges: 0,
+    gadgetReadyAt: 0,
+    flashedUntil: 0,
     sideMag: WEAPONS.pistol.magazine,
     heavy: null,
     heavyMag: 0,
@@ -316,10 +365,10 @@ export function stepMovement(p: PlayerState, input: InputFrame, collision: Colli
 
 const modCache = new WeakMap<WeaponMods, Map<WeaponId, WeaponDef>>();
 
-/** Effective stats of `w` for this player (upgrades applied). */
+/** Effective stats of `w` for this player (modifications applied). */
 export function weaponFor(p: Pick<PlayerState, 'mods'>, w: WeaponId): WeaponDef {
   const mods = p.mods[w];
-  if (!mods) return WEAPONS[w];
+  if (!mods || mods.length === 0) return WEAPONS[w];
   let per = modCache.get(mods);
   if (!per) {
     per = new Map();
@@ -364,7 +413,7 @@ export function setWeapon(p: PlayerState, w: WeaponId): void {
   p.reloadWeapon = null;
   p.reloadUntil = 0;
   p.spreadHeat = 0;
-  p.nextFireAt = Math.max(p.nextFireAt, p.clock + 150);
+  p.nextFireAt = Math.max(p.nextFireAt, p.clock + weaponFor(p, w).drawMs);
 }
 
 export function switchToSlot(p: PlayerState, slot: number): void {
@@ -465,9 +514,11 @@ export class World {
   readonly players = new Map<string, PlayerState>();
   readonly pickups: PickupState[] = [];
   readonly projectiles: ProjectileState[] = [];
+  readonly gadgets: GadgetState[] = [];
   events: WorldEvent[] = [];
   private nextPickupId = 1;
   private nextProjectileId = 1;
+  private nextGadgetId = 1;
   /** World time of the next «дефицит» supply drop (active phase only). */
   nextSupplyAt = 0;
   private readonly history: HistoryFrame[] = [];
@@ -533,6 +584,7 @@ export class World {
     p.melee = l.melee;
     p.primary = l.primary;
     p.mods = l.mods;
+    p.gadget = l.gadget;
     if (!p.alive) {
       p.weapon = l.primary ?? l.sidearm;
       p.sideMag = weaponFor(p, l.sidearm).magazine;
@@ -544,6 +596,11 @@ export class World {
     if (!p) return;
     if (p.alive && p.heavy) this.dropHeavy(p);
     this.players.delete(id);
+    // placed charges and turrets leave with their owner; fire and smoke burn out on their own
+    for (let i = this.gadgets.length - 1; i >= 0; i--) {
+      const g = this.gadgets[i]!;
+      if (g.ownerId === id && (g.kind === 'mine' || g.kind === 'c4' || g.kind === 'turret')) this.gadgets.splice(i, 1);
+    }
   }
 
   playerBySlot(slot: number): PlayerState | undefined {
@@ -607,6 +664,7 @@ export class World {
     }
     this.pickups.splice(0, this.pickups.length, ...this.pickups.filter((pk) => !pk.dropped));
     this.projectiles.length = 0;
+    this.gadgets.length = 0;
     this.resetPickups();
   }
 
@@ -637,6 +695,7 @@ export class World {
       }
     }
     this.projectiles.length = 0;
+    this.gadgets.length = 0;
   }
 
   get matchTimeLeftMs(): number {
@@ -710,6 +769,9 @@ export class World {
     p.spreadHeat = 0;
     p.lastDamagedBy = null;
     p.recentDamage = [];
+    p.gadgetCharges = p.gadget ? GADGETS[p.gadget].charges : 0;
+    p.gadgetReadyAt = 0;
+    p.flashedUntil = 0;
     this.events.push({ t: 'respawn', slot: p.slot, x: p.x, y: p.y });
   }
 
@@ -728,6 +790,7 @@ export class World {
 
     stepMovement(p, input, this.collision, this.normals);
     this.applyWeaponInput(p, input, pressed);
+    if (pressed & BTN.GADGET) this.useGadget(p);
     this.checkPickups(p, (pressed & BTN.INTERACT) !== 0);
   }
 
@@ -763,14 +826,17 @@ export class World {
     p.invulnUntil = Math.min(p.invulnUntil, this.time);
     if (w.kind === 'projectile' && w.projectile) return this.launch(p, w, spread);
     const targets = this.targetsAt(viewTime, p);
+    const turrets = this.gadgets.filter((g) => g.kind === 'turret' && g.ownerId !== p.id);
     const pellets: PelletResult[] = [];
     const dmgByVictim = new Map<PlayerState, number>();
+    const dmgByTurret = new Map<GadgetState, number>();
     for (const a of pelletAngles(p, w, spread)) {
       const dx = Math.cos(a);
       const dy = Math.sin(a);
       const wallHit = this.collision.raycast(p.x, p.y, dx, dy, w.range, 'shot');
       let maxT = wallHit ? wallHit.t : w.range;
       let victim: PlayerState | null = null;
+      let turret: GadgetState | null = null;
       for (const tgt of targets) {
         const t = rayCircle(p.x, p.y, dx, dy, tgt.x, tgt.y, PLAYER_RADIUS);
         if (t !== null && t < maxT) {
@@ -778,16 +844,28 @@ export class World {
           victim = tgt.p;
         }
       }
+      for (const g of turrets) {
+        const t = rayCircle(p.x, p.y, dx, dy, g.x, g.y, TURRET.radius);
+        if (t !== null && t < maxT) {
+          maxT = t;
+          victim = null;
+          turret = g;
+        }
+      }
       if (victim) {
         const dmg = w.damage * damageFalloff(w, maxT);
         dmgByVictim.set(victim, (dmgByVictim.get(victim) ?? 0) + dmg);
         pellets.push({ angle: a, dist: maxT, hit: victim.slot, kind: 2 });
+      } else if (turret) {
+        dmgByTurret.set(turret, (dmgByTurret.get(turret) ?? 0) + w.damage * damageFalloff(w, maxT));
+        pellets.push({ angle: a, dist: maxT, hit: -1, kind: 1 });
       } else {
         pellets.push({ angle: a, dist: maxT, hit: -1, kind: wallHit ? 1 : 0 });
       }
     }
     this.events.push({ t: 'shot', shooter: p.slot, weapon: w.id, shotId: p.shotCounter, ox: p.x, oy: p.y, pellets });
     for (const [victim, dmg] of dmgByVictim) this.applyDamage(victim, p, Math.round(dmg), w.id);
+    for (const [g, dmg] of dmgByTurret) this.damageTurret(g, dmg);
   }
 
   /** Rockets and grenades: fly in a straight line, explode on walls, players or at max range. */
@@ -848,17 +926,29 @@ export class World {
   }
 
   private explode(pr: ProjectileState, x: number, y: number, direct: PlayerState | null) {
-    this.events.push({ t: 'boom', id: pr.id, shooter: pr.ownerSlot, weapon: pr.weapon, x, y, radius: pr.radius });
-    const owner = this.players.get(pr.ownerId) ?? null;
+    this.blast({ id: pr.id, ownerId: pr.ownerId, ownerSlot: pr.ownerSlot, arms: pr.weapon, x, y, radius: pr.radius, splash: pr.splash, selfFactor: pr.selfFactor, direct, directDamage: pr.direct });
+  }
+
+  /** An explosion: splash damage with line of sight to players and turrets around (x, y). */
+  private blast(b: { id: number; ownerId: string; ownerSlot: number; arms: ArmsId; x: number; y: number; radius: number; splash: number; selfFactor: number; direct?: PlayerState | null; directDamage?: number }) {
+    const { x, y, radius } = b;
+    this.events.push({ t: 'boom', id: b.id, shooter: b.ownerSlot, weapon: b.arms, x, y, radius });
+    const owner = this.players.get(b.ownerId) ?? null;
     for (const q of [...this.players.values()]) {
       if (!q.alive) continue;
       const d = Math.hypot(q.x - x, q.y - y);
-      if (d > pr.radius + PLAYER_RADIUS) continue;
-      if (q !== direct && !this.collision.lineOfSight(x, y, q.x, q.y)) continue;
-      const k = Math.max(0, Math.min(1, (d - PLAYER_RADIUS * 0.5) / pr.radius));
-      let dmg = pr.splash * (1 - 0.7 * k) + (q === direct ? pr.direct : 0);
-      if (q.id === pr.ownerId) dmg *= pr.selfFactor;
-      this.applyDamage(q, owner, Math.round(dmg), pr.weapon);
+      if (d > radius + PLAYER_RADIUS) continue;
+      if (q !== b.direct && !this.collision.lineOfSight(x, y, q.x, q.y)) continue;
+      const k = Math.max(0, Math.min(1, (d - PLAYER_RADIUS * 0.5) / radius));
+      let dmg = b.splash * (1 - 0.7 * k) + (q === b.direct ? (b.directDamage ?? 0) : 0);
+      if (q.id === b.ownerId) dmg *= b.selfFactor;
+      this.applyDamage(q, owner, Math.round(dmg), b.arms);
+    }
+    for (const g of [...this.gadgets]) {
+      if (g.kind !== 'turret') continue;
+      const d = Math.hypot(g.x - x, g.y - y);
+      if (d > radius + TURRET.radius || !this.collision.lineOfSight(x, y, g.x, g.y)) continue;
+      this.damageTurret(g, b.splash * (1 - 0.7 * Math.max(0, Math.min(1, d / radius))));
     }
   }
 
@@ -881,10 +971,19 @@ export class World {
       }
     }
     this.events.push({ t: 'melee', shooter: p.slot, angle: p.aim, hit: best ? best.slot : -1 });
-    if (best) this.applyDamage(best, p, w.damage, w.id);
+    if (best) return this.applyDamage(best, p, w.damage, w.id);
+    // nobody in reach: an opponent's turret can be smashed
+    for (const g of this.gadgets) {
+      if (g.kind !== 'turret' || g.ownerId === p.id) continue;
+      const d = Math.hypot(g.x - p.x, g.y - p.y);
+      if (d > w.meleeRange + TURRET.radius) continue;
+      if (Math.abs(angleDiff(p.aim, Math.atan2(g.y - p.y, g.x - p.x))) > w.meleeArc / 2 && d > TURRET.radius * 1.6) continue;
+      this.damageTurret(g, w.damage);
+      return;
+    }
   }
 
-  applyDamage(victim: PlayerState, attacker: PlayerState | null, amount: number, weapon: WeaponId): void {
+  applyDamage(victim: PlayerState, attacker: PlayerState | null, amount: number, weapon: ArmsId): void {
     if (!victim.alive || amount <= 0) return;
     if (this.time < victim.invulnUntil) return;
     if (this.phase !== 'active') return;
@@ -905,7 +1004,7 @@ export class World {
     if (victim.hp <= 0) this.kill(victim, attacker, weapon);
   }
 
-  private kill(victim: PlayerState, killer: PlayerState | null, weapon: WeaponId) {
+  private kill(victim: PlayerState, killer: PlayerState | null, weapon: ArmsId) {
     victim.alive = false;
     victim.deaths++;
     victim.streak = 0;
@@ -939,6 +1038,288 @@ export class World {
     victim.recentDamage = [];
     this.events.push({ t: 'kill', killer: killer ? killer.slot : -1, victim: victim.slot, weapon, assists });
     if (scorers.some((p) => p.score >= this.config.scoreLimit)) this.finish('score');
+  }
+
+  // ── Equipment (slot 4) ──────────────────────────────────────────────────
+  /** Throw / place / deploy the equipped gadget, or detonate this player's armed C4. */
+  private useGadget(p: PlayerState) {
+    const armedC4 = this.gadgets.filter((g) => g.kind === 'c4' && g.ownerId === p.id && this.time >= g.fuseAt);
+    if (armedC4.length > 0) {
+      for (const g of armedC4) this.detonateGadget(g);
+      return;
+    }
+    if (!p.gadget || p.gadgetCharges <= 0 || this.time < p.gadgetReadyAt) return;
+    const kind = p.gadget;
+    const def = GADGETS[kind];
+    const dx = Math.cos(p.aim);
+    const dy = Math.sin(p.aim);
+    const reach = def.use === 'deploy' ? 20 : 12;
+    const wall = this.collision.raycast(p.x, p.y, dx, dy, reach + 4, 'shot');
+    const d = wall ? Math.max(0, wall.t - 5) : reach;
+    let x = p.x + dx * d;
+    let y = p.y + dy * d;
+    if (def.use === 'deploy' && this.collision.overlapsCircle(x, y, TURRET.radius)) {
+      x = p.x;
+      y = p.y;
+    }
+    const g: GadgetState = {
+      id: this.nextGadgetId,
+      kind,
+      ownerId: p.id,
+      ownerSlot: p.slot,
+      x,
+      y,
+      vx: def.use === 'throw' ? dx * def.throwSpeed + p.vx * 0.5 : 0,
+      vy: def.use === 'throw' ? dy * def.throwSpeed + p.vy * 0.5 : 0,
+      phase: def.use === 'throw' ? 'moving' : 'armed',
+      born: this.time,
+      fuseAt: this.time + def.fuseMs,
+      endsAt: def.use === 'throw' ? 0 : this.time + def.fuseMs + def.durationMs,
+      hp: def.use === 'deploy' ? TURRET.hp : 0,
+      aim: p.aim,
+      nextTickAt: 0,
+      ammo: def.use === 'deploy' ? TURRET.ammo : 0,
+      shots: 0,
+      triggeredAt: 0,
+    };
+    this.nextGadgetId = this.nextGadgetId >= 0xffff ? 1 : this.nextGadgetId + 1;
+    // two mines, one C4 and one turret per player at a time: the oldest goes
+    const limit = kind === 'mine' ? 2 : def.use === 'throw' ? Infinity : 1;
+    if (limit < Infinity) {
+      const mine = this.gadgets.filter((o) => o.ownerId === p.id && o.kind === kind);
+      while (mine.length >= limit) this.removeGadget(mine.shift()!);
+    }
+    this.gadgets.push(g);
+    p.gadgetCharges--;
+    p.gadgetReadyAt = this.time + def.cooldownMs;
+    p.invulnUntil = Math.min(p.invulnUntil, this.time);
+    this.events.push({ t: 'gadget', id: g.id, kind, slot: p.slot, x, y });
+  }
+
+  private removeGadget(g: GadgetState) {
+    const i = this.gadgets.indexOf(g);
+    if (i >= 0) this.gadgets.splice(i, 1);
+  }
+
+  private detonateGadget(g: GadgetState) {
+    const def = GADGETS[g.kind];
+    this.removeGadget(g);
+    this.blast({ id: 0x10000 + g.id, ownerId: g.ownerId, ownerSlot: g.ownerSlot, arms: g.kind, x: g.x, y: g.y, radius: def.radius, splash: def.damage, selfFactor: def.selfFactor });
+  }
+
+  private damageTurret(g: GadgetState, amount: number) {
+    if (g.kind !== 'turret' || !this.gadgets.includes(g)) return;
+    g.hp -= amount;
+    if (g.hp <= 0) {
+      this.removeGadget(g);
+      this.events.push({ t: 'turretDown', id: g.id, x: g.x, y: g.y });
+    }
+  }
+
+  /** Is the segment a→b hidden by an active smoke cloud? */
+  smokeBlocks(ax: number, ay: number, bx: number, by: number): boolean {
+    const r = GADGETS.smoke.radius * 0.85;
+    for (const g of this.gadgets) {
+      if (g.kind !== 'smoke' || g.phase !== 'active') continue;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const l2 = dx * dx + dy * dy || 1;
+      const t = Math.max(0, Math.min(1, ((g.x - ax) * dx + (g.y - ay) * dy) / l2));
+      const px = ax + dx * t - g.x;
+      const py = ay + dy * t - g.y;
+      if (px * px + py * py < r * r) return true;
+    }
+    return false;
+  }
+
+  /** Is the point inside an active smoke cloud? */
+  inSmoke(x: number, y: number): boolean {
+    const r = GADGETS.smoke.radius * 0.85;
+    return this.gadgets.some((g) => g.kind === 'smoke' && g.phase === 'active' && (g.x - x) ** 2 + (g.y - y) ** 2 < r * r);
+  }
+
+  /** Slides a thrown item along the floor with friction and wall bounces. Returns true if it hit a wall. */
+  private slide(g: GadgetState): boolean {
+    const dt = TICK_MS / 1000;
+    const sp = Math.hypot(g.vx, g.vy);
+    if (sp <= 0) return false;
+    const nsp = Math.max(0, sp - THROW_FRICTION * dt);
+    let dist = ((sp + nsp) / 2) * dt;
+    let dx = g.vx / sp;
+    let dy = g.vy / sp;
+    let bounced = false;
+    for (let k = 0; k < 3 && dist > 0.01; k++) {
+      const hit = this.collision.raycast(g.x, g.y, dx, dy, dist + 3, 'shot');
+      if (!hit) {
+        g.x += dx * dist;
+        g.y += dy * dist;
+        break;
+      }
+      const t = Math.max(0, hit.t - 3);
+      g.x += dx * t;
+      g.y += dy * t;
+      dist = (dist - t) * THROW_BOUNCE;
+      const dot = dx * hit.nx + dy * hit.ny;
+      dx -= 2 * dot * hit.nx;
+      dy -= 2 * dot * hit.ny;
+      bounced = true;
+      if (g.kind === 'molotov') break;
+    }
+    const out = bounced ? nsp * THROW_BOUNCE : nsp;
+    g.vx = out < 6 ? 0 : dx * out;
+    g.vy = out < 6 ? 0 : dy * out;
+    return bounced;
+  }
+
+  private stepGadgets() {
+    for (const g of [...this.gadgets]) {
+      if (!this.gadgets.includes(g)) continue; // removed by an earlier explosion this tick
+      const def = GADGETS[g.kind];
+      if (g.phase === 'moving') {
+        const hitWall = this.slide(g);
+        const stopped = g.vx === 0 && g.vy === 0;
+        if (g.kind === 'molotov') {
+          if (hitWall || stopped || this.time >= g.fuseAt) this.ignite(g);
+        } else if (this.time >= g.fuseAt) {
+          if (g.kind === 'f1') this.detonateGadget(g);
+          else if (g.kind === 'flash') this.flashbang(g);
+          else if (g.kind === 'smoke') {
+            g.phase = 'active';
+            g.vx = 0;
+            g.vy = 0;
+            g.endsAt = this.time + def.durationMs;
+            this.events.push({ t: 'smoke', id: g.id, x: g.x, y: g.y, radius: def.radius });
+          }
+        }
+        continue;
+      }
+      switch (g.kind) {
+        case 'molotov':
+          if (this.time >= g.endsAt) this.removeGadget(g);
+          else if (this.time >= g.nextTickAt) {
+            g.nextTickAt += FIRE_TICK_MS;
+            this.burn(g);
+          }
+          break;
+        case 'smoke':
+          if (this.time >= g.endsAt) this.removeGadget(g);
+          break;
+        case 'mine':
+          if (this.time >= g.endsAt) this.removeGadget(g);
+          else if (g.triggeredAt > 0) {
+            if (this.time >= g.triggeredAt + 250) this.detonateGadget(g);
+          } else if (this.time >= g.fuseAt) {
+            for (const q of this.players.values()) {
+              if (!q.alive || q.id === g.ownerId) continue;
+              if ((q.x - g.x) ** 2 + (q.y - g.y) ** 2 > (MINE_TRIGGER + PLAYER_RADIUS) ** 2) continue;
+              g.triggeredAt = this.time;
+              this.events.push({ t: 'beep', id: g.id, x: g.x, y: g.y });
+              break;
+            }
+          }
+          break;
+        case 'c4':
+          if (this.time >= g.endsAt) this.removeGadget(g);
+          break;
+        case 'turret':
+          this.stepTurret(g);
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  private ignite(g: GadgetState) {
+    const def = GADGETS.molotov;
+    g.phase = 'active';
+    g.vx = 0;
+    g.vy = 0;
+    g.endsAt = this.time + def.durationMs;
+    g.nextTickAt = this.time;
+    this.events.push({ t: 'ignite', id: g.id, x: g.x, y: g.y, radius: def.radius });
+  }
+
+  /** One damage tick of a burning molotov. */
+  private burn(g: GadgetState) {
+    const def = GADGETS.molotov;
+    const owner = this.players.get(g.ownerId) ?? null;
+    for (const q of [...this.players.values()]) {
+      if (!q.alive) continue;
+      if ((q.x - g.x) ** 2 + (q.y - g.y) ** 2 > def.radius * def.radius) continue;
+      if (!this.collision.lineOfSight(g.x, g.y, q.x, q.y)) continue;
+      const dmg = q.id === g.ownerId ? def.damage * def.selfFactor : def.damage;
+      this.applyDamage(q, owner, Math.max(1, Math.round(dmg)), 'molotov');
+    }
+    for (const t of [...this.gadgets]) if (t.kind === 'turret' && (t.x - g.x) ** 2 + (t.y - g.y) ** 2 <= def.radius * def.radius) this.damageTurret(t, def.damage);
+  }
+
+  /** Flashbang: blinds everyone with line of sight, longer when close and looking at it. */
+  private flashbang(g: GadgetState) {
+    const def = GADGETS.flash;
+    this.removeGadget(g);
+    this.events.push({ t: 'flashbang', x: g.x, y: g.y });
+    for (const q of this.players.values()) {
+      if (!q.alive) continue;
+      const d = Math.hypot(q.x - g.x, q.y - g.y);
+      if (d > def.radius || !this.collision.lineOfSight(g.x, g.y, q.x, q.y)) continue;
+      const look = Math.abs(angleDiff(q.aim, Math.atan2(g.y - q.y, g.x - q.x)));
+      const facing = look < Math.PI / 3 ? 1 : look < (Math.PI * 2) / 3 ? 0.6 : 0.3;
+      const ms = def.durationMs * facing * (1 - 0.6 * (d / def.radius));
+      q.flashedUntil = Math.max(q.flashedUntil, this.time + ms);
+    }
+  }
+
+  /** Turret: turns to the nearest visible opponent in range and fires short bursts. */
+  private stepTurret(g: GadgetState) {
+    const def = GADGETS.turret;
+    if (this.time >= g.endsAt || g.ammo <= 0) {
+      this.removeGadget(g);
+      this.events.push({ t: 'turretDown', id: g.id, x: g.x, y: g.y });
+      return;
+    }
+    if (g.phase === 'armed') {
+      if (this.time >= g.fuseAt) {
+        g.phase = 'active';
+        g.nextTickAt = this.time;
+      }
+      return;
+    }
+    let target: PlayerState | null = null;
+    let bestD = def.radius;
+    for (const q of this.players.values()) {
+      if (!q.alive || q.id === g.ownerId || this.time < q.invulnUntil) continue;
+      const d = Math.hypot(q.x - g.x, q.y - g.y);
+      if (d > bestD) continue;
+      if (!this.collision.lineOfSight(g.x, g.y, q.x, q.y) || this.smokeBlocks(g.x, g.y, q.x, q.y)) continue;
+      bestD = d;
+      target = q;
+    }
+    if (!target) return;
+    const want = Math.atan2(target.y - g.y, target.x - g.x);
+    const maxTurn = TURRET.turnRate * (TICK_MS / 1000);
+    g.aim = wrapAngle(g.aim + Math.max(-maxTurn, Math.min(maxTurn, angleDiff(g.aim, want))));
+    if (Math.abs(angleDiff(g.aim, want)) > 0.12 || this.time < g.nextTickAt) return;
+    g.nextTickAt = this.time + TURRET.fireIntervalMs;
+    g.ammo--;
+    g.shots++;
+    const a = wrapAngle(g.aim + spreadNoise(g.id * 7919 + 13, g.shots, 0) * TURRET.spread);
+    const dx = Math.cos(a);
+    const dy = Math.sin(a);
+    const range = def.radius + 40;
+    const wall = this.collision.raycast(g.x, g.y, dx, dy, range, 'shot');
+    let maxT = wall ? wall.t : range;
+    let victim: PlayerState | null = null;
+    for (const q of this.players.values()) {
+      if (!q.alive || q.id === g.ownerId) continue;
+      const t = rayCircle(g.x, g.y, dx, dy, q.x, q.y, PLAYER_RADIUS);
+      if (t !== null && t < maxT) {
+        maxT = t;
+        victim = q;
+      }
+    }
+    this.events.push({ t: 'shot', shooter: g.ownerSlot, weapon: 'turret', shotId: g.shots & 0xffff, ox: g.x, oy: g.y, pellets: [{ angle: a, dist: maxT, hit: victim ? victim.slot : -1, kind: victim ? 2 : wall ? 1 : 0 }], turret: true });
+    if (victim) this.applyDamage(victim, this.players.get(g.ownerId) ?? null, def.damage, 'turret');
   }
 
   // ── Pickups ─────────────────────────────────────────────────────────────
@@ -1070,6 +1451,7 @@ export class World {
         }
       }
       this.stepProjectiles();
+      this.stepGadgets();
       if (this.nextSupplyAt > 0 && this.time >= this.nextSupplyAt) {
         this.nextSupplyAt = this.time + this.config.supplyIntervalMs;
         this.dropSupply();

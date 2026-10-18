@@ -3,9 +3,9 @@
  * the differences are visual and narrative only (the abilities on the owner's sheets are deliberately
  * not implemented: half of the roster is sold for money, so no character may be stronger). The first
  * four are free; the rest are unlocked in the shop (see economy.ts): five for experience level +
- * tokens, four for diamonds.
+ * tokens, five for diamonds.
  */
-export const CHARACTER_IDS = ['petya', 'valuta', 'uchastkovy', 'mihalych', 'vorona', 'zmeya', 'varan', 'popugay', 'piranya', 'akula', 'leopard', 'slon', 'lobster'] as const;
+export const CHARACTER_IDS = ['petya', 'valuta', 'uchastkovy', 'mihalych', 'vorona', 'zmeya', 'varan', 'popugay', 'piranya', 'akula', 'oryol', 'leopard', 'slon', 'lobster'] as const;
 export type CharacterId = (typeof CHARACTER_IDS)[number];
 
 /** Free for everyone, unlocked by level + tokens, or bought for diamonds. */
@@ -196,6 +196,22 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     tier: 'premium',
     accent: '#3d5a8c',
     tag: 'Жора',
+  },
+  oryol: {
+    id: 'oryol',
+    name: 'Гарик',
+    nickname: 'Пендос',
+    species: 'Орёл',
+    role: 'Снайпер. Устраняет цели с расстояния, контролирует ключевые позиции.',
+    personality: 'Спокойный, рассудительный, не говорит лишнего.',
+    quote: 'Вижу дальше. Стреляю точнее.',
+    district: 'Порт',
+    business: 'Контроль территории',
+    weaponsNote: 'Снайперская винтовка',
+    lore: 'Пендосом Гарика прозвали ещё в восьмидесятом: тёмные очки-капли, бомбер с овчиной и жвачка, которую он жуёт даже во сне. Очки он выменял у иностранного моряка за ящик матрёшек и с тех пор их не снимает. Гарик сидит на портовых кранах и видит всё, что происходит у причалов. Говорит мало, стреляет редко — и почти никогда не промахивается.',
+    tier: 'premium',
+    accent: '#e8b030',
+    tag: 'Гарик',
   },
   leopard: {
     id: 'leopard',

@@ -7,7 +7,7 @@ import type { MapDef } from '../maps/types.js';
 import type { Loadout } from '../game-rules/loadout.js';
 
 /** The pre-shop loadout (pistol + crowbar, primary only from map pickups) used by most rule tests. */
-export const PISTOL_ONLY: Loadout = { sidearm: 'pistol', melee: 'montirovka', primary: null, mods: {} };
+export const PISTOL_ONLY: Loadout = { sidearm: 'pistol', melee: 'montirovka', primary: null, gadget: null, mods: {} };
 
 /** Small open test arena: 400x300 with one wall block in the middle. */
 export function testMap(): MapDef {

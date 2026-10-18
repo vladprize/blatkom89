@@ -1,7 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { CASE_PRICE, CASE_TABLE, DEFAULT_LOADOUT, FREE_CHARACTERS, FREE_WEAPONS, UPGRADE_COSTS, WEAPON_PRICES, tokensForMatch } from '@blatkom/shared';
+import { CASE_PRICE, CASE_TABLE, DEFAULT_LOADOUT, FREE_CHARACTERS, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, WEAPON_PRICES, tokensForMatch } from '@blatkom/shared';
 import { startTestApp, api, devLogin } from '../admin/testkit.js';
 import type { TestApp } from '../admin/testkit.js';
 import { pgContext } from '../services/persistence.js';
@@ -30,7 +30,10 @@ test('economy: a new player owns the free weapons and characters and spawns with
   assert.equal(r.body.diamonds, 0);
   assert.deepEqual([...r.body.weapons].sort(), [...FREE_WEAPONS].sort());
   assert.deepEqual([...r.body.characters].sort(), [...FREE_CHARACTERS].sort());
+  assert.deepEqual([...r.body.gadgets].sort(), [...FREE_GADGETS].sort());
+  assert.deepEqual(r.body.mods, {});
   assert.deepEqual({ ...r.body.loadout, mods: {} }, { ...DEFAULT_LOADOUT, mods: {} });
+  assert.equal(r.body.loadout.gadget, 'f1', 'the free grenade is equipped by default');
   const me = await api(app.base, '/api/me', { token: a.token });
   assert.equal(me.body.tokens, 0);
   assert.equal(me.body.email, null);
@@ -84,8 +87,8 @@ test('economy: buying weapons checks funds, level and ownership; prices come fro
   r = await buy('weapon', 'uzi');
   assert.equal(r.body.error.code, 'owned');
   r = await buy('weapon', 'ksyuha');
-  assert.equal(r.body.error.code, 'level', 'ksyuha needs level 3');
-  await setLevel(a.userId, 3);
+  assert.equal(r.body.error.code, 'level', 'АКС-74У needs level 7');
+  await setLevel(a.userId, 7);
   r = await buy('weapon', 'ksyuha');
   assert.equal(r.status, 200, r.text);
   r = await buy('weapon', 'svd');
@@ -120,22 +123,56 @@ test('economy: characters — level + tokens or diamonds; only owned characters 
   assert.ok(gear.characters.has('leopard'));
 });
 
-test('economy: upgrades cost tokens per level, are capped and only fit stats the weapon has', async () => {
+test('economy: modifications cost tokens per weapon, fit only where they make sense and equip by mount', async () => {
   const a = await devLogin(app.base, 'Оружейник');
   await ctx().economy.grant(a.userId, 'tokens', 5000, null, 'test');
-  const up = (weapon: string, stat: string) => api(app.base, '/api/shop/upgrade', { method: 'POST', token: a.token, body: { weapon, stat } });
-  for (let lv = 1; lv <= 3; lv++) {
-    const r = await up('avtomat', 'dmg');
-    assert.equal(r.status, 200, r.text);
-    assert.equal(r.body.upgrades.avtomat.dmg, lv);
-  }
-  assert.equal((await up('avtomat', 'dmg')).body.error.code, 'max_level');
-  assert.equal((await up('montirovka', 'mag')).body.error.code, 'not_upgradable');
-  assert.equal((await up('svd', 'dmg')).body.error.code, 'not_owned');
+  const mod = (weapon: string, m: string) => api(app.base, '/api/shop/mod', { method: 'POST', token: a.token, body: { weapon, mod: m } });
+  let r = await mod('avtomat', 'silencer');
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual(r.body.mods.avtomat, ['silencer']);
+  assert.deepEqual(r.body.loadout.mods.avtomat, ['silencer'], 'a bought modification is equipped right away');
+  r = await mod('avtomat', 'reddot');
+  assert.deepEqual(r.body.loadout.mods.avtomat, ['silencer', 'reddot']);
+  r = await mod('avtomat', 'scope');
+  assert.deepEqual(r.body.mods.avtomat, ['silencer', 'reddot', 'scope']);
+  assert.deepEqual(r.body.loadout.mods.avtomat, ['silencer', 'scope'], 'the scope takes the optic mount from the red dot');
+  assert.equal((await mod('avtomat', 'silencer')).body.error.code, 'owned');
+  assert.equal((await mod('pistol', 'scope')).body.error.code, 'not_fit');
+  assert.equal((await mod('montirovka', 'laser')).body.error.code, 'not_fit');
+  assert.equal((await mod('svd', 'scope')).body.error.code, 'not_owned');
+  assert.equal((await mod('avtomat', 'turbo')).status, 400);
   const inv = await ctx().economy.inventory(a.userId);
-  assert.equal(inv.tokens, 5000 - UPGRADE_COSTS[1]! - UPGRADE_COSTS[2]! - UPGRADE_COSTS[3]!);
-  // upgrades travel with the loadout into rooms
-  assert.deepEqual(inv.loadout.mods.avtomat, { dmg: 3 });
+  assert.equal(inv.tokens, 5000 - MOD_PRICES.silencer - MOD_PRICES.reddot - MOD_PRICES.scope);
+  // the loadout endpoint switches between owned modifications; unowned ones are dropped
+  r = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', mods: { avtomat: ['reddot', 'laser'] } } });
+  assert.deepEqual(r.body.loadout.mods.avtomat, ['reddot']);
+  const gear = await ctx().economy.gear(a.userId);
+  assert.deepEqual(gear.loadout.mods.avtomat, ['reddot'], 'modifications travel with the loadout into rooms');
+  const led = await ctx().economy.ledger(a.userId);
+  assert.equal(led.filter((e) => e.reason === 'mod').length, 3);
+});
+
+test('economy: equipment is bought with tokens (some from a level) and equipped in the loadout', async () => {
+  const a = await devLogin(app.base, 'Подрывник');
+  const buy = (id: string) => api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'gadget', id } });
+  assert.equal((await buy('f1')).body.error.code, 'not_for_sale', 'the free grenade is not sold');
+  assert.equal((await buy('smoke')).body.error.code, 'funds');
+  await ctx().economy.grant(a.userId, 'tokens', 2000, null, 'test');
+  let r = await buy('smoke');
+  assert.equal(r.status, 200, r.text);
+  assert.ok(r.body.gadgets.includes('smoke'));
+  assert.equal(r.body.tokens, 2000 - GADGET_PRICES.smoke!.amount);
+  assert.equal((await buy('turret')).body.error.code, 'level');
+  await setLevel(a.userId, 12);
+  r = await buy('turret');
+  assert.equal(r.status, 200, r.text);
+  r = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', gadget: 'turret' } });
+  assert.equal(r.body.loadout.gadget, 'turret');
+  r = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', gadget: 'c4' } });
+  assert.equal(r.body.loadout.gadget, 'f1', 'unowned equipment falls back to the free grenade');
+  r = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', gadget: null } });
+  assert.equal(r.body.loadout.gadget, null);
+  assert.equal((await ctx().economy.gear(a.userId)).loadout.gadget, null);
 });
 
 test('economy: cases cost diamonds, never repeat a weapon and stop when the collection is complete', async () => {
@@ -173,7 +210,7 @@ test('economy: cases cost diamonds, never repeat a weapon and stop when the coll
 
 test('economy: the loadout only keeps owned weapons and the server re-reads it for rooms', async () => {
   const a = await devLogin(app.base, 'Снайпер');
-  let r = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'nagan', melee: 'bita', primary: 'svd' } });
+  let r = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'deagle', melee: 'bita', primary: 'svd' } });
   assert.equal(r.status, 200, r.text);
   assert.deepEqual([r.body.loadout.sidearm, r.body.loadout.melee, r.body.loadout.primary], ['pistol', 'montirovka', 'avtomat'], 'unowned → free defaults');
   await ctx().economy.grantItem(a.userId, 'weapon', 'svd');
@@ -188,9 +225,9 @@ test('economy: the loadout only keeps owned weapons and the server re-reads it f
 
 test('economy: concurrent purchases cannot overspend', async () => {
   const a = await devLogin(app.base, 'Торопыга');
-  await ctx().economy.grant(a.userId, 'tokens', WEAPON_PRICES.finka!.amount + WEAPON_PRICES.uzi!.amount - 1, null, 'test');
+  await ctx().economy.grant(a.userId, 'tokens', WEAPON_PRICES.nozh!.amount + WEAPON_PRICES.uzi!.amount - 1, null, 'test');
   const results = await Promise.all([
-    api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'weapon', id: 'finka' } }),
+    api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'weapon', id: 'nozh' } }),
     api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'weapon', id: 'uzi' } }),
   ]);
   assert.equal(results.filter((r) => r.status === 200).length, 1, results.map((r) => r.text).join(' | '));

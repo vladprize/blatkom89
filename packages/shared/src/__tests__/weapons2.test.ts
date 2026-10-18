@@ -2,12 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeWorld, input, startDuel, BTN, PISTOL_ONLY, testMap } from './helpers.js';
 import { MAX_HP, MEDKIT_HEAL, RUN_SPEED, TICK_MS } from '../constants/game.js';
-import { WEAPONS, WEAPON_IDS, applyMods, sanitizeMods, upgradeStatsFor, UPGRADE_EFFECT, damageFalloff, SIDEARMS, MELEE_WEAPONS, PRIMARY_WEAPONS } from '../game-rules/weapons.js';
+import { WEAPONS, WEAPON_IDS, MOD_IDS, MODS, applyMods, sanitizeMods, modsFor, damageFalloff, SIDEARMS, MELEE_WEAPONS, PRIMARY_WEAPONS } from '../game-rules/weapons.js';
 import type { WeaponId } from '../game-rules/weapons.js';
 import { DEFAULT_LOADOUT, sanitizeLoadout } from '../game-rules/loadout.js';
 import type { Loadout } from '../game-rules/loadout.js';
 import { encodeSnapshot, decodeSnapshot } from '../net/codec.js';
 import { weaponFor } from '../sim/world.js';
+import type { ModId } from '../game-rules/weapons.js';
 
 const withPrimary = (primary: WeaponId | null, extra: Partial<Loadout> = {}): Loadout => ({ ...PISTOL_ONLY, primary, ...extra });
 
@@ -33,8 +34,11 @@ test('balance: classic shooter hit counts at 100 HP', () => {
   assert.ok(hitsToKill('obrez', 200) >= 2, 'sawn-off is weak at range');
   assert.equal(hitsToKill('montirovka'), 2);
   assert.equal(hitsToKill('svd'), 2);
-  assert.equal(hitsToKill('mosinka'), 2);
-  for (const id of ['uzi', 'ksyuha', 'pkm', 'tommy', 'gvozdomet', 'stechkin'] as const) assert.ok(hitsToKill(id) >= 4 && hitsToKill(id) <= 8, `${id} trades damage for rate`);
+  assert.equal(hitsToKill('m24'), 2);
+  assert.equal(hitsToKill('awm'), 2, 'AWM finishes a wounded target with one shot, never a healthy one');
+  assert.equal(hitsToKill('deagle'), 2);
+  assert.equal(hitsToKill('tt'), 3);
+  for (const id of ['uzi', 'ppsh', 'mp5', 'ksyuha', 'm4', 'm249', 'tommy', 'gvozdomet', 'p92'] as const) assert.ok(hitsToKill(id) >= 4 && hitsToKill(id) <= 8, `${id} trades damage for rate`);
   for (const id of WEAPON_IDS) {
     const w = WEAPONS[id];
     assert.ok(w.damage > 0 && w.fireIntervalMs >= 50, `${id} sane`);
@@ -44,7 +48,7 @@ test('balance: classic shooter hit counts at 100 HP', () => {
   }
   // single-shot kills only from shotguns point-blank, launchers (splash) and the slow sledgehammer
   const oneShot = WEAPON_IDS.filter((id) => hitsToKill(id) === 1).sort();
-  assert.deepEqual(oneShot, ['granatomet', 'kuvalda', 'muha', 'obrez', 'rpg', 'toz'].sort().filter((id) => hitsToKill(id as WeaponId) === 1));
+  assert.deepEqual(oneShot, ['granatomet', 'kuvalda', 'muha', 'obrez', 'rpg', 's12'].sort().filter((id) => hitsToKill(id as WeaponId) === 1));
   for (const id of oneShot) assert.ok(['shotgun', 'obrez', 'rocket', 'heavySwing'].includes(WEAPONS[id].sound), `${id} is a shotgun, launcher or sledgehammer`);
 });
 
@@ -70,91 +74,112 @@ test('balance: paid and rare weapons are sidegrades, not upgrades', () => {
   }
 });
 
-test('loadout: sanitize rejects unknown, mis-slotted and unowned weapons', () => {
+test('loadout: sanitize rejects unknown, mis-slotted and unowned weapons, gadgets and mods', () => {
   assert.deepEqual(sanitizeLoadout(null), { ...DEFAULT_LOADOUT, mods: {} });
-  const l = sanitizeLoadout({ sidearm: 'finka', melee: 'pb', primary: 'laser', mods: { svd: { dmg: 9, mag: -1, x: 2 }, nope: { dmg: 1 } } });
+  const l = sanitizeLoadout({ sidearm: 'nozh', melee: 'tt', primary: 'laser', gadget: 'nuke', mods: { svd: ['scope', 'reddot', 'silencer', 'nope'], m4: 'silencer', nope: ['laser'] } });
   assert.equal(l.sidearm, 'pistol');
   assert.equal(l.melee, 'montirovka');
   assert.equal(l.primary, 'avtomat');
-  assert.deepEqual(l.mods, { svd: { dmg: 3 } });
+  assert.equal(l.gadget, 'f1');
+  assert.deepEqual(l.mods, { svd: ['silencer', 'scope'] }, 'one modification per mount, the first one wins');
   const owned = new Set<WeaponId>(['pistol', 'montirovka', 'avtomat', 'obrez', 'svd']);
-  const l2 = sanitizeLoadout({ sidearm: 'nagan', melee: 'bita', primary: 'svd', mods: { nagan: { dmg: 2 }, svd: { rate: 1 } } }, (w) => owned.has(w));
+  const l2 = sanitizeLoadout(
+    { sidearm: 'deagle', melee: 'bita', primary: 'svd', gadget: 'turret', mods: { deagle: ['laser'], svd: ['scope', 'extmag'] } },
+    { weapon: (w) => owned.has(w), gadget: (g) => g === 'f1', mod: (w, m) => w === 'svd' && m === 'extmag' },
+  );
   assert.equal(l2.sidearm, 'pistol');
   assert.equal(l2.melee, 'montirovka');
   assert.equal(l2.primary, 'svd');
-  assert.deepEqual(l2.mods, { svd: { rate: 1 } });
-  assert.equal(sanitizeLoadout({ primary: null }).primary, null);
+  assert.equal(l2.gadget, 'f1', 'an unowned gadget falls back to the free grenade');
+  assert.deepEqual(l2.mods, { svd: ['extmag'] });
+  assert.equal(sanitizeLoadout({ primary: null, gadget: null }).primary, null);
+  assert.equal(sanitizeLoadout({ gadget: null }).gadget, null);
 });
 
-test('upgrades: capped per-level effects, only stats that fit the weapon', () => {
+test('modifications: every one has a plus and a minus, fits only where it makes sense', () => {
+  for (const m of MOD_IDS) assert.ok(MODS[m].plus && MODS[m].minus, `${m} described`);
+  assert.deepEqual(modsFor(WEAPONS.bita), [], 'melee takes none');
+  assert.deepEqual(modsFor(WEAPONS.rpg), [], 'launchers take none');
+  assert.deepEqual(modsFor(WEAPONS.ognemet), [], 'the flamethrower takes none');
+  assert.ok(!modsFor(WEAPONS.pistol).includes('scope') && !modsFor(WEAPONS.pistol).includes('grip'), 'no scope or grip on pistols');
+  assert.ok(!modsFor(WEAPONS.obrez).includes('extmag'), 'two-shell guns get no extended magazine');
+  assert.ok(!modsFor(WEAPONS.s12).includes('scope'), 'no scope on shotguns');
+  assert.deepEqual(modsFor(WEAPONS.arbalet), ['reddot', 'scope']);
+  assert.deepEqual(modsFor(WEAPONS.avtomat), ['silencer', 'reddot', 'scope', 'laser', 'grip', 'extmag']);
+
   const ak = WEAPONS.avtomat;
-  const up = applyMods(ak, { dmg: 3, rate: 3, reload: 3, mag: 3 });
-  assert.ok(Math.abs(up.damage - ak.damage * (1 + UPGRADE_EFFECT.dmg[3]!)) < 1e-9);
-  assert.equal(up.fireIntervalMs, Math.round(ak.fireIntervalMs * (1 - UPGRADE_EFFECT.rate[3]!)));
-  assert.equal(up.reloadMs, Math.round(ak.reloadMs * (1 - UPGRADE_EFFECT.reload[3]!)));
-  assert.equal(up.magazine, 30 + 9);
-  assert.equal(applyMods(ak, { dmg: 99 }).damage, applyMods(ak, { dmg: 3 }).damage, 'levels are capped');
-  assert.equal(applyMods(ak, {}), ak, 'no mods returns the base definition');
-  // melee upgrades only damage and swing speed; single-shot weapons never get a magazine upgrade
-  assert.deepEqual(upgradeStatsFor(WEAPONS.bita), ['dmg', 'rate']);
-  assert.equal(applyMods(WEAPONS.rpg, { mag: 3 }).magazine, 1);
-  assert.equal(applyMods(WEAPONS.rpg, { dmg: 3 }).projectile!.splash, WEAPONS.rpg.projectile!.splash * 1.12);
-  assert.deepEqual(sanitizeMods({ dmg: 2.7, rate: '3', reload: -4, mag: Infinity }), { dmg: 2 });
-  // a fully upgraded free rifle still kills in the same number of hits as a fresh one
-  assert.equal(Math.ceil(MAX_HP / up.damage), 4);
+  assert.equal(applyMods(ak, []), ak, 'no mods returns the base definition');
+  const sil = applyMods(ak, ['silencer']);
+  assert.ok(sil.silenced && sil.range < ak.range && sil.flash === 'none');
+  const dot = applyMods(ak, ['reddot']);
+  assert.ok(dot.spread < ak.spread && dot.drawMs > ak.drawMs);
+  const scope = applyMods(ak, ['scope']);
+  assert.ok(scope.range > ak.range && scope.moveSpeed < ak.moveSpeed && scope.drawMs > ak.drawMs);
+  const laser = applyMods(ak, ['laser']);
+  assert.ok(laser.laser && laser.spread < ak.spread);
+  const grip = applyMods(ak, ['grip']);
+  assert.ok(grip.spreadPerShot < ak.spreadPerShot && grip.reloadMs > ak.reloadMs);
+  const mag = applyMods(ak, ['extmag']);
+  assert.ok(mag.magazine === 45 && mag.reloadMs > ak.reloadMs);
+  // nothing changes damage or fire rate: hit counts stay classic
+  const all = applyMods(ak, ['silencer', 'reddot', 'laser', 'extmag']);
+  assert.equal(all.damage, ak.damage);
+  assert.equal(all.fireIntervalMs, ak.fireIntervalMs);
+  assert.equal(applyMods(WEAPONS.rpg, ['extmag', 'scope']), WEAPONS.rpg, 'unfit modifications are ignored');
+  assert.deepEqual(sanitizeMods(['grip', 'laser', 'extmag', 'extmag', 7], 'avtomat'), ['grip', 'extmag']);
 });
 
-test('upgrades: the world applies a player\'s mods to fire rate and magazine', () => {
+test('modifications: the world applies a player\'s magazine and silencer', () => {
   const w = makeWorld();
-  const mods = { avtomat: { rate: 3, mag: 3 } };
+  const mods = { avtomat: ['extmag', 'silencer'] as ModId[] };
   const { p1 } = startDuel(w, { x: 60, y: 50 }, { x: 350, y: 260 }, [withPrimary('avtomat', { mods }), PISTOL_ONLY]);
-  w.players.get('a')!.alive && w.spawnPlayer(p1, false);
+  w.spawnPlayer(p1, false);
   p1.x = 60;
   p1.y = 50;
   assert.equal(p1.weapon, 'avtomat');
-  assert.equal(p1.heavyMag, 39, 'upgraded magazine at spawn');
-  assert.equal(weaponFor(p1, 'avtomat').fireIntervalMs, 88);
+  assert.equal(p1.heavyMag, 45, 'extended magazine at spawn');
+  assert.ok(weaponFor(p1, 'avtomat').silenced);
   let shots = 0;
   for (let i = 0; i < 60; i++) {
     w.applyInput('a', input({ buttons: BTN.FIRE, aimRad: 0 }));
     shots += w.drainEvents().filter((e) => e.t === 'shot').length;
   }
-  assert.equal(shots, 12, '1 s of fire at 88 ms intervals');
+  assert.equal(shots, 10, '1 s of fire at the unchanged 100 ms interval');
 });
 
 test('loadout: spawn with the primary in hand (full magazine + one spare), slots 1–3 switch', () => {
   const w = makeWorld();
-  const { p1, p2 } = startDuel(w, { x: 60, y: 50 }, { x: 350, y: 260 }, [withPrimary('svd', { sidearm: 'nagan', melee: 'bita' }), PISTOL_ONLY]);
+  const { p1, p2 } = startDuel(w, { x: 60, y: 50 }, { x: 350, y: 260 }, [withPrimary('svd', { sidearm: 'deagle', melee: 'bita' }), PISTOL_ONLY]);
   w.spawnPlayer(p1, false);
   assert.equal(p1.weapon, 'svd');
   assert.equal(p1.heavy, 'svd');
   assert.equal(p1.heavyMag, WEAPONS.svd.magazine);
   assert.equal(p1.heavyReserve, WEAPONS.svd.magazine);
-  assert.equal(p1.sideMag, WEAPONS.nagan.magazine);
+  assert.equal(p1.sideMag, WEAPONS.deagle.magazine);
   assert.equal(p2.weapon, 'pistol');
   assert.equal(p2.heavy, null);
   for (let i = 0; i < 12; i++) w.applyInput('a', input({ slot: 1 }));
-  assert.equal(p1.weapon, 'nagan');
+  assert.equal(p1.weapon, 'deagle');
   w.applyInput('a', input({ slot: 2 }));
   assert.equal(p1.weapon, 'bita');
   w.applyInput('a', input({ slot: 3 }));
   assert.equal(p1.weapon, 'svd');
   // a loadout change applies from the next spawn, not mid-life
-  w.setLoadout('a', withPrimary('pkm'));
+  w.setLoadout('a', withPrimary('m249'));
   assert.equal(p1.weapon, 'svd');
   w.spawnPlayer(p1, false);
-  assert.equal(p1.weapon, 'pkm');
+  assert.equal(p1.weapon, 'm249');
   assert.equal(p1.sidearm, 'pistol');
 });
 
 test('weapons: heavy weapons slow the carrier down', () => {
   const w = makeWorld();
-  const { p1 } = startDuel(w, { x: 40, y: 50 }, { x: 350, y: 260 }, [withPrimary('pkm'), PISTOL_ONLY]);
+  const { p1 } = startDuel(w, { x: 40, y: 50 }, { x: 350, y: 260 }, [withPrimary('m249'), PISTOL_ONLY]);
   w.spawnPlayer(p1, false);
   p1.x = 40;
   p1.y = 50;
   for (let i = 0; i < 40; i++) w.applyInput('a', input({ moveX: 127 }));
-  assert.ok(Math.abs(p1.vx - RUN_SPEED * WEAPONS.pkm.moveSpeed) < 1e-6, `vx ${p1.vx}`);
+  assert.ok(Math.abs(p1.vx - RUN_SPEED * WEAPONS.m249.moveSpeed) < 1e-6, `vx ${p1.vx}`);
   for (let i = 0; i < 2; i++) w.applyInput('a', input({ moveX: 127, slot: 1 }));
   for (let i = 0; i < 40; i++) w.applyInput('a', input({ moveX: 127 }));
   assert.ok(Math.abs(p1.vx - RUN_SPEED) < 1e-6, 'full speed with the pistol out');
@@ -162,7 +187,7 @@ test('weapons: heavy weapons slow the carrier down', () => {
 
 test('weapons: silenced weapons are flagged (hidden from the minimap radar)', () => {
   const silenced = WEAPON_IDS.filter((id) => WEAPONS[id].silenced).sort();
-  assert.deepEqual(silenced, ['arbalet', 'pb', 'val']);
+  assert.deepEqual(silenced, ['arbalet'], 'only the crossbow is silent out of the box; the rest need a silencer');
   for (const id of silenced) assert.notEqual(WEAPONS[id].sound, 'avtomat');
 });
 
@@ -250,19 +275,19 @@ test('medkits: heal 50 up to full, are not wasted at full HP, respawn after a de
   assert.equal(p1.hp, MAX_HP, 'capped at full');
 });
 
-test('codec v3: loadout slots, heavy weapon and medkits survive a snapshot round-trip', () => {
+test('codec v4: loadout slots, heavy weapon and medkits survive a snapshot round-trip', () => {
   const w = makeWorld();
-  const { p1, p2 } = startDuel(w, { x: 60, y: 50 }, { x: 160, y: 50 }, [withPrimary('rpg', { sidearm: 'stechkin', melee: 'kuvalda' }), PISTOL_ONLY]);
+  const { p1, p2 } = startDuel(w, { x: 60, y: 50 }, { x: 160, y: 50 }, [withPrimary('rpg', { sidearm: 'p92', melee: 'kuvalda' }), PISTOL_ONLY]);
   w.spawnPlayer(p1, false);
-  const buf = encodeSnapshot({ tick: w.tick, time: w.time, phase: w.phase, phaseRemaining: 0, players: w.players.values(), pickups: w.pickups, events: [], now: w.time });
+  const buf = encodeSnapshot({ tick: w.tick, time: w.time, phase: w.phase, phaseRemaining: 0, players: w.players.values(), pickups: w.pickups, gadgets: w.gadgets, events: [], now: w.time });
   const s = decodeSnapshot(buf);
   const a = s.players.find((p) => p.slot === p1.slot)!;
   const b = s.players.find((p) => p.slot === p2.slot)!;
   assert.equal(a.weapon, 'rpg');
   assert.equal(a.heavy, 'rpg');
-  assert.equal(a.sidearm, 'stechkin');
+  assert.equal(a.sidearm, 'p92');
   assert.equal(a.melee, 'kuvalda');
-  assert.equal(a.sideMag, WEAPONS.stechkin.magazine);
+  assert.equal(a.sideMag, WEAPONS.p92.magazine);
   assert.equal(b.heavy, null);
   assert.equal(b.sidearm, 'pistol');
   const kits = s.pickups.filter((pk) => pk.medkit);

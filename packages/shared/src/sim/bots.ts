@@ -4,6 +4,7 @@
  */
 import { WEAPONS } from '../game-rules/weapons.js';
 import type { WeaponId } from '../game-rules/weapons.js';
+import { GADGETS } from '../game-rules/gadgets.js';
 import { quantizeAngle, wrapAngle, angleDiff } from './math.js';
 import { mulberry32 } from './rng.js';
 import type { NavGrid } from './nav.js';
@@ -44,6 +45,7 @@ export class BotBrain {
   private aimNoiseAt = 0;
   private stuckCheck = { x: 0, y: 0, at: 0 };
   private roamGoal: { x: number; y: number } | null = null;
+  private gadgetAt = 0;
   private readonly rng: () => number;
   private readonly d: (typeof DIFFICULTY)[BotDifficulty];
 
@@ -111,6 +113,25 @@ export class BotBrain {
       const reacted = now - this.targetSeenAt > this.d.reaction;
       const w = WEAPONS[me.weapon];
       if (aimed && reacted && dist < w.range * 0.95) frame.buttons |= BTN.FIRE;
+      // equipment: grenades at mid range, a turret or a mine when an opponent shows up, smoke when hurt
+      if (me.gadget && me.gadgetCharges > 0 && aimed && reacted && now >= this.gadgetAt && now >= me.gadgetReadyAt) {
+        const g = GADGETS[me.gadget];
+        const throwRange = (g.throwSpeed * g.throwSpeed) / 1400;
+        const want =
+          g.use === 'throw'
+            ? me.gadget === 'smoke'
+              ? me.hp < 45
+              : dist > 90 && dist < throwRange + 60
+            : me.gadget === 'turret'
+              ? dist > 120 && dist < g.radius
+              : me.gadget === 'mine'
+                ? dist > 150
+                : false;
+        if (want && this.rng() < 0.08) {
+          frame.buttons |= BTN.GADGET;
+          this.gadgetAt = now + 4000 + this.rng() * 4000;
+        }
+      }
     } else {
       const goal = this.chooseGoal(me, now);
       const wp = this.followPath(me, goal, now);
@@ -157,11 +178,13 @@ export class BotBrain {
   private pickTarget(me: PlayerState, now: number): PlayerState | null {
     let best: PlayerState | null = null;
     let bestD = this.d.vision;
+    // blinded by a flashbang: nobody is visible
+    if (now < me.flashedUntil) bestD = 0;
     for (const p of this.world.players.values()) {
       if (p === me || !p.alive) continue;
       const d = Math.sqrt((p.x - me.x) ** 2 + (p.y - me.y) ** 2);
       const sticky = p.id === this.targetId ? 80 : 0;
-      if (d - sticky < bestD && this.world.collision.lineOfSight(me.x, me.y, p.x, p.y)) {
+      if (d - sticky < bestD && this.world.collision.lineOfSight(me.x, me.y, p.x, p.y) && !this.world.smokeBlocks(me.x, me.y, p.x, p.y)) {
         bestD = d - sticky;
         best = p;
       }

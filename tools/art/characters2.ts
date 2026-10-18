@@ -798,6 +798,65 @@ const lobster: Rig = {
   },
 };
 
-export const EXTRA_RIGS: Record<Exclude<CharacterId, 'petya' | 'valuta' | 'uchastkovy' | 'mihalych'>, Rig> = { vorona, zmeya, varan, popugay, piranya, akula, leopard, slon, lobster };
+// ── Гарик «Пендос» — bald eagle, leather bomber with a shearling collar, red scarf, shades ─────
+const EAGLE_WHITE = H('#8a8478', '#b8b2a4', '#ddd8cc', '#f2eee4', '#fbf8f0');
+const BOMBER: Material = { ramp: H('#140b06', '#24140b', '#381f11', '#4e2d19', '#683e24'), spec: { color: hex('#d8a880'), power: 10, threshold: 0.74 } };
+const SCARF_RED = H('#4a0608', '#7a0e12', '#a81a1a', '#cc2c22', '#e64a34');
+const oryol: Rig = {
+  id: 'oryol',
+  torsoC: [-0.3, 0, 8.4],
+  torsoR: [5.9, 11.2, 5.4],
+  shoulderY: 8.8,
+  shoulderZ: 11.6,
+  armR: 2.45,
+  headC: [0.4, 0, 15.2],
+  hipY: 4.3,
+  footR: [2.9, 1.6, 1.2],
+  toes: true,
+  pal: {
+    torso: { ...BOMBER, pattern: (c) => (Math.abs(((c.x * 0.6 + c.y * 0.4 + 40) % 2.6) - 1.3) < 0.07 ? 0.7 : null) },
+    sleeve: { ...BOMBER, pattern: (c) => (c.t > 0.86 ? hex('#1c120c') : null) },
+    hand: { ramp: H('#060608', '#101014', '#1c1c22', '#2c2c34') },
+    pants: { ramp: H('#1a2232', '#263248', '#344462', '#465a80') },
+    shoe: { ramp: H('#1e1208', '#352010', '#52341c', '#704c2a') },
+  },
+  torsoExtras(p, o) {
+    // red star patch on the left shoulder
+    p.push({ k: 'ell', c: [-0.2 + o.dx, -oryol.shoulderY + o.dy, oryol.shoulderZ + oryol.armR + 0.15 + o.dz], r: [1.3, 1.3, 0.3], mat: { ramp: H('#5a0a0c', '#a01c1a', '#d0302a'), pattern: (c) => { const a = Math.atan2(c.ly, c.lx); const r = Math.hypot(c.lx, c.ly); return r < 0.5 + 0.45 * Math.abs(Math.cos(a * 2.5)) ? hex('#f0c040') : null; } }, group: 'patch' });
+    // shearling collar over the shoulders
+    for (const s of [-1, 1]) p.push({ k: 'ell', c: [0.0 + o.dx, s * 5.6 + o.dy, 12.9 + o.dz], r: [3.8, 2.3, 1.7], yaw: s * 0.45 + o.yaw, mat: SHEARLING, group: 'collar' + s });
+    p.push({ k: 'ell', c: [-2.8 + o.dx, o.dy, 13.0 + o.dz], r: [2.0, 5.8, 1.7], yaw: o.yaw, mat: SHEARLING, group: 'collarback' });
+    // red scarf: a ring round the neck and two ends flying back
+    p.push({ k: 'ell', c: [1.2 + o.dx, o.dy, 13.4 + o.dz], r: [4.6, 5.4, 1.6], yaw: o.yaw, mat: { ramp: SCARF_RED, dither: true }, group: 'scarf' });
+    for (const s of [-1, 1]) p.push({ k: 'cap', a: [-3.0 + o.dx, s * 1.6 + o.dy, 13.6 + o.dz], b: [-9.0 + o.dx, s * 3.0 + o.sway * 0.8 + o.dy, 12.2 + o.dz], r: 1.2, r2: 0.8, mat: { ramp: SCARF_RED }, group: 'scarfend' });
+    pouches(p, o, oryol, { ramp: H('#1a140c', '#2e2416', '#463822', '#5e4c30') }, [
+      [3.4, -5.2],
+      [3.4, 5.2],
+    ]);
+    backpack(p, o, oryol, { ramp: H('#1c1a10', '#2e2a1a', '#463e26', '#5e5434') }, { ramp: H('#120e08', '#201a10', '#302616') }, [2.2, 4.2, 2.6]);
+  },
+  head(p, o) {
+    const hc: V3 = [0.6 + o.dx, o.dy, 15.0 + o.dz];
+    const hr: V3 = [4.8, 4.4, 4.0];
+    p.push({ k: 'ell', c: hc, r: hr, mat: fur(EAGLE_WHITE), group: 'head' });
+    // ruffled white nape feathers
+    for (const y of [-1.6, 0, 1.6]) p.push({ k: 'cap', a: [hc[0] - 2.6, hc[1] + y * 0.6, hc[2] + 1.6], b: [hc[0] - 4.8, hc[1] + y * 1.2, hc[2] + 0.8], r: 0.9, r2: 0.35, mat: fur(EAGLE_WHITE), group: 'nape' });
+    // big hooked yellow beak
+    p.push({ k: 'cap', a: [hc[0] + 3.0, hc[1], hc[2] + 0.9], b: [hc[0] + 8.4, hc[1], hc[2] + 0.2], r: 2.3, r2: 1.1, mat: { ramp: H('#7a5008', '#b88010', '#e8b020', '#ffd84a') }, group: 'beak' });
+    p.push({ k: 'cap', a: [hc[0] + 8.2, hc[1], hc[2] + 0.2], b: [hc[0] + 9.2, hc[1], hc[2] - 1.4], r: 1.0, r2: 0.45, mat: { ramp: H('#5a3a06', '#8a600c', '#b88010') }, group: 'beak' });
+    // black aviator shades over the eyes
+    shadesOnEyes(p, hc, hr, 2.2, 2.0, 1.7);
+  },
+  tail(p, o) {
+    for (const [y, l] of [
+      [-1.4, 12.0],
+      [0, 13.2],
+      [1.4, 12.0],
+    ] as const)
+      p.push({ k: 'cap', a: [-6.4, y * 0.5, 6.6], b: [-l, y * 1.5 + o.sway * 0.4, 6.2], r: 1.3, r2: 0.8, mat: { ramp: H('#6a6458', '#a8a294', '#d8d2c4', '#f2eee4') }, group: 'tail' });
+  },
+};
+
+export const EXTRA_RIGS: Record<Exclude<CharacterId, 'petya' | 'valuta' | 'uchastkovy' | 'mihalych'>, Rig> = { vorona, zmeya, varan, popugay, piranya, akula, oryol, leopard, slon, lobster };
 
 export type { PoseOffsets };
