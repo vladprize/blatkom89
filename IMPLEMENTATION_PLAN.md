@@ -1,4 +1,4 @@
-# БЛАТКОМ ’89 — Implementation Plan
+# БЛАТКОМ ’89 (BLATKOM ’89) — Implementation Plan
 
 Living document. Status markers: ✅ done & verified · 🟡 done, partially verified · ⛔ not done / not verifiable here.
 
@@ -51,27 +51,48 @@ Living document. Status markers: ✅ done & verified · 🟡 done, partially ver
 | Rating points for assists, not only kills | Points: elimination +2, assist +1 (≥ 20 damage within 6 s before the elimination, shared `SCORING`); limit in points (50 online / 40 practice); kill feed lists assisters; «+2 УСТРАНЕНИЕ» / «+1 ПОМОЩЬ» popups; Tab table, results, profile, history and admin show assists; +5 XP per assist; DB migration `003_assists.sql`; protocol v2 (`assists` in snapshots and kill events) | ✅ shared + recorder + realtime tests, online and demo E2E |
 | Personal nickname / profile and level | First-launch dialog «Как тебя звать на районе?» with random district nicknames; profile strip in the menu (level badge, nickname, XP bar, «✎»); level shown in HUD, nameplates (badge next to the health bar) and the Tab table; the roster is refreshed with the level earned after each match. Online: server profile (`PATCH /api/me`, same validation). Demo (no server): browser-only profile with XP, levels, stats, achievements and history using the same shared `applyMatchProgress` as the server | ✅ unit tests (local profile, shared progression), realtime roster-level test, online E2E (nickname visible to the other player, persisted) and demo E2E (XP, level, reload persistence) |
 
+## 2b. Update 2026-10-19 — the owner's second brief (arsenal, characters, economy, maps, English)
+
+The owner extended the scope beyond the original spec. Where it conflicts with the original text
+(«the first release is completely free», «four characters», «three maps»), the owner's later
+instructions win; the original criteria are re-evaluated in §4.
+
+| Request (owner) | Implementation | Status |
+|---|---|---|
+| Classic shooter balance, many more weapons | 32 weapons (4 free, 18 in the Arsenal, 10 rare from cases): pistols, melee, SMGs, shotguns, rifles, snipers, LMG, launchers with server-side rockets and splash; classic hit counts at 100 HP; paid/rare weapons are sidegrades (test); medkits on every map | ✅ shared sim tests (balance, rockets, medkits, loadouts), realtime + E2E |
+| Characters from the owner's sheets | 14 characters with lore, portraits cut from the sheets and re-modelled top-down rigs; equal combat stats; Soviet street names; the eagle «Pendos» per the owner | ✅ |
+| Arsenal sheet, modifications instead of upgrades, equipment «all now» | 6 modifications (each with a plus and a minus) per weapon; 7 equipment types (F-1, smoke, flashbang, Molotov, mine, C4, turret) in the deterministic sim, HUD slot 4, G key / middle mouse / touch button | ✅ shared gadget tests, gadgets E2E (all seven against a bot), online E2E |
+| Economy: tokens, diamonds, shop, cases | talons from online matches (capped), diamonds for money (100 = $1); prices, levels, cases without duplicates (CSPRNG, published odds, `CASES_ENABLED`); everything transactional with a ledger | ✅ economy integration tests |
+| Real payments | Stripe Checkout (card) and NOWPayments (crypto) with verified webhooks, credit-once, refunds take back unspent diamonds; no simulated purchases. Inside Telegram card/crypto are disabled (UI + server `telegram_stars_only`) — Telegram requires Stars for digital goods; **Stars not implemented** | 🟡 provider code tested with signed fixtures; **not run against live provider accounts** (keys needed) |
+| Email linking | email + password (scrypt) to restore the account on another device; password change; reset by letter (Resend) or one-time admin link | ✅ integration tests; 🟡 Resend not called live (key needed) |
+| Four new maps from the owner's layouts | Construction Site, House of Culture, Gastronom, City Hospital No. 3 rebuilt in the map format with new props/floors; validated (spawns, reachability, medkits, supply) and played by bots | ✅ map tests, screenshots reviewed |
+| «The whole game in English with Soviet jargon and naphthalene» | All player-facing text (menus, HUD, shop, lore, weapons, achievements, server messages, privacy policy, logo «BLATKOM ’89») in English; in-world signage stays Cyrillic; `/admin` stays Russian | ✅ E2E follow the English UI |
+| Admin analytics for the new parts | «Воронка» (visitor and new-player cohorts, referrers), «Экономика» (talons/diamonds by reason, revenue, payers, ARPPU, purchases, modifications, cases), player card with wallet/items/ledger/payments, audited balance grants and password-reset links, masked emails | ✅ `admin/economy-admin.test.ts`, seeded-data screenshots |
+
 ## 3. Open risks / next steps
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).
 - Build and run the Docker stack on the target host; test a backup restore.
 - Live Telegram verification on iOS/Android/Desktop/Web (checklist in `docs/TELEGRAM.md` §4).
 - Real-device performance pass (only software-GL headless Chromium was available; JS cost per frame measured at ~6 ms there).
-- Fill the operator placeholders in `apps/web/public/privacy.html` (operator, contact, backup rotation).
+- Fill the operator placeholders in `apps/web/public/privacy.html` (operator, contact, email provider, payment-record and backup retention).
+- Payments: create Stripe / NOWPayments accounts, set the keys and webhooks (docs/ECONOMY.md §5) and make one real test purchase and refund on the deployed site; check consumer-law and loot-box rules for the target markets.
+- Telegram Stars for diamonds inside the Mini App (docs/TELEGRAM.md, «Payments inside Telegram»).
+- Resend (or another mail provider) with a verified sender domain for password-reset letters.
 - Content growth (more maps/characters) fits the existing map format and atlas conventions.
 
-## 4. Acceptance checklist (state at the end of this session)
+## 4. Acceptance checklist (state on 2026-10-19)
 
 | Criterion | Status | Evidence |
 |---|---|---|
 | The project builds successfully | ✅ | `npm run typecheck`; `node apps/web/build.mjs --mode=production`; `node apps/server/build.mjs` |
 | The server starts | ✅ | bundled `apps/server/dist/server.js` started against PostgreSQL; `/api/health`, `/api/ready` OK |
-| PostgreSQL works | ✅ | migrations 001–003 applied; 35 DB-backed integration tests on PostgreSQL 16 |
+| PostgreSQL works | ✅ | migrations 001–005 applied; DB-backed integration tests (incl. economy, payments, email, admin funnel/economy) on PostgreSQL 16 |
 | Strict top-down 2D camera; not isometric / first-person | ✅ | orthographic camera, top-down sprites; screenshots in all modes |
 | Flagship factory map fully playable | ✅ | offline E2E + online two-browser E2E on «Заводская проходная» |
-| Four characters playable | ✅ | selectable in menu/lobby, used by players and bots; sprites + animations for all four |
-| Three maps functional | ✅ | spawn/pickup reachability tests and bot matches with eliminations on every map |
-| Four weapon categories work | ✅ | pistol, обрез, автомат (pickups), монтировка; weapon unit tests |
+| Four characters playable | ✅ | now 14 (4 free + 10 from the Arsenal) with sprites, portraits and animations; locked ones are refused by the server unless owned |
+| Three maps functional | ✅ | now 7 maps; spawn/pickup/medkit/supply reachability tests and bot matches with eliminations on every map |
+| Four weapon categories work | ✅ | 32 weapons: pistols, melee, SMGs, shotguns, rifles, snipers, LMG, launchers; 7 equipment types; balance and gadget tests |
 | Two or more independent clients can play together | ✅ | `rooms/realtime.test.ts` (WS clients) and `tests/e2e/online.mjs` (two browsers) |
 | Movement and combat are synchronized | ✅ | identical per-tick snapshot state on both clients; kill/damage events identical |
 | Damage and scoring are server-authoritative | ✅ | clients send inputs only; speed-hack flood test; walls block shots |
@@ -88,8 +109,12 @@ Living document. Status markers: ✅ done & verified · 🟡 done, partially ver
 | Retention calculations are documented | ✅ | `docs/ANALYTICS.md` |
 | Analytics events are deduplicated | ✅ | UUID primary key, tests across requests and inside batches |
 | CSV export works | ✅ | export tests incl. formula-injection neutralisation |
-| Critical tests pass | ✅ | 77/77 unit+integration, browser E2E suite passes incl. the single-file demo (see `docs/TESTING.md`) |
+| Critical tests pass | ✅ | 129/129 unit+integration; browser E2E (development and production mode) — see `docs/TESTING.md` §3 |
 | No real secrets are exposed | ✅ | `.env*` ignored; bot token/DB/session secrets server-only; logger redaction |
 | Deployment instructions match the actual project | 🟡 | non-Docker path executed locally; Docker/compose/Caddy not executed |
-| The first release is completely free | ✅ | no payment code; Stars only described as a future module |
+| The first release is completely free | ⚠️ changed by the owner | free to play with optional purchases (owner's request): talons from matches, diamonds for money on the website; fight-changing extras (modifications, equipment) cost talons only; paid weapons are sidegrades |
+| Real payments work end-to-end | ⛔ | Stripe / NOWPayments code, signatures and credit-once are tested with fixtures; no live provider account, so no real purchase has been made |
+| Diamonds inside Telegram (Stars, `XTR`) | ⛔ | not implemented; card/crypto disabled inside Telegram (UI + server) |
+| Password-reset letters | 🟡 | Resend integration written; not sent live (no key). Admin one-time reset links work (tested) |
+| Whole game in English with Soviet flavour | ✅ | all player-facing texts; E2E drive the English UI; signage on maps stays Cyrillic by design; `/admin` Russian |
 | Lint/format clean | ⛔ | ESLint/Prettier unavailable in the build sandbox (tsc strict with unused-code checks passes) |

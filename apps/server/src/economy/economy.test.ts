@@ -2,7 +2,8 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { CASE_PRICE, CASE_TABLE, DEFAULT_LOADOUT, FREE_CHARACTERS, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, WEAPON_PRICES, tokensForMatch } from '@blatkom/shared';
-import { startTestApp, api, devLogin } from '../admin/testkit.js';
+import { startTestApp, api, devLogin, TEST_BOT_TOKEN } from '../admin/testkit.js';
+import { signInitData } from '../auth/telegram.js';
 import type { TestApp } from '../admin/testkit.js';
 import { pgContext } from '../services/persistence.js';
 import { silentLogger } from '../logging/logger.js';
@@ -246,6 +247,17 @@ test('payments: without provider keys checkout is unavailable (no simulated purc
   assert.equal(r.status, 503);
   assert.equal(r.body.error.code, 'payments_not_configured');
   assert.equal((await api(app.base, '/api/pay/stripe/webhook', { method: 'POST', body: {} })).status, 404);
+});
+
+test('payments: sessions opened inside Telegram cannot start card or crypto checkouts (Stars only)', async () => {
+  const init = signInitData({ user: JSON.stringify({ id: 515151, first_name: 'Zhora' }), auth_date: String(Math.floor(Date.now() / 1000)) }, TEST_BOT_TOKEN);
+  const t = await api(app.base, '/api/auth/telegram', { method: 'POST', body: { initData: init, platform: 'telegram_ios' } });
+  assert.equal(t.status, 200, t.text);
+  const r = await api(app.base, '/api/pay/checkout', { method: 'POST', token: t.body.token, body: { packId: 'd199', method: 'card' } });
+  assert.equal(r.status, 403);
+  assert.equal(r.body.error.code, 'telegram_stars_only');
+  const [n] = await app.db.sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM payments WHERE user_id = ${t.body.profile.id}`;
+  assert.equal(n!.n, 0, 'no payment row is created');
 });
 
 test('payments: Stripe checkout + signed webhook credits diamonds exactly once; bad signatures are refused', async () => {

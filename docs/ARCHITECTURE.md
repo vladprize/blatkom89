@@ -1,6 +1,6 @@
 # Architecture
 
-БЛАТКОМ ’89 is a TypeScript monorepo with three packages and one deployable process.
+BLATKOM ’89 (БЛАТКОМ ’89) is a TypeScript monorepo with three packages and one deployable process.
 
 ```
 apps/web         Phaser 3 client (game, menus, Telegram Mini App glue) + admin dashboard page
@@ -42,9 +42,9 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 | Module | Contents |
 |---|---|
 | `constants/game.ts` | tick rate (60 Hz), snapshot rate (30 Hz), speeds, rewind window, quantisation scales, input limits |
-| `game-rules/` | characters (4, identical stats), weapons (pistol, обрез, автомат, монтировка), match config & phases, scoring (elimination +2, assist +1), XP/levels/achievements and `applyMatchProgress` — the one progression rule set used by the server recorder and by the demo's browser-only profile |
-| `maps/` | map format (`types.ts`), prop registry (footprints, collision, render layer), `MapBuilder`, the three maps, collision world (grid + rects + circles, ray casts, swept movement) |
-| `sim/world.ts` | deterministic match simulation: movement with sliding, weapons (fire rate, spread, reload, ammo, pickups), «дефицит» supply drops, lag-compensated hitscan, melee, damage with per-attacker damage log (assists), respawn, spawn selection, scoring, phase machine |
+| `game-rules/` | characters (14, identical stats), weapons (32: base, Arsenal, rare; modifications), equipment (7 gadgets), loadouts, economy (prices, talons per match, cases, diamond packs), match config & phases, scoring (elimination +2, assist +1), XP/levels/achievements and `applyMatchProgress` — the one progression rule set used by the server recorder and by the demo's browser-only profile |
+| `maps/` | map format (`types.ts`), prop registry (footprints, collision, render layer), `MapBuilder`, the seven maps, collision world (grid + rects + circles, ray casts, swept movement) |
+| `sim/world.ts` | deterministic match simulation: movement with sliding, weapons (fire rate, spread, reload, ammo, pickups, modifications), rockets with splash, equipment (grenades, smoke, fire, mines, C4, turrets), medkits, «deficit goods» supply drops, lag-compensated hitscan, melee, damage with per-attacker damage log (assists), respawn, spawn selection, scoring, phase machine |
 | `sim/bots.ts`, `sim/nav.ts` | offline bot AI (grid A*, line-of-sight aiming, difficulty levels) |
 | `net/codec.ts`, `net/protocol.ts` | binary input/snapshot codec with bounds checks; zod-validated JSON control messages; close codes |
 | `events/analytics.ts`, `schemas/api.ts` | analytics event schemas, HTTP request/response schemas and types |
@@ -56,7 +56,8 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 | `config/env.ts` | zod-validated environment (refuses dev login, missing bot token or placeholder secrets in production) |
 | `http/` | tiny router (params, JSON body limits, errors), bearer auth, static files (CSP, ETag, cache rules) |
 | `rooms/` | `RoomManager` (shared 60 Hz loop, quick match, limits), `MatchRoom` (lobby, phases, input queues, snapshots, results), `gateway` (WS upgrade, origin/IP limits, hello authentication) |
-| `auth/` | Telegram `initData` HMAC validation, dev login (non-production only), opaque random session tokens (only an HMAC-SHA-256 of the token is stored) |
+| `auth/` | Telegram `initData` HMAC validation, guest login (HMAC of a browser secret), email + password (scrypt) with reset tokens, dev login (non-production only), opaque random session tokens (only an HMAC-SHA-256 of the token is stored) |
+| `economy/`, `payments/` | wallet, purchases, modifications, cases and loadouts with a ledger (row locks, one transaction per change); Stripe / NOWPayments checkouts and verified webhooks, credit-once, refunds ([ECONOMY.md](ECONOMY.md)) |
 | `profiles/`, `progression/` | profile reads/updates, idempotent match recorder (XP, levels, wins/streaks, achievements) |
 | `analytics/` | event ingestion with UUID dedupe, buffered server events, sanitised error log, metrics (DAU/WAU/MAU, D1/D7, charts), retention purge |
 | `admin/` | admin auth (scrypt, HttpOnly cookie + CSRF), roles, audit log, dashboard API, CSV export with formula-injection protection, CLI |
@@ -100,8 +101,10 @@ XP awarded) · `achievements` / `player_achievements` · `invitations` (code →
 
 Swapping in Fastify/Colyseus later is possible behind the existing `services/contracts.ts` boundary.
 
-## 5. Future monetisation boundary (not implemented)
-The first release is free and contains no payment code. Telegram Stars (currency `XTR`) would be added
-as a separate `commerce/` module: catalogue → order (server-side price) → `sendInvoice`/`createInvoiceLink`
-→ `pre_checkout_query` validation → `successful_payment` → idempotent entitlement grant → inventory read
-by the client (cosmetics only, never stats). Nothing in the current schema or client assumes purchases.
+## 5. Monetisation (owner's decision, 2026-10)
+The game is free to play with optional purchases ([ECONOMY.md](ECONOMY.md)): talons are earned in
+matches, diamonds are bought on the website through Stripe (card) or NOWPayments (crypto) — prices come
+from the server, payments are confirmed only by signed webhooks and credited once. Inside the Telegram
+Mini App purchases for money are disabled until Telegram Stars (`XTR`) are integrated: the same
+`payments` table already accepts `provider = 'telegram'`; the flow is `createInvoiceLink` →
+`pre_checkout_query` validation → `successful_payment` → idempotent crediting (see TELEGRAM.md).

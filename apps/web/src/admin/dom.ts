@@ -33,3 +33,10 @@ export function s<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<st
 export function clear(el: Element): void {
   while (el.firstChild) el.removeChild(el.firstChild);
 }
+
+/** Short-lived status message in the corner (errors by default). */
+export function toast(text: string, kind: 'error' | 'ok' = 'error'): void {
+  const t = h('div', { class: `toast ${kind}`, role: 'status' }, text);
+  document.body.append(t);
+  setTimeout(() => t.remove(), 4500);
+}

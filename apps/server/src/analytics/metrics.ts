@@ -263,12 +263,15 @@ export async function listPlayers(sql: Sql, opts: { q?: string | null; sort?: st
     playtime: sql`COALESCE(p.playtime_sec, 0)`,
   }[sort];
   const order = dir === 'asc' ? sql`ASC` : sql`DESC`;
+  // an exact email finds the account (support requests) without the address ever being listed
   const filter = q
-    ? /^\d{1,20}$/.test(q)
-      ? sql`AND (u.telegram_id::text = ${q} OR ${folded} LIKE ${like})`
-      : /^[0-9a-f-]{36}$/i.test(q)
-        ? sql`AND (u.id::text = ${q.toLowerCase()} OR ${folded} LIKE ${like})`
-        : sql`AND ${folded} LIKE ${like}`
+    ? q.includes('@')
+      ? sql`AND u.email = ${q.toLowerCase()}`
+      : /^\d{1,20}$/.test(q)
+        ? sql`AND (u.telegram_id::text = ${q} OR ${folded} LIKE ${like})`
+        : /^[0-9a-f-]{36}$/i.test(q)
+          ? sql`AND (u.id::text = ${q.toLowerCase()} OR ${folded} LIKE ${like})`
+          : sql`AND ${folded} LIKE ${like}`
     : sql``;
   const rows = await sql<PlayerDbRow[]>`
     SELECT u.id, u.display_name, u.telegram_id::text AS telegram_id, u.created_at, u.last_seen_at,

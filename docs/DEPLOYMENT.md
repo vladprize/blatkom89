@@ -18,6 +18,9 @@ nickname and play as guests (`GUEST_AUTH_ENABLED=true`); Telegram is not needed.
    the service's *Environment* tab; login `admin` at `/admin`).
 3. Wait for the deploy (≈3–5 min), open `https://<service>.onrender.com`. `PUBLIC_URL` defaults to
    Render's `RENDER_EXTERNAL_URL`; a custom domain needs `PUBLIC_URL=https://your-domain`.
+4. Optional, any time later in the service's *Environment* tab: payment keys (Stripe / NOWPayments)
+   and mail keys (Resend) — see the table in §2 and [ECONOMY.md](ECONOMY.md). Empty values keep the
+   feature off; nothing is simulated.
 
 Free-tier limits (Render, 2026): the service sleeps after 15 minutes without traffic and the first
 visit then takes about a minute (the client pings `/api/health` every 4 minutes while in a room);
@@ -51,7 +54,11 @@ Copy `.env.example` to `.env` and set at least:
 | `SESSION_SECRET` | ≥ 32 random chars: `openssl rand -base64 48` (rotating it logs everyone out) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_MINIAPP_SHORT_NAME` | from BotFather |
 | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD` | optional first admin, created on start only when no admin exists — remove after first start (or use the CLI below) |
-| `MATCH_DURATION_SEC`, `MATCH_SCORE_LIMIT`, `MATCH_MIN_PLAYERS`, `MATCH_MAX_PLAYERS` | match rules (defaults 240 s, 25, 2, 6) |
+| `MATCH_DURATION_SEC`, `MATCH_SCORE_LIMIT`, `MATCH_MIN_PLAYERS`, `MATCH_MAX_PLAYERS` | match rules (defaults 240 s, 50 points, 2, 6) |
+| `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` | optional: diamonds by card (Stripe Checkout); webhook `https://$DOMAIN/api/pay/stripe/webhook` — events in [ECONOMY.md](ECONOMY.md) §5 |
+| `NOWPAYMENTS_API_KEY` + `NOWPAYMENTS_IPN_SECRET` | optional: diamonds by crypto (NOWPayments invoices; `NOWPAYMENTS_SANDBOX=true` for the sandbox) |
+| `RESEND_API_KEY` + `MAIL_FROM` | optional: password-reset letters (Resend; the sender domain must be verified there). Without them admins issue one-time reset links in `/admin` |
+| `CASES_ENABLED` | `true` (default) / `false` — paid rare-weapon cases |
 | `LOG_LEVEL`, `MAX_ROOMS`, `SESSION_TTL_HOURS`, `TELEGRAM_AUTH_MAX_AGE_SEC` | optional |
 
 The server validates the environment at start and refuses to run in production with

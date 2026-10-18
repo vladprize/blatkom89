@@ -30,7 +30,8 @@ const EnvSchema = z.object({
   ADMIN_SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(72).default(12),
   STATIC_DIR: z.string().optional(),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-  SERVER_VERSION: z.string().default('0.1.0'),
+  /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
+  SERVER_VERSION: z.string().default(process.env.BLATKOM_BUILD_VERSION ?? '0.0.0-dev'),
   MAX_ROOMS: z.coerce.number().int().min(1).max(10000).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: z.coerce.number().int().min(30).max(900).default(240),

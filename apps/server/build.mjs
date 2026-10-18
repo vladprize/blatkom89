@@ -36,7 +36,7 @@ const result = await esbuild.build({
   external: ['bufferutil', 'utf-8-validate'],
   // CommonJS dependencies (ws) call require() for Node built-ins; give the ESM bundle a real require
   banner: { js: "import { createRequire as __blatkomCreateRequire } from 'node:module';\nconst require = __blatkomCreateRequire(import.meta.url);" },
-  define: { 'process.env.BLATKOM_BUNDLED': '"1"' },
+  define: { 'process.env.BLATKOM_BUNDLED': '"1"', 'process.env.BLATKOM_BUILD_VERSION': JSON.stringify(version) },
 });
 
 cpSync(join(here, 'src/database/migrations'), join(out, 'migrations'), { recursive: true });

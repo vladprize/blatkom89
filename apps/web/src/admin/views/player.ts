@@ -1,10 +1,82 @@
-/** Player detail: profile, progression, sessions, achievements, match history, errors. */
-import type { AdminPlayerDetail } from '@blatkom/shared';
-import { h, clear } from '../dom.js';
+/** Player detail: profile, progression, wallet and purchases, sessions, achievements, match history, errors. */
+import type { AdminMe, AdminPlayerDetail, AdminResetLink } from '@blatkom/shared';
+import { h, clear, toast } from '../dom.js';
 import { apiFetch } from '../api.js';
-import { num, dateTime, playtime, duration, MAP_NAMES, CHARACTER_NAMES, PLATFORM_NAMES } from '../format.js';
+import { num, dateTime, playtime, duration, money, itemName, ACHIEVEMENT_NAMES, ACHIEVEMENT_DESCRIPTIONS, MAP_NAMES, CHARACTER_NAMES, PLATFORM_NAMES, ITEM_KINDS, ITEM_SOURCES, LEDGER_REASONS, MOD_NAMES, PAYMENT_PROVIDERS, PAYMENT_STATUSES, SIGN_IN_METHODS, WEAPON_NAMES } from '../format.js';
 
-export async function renderPlayer(root: HTMLElement, id: string): Promise<void> {
+const CURRENCY_NAMES: Record<string, string> = { tokens: 'талоны', diamonds: 'алмазы' };
+
+function table(head: string[], rows: Array<Array<string | HTMLElement>>, numeric: number[], empty: string): HTMLElement {
+  if (rows.length === 0) return h('div', { class: 'chart-empty' }, empty);
+  return h(
+    'div',
+    { class: 'table-scroll' },
+    h(
+      'table',
+      { class: 'table' },
+      h('thead', {}, h('tr', {}, ...head.map((t) => h('th', {}, t)))),
+      h('tbody', {}, ...rows.map((r) => h('tr', {}, ...r.map((c, i) => h('td', numeric.includes(i) ? { class: 'num' } : {}, c))))),
+    ),
+  );
+}
+
+/** Admin-only actions: audited balance adjustment and a one-time password-reset link. */
+function actions(d: AdminPlayerDetail, onChanged: () => void): HTMLElement {
+  const p = d.player;
+  const currency = h('select', { 'aria-label': 'Валюта' }, h('option', { value: 'tokens' }, 'Талоны'), h('option', { value: 'diamonds' }, 'Алмазы')) as HTMLSelectElement;
+  const amount = h('input', { type: 'number', step: 1, min: -1000000, max: 1000000, placeholder: 'Сколько (минус — списать)', 'aria-label': 'Сумма', class: 'grow' }) as HTMLInputElement;
+  const note = h('input', { type: 'text', maxlength: 120, placeholder: 'Причина — попадёт в журнал', 'aria-label': 'Причина', class: 'grow' }) as HTMLInputElement;
+  const grantBtn = h('button', { class: 'btn', type: 'submit' }, 'Провести') as HTMLButtonElement;
+  const form = h('form', { class: 'action-form' }, currency, amount, note, grantBtn);
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const n = Number(amount.value);
+    if (!Number.isInteger(n) || n === 0) return toast('Сумма — целое число, не ноль');
+    if (note.value.trim().length < 3) return toast('Укажите причину (от 3 символов)');
+    const what = `${n > 0 ? 'Начислить' : 'Списать'} ${num(Math.abs(n))} (${CURRENCY_NAMES[currency.value]}) игроку «${p.displayName}»?`;
+    if (!confirm(what)) return;
+    grantBtn.disabled = true;
+    apiFetch<{ balance: number }>(`/api/admin/players/${encodeURIComponent(p.id)}/grant`, { method: 'POST', body: { currency: currency.value, amount: n, note: note.value.trim() } })
+      .then((r) => {
+        toast(`Готово: теперь ${num(r.balance)} (${CURRENCY_NAMES[currency.value]})`, 'ok');
+        onChanged();
+      })
+      .catch((err: Error) => toast(err.message))
+      .finally(() => (grantBtn.disabled = false));
+  });
+  const linkOut = h('div', { class: 'reset-out' });
+  const resetBtn = h('button', { class: 'chip', type: 'button', disabled: !d.account.emailMasked }, 'Ссылка для сброса пароля') as HTMLButtonElement;
+  resetBtn.addEventListener('click', () => {
+    if (!confirm(`Создать одноразовую ссылку для смены пароля игрока «${p.displayName}»? Передайте её только владельцу аккаунта.`)) return;
+    resetBtn.disabled = true;
+    apiFetch<AdminResetLink>(`/api/admin/players/${encodeURIComponent(p.id)}/reset-link`, { method: 'POST' })
+      .then((r) => {
+        const input = h('input', { class: 'mono grow', readonly: true, value: r.link, 'aria-label': 'Ссылка для сброса пароля' }) as HTMLInputElement;
+        const copy = h('button', { class: 'chip', type: 'button' }, 'Скопировать');
+        copy.addEventListener('click', () => {
+          input.select();
+          void navigator.clipboard?.writeText(r.link).then(() => toast('Ссылка скопирована', 'ok'));
+        });
+        clear(linkOut);
+        linkOut.append(h('div', { class: 'row' }, input, copy), h('p', { class: 'note' }, `Одноразовая, действует до ${dateTime(r.expiresAt)}. Создание ссылки записано в журнал аудита.`));
+      })
+      .catch((err: Error) => toast(err.message))
+      .finally(() => (resetBtn.disabled = !d.account.emailMasked));
+  });
+  return h(
+    'section',
+    { class: 'card' },
+    h('h3', {}, 'Действия администратора'),
+    h('p', { class: 'note' }, 'Начисление или списание талонов и алмазов (компенсации, исправления). Баланс не может уйти в минус; каждая операция пишется в журнал аудита и в историю игрока.'),
+    form,
+    h('div', { style: 'height:12px' }),
+    resetBtn,
+    d.account.emailMasked ? null : h('p', { class: 'note' }, 'У игрока нет привязанной почты — сбросить пароль нечем.'),
+    linkOut,
+  );
+}
+
+export async function renderPlayer(root: HTMLElement, id: string, me?: AdminMe | null): Promise<void> {
   clear(root);
   root.append(h('div', { class: 'loading' }, 'Загрузка…'));
   const d = await apiFetch<AdminPlayerDetail>(`/api/admin/players/${encodeURIComponent(id)}`);
@@ -33,6 +105,8 @@ export async function renderPlayer(root: HTMLElement, id: string): Promise<void>
             ['Платформа', p.platform ? (PLATFORM_NAMES[p.platform] ?? p.platform) : '—'],
             ['Любимый персонаж', p.preferredCharacter ? CHARACTER_NAMES[p.preferredCharacter] ?? p.preferredCharacter : '—'],
             ['Сессии', `${num(d.sessions.total)} (активных: ${num(d.sessions.active)})`],
+            ['Способы входа', d.account.signInMethods.map((m) => SIGN_IN_METHODS[m] ?? m).join(', ') || '—'],
+            ['Почта', d.account.emailMasked ? `${d.account.emailMasked} · с ${dateTime(d.account.emailLinkedAt)}` : 'не привязана'],
             ['Версия клиента', d.sessions.lastClientVersion ?? '—'],
           ] as Array<[string, string]>).flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]),
         ),
@@ -62,10 +136,61 @@ export async function renderPlayer(root: HTMLElement, id: string): Promise<void>
       ),
     ),
     h(
+      'div',
+      { class: 'grid2' },
+      h(
+        'section',
+        { class: 'card' },
+        h('h3', {}, 'Кошелёк и покупки'),
+        h(
+          'div',
+          { class: 'tiles small' },
+          h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Талоны'), h('div', { class: 'tile-value' }, num(d.wallet.tokens))),
+          h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Алмазы'), h('div', { class: 'tile-value' }, num(d.wallet.diamonds))),
+          h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Предметов'), h('div', { class: 'tile-value' }, num(d.items.length))),
+          h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Модификаций'), h('div', { class: 'tile-value' }, num(d.mods.length))),
+        ),
+        h('div', { style: 'height:12px' }),
+        table(
+          ['Предмет', 'Тип', 'Как получен', 'Когда'],
+          [
+            ...d.items.map((i) => [itemName(i.kind, i.id), ITEM_KINDS[i.kind] ?? i.kind, ITEM_SOURCES[i.source] ?? i.source, dateTime(i.acquiredAt)]),
+            ...d.mods.map((m) => [`${MOD_NAMES[m.mod] ?? m.mod} → ${WEAPON_NAMES[m.weapon] ?? m.weapon}`, 'Модификация', 'за талоны', dateTime(m.acquiredAt)]),
+          ],
+          [],
+          'Только бесплатное снаряжение',
+        ),
+      ),
+      me?.role === 'admin' ? actions(d, () => void renderPlayer(root, id, me)) : h('section', { class: 'card' }, h('h3', {}, 'Действия администратора'), h('p', { class: 'note' }, 'Начисления и ссылки для сброса пароля доступны роли admin.')),
+    ),
+    h(
+      'section',
+      { class: 'card' },
+      h('h3', {}, 'Движение талонов и алмазов'),
+      table(
+        ['Время', 'Валюта', 'Изменение', 'Баланс', 'Причина', 'Ссылка / комментарий', 'Админ'],
+        d.ledger.map((l) => [dateTime(l.at), CURRENCY_NAMES[l.currency] ?? l.currency, `${l.delta > 0 ? '+' : ''}${num(l.delta)}`, num(l.balanceAfter), LEDGER_REASONS[l.reason] ?? l.reason, l.ref ?? '—', l.admin ?? '—']),
+        [2, 3],
+        'Операций не было',
+      ),
+      h('p', { class: 'note' }, 'Последние 50 операций, новые сверху.'),
+    ),
+    h(
+      'section',
+      { class: 'card' },
+      h('h3', {}, 'Платежи'),
+      table(
+        ['Создан', 'Оплачен', 'Способ', 'Набор', 'Алмазы', 'Сумма', 'Статус'],
+        d.payments.map((x) => [dateTime(x.createdAt), x.paidAt ? dateTime(x.paidAt) : '—', PAYMENT_PROVIDERS[x.provider] ?? x.provider, x.packId, num(x.diamonds), money(x.amountCents, x.currency), PAYMENT_STATUSES[x.status] ?? x.status]),
+        [4, 5],
+        'Платежей не было',
+      ),
+    ),
+    h(
       'section',
       { class: 'card' },
       h('h3', {}, 'Достижения'),
-      h('ul', { class: 'achievements' }, ...d.achievements.map((a) => h('li', { class: a.unlockedAt ? 'got' : '' }, h('b', {}, a.title), h('span', {}, a.description), h('em', {}, a.unlockedAt ? dateTime(a.unlockedAt) : 'не получено')))),
+      h('ul', { class: 'achievements' }, ...d.achievements.map((a) => h('li', { class: a.unlockedAt ? 'got' : '' }, h('b', {}, ACHIEVEMENT_NAMES[a.id] ?? a.title, h('span', { class: 'muted-text' }, ` · в игре «${a.title}»`)), h('span', {}, ACHIEVEMENT_DESCRIPTIONS[a.id] ?? a.description), h('em', {}, a.unlockedAt ? dateTime(a.unlockedAt) : 'не получено')))),
     ),
     h(
       'section',

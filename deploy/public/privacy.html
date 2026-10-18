@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="robots" content="noindex" />
-    <title>БЛАТКОМ ’89 — конфиденциальность</title>
+    <title>BLATKOM ’89 — privacy</title>
     <style>
       @font-face { font-family: 'Oswald'; src: url('assets/fonts/oswald.woff') format('woff'); font-weight: 200 700; font-display: swap; }
       @font-face { font-family: 'PT Sans Narrow'; src: url('assets/fonts/ptsansnarrow-regular.woff') format('woff'); font-weight: 400; font-display: swap; }
@@ -37,88 +37,117 @@
   <body>
     <main>
       <header>
-        <a class="brand" href="./">БЛАТКОМ ’89</a>
-        <h1>Политика конфиденциальности</h1>
-        <div class="muted">Редакция от 18 октября 2026 г.</div>
+        <a class="brand" href="./">BLATKOM ’89</a>
+        <h1>Privacy policy</h1>
+        <div class="muted">Revised 19 October 2026</div>
       </header>
 
       <div class="tldr">
-        <strong>Коротко.</strong> Игра бесплатная, без рекламы и покупок. Мы храним только то, что нужно для работы игры, вашего профиля и
-        статистики. Мы не получаем ваш номер телефона и не сохраняем ваш @username и фото. Данные не продаются и не используются для
-        рекламы. Удалить профиль можно в любой момент: <strong>Настройки → «Удалить мои данные»</strong>.
+        <strong>In short.</strong> The game is free to play; purchases are optional and there are no ads. We keep only what the game,
+        your profile and its statistics need. We never get your phone number, and we don’t keep your Telegram @username or photo.
+        Card and crypto-wallet details are entered on the payment provider’s page and never reach us. Data is not sold or used for
+        advertising. You can delete your profile at any time: <strong>Settings → “Delete my data”</strong>.
       </div>
 
-      <h2>1. Кто отвечает за данные</h2>
-      <p>Оператор игры: <span class="fill">[название или имя оператора]</span>. Связь: <span class="fill">[e-mail или Telegram-контакт]</span>.</p>
+      <h2>1. Who is responsible for the data</h2>
+      <p>Game operator: <span class="fill">[operator name]</span>. Contact: <span class="fill">[email or Telegram contact]</span>.</p>
 
-      <h2>2. Какие данные мы обрабатываем</h2>
+      <h2>2. What data we process</h2>
       <ol>
         <li>
-          <strong>При входе через Telegram.</strong> Telegram передаёт игре подписанные данные запуска; сервер проверяет подпись. Мы
-          сохраняем: числовой идентификатор Telegram (чтобы узнавать вас при следующем входе), игровое имя (составляется из имени и фамилии
-          в Telegram, его можно изменить — «✎ Кличка» в меню или в профиле) и код языка. Мы <strong>не сохраняем</strong> @username, фото профиля и сами данные запуска.
+          <strong>Signing in through Telegram.</strong> Telegram passes signed launch data to the game; the server checks the signature. We
+          keep: your numeric Telegram ID (to recognise you next time), your in-game name (built from your Telegram first and last name;
+          you can change it — “✎ Alias” in the menu or the profile) and the language code. We <strong>don’t keep</strong> your @username,
+          profile photo or the launch data itself.
         </li>
         <li>
-          <strong>Игровые данные:</strong> выбранный персонаж, участие в матчах (карта, место, устранения, помощь, гибели, урон, время), опыт,
-          уровень, достижения, серии побед, время в игре, история матчей.
+          <strong>Playing in a browser without Telegram.</strong> Your browser generates a random device identifier and keeps it; the
+          server stores only a keyed hash of it, so a database copy alone cannot be used to sign in as you.
         </li>
         <li>
-          <strong>Технические данные:</strong> тип платформы (например, «Telegram iOS» или «браузер»), версия игры, время входа, дни, в
-          которые вы заходили в игру, длительность игровых сессий, события работы приложения (запуск, ошибки соединения, переподключения)
-          и отчёты об ошибках. Из отчётов об ошибках перед сохранением удаляются пароли, токены, адреса e-mail и длинные идентификаторы.
+          <strong>Email sign-in (optional).</strong> If you register an email, we keep the address and a hash of your password (scrypt; the
+          password itself is never stored). When you ask for a password reset, the letter with a one-time link (valid for an hour) is sent
+          through our email delivery provider, <span class="fill">[Resend, or the provider you configure]</span>, which receives your
+          address and the letter.
         </li>
         <li>
-          <strong>IP-адрес</strong> используется сервером при обработке запросов и для защиты от злоупотреблений (ограничение частоты
-          запросов). В базе данных профилей он не сохраняется; он может попадать в технические журналы сервера (например, при отклонённой
-          попытке входа), которые хранятся ограниченное время.
+          <strong>Game data:</strong> the chosen character, match participation (map, place, eliminations, assists, deaths, damage, time),
+          XP, level, achievements, win streaks, time in game, match history; your talon and diamond balances and every change to them,
+          the weapons, characters, equipment and modifications you own, your loadout, and case openings.
         </li>
         <li>
-          <strong>На вашем устройстве</strong> игра хранит ключ сессии, настройки и — при игре в браузере без Telegram — случайный
-          идентификатор устройства. Рекламных и сторонних систем отслеживания в игре нет. В демо-версии без сервера
-          (один HTML-файл) кличка, опыт, уровень, статистика и история тренировок хранятся только в этом браузере и никуда
-          не отправляются; удалить их можно, очистив данные сайта в браузере.
+          <strong>Purchases (optional).</strong> When you buy diamonds we record the pack, price, currency, payment provider, the provider’s
+          payment reference, the status and the time. You pay on the provider’s own page — Stripe for cards, NOWPayments for
+          cryptocurrency; we only pass them an internal payment number. The providers process your payment details under their own
+          policies.
+        </li>
+        <li>
+          <strong>Technical data:</strong> platform type (for example “Telegram iOS” or “browser”), game version, sign-in times, the days
+          you played, session lengths, app events (launch, connection errors, reconnects) and error reports. Passwords, tokens, email
+          addresses and long identifiers are removed from error reports before they are saved.
+        </li>
+        <li>
+          <strong>Visit statistics:</strong> when the game’s website opens, the browser creates a random visitor identifier. We keep it with
+          the first and last visit, the days with visits, the platform type and the domain of the site you came from (not the full address)
+          — to count how many visitors become players. Once you sign in, the identifier is linked to your profile.
+        </li>
+        <li>
+          <strong>IP address</strong> is used by the server to handle requests and to protect against abuse (rate limits). It is not stored
+          in the profile database; it may appear in the server’s technical logs (for example, after a rejected sign-in), which are kept
+          for a limited time.
+        </li>
+        <li>
+          <strong>On your device</strong> the game keeps a session key, your settings and the random identifiers described above. There are
+          no ad or third-party tracking systems in the game. In the server-less demo (a single HTML file) the alias, XP, level, statistics
+          and practice history are kept only in that browser and sent nowhere; clearing the site’s data in the browser removes them.
         </li>
       </ol>
 
-      <h2>3. Зачем</h2>
+      <h2>3. Why</h2>
       <p>
-        Для входа и узнавания игрока; для сетевых матчей, таблицы результатов, начисления опыта и достижений; для профиля, статистики и
-        истории матчей; для поиска и исправления ошибок и защиты от злоупотреблений; для обобщённой статистики (сколько людей играет, какие
-        карты популярны, возвращаются ли игроки), чтобы делать игру лучше.
+        To sign you in and recognise you; to run online matches, the scoreboard, XP, achievements and the in-game currency; to deliver
+        what you bought; for the profile, statistics and match history; to find and fix bugs and to protect against abuse; and for
+        aggregated statistics (how many people play, which maps are popular, whether players come back) to make the game better.
       </p>
 
-      <h2>4. Кто видит данные</h2>
+      <h2>4. Who sees the data</h2>
       <p>
-        Другие игроки видят ваше игровое имя, персонажа и результаты в лобби и матчах. Администраторы игры работают с панелью статистики;
-        каждый вход, просмотр карточки игрока и выгрузка данных записываются в журнал. Мы не передаём данные третьим лицам, кроме
-        хостинг-провайдера, на серверах которого работает игра. Telegram обрабатывает данные по своим правилам.
+        Other players see your in-game name, character and results in lobbies and matches. The game’s administrators work with the
+        statistics panel; every sign-in, look at a player’s card, balance adjustment, password-reset link and data export is written to an
+        audit log. We share data with no one except the hosting provider whose servers run the game, the payment provider you choose when
+        you buy something, and the email provider when you ask for a password reset. Telegram processes data under its own rules.
       </p>
 
-      <h2>5. Сколько мы храним</h2>
+      <h2>5. How long we keep it</h2>
       <table>
-        <thead><tr><th>Данные</th><th>Срок</th></tr></thead>
+        <thead><tr><th>Data</th><th>Period</th></tr></thead>
         <tbody>
-          <tr><td>Профиль, статистика, история матчей, достижения</td><td>пока вы не удалите профиль</td></tr>
-          <tr><td>События использования и дни активности</td><td>до 400 дней</td></tr>
-          <tr><td>Отчёты об ошибках</td><td>90 дней</td></tr>
-          <tr><td>Записи о сессиях входа</td><td>90 дней после окончания сессии</td></tr>
-          <tr><td>Приглашения в комнаты</td><td>24 часа действия + 7 дней</td></tr>
-          <tr><td>Резервные копии базы данных</td><td><span class="fill">[срок ротации резервных копий]</span></td></tr>
+          <tr><td>Profile, statistics, match history, achievements, balances and owned items</td><td>until you delete the profile</td></tr>
+          <tr><td>Email address and password hash</td><td>until you delete the profile</td></tr>
+          <tr><td>Usage events and days active</td><td>up to 400 days</td></tr>
+          <tr><td>Visit statistics</td><td>400 days after the last visit</td></tr>
+          <tr><td>Error reports</td><td>90 days</td></tr>
+          <tr><td>Sign-in session records</td><td>90 days after the session ends</td></tr>
+          <tr><td>Password-reset links</td><td>valid for 1 hour, deleted 7 days later</td></tr>
+          <tr><td>Room invitations</td><td>valid for 24 hours, deleted 7 days later</td></tr>
+          <tr><td>Payment records</td><td><span class="fill">[the period your accounting rules require]</span>; no longer linked to you once the profile is deleted</td></tr>
+          <tr><td>Database backups</td><td><span class="fill">[backup rotation period]</span></td></tr>
         </tbody>
       </table>
 
-      <h2>6. Как удалить данные</h2>
+      <h2>6. How to delete your data</h2>
       <p>
-        В игре: <strong>Настройки → «Удалить мои данные»</strong>. Удаление выполняется сразу и без возможности восстановления: удаляются
-        профиль, статистика, история матчей, достижения, дни активности и все сессии входа. События использования и отчёты об ошибках
-        теряют связь с вами и удаляются по сроку хранения. Если вы снова откроете игру, будет создан новый пустой профиль. Если доступа к
-        игре нет, напишите оператору (раздел 1) из того же аккаунта Telegram.
+        In the game: <strong>Settings → “Delete my data”</strong>. Deletion is immediate and cannot be undone: the profile, statistics,
+        match history, achievements, balances and owned items, the email address and password hash, days active and all sign-in sessions
+        are deleted. Diamonds and items you bought are lost with the profile. Usage events and error reports lose their link to you and
+        expire on schedule; payment records stay as accounting records without a link to you. If you open the game again, a new empty
+        profile is created. If you can’t get into the game, write to the operator (section 1) from the same Telegram account or email.
       </p>
 
-      <h2>7. Изменения</h2>
-      <p>При изменении политики мы обновим дату редакции на этой странице.</p>
+      <h2>7. Changes</h2>
+      <p>When this policy changes, we update the revision date on this page.</p>
 
-      <footer class="muted"><a href="./">← Вернуться в игру</a></footer>
+      <footer class="muted"><a href="./">← Back to the game</a></footer>
     </main>
   </body>
 </html>

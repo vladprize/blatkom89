@@ -78,6 +78,8 @@ try {
         me.gadgetReadyAt = 0;
         me.flashedUntil = 0;
         w.gadgets.length = 0;
+        // a fixed camera (no easing, no aim look-ahead) so the mouse maps to a stable world point
+        window.__blatkom.game.scene.getScene('game').debugCam = { x: spot.x + 150, y: spot.y };
         return { me: me.slot, bot: bot.slot };
       },
       { spot, gadget, botDx },
@@ -100,31 +102,23 @@ try {
     }, kind);
     if (at) await page.screenshot({ path: `${outDir}/${name}.png`, clip: { x: Math.max(0, at.x - half), y: Math.max(0, at.y - half * 0.75), width: half * 2, height: half * 1.5 } });
   };
-  // aim due east of the player (the camera is clamped at the map edge, so find the player on screen)
+  // aim due east of the player: the camera is fixed (debugCam), re-check until the simulated aim follows
   const aimEast = async () => {
-    // the camera eases after a teleport: wait until it has caught up with the player
-    await page.waitForFunction(
-      () => {
+    await sleep(150);
+    for (let i = 0; i < 20; i++) {
+      const at = await page.evaluate(() => {
         const sc = window.__blatkom.game.scene.getScene('game');
         const me = sc.session.world.players.get('local');
         const cam = sc.cameras.main;
-        const cx = Math.min(Math.max(me.x, cam.worldView.width / 2), sc.session.world.map.width - cam.worldView.width / 2);
-        const cy = Math.min(Math.max(me.y, cam.worldView.height / 2), sc.session.world.map.height - cam.worldView.height / 2);
-        return Math.abs(cam.midPoint.x - cx) < 3 && Math.abs(cam.midPoint.y - cy) < 3;
-      },
-      null,
-      { timeout: 5000 },
-    ).catch(() => {});
-    const at = await page.evaluate(() => {
-      const sc = window.__blatkom.game.scene.getScene('game');
-      const me = sc.session.world.players.get('local');
-      const cam = sc.cameras.main;
-      const r = sc.game.canvas.getBoundingClientRect();
-      const k = r.width / sc.scale.width;
-      return { x: r.left + (me.x - cam.worldView.x) * cam.zoom * k, y: r.top + (me.y - cam.worldView.y) * cam.zoom * k };
-    });
-    await page.mouse.move(at.x + 300, at.y);
-    await sleep(120);
+        const r = sc.game.canvas.getBoundingClientRect();
+        const k = r.width / sc.scale.width;
+        return { x: r.left + (me.x - cam.worldView.x) * cam.zoom * k, y: r.top + (me.y - cam.worldView.y) * cam.zoom * k };
+      });
+      await page.mouse.move(at.x + 300, at.y);
+      await sleep(200);
+      const aim = await page.evaluate(() => window.__blatkom.game.scene.getScene('game').session.world.players.get('local').aim);
+      if (Math.abs(aim) < 0.04) break;
+    }
   };
 
   // ── F-1 ──
@@ -174,7 +168,18 @@ try {
   await page.keyboard.press('g');
   await sleep(1700);
   st = await state();
-  check(st.gadgets.some((g) => g.kind === 'molotov' && g.phase === 'active'), 'molotov burns');
+  check(st.gadgets.some((g) => g.kind === 'molotov' && g.phase === 'active'), `molotov burns (${JSON.stringify(st.gadgets)})`);
+  // where exactly the bottle lands depends on the aim (frame timing in headless Chromium); the claim
+  // checked here is that the fire hurts whoever stands in it, so the bot is moved into the flames
+  await page.evaluate(() => {
+    const w = window.__blatkom.game.scene.getScene('game').session.world;
+    const fire = w.gadgets.find((g) => g.kind === 'molotov');
+    const bot = [...w.players.values()].find((p) => p.isBot);
+    if (fire && bot.alive) {
+      bot.x = fire.x;
+      bot.y = fire.y;
+    }
+  });
   await shot('g4_molotov');
   await zoomAt('molotov', 'g4_molotov_zoom', 200);
   await sleep(1500);

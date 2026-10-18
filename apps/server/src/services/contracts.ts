@@ -11,6 +11,8 @@ export interface AuthedUser {
   displayName: string;
   level: number;
   platform: Platform | null;
+  /** How the session was opened (verified server-side, unlike `platform`). */
+  method?: 'telegram' | 'dev' | 'guest' | 'email';
 }
 
 /** Validates bearer session tokens (HTTP and WebSocket hello). */

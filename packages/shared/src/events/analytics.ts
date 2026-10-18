@@ -85,7 +85,7 @@ export const SERVER_EVENT_PROPS = {
   match_abandoned: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS), phase: z.string() }),
   map_played: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS) }),
   invite_created: z.object({ code: z.string(), roomId: z.string() }),
-  shop_purchase: z.object({ kind: z.enum(['weapon', 'character']), item: z.string(), currency: z.enum(['tokens', 'diamonds']), amount: z.number().int() }),
+  shop_purchase: z.object({ kind: z.enum(['weapon', 'character', 'gadget']), item: z.string(), currency: z.enum(['tokens', 'diamonds']), amount: z.number().int() }),
   mod_bought: z.object({ weapon: z.string(), mod: z.string(), cost: z.number().int() }),
   case_opened: z.object({ weapon: z.string(), rarity: z.enum(['rare', 'epic', 'legendary']), price: z.number().int() }),
   payment_completed: z.object({ provider: z.string(), packId: z.string(), diamonds: z.number().int(), amountCents: z.number().int() }),

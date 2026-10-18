@@ -20,7 +20,13 @@ export const displayNameSchema = z
   .regex(/^[\p{L}\p{N} _.\-’']+$/u, 'A name may contain letters, digits, spaces and _ . -');
 
 export const TelegramAuthRequest = z
-  .object({ initData: z.string().min(10).max(8192), platform: PlatformSchema.optional(), clientVersion: z.string().max(32).optional() })
+  .object({
+    initData: z.string().min(10).max(8192),
+    platform: PlatformSchema.optional(),
+    clientVersion: z.string().max(32).optional(),
+    /** Optional anonymous browser id (see VisitRequest) that links a new player to the visitor funnel. */
+    visitorId: z.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
+  })
   .strict();
 export const DevAuthRequest = z
   .object({
@@ -347,4 +353,107 @@ export interface AdminPlayerDetail {
   achievements: AchievementStatus[];
   matches: MatchHistoryEntry[];
   errors: AdminErrorRow[];
+  /** Current balances (talons = `tokens`). */
+  wallet: { tokens: number; diamonds: number };
+  /** Email sign-in: the address is masked («d•••r@example.com») — admins never see it in full. */
+  account: { emailMasked: string | null; emailLinkedAt: string | null; signInMethods: string[] };
+  /** Bought / granted / dropped items (free ones are implicit and not listed). */
+  items: Array<{ kind: 'weapon' | 'character' | 'gadget'; id: string; source: 'tokens' | 'diamonds' | 'case' | 'grant'; acquiredAt: string }>;
+  mods: Array<{ weapon: string; mod: string; acquiredAt: string }>;
+  /** Latest balance changes, newest first; `admin` is set for grants. */
+  ledger: Array<{ at: string; currency: 'tokens' | 'diamonds'; delta: number; balanceAfter: number; reason: string; ref: string | null; admin: string | null }>;
+  payments: AdminPaymentRow[];
+}
+
+export interface AdminPaymentRow {
+  id: string;
+  createdAt: string;
+  paidAt: string | null;
+  provider: string;
+  packId: string;
+  diamonds: number;
+  amountCents: number;
+  currency: string;
+  status: 'created' | 'paid' | 'failed' | 'expired' | 'refunded';
+}
+
+/** POST /api/admin/players/:id/grant — audited balance adjustment (negative = correction). */
+export const AdminGrantRequest = z
+  .object({
+    currency: z.enum(['tokens', 'diamonds']),
+    amount: z
+      .number()
+      .int()
+      .min(-1_000_000)
+      .max(1_000_000)
+      .refine((v) => v !== 0, 'amount must not be 0'),
+    note: z.string().trim().min(3).max(120),
+  })
+  .strict();
+export type AdminGrantRequest = z.infer<typeof AdminGrantRequest>;
+
+/** POST /api/admin/players/:id/reset-link — one-time password-reset link for a player with an email. */
+export interface AdminResetLink {
+  link: string;
+  expiresAt: string;
+}
+
+/**
+ * GET /api/admin/funnel — two cohorts of the period: anonymous visitors first seen in it (website and
+ * mini app) and players registered in it (any sign-in). Steps are nested: played ⊂ registered,
+ * returned ⊂ played. `paid` and `emailLinked` are counted among the registered.
+ */
+export interface AdminFunnelCohort {
+  entered: number;
+  registered: number;
+  played: number;
+  returned: number;
+  paid: number;
+  emailLinked: number;
+}
+export interface AdminFunnel {
+  range: AdminRange;
+  visitors: AdminFunnelCohort;
+  players: AdminFunnelCohort;
+  referrers: Array<{ key: string; visitors: number; registered: number }>;
+  daily: Array<{ day: string; uniqueVisitors: number; newVisitors: number; registrations: number }>;
+}
+
+/** GET /api/admin/economy — currency flows by ledger reason, revenue, purchases, mods and cases. */
+export interface AdminCurrencyFlow {
+  /** Credited in the period by ledger reason (match, topup, grant, refund). */
+  issued: Record<string, number>;
+  /** Debited in the period by ledger reason (purchase, mod, case, grant corrections). */
+  spent: Record<string, number>;
+  issuedTotal: number;
+  spentTotal: number;
+  /** Sum of all balances right now and how many players hold any. */
+  circulating: number;
+  holders: number;
+}
+export interface AdminEconomy {
+  range: AdminRange;
+  generatedAt: string;
+  tokens: AdminCurrencyFlow;
+  diamonds: AdminCurrencyFlow;
+  revenue: {
+    /** Paid (incl. later refunded) payments by `paid_at` in the period. */
+    payments: number;
+    payers: number;
+    byCurrency: Array<{ currency: string; grossCents: number; refundedCents: number }>;
+    byProvider: Array<{ provider: string; payments: number; grossCents: number }>;
+    byPack: Array<{ packId: string; payments: number }>;
+    /** Checkouts created in the period that are still open / failed or expired. */
+    pending: number;
+    failed: number;
+  };
+  purchases: {
+    /** Bought with talons or diamonds (case drops and grants are only in `byKind`). */
+    total: number;
+    byKind: Array<{ kind: string; source: string; count: number }>;
+    top: Array<{ kind: string; id: string; count: number }>;
+  };
+  mods: { total: number; top: Array<{ id: string; count: number }> };
+  cases: { total: number; diamondsSpent: number; byRarity: Array<{ rarity: string; count: number }> };
+  daily: Array<{ day: string; tokensIssued: number; tokensSpent: number; diamondsIssued: number; diamondsSpent: number; revenueCents: number }>;
 }

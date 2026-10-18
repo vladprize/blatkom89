@@ -76,7 +76,7 @@ export class OnlineClient {
   private async doAuth(): Promise<PublicProfile> {
     const t = tg();
     if (t) {
-      const res = await this.api.authTelegram(t.initData);
+      const res = await this.api.authTelegram(t.initData, storageGet(VISITOR_KEY) ?? undefined);
       this.setToken(res.token);
       this.profile = res.profile;
       return res.profile;

@@ -1,8 +1,14 @@
 # Admin analytics dashboard
 
 URL: `https://<your-domain>/admin` (static page `apps/web/admin.html` + bundle from
-`apps/web/src/admin/`, vanilla TypeScript, Russian UI). API: `/api/admin/*`
-(`apps/server/src/admin/`). Metric definitions: [ANALYTICS.md](ANALYTICS.md).
+`apps/web/src/admin/`, vanilla TypeScript, Russian UI — the game itself is in English; the dashboard
+names weapons, characters and maps the way the owner's sheets do). API: `/api/admin/*`
+(`apps/server/src/admin/`). Metric definitions: [ANALYTICS.md](ANALYTICS.md); economy rules:
+[ECONOMY.md](ECONOMY.md).
+
+Tabs: «Обзор» (KPIs and charts), «Воронка» (visitors → account → match → return, sources),
+«Экономика» (talons, diamonds, revenue, purchases, modifications, cases), «Игроки» (search, player
+card with wallet, purchases, ledger, payments and admin actions), «Ошибки», «Экспорт», «Аудит».
 
 The page itself is public (it contains no data); **every** data request is authorised on the server.
 Hiding the URL is not part of the security model.
@@ -43,6 +49,8 @@ Passwords: minimum 12 characters; stored as `scrypt$N$r$p$salt$hash` (N=16384, r
 | Capability | `viewer` | `admin` |
 |---|:---:|:---:|
 | Overview, charts, live rooms, players list & detail, errors | ✅ | ✅ |
+| Funnel and economy panels | ✅ | ✅ |
+| Balance grants / corrections, password-reset links | — | ✅ |
 | CSV exports | — | ✅ |
 | Audit log | — | ✅ |
 | Create administrators | — | ✅ |
@@ -69,6 +77,7 @@ what the role cannot use.
 
 Recorded actions: `login`, `login_failed`, `logout`, `admin_bootstrap`, `admin_created`,
 `admin_created_cli`, `player_viewed` (opening a player's card, target = player id),
+`balance_grant` (currency, amount, reason, balance after), `password_reset_link`,
 `export_players`, `export_matches`, `export_daily` (with row counts / date range). Visible to `admin`
 in the «Аудит» tab (latest 200). Kept 365 days ([PRIVACY.md](PRIVACY.md) §4).
 
@@ -88,8 +97,12 @@ Range parameters (where noted): `range=24h|7d|30d|90d` (default `7d`) or
 | `GET /api/admin/overview?range…` | viewer | KPI tiles (`AdminOverview`) |
 | `GET /api/admin/charts?range…` | viewer | chart series (`AdminCharts`) |
 | `GET /api/admin/rooms` | viewer | live rooms (map, phase, players, private) |
-| `GET /api/admin/players?q=&sort=&dir=&page=&pageSize=` | viewer | search by name (case-insensitive, Cyrillic-safe), exact Telegram ID or internal UUID; `sort` ∈ `created, last_seen, name, level, xp, matches, wins, losses, kills, assists, playtime`; `pageSize` 5–100 |
-| `GET /api/admin/players/:id` | viewer | profile, progression, sessions summary, achievements, last 50 matches, last 50 errors (audited) |
+| `GET /api/admin/funnel?range…` | viewer | visitor and new-player cohorts, referrers, daily visitors (`AdminFunnel`) |
+| `GET /api/admin/economy?range…` | viewer | currency flows, revenue, purchases, modifications, cases (`AdminEconomy`) |
+| `GET /api/admin/players?q=&sort=&dir=&page=&pageSize=` | viewer | search by name (case-insensitive, Cyrillic-safe), exact Telegram ID, internal UUID or exact email (the address itself is never listed); `sort` ∈ `created, last_seen, name, level, xp, matches, wins, losses, kills, assists, playtime`; `pageSize` 5–100 |
+| `GET /api/admin/players/:id` | viewer | profile, progression, sessions summary, sign-in methods, masked email, wallet, owned items and modifications, last 50 ledger rows, last 30 payments, achievements, last 50 matches, last 50 errors (audited) |
+| `POST /api/admin/players/:id/grant` | admin | `{currency: tokens\|diamonds, amount: ±1…1 000 000, note: 3–120 chars}` → `{balance}`; never below zero (`409 insufficient_balance`); ledger reason `grant` with the admin id; audited; 30 actions / 5 min per admin (CSRF) |
+| `POST /api/admin/players/:id/reset-link` | admin | one-time password-reset link (valid 1 h) for a player with a registered email → `{link, expiresAt}`; `404 no_email` otherwise; audited; hand it over only to the account owner (CSRF) |
 | `GET /api/admin/errors?range…` | viewer | errors grouped by fingerprint (≤200 groups) |
 | `GET /api/admin/audit` | admin | latest 200 audit entries |
 | `POST /api/admin/users` | admin | `{username, password, role}` (CSRF) |
@@ -103,4 +116,9 @@ Range parameters (where noted): `range=24h|7d|30d|90d` (default `7d`) or
   production). Rotating it logs out all players and administrators.
 * Serve only over HTTPS in production so the cookie gets `Secure`.
 * Prefer `viewer` accounts for people who only need to look at numbers; exports contain Telegram IDs.
+* Grants are for support (compensation, fixing a mistaken purchase). The reason is mandatory and
+  shows up in the player's ledger and in «Аудит»; corrections use a negative amount.
+* A reset link opens the player's account to whoever holds it for an hour: before creating one,
+  check that the request really comes from the owner (e.g. the masked email and the Telegram ID or
+  match history they can describe). Admins never see the full email address.
 * Review «Аудит» periodically for `login_failed` bursts and unexpected exports.

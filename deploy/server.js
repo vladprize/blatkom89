@@ -7781,13 +7781,26 @@ var EnvSchema = external_exports.object({
   ADMIN_SESSION_TTL_HOURS: external_exports.coerce.number().int().min(1).max(72).default(12),
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
-  SERVER_VERSION: external_exports.string().default("0.1.0"),
+  /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
+  SERVER_VERSION: external_exports.string().default("0.2.0"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
   MATCH_SCORE_LIMIT: external_exports.coerce.number().int().min(1).max(400).default(50),
   MATCH_MIN_PLAYERS: external_exports.coerce.number().int().min(2).max(6).default(2),
-  MATCH_MAX_PLAYERS: external_exports.coerce.number().int().min(2).max(6).default(6)
+  MATCH_MAX_PLAYERS: external_exports.coerce.number().int().min(2).max(6).default(6),
+  /** Paid cases can be switched off where randomised paid items are restricted (docs/ECONOMY.md). */
+  CASES_ENABLED: bool.default("true"),
+  /** Card payments (Stripe Checkout). Both keys are required to enable them. */
+  STRIPE_SECRET_KEY: external_exports.string().optional(),
+  STRIPE_WEBHOOK_SECRET: external_exports.string().optional(),
+  /** Crypto payments (NOWPayments invoices). Both keys are required to enable them. */
+  NOWPAYMENTS_API_KEY: external_exports.string().optional(),
+  NOWPAYMENTS_IPN_SECRET: external_exports.string().optional(),
+  NOWPAYMENTS_SANDBOX: bool.default("false"),
+  /** Password-reset emails through Resend (https://resend.com); without a key the admin issues reset links. */
+  RESEND_API_KEY: external_exports.string().optional(),
+  MAIL_FROM: external_exports.string().optional()
 });
 function loadEnv(source = process.env) {
   const publicUrlSet = !!source.PUBLIC_URL || !!source.RENDER_EXTERNAL_URL;
@@ -10273,6 +10286,7 @@ var MAX_REWIND_MS = 250;
 var HISTORY_MS = 600;
 var PICKUP_RADIUS = 18;
 var DROPPED_WEAPON_TTL_MS = 2e4;
+var MEDKIT_HEAL = 50;
 var POS_SCALE = 4;
 var VEL_SCALE = 8;
 var MOVE_AXIS_MAX = 127;
@@ -10283,11 +10297,281 @@ var MAX_INPUTS_PER_MESSAGE = 8;
 var MAX_NAME_LENGTH = 24;
 
 // packages/shared/src/game-rules/characters.ts
-var CHARACTER_IDS = ["petya", "valuta", "uchastkovy", "mihalych"];
+var CHARACTER_IDS = ["petya", "valuta", "uchastkovy", "mihalych", "vorona", "zmeya", "varan", "popugay", "piranya", "akula", "oryol", "leopard", "slon", "lobster"];
 var CHARACTER_BASE_STATS = Object.freeze({ maxHp: 100, speed: 1, radius: 10 });
+var CHARACTERS = {
+  petya: {
+    id: "petya",
+    name: "Petya",
+    nickname: "The Commandant",
+    species: "Rooster",
+    role: "Former dormitory commandant",
+    personality: "Keeps order. Knows every corner of the yard.",
+    quote: "My yard. My rules.",
+    district: "3rd Microdistrict",
+    business: "Running the yard",
+    weaponsNote: "Anything, as long as it comes with respect.",
+    lore: "For twenty years he ran the textile mill dormitory with an iron fist: lights out at 23:00, guests until 22:00, immersion heaters strictly forbidden. The dormitory was resettled, the habit of giving orders stayed. Now Petya has appointed himself commandant of the whole yard \u2014 and nobody has dared to argue yet.",
+    tier: "base",
+    accent: "#c8312a",
+    tag: "Petya"
+  },
+  valuta: {
+    id: "valuta",
+    name: "Valuta",
+    nickname: "The Black Marketeer",
+    species: "Panther",
+    role: "Black marketeer and fixer",
+    personality: "Always knows where to get it. Settles questions at any level.",
+    quote: "Connections decide everything.",
+    district: "Garage Cooperative",
+    business: "Trade, deliveries, hard currency",
+    weaponsNote: "A gun, connections and good information.",
+    lore: "Started out flogging chewing gum outside the Intourist hotel; now half the jeans in the district pass through his garages. Moves without a sound, talks in a whisper and never lets go of his little book of phone numbers. Need a VCR, a sheepskin coat or the right certificate with the right stamp? Everybody goes to Valuta. The only question is the price.",
+    tier: "base",
+    accent: "#d8a637",
+    tag: "Valuta"
+  },
+  uchastkovy: {
+    id: "uchastkovy",
+    name: "Uchastkovy",
+    nickname: "Knows Everyone",
+    species: "Wolf",
+    role: "The beat cop. Watches the district, knows everyone and everything.",
+    personality: "Suspicious, observant, bureaucratically relentless.",
+    quote: "Where are you off to? Papers, please.",
+    district: "3rd Microdistrict",
+    business: "Order, reports, district affairs",
+    weaponsNote: "Pistol, rifle, baton, sawn-off.",
+    lore: "Fifteen years on the beat, and he remembers everyone who ever crossed the street in the wrong place. His reports get read out at tenants\u2019 meetings like detective novels. The bosses keep promising him a transfer to the city centre, but he is in no hurry: here he knows who, where and for how much.",
+    tier: "base",
+    accent: "#3d5a8c",
+    tag: "Uchastkovy"
+  },
+  mihalych: {
+    id: "mihalych",
+    name: "Mikhalych",
+    nickname: "The Demob",
+    species: "Bear",
+    role: "Ex-army. Went out for bread, now settles the district\u2019s affairs.",
+    personality: "Calm, experienced, stays out of the fuss \u2014 but sorts it out when he has to. Respects his own, keeps his word.",
+    quote: "Order isn\u2019t what they write down. Order is what people hold together.",
+    district: "Garage Cooperative",
+    business: "Security, muscle, settling disputes",
+    weaponsNote: "Rifle, sawn-off, pistol, hand-to-hand.",
+    lore: "Served his time, came home and went out for a loaf of bread. On the way he broke up two fights, made peace between the garage owners and somehow became head of security for the whole cooperative. They say he never did buy the bread. You don\u2019t need to talk Mikhalych into anything \u2014 just ask him like a human being.",
+    tier: "base",
+    accent: "#6b7536",
+    tag: "Mikhalych"
+  },
+  // ── unlocked by level + talons (art: references/08…16, supplied by the product owner) ─────────
+  vorona: {
+    id: "vorona",
+    name: "Karlych",
+    nickname: "The Informant",
+    species: "Raven",
+    role: "Knows everything that happens in the district. Gets information, brings people together, sorts things out.",
+    personality: "Sly, observant, always a step ahead. Stays out of open fights, but is always there at the right moment.",
+    quote: "Walls hear more than people think.",
+    district: "Old Town",
+    business: "Connections, rumours, people",
+    weaponsNote: "Pistols, SMGs",
+    lore: "Karlych has ears in every yard of the Old Town: caretakers, cabbies, canteen ladies \u2014 everyone tells him something. A cassette recorder hangs on his chest and his pockets are full of tapes of other people\u2019s conversations. Karlych never sells information \u2014 he trades it. And if you were the last to hear the news, Karlych was the first.",
+    tier: "progress",
+    accent: "#b8302a",
+    tag: "Karlych"
+  },
+  zmeya: {
+    id: "zmeya",
+    name: "Sonka",
+    nickname: "The Temptress",
+    species: "Snake",
+    role: "Reconnaissance, cunning operations, provocations. Knows every loophole in the district.",
+    personality: "Quiet, clever, always a step ahead. Knows how to strike a deal \u2014 and how to vanish.",
+    quote: "Everyone has a price. You just need to know where to press.",
+    district: "Market / Railway Station",
+    business: "Connections, deliveries, reconnaissance",
+    weaponsNote: "SMGs, pistols, knife",
+    lore: "Every conductor at the station knows Sonka, and so does every scales lady at the market. She turns up wherever a deal is being made and disappears before anyone misses their wallet. She smiles, whispers, promises \u2014 and everyone walks away sure they got a bargain. They realise they were taken a week later. Beautiful, dirty, effective: that is her signature.",
+    tier: "progress",
+    accent: "#6f8a3a",
+    tag: "Sonka"
+  },
+  varan: {
+    id: "varan",
+    name: "Tolyan",
+    nickname: "The Techie",
+    species: "Monitor Lizard",
+    role: "Knows machines, locks and engines. Fixes, improves and gets what can\u2019t be bought.",
+    personality: "Calm, calculating, always on the move. Does more than he talks. At home among the garages.",
+    quote: "If it can be fixed, it can still fight.",
+    district: "Garage Cooperative",
+    business: "Weapons, machinery, modifications, break-ins",
+    weaponsNote: "Rifles, SMGs, shotguns",
+    lore: "There is no lock in the cooperative Tolyan can\u2019t open in a minute, and no engine he can\u2019t push-start. He\u2019ll build an armoured car out of an old Moskvich, a timer out of an alarm clock, and out of a written-off shotgun \u2014 a piece people drive over from other districts to see. Says little, smokes a lot and always smells of engine oil.",
+    tier: "progress",
+    accent: "#8a7444",
+    tag: "Tolyan"
+  },
+  popugay: {
+    id: "popugay",
+    name: "Gosha",
+    nickname: "The Liaison",
+    species: "Parrot",
+    role: "Passes the word, coordinates the crew, knows every district. Quick to react and always in the loop.",
+    personality: "Talkative, charismatic, sharp-tongued, always on the line. Can talk his way out of anything. Loves freedom and a bit of action.",
+    quote: "I hear it all, see it all, fly everywhere. News travels faster than a bullet!",
+    district: "Market / Radio Tower",
+    business: "Communications, reconnaissance, passing on the word",
+    weaponsNote: "Pistols, SMGs, rifles",
+    lore: "Gosha sits on the radio tower above the market and listens to the whole city: the militsiya band, the cabbies, the port dispatchers. Every negotiation in the district goes through him \u2014 he\u2019ll pass it on, remind you, warn you and, if needed, embellish it a little. Walkie-talkie on his belt, pipe in his beak, flying goggles on his forehead. Whoever owns the information owns the district.",
+    tier: "progress",
+    accent: "#e0a020",
+    tag: "Gosha"
+  },
+  piranya: {
+    id: "piranya",
+    name: "Vityok",
+    nickname: "The Madman",
+    species: "Piranha",
+    role: "First into any brawl. Close combat and pressure are his element. Creates chaos so his own can take what\u2019s theirs.",
+    personality: "Impulsive, wild, unpredictable. Does what he feels. Lives for the moment.",
+    quote: "The smell of blood is the best plan.",
+    district: "River / Port",
+    business: "Muscle, cargo protection",
+    weaponsNote: "Uzi, shotguns, knives, mines",
+    lore: "They found Vityok on a river barge, where he had single-handedly chased off a whole gang of dockers from the next district. Since then he gets called when the talking is over. He never has a plan \u2014 just a red bandana, a mouth full of teeth and the firm conviction that fish have a say too. His own people are a bit scared of him; strangers even more so.",
+    tier: "progress",
+    accent: "#c24a3a",
+    tag: "Vityok"
+  },
+  // ── premium (diamonds) ────────────────────────────────────────────────────
+  akula: {
+    id: "akula",
+    name: "Zhora",
+    nickname: "The Businessman",
+    species: "Shark",
+    role: "Settles things with money, connections and force. Controls trade, deliveries and protection.",
+    personality: "Cold-blooded, calculating, always looking for an angle. Keeps smiling even when it\u2019s too late to save anything.",
+    quote: "Everything in the district is for sale. It\u2019s only a question of price.",
+    district: "Port / Market",
+    business: "Deliveries, contraband, a cut of every business",
+    weaponsNote: "Rifles, SMGs, shotguns",
+    lore: "Zhora came to the port back when they only loaded timber and fish. Now VCRs, jeans and everything \u201Cnot allowed\u201D come through his piers. He wears a pinstripe suit, smokes a fat cigar and never raises his voice \u2014 why would he, when he can simply smile. Everyone who trades by the sea pays Zhora his cut. Those who don\u2019t pay don\u2019t trade any more.",
+    tier: "premium",
+    accent: "#3d5a8c",
+    tag: "Zhora"
+  },
+  oryol: {
+    id: "oryol",
+    name: "Garik",
+    nickname: "Pendos",
+    species: "Eagle",
+    role: "Sniper. Takes out targets from a distance, holds the key positions.",
+    personality: "Calm, deliberate, never says a word too many.",
+    quote: "I see further. I shoot straighter.",
+    district: "Port",
+    business: "Holding the territory",
+    weaponsNote: "Sniper rifle",
+    lore: "They started calling Garik \u201CPendos\u201D \u2014 the Yankee \u2014 back in 1980: aviator shades, a sheepskin bomber jacket and chewing gum he chews even in his sleep. He traded a crate of matryoshka dolls for the shades with a foreign sailor and has never taken them off since. Garik sits up on the port cranes and sees everything that happens at the piers. He says little, shoots rarely \u2014 and almost never misses.",
+    tier: "premium",
+    accent: "#e8b030",
+    tag: "Garik"
+  },
+  leopard: {
+    id: "leopard",
+    name: "Lyova",
+    nickname: "The Mercenary",
+    species: "Leopard",
+    role: "Takes on the hard jobs. Settles matters when speed and precision are needed.",
+    personality: "Cold, confident, always in control. Doesn\u2019t chatter. Values results.",
+    quote: "A job should be clean, like tracks in fresh snow.",
+    district: "The Whole City",
+    business: "Protection, escorts, special orders",
+    weaponsNote: "Assault and sniper rifles, pistols",
+    lore: "Nobody hires Lyova \u2014 you put your name down on his waiting list. He takes only difficult jobs, works alone and never haggles: the price is named, the question is closed. He wears a sheepskin coat all year round and never takes the cigarette out of his mouth, even on a job. The district tells legends about his past; the few who know the truth prefer to keep quiet.",
+    tier: "premium",
+    accent: "#d89a2a",
+    tag: "Lyova"
+  },
+  slon: {
+    id: "slon",
+    name: "Batya",
+    nickname: "The Roof",
+    species: "Elephant",
+    role: "Holds the districts, covers the businesses, settles the big conflicts. The heavy artillery of any affair.",
+    personality: "Calm, massive, says little but every word counts. Always keeps his word. When the Elephant is around, problems disappear.",
+    quote: "Big things are done slowly \u2014 but forever.",
+    district: "The Whole City",
+    business: "Protection (\u201Ca roof\u201D) for businesses, security, muscle",
+    weaponsNote: "Machine guns, RPGs, heavy weapons",
+    lore: "Every kiosk, cooperative and car workshop in the city has a \u201Croof\u201D \u2014 protection. And every roof has Batya. He doesn\u2019t run, doesn\u2019t shout and doesn\u2019t hurry: he arrives in person, sits down, listens in silence \u2014 and the matter is closed for good. A red tracksuit, a fur waistcoat and a gold chain with a star: the whole city knows him by these, and nobody wants to check whether it\u2019s true that he never forgets.",
+    tier: "premium",
+    accent: "#c8312a",
+    tag: "Batya"
+  },
+  lobster: {
+    id: "lobster",
+    name: "Slavik",
+    nickname: "The Fence",
+    species: "Lobster",
+    role: "Controls deliveries, gets hold of defitsit, weapons and hard currency. Always knows where to find anything.",
+    personality: "Sly, enterprising, a born negotiator who always comes out dry. Loves luxury, but is always ready for a fight.",
+    quote: "Everything you need is already on its way. All it takes is the right port.",
+    district: "Port",
+    business: "Deliveries, defitsit, currency exchange",
+    weaponsNote: "Pistols, SMGs, shotguns",
+    lore: "Slavik grew up in the port and has spent his whole life mastering one skill: coming out of the water dry. Jeans, chewing gum, video cassettes, hard currency \u2014 whatever the district needs, with Slavik it\u2019s \u201Calready on its way\u201D. He adores gold, tracksuits and good cigars, and in an argument he always offers a deal first \u2014 and only then uses his claws.",
+    tier: "premium",
+    accent: "#c8402a",
+    tag: "Slavik"
+  }
+};
+function isCharacterId(v) {
+  return typeof v === "string" && CHARACTER_IDS.includes(v);
+}
+var FREE_CHARACTERS = CHARACTER_IDS.filter((c) => CHARACTERS[c].tier === "base");
 
 // packages/shared/src/game-rules/weapons.ts
-var WEAPON_IDS = ["pistol", "montirovka", "obrez", "avtomat"];
+var WEAPON_IDS = [
+  // base (free)
+  "pistol",
+  "montirovka",
+  "obrez",
+  "avtomat",
+  // shop: sidearms
+  "tt",
+  "p92",
+  "deagle",
+  // shop: melee
+  "nozh",
+  "bita",
+  "topor",
+  // shop: primaries
+  "uzi",
+  "ppsh",
+  "mp5",
+  "s12",
+  "ksyuha",
+  "m4",
+  "g36",
+  "svd",
+  "awm",
+  "m24",
+  "rpg",
+  "m249",
+  // rare (cases)
+  "mauser",
+  "kuvalda",
+  "zolotoy",
+  "tommy",
+  "tulka",
+  "ognemet",
+  "arbalet",
+  "gvozdomet",
+  "muha",
+  "granatomet"
+];
 var base = {
   pellets: 1,
   falloffStart: 9999,
@@ -10297,105 +10581,190 @@ var base = {
   spreadRecovery: 0,
   meleeArc: 0,
   meleeRange: 0,
-  reserveOnPickup: 0
+  reserveOnPickup: 0,
+  projectile: null,
+  moveSpeed: 1,
+  silenced: false,
+  laser: false,
+  drawMs: 150,
+  automatic: true
 };
-var WEAPONS = {
-  pistol: {
-    ...base,
-    id: "pistol",
-    index: 0,
-    name: "\u041F\u0438\u0441\u0442\u043E\u043B\u0435\u0442",
-    slot: 1,
-    kind: "hitscan",
-    damage: 34,
-    fireIntervalMs: 290,
-    automatic: true,
-    range: 520,
-    falloffStart: 320,
-    minDamageFactor: 0.75,
-    spread: 0.028,
-    magazine: 8,
-    reserveMax: -1,
-    reloadMs: 1100,
-    muzzle: { forward: 19, side: 2 },
-    shake: 0.15,
-    sound: "pistol"
-  },
-  montirovka: {
-    ...base,
-    id: "montirovka",
-    index: 1,
-    name: "\u041C\u043E\u043D\u0442\u0438\u0440\u043E\u0432\u043A\u0430",
-    slot: 2,
-    kind: "melee",
-    damage: 55,
-    fireIntervalMs: 460,
-    automatic: true,
-    range: 36,
-    spread: 0,
-    magazine: 0,
-    reserveMax: 0,
-    reloadMs: 0,
-    meleeArc: 115 * Math.PI / 180,
-    meleeRange: 36,
-    muzzle: { forward: 22, side: 6 },
-    shake: 0.2,
-    sound: "swing"
-  },
-  obrez: {
-    ...base,
-    id: "obrez",
-    index: 2,
-    name: "\u041E\u0431\u0440\u0435\u0437",
-    slot: 3,
-    kind: "hitscan",
-    damage: 15,
-    pellets: 7,
-    fireIntervalMs: 620,
-    automatic: true,
-    range: 270,
+var sidearm = (d) => ({
+  ...base,
+  slot: 1,
+  pose: "pistol",
+  kind: "hitscan",
+  reserveMax: -1,
+  falloffStart: 280,
+  minDamageFactor: 0.75,
+  shake: 0.15,
+  sound: "pistol",
+  flash: "pistol",
+  ...d
+});
+var melee = (d) => ({
+  ...base,
+  slot: 2,
+  pose: "melee",
+  kind: "melee",
+  range: d.meleeRange,
+  spread: 0,
+  magazine: 0,
+  reserveMax: 0,
+  reloadMs: 0,
+  shake: 0.2,
+  sound: "swing",
+  flash: "none",
+  ...d
+});
+var primary = (d) => ({
+  ...base,
+  slot: 3,
+  pose: "long",
+  kind: "hitscan",
+  shake: 0.22,
+  sound: "avtomat",
+  flash: "avtomat",
+  ...d
+});
+var DEFS = {
+  // ── base ──────────────────────────────────────────────────────────────────
+  pistol: sidearm({ name: "Makarov (PM)", blurb: "The trusty Makarov. Always on you, never runs out of ammo.", tier: "base", damage: 25, fireIntervalMs: 260, magazine: 8, reloadMs: 1100, spread: 0.028, range: 520 }),
+  montirovka: melee({ name: "Crowbar", blurb: "Two swings and the conversation is over.", tier: "base", damage: 55, fireIntervalMs: 460, meleeRange: 36, meleeArc: 115 * Math.PI / 180 }),
+  obrez: primary({
+    name: "Sawn-off",
+    blurb: "Two barrels point-blank settle any argument.",
+    tier: "base",
+    damage: 14,
+    pellets: 8,
+    fireIntervalMs: 650,
+    range: 260,
     falloffStart: 70,
     minDamageFactor: 0.3,
-    spread: 0.19,
+    spread: 0.2,
     magazine: 2,
     reserveMax: 16,
     reserveOnPickup: 10,
-    reloadMs: 1500,
-    muzzle: { forward: 23, side: 2 },
+    reloadMs: 1700,
     shake: 0.55,
-    sound: "obrez"
-  },
-  avtomat: {
-    ...base,
-    id: "avtomat",
-    index: 3,
-    name: "\u0410\u0432\u0442\u043E\u043C\u0430\u0442",
-    slot: 3,
-    kind: "hitscan",
-    damage: 17,
+    sound: "obrez",
+    flash: "obrez"
+  }),
+  avtomat: primary({
+    name: "AK-47",
+    blurb: "The classic: four hits, thirty rounds.",
+    tier: "base",
+    damage: 27,
     fireIntervalMs: 100,
-    automatic: true,
-    range: 620,
-    falloffStart: 380,
+    range: 650,
+    falloffStart: 400,
     minDamageFactor: 0.7,
-    spread: 0.03,
-    spreadPerShot: 0.012,
-    spreadMax: 0.12,
+    spread: 0.025,
+    spreadPerShot: 0.01,
+    spreadMax: 0.11,
     spreadRecovery: 0.3,
     magazine: 30,
     reserveMax: 90,
     reserveOnPickup: 60,
-    reloadMs: 1700,
-    muzzle: { forward: 27, side: 2 },
-    shake: 0.22,
-    sound: "avtomat"
-  }
+    reloadMs: 2200
+  }),
+  // ── shop: sidearms ─────────────────────────────────────────────────────────
+  tt: sidearm({ name: "TT", blurb: "The Tula Tokarev: three hits up close, but a stiff action.", tier: "shop", damage: 34, fireIntervalMs: 340, magazine: 8, reloadMs: 1300, spread: 0.022, range: 580, falloffStart: 300, sound: "revolver", shake: 0.2 }),
+  p92: sidearm({ name: "P92", blurb: "An imported nine-millimetre: fifteen rounds, quick, but weaker.", tier: "shop", damage: 20, fireIntervalMs: 200, magazine: 15, reloadMs: 1500, spread: 0.03, range: 500, falloffStart: 260 }),
+  deagle: sidearm({ name: "Deagle", blurb: "A hand cannon from the desert: two hits, but heavy recoil and seven rounds.", tier: "shop", damage: 50, fireIntervalMs: 560, magazine: 7, reloadMs: 1900, spread: 0.026, range: 620, falloffStart: 340, minDamageFactor: 0.7, sound: "revolver", shake: 0.32 }),
+  // ── shop: melee ───────────────────────────────────────────────────────────
+  nozh: melee({ name: "Knife", blurb: "Short, fast and quiet. You run lighter with it.", tier: "shop", damage: 40, fireIntervalMs: 300, meleeRange: 30, meleeArc: 90 * Math.PI / 180, moveSpeed: 1.04 }),
+  bita: melee({ name: "Bat", blurb: "A wide swing and a heavy hit.", tier: "shop", damage: 65, fireIntervalMs: 600, meleeRange: 40, meleeArc: 130 * Math.PI / 180, sound: "heavySwing" }),
+  topor: melee({ name: "Axe", blurb: "Two swings like the crowbar, but a longer wind-up.", tier: "shop", damage: 70, fireIntervalMs: 640, meleeRange: 38, meleeArc: 110 * Math.PI / 180, moveSpeed: 0.97, sound: "heavySwing", shake: 0.3 }),
+  // ── shop: primaries ───────────────────────────────────────────────────────
+  uzi: primary({ name: "Uzi", blurb: "A thousand rounds a minute, but weak at range.", tier: "shop", damage: 15, fireIntervalMs: 60, range: 430, falloffStart: 200, minDamageFactor: 0.55, spread: 0.05, spreadPerShot: 0.01, spreadMax: 0.13, spreadRecovery: 0.4, magazine: 32, reserveMax: 128, reserveOnPickup: 64, reloadMs: 1700, sound: "smg" }),
+  ppsh: primary({ name: "PPSh-41", blurb: "A 71-round drum. Reloading takes ages \u2014 better not miss.", tier: "shop", damage: 17, fireIntervalMs: 70, range: 460, falloffStart: 230, minDamageFactor: 0.6, spread: 0.05, spreadPerShot: 8e-3, spreadMax: 0.13, spreadRecovery: 0.3, magazine: 71, reserveMax: 142, reserveOnPickup: 71, reloadMs: 3200, moveSpeed: 0.95, sound: "smg" }),
+  mp5: primary({ name: "MP5", blurb: "An accurate submachine gun: tight groups, modest damage.", tier: "shop", damage: 18, fireIntervalMs: 75, range: 500, falloffStart: 260, minDamageFactor: 0.6, spread: 0.028, spreadPerShot: 7e-3, spreadMax: 0.1, spreadRecovery: 0.4, magazine: 30, reserveMax: 120, reserveOnPickup: 60, reloadMs: 1900, sound: "smg" }),
+  s12: primary({ name: "S-12K", blurb: "A self-loading shotgun: fast, but a wider spread than the sawn-off.", tier: "shop", damage: 11, pellets: 8, fireIntervalMs: 330, range: 270, falloffStart: 80, minDamageFactor: 0.3, spread: 0.17, magazine: 8, reserveMax: 24, reserveOnPickup: 16, reloadMs: 2600, sound: "shotgun", flash: "obrez", shake: 0.45 }),
+  ksyuha: primary({ name: "AKS-74U", blurb: "The \u201CKsyukha\u201D: fires faster, hits worse at range.", tier: "shop", damage: 22, fireIntervalMs: 80, range: 520, falloffStart: 300, minDamageFactor: 0.65, spread: 0.035, spreadPerShot: 0.011, spreadMax: 0.12, spreadRecovery: 0.32, magazine: 30, reserveMax: 120, reserveOnPickup: 60, reloadMs: 2e3 }),
+  m4: primary({ name: "M4A1", blurb: "Fast and accurate, but five hits instead of four.", tier: "shop", damage: 24, fireIntervalMs: 80, range: 680, falloffStart: 420, minDamageFactor: 0.7, spread: 0.02, spreadPerShot: 8e-3, spreadMax: 0.09, spreadRecovery: 0.35, magazine: 30, reserveMax: 90, reserveOnPickup: 60, reloadMs: 2e3 }),
+  g36: primary({ name: "G36", blurb: "A tight-grouping rifle with built-in optics. Heavier and slower to reload.", tier: "shop", damage: 26, fireIntervalMs: 100, range: 720, falloffStart: 450, minDamageFactor: 0.7, spread: 0.016, spreadPerShot: 8e-3, spreadMax: 0.09, spreadRecovery: 0.3, magazine: 30, reserveMax: 90, reserveOnPickup: 60, reloadMs: 2600, moveSpeed: 0.95 }),
+  svd: primary({ name: "SVD", blurb: "The Dragunov self-loading sniper rifle: two hits.", tier: "shop", damage: 70, fireIntervalMs: 600, range: 950, spread: 6e-3, magazine: 10, reserveMax: 30, reserveOnPickup: 20, reloadMs: 2600, moveSpeed: 0.9, sound: "rifle", shake: 0.4, drawMs: 300 }),
+  awm: primary({ name: "AWM", blurb: "Finishes a wounded target in one shot. The bolt and the weight are the price.", tier: "shop", damage: 95, fireIntervalMs: 1450, range: 1050, spread: 2e-3, magazine: 5, reserveMax: 20, reserveOnPickup: 10, reloadMs: 3200, moveSpeed: 0.86, sound: "rifle", shake: 0.55, drawMs: 400 }),
+  m24: primary({ name: "M24", blurb: "A bolt-action rifle: two hits, a faster bolt than the AWM.", tier: "shop", damage: 85, fireIntervalMs: 1150, range: 980, spread: 3e-3, magazine: 5, reserveMax: 25, reserveOnPickup: 10, reloadMs: 2600, moveSpeed: 0.92, sound: "rifle", shake: 0.45, drawMs: 350 }),
+  rpg: primary({
+    name: "RPG-7",
+    blurb: "The blast catches everyone nearby \u2014 you included.",
+    tier: "shop",
+    kind: "projectile",
+    damage: 30,
+    fireIntervalMs: 900,
+    range: 800,
+    spread: 0.01,
+    magazine: 1,
+    reserveMax: 4,
+    reserveOnPickup: 3,
+    reloadMs: 2800,
+    projectile: { speed: 520, radius: 70, splash: 110, selfFactor: 0.5 },
+    moveSpeed: 0.85,
+    sound: "rocket",
+    flash: "obrez",
+    shake: 0.6,
+    drawMs: 350
+  }),
+  m249: primary({ name: "M249", blurb: "A hundred rounds in the box. Heavy: you move slower.", tier: "shop", damage: 23, fireIntervalMs: 80, range: 700, falloffStart: 450, minDamageFactor: 0.7, spread: 0.04, spreadPerShot: 8e-3, spreadMax: 0.14, spreadRecovery: 0.25, magazine: 100, reserveMax: 100, reserveOnPickup: 100, reloadMs: 4400, moveSpeed: 0.82, sound: "lmg", shake: 0.3, drawMs: 350 }),
+  // ── rare (cases) ──────────────────────────────────────────────────────────
+  mauser: sidearm({ name: "Commissar\u2019s Mauser", blurb: "A wooden holster, ten rounds and a temper.", tier: "rare", damage: 34, fireIntervalMs: 360, magazine: 10, reloadMs: 1700, spread: 0.02, range: 600, falloffStart: 360, sound: "revolver", shake: 0.22 }),
+  kuvalda: melee({ name: "Udarnik Sledgehammer", blurb: "One blow, one elimination \u2014 if you land it: a long wind-up and a short reach.", tier: "rare", damage: 100, fireIntervalMs: 1050, meleeRange: 33, meleeArc: 100 * Math.PI / 180, moveSpeed: 0.9, sound: "heavySwing", shake: 0.45 }),
+  zolotoy: primary({ name: "Golden Kalash", blurb: "The same AK-47, only gold-plated and with a 35-round magazine.", tier: "rare", damage: 27, fireIntervalMs: 100, range: 660, falloffStart: 400, minDamageFactor: 0.7, spread: 0.024, spreadPerShot: 95e-4, spreadMax: 0.105, spreadRecovery: 0.32, magazine: 35, reserveMax: 105, reserveOnPickup: 70, reloadMs: 2200 }),
+  tommy: primary({ name: "Chicago Tommy Gun", blurb: "A 50-round drum. Contraband with a sense of humour.", tier: "rare", damage: 19, fireIntervalMs: 66, range: 480, falloffStart: 250, minDamageFactor: 0.6, spread: 0.045, spreadPerShot: 9e-3, spreadMax: 0.13, spreadRecovery: 0.3, magazine: 50, reserveMax: 100, reserveOnPickup: 50, reloadMs: 3e3, moveSpeed: 0.95, sound: "smg" }),
+  tulka: primary({ name: "Engraved Tulka", blurb: "A master\u2019s double-barrel: tighter and longer-reaching than the sawn-off, weaker point-blank.", tier: "rare", damage: 12, pellets: 8, fireIntervalMs: 420, range: 320, falloffStart: 110, minDamageFactor: 0.35, spread: 0.11, magazine: 2, reserveMax: 20, reserveOnPickup: 12, reloadMs: 2200, sound: "obrez", flash: "obrez", shake: 0.5 }),
+  ognemet: primary({ name: "Plamya-84 Flamethrower", blurb: "A jet of fire up close. Keep your distance.", tier: "rare", damage: 6, pellets: 3, fireIntervalMs: 100, range: 160, falloffStart: 60, minDamageFactor: 0.4, spread: 0.25, magazine: 60, reserveMax: 120, reserveOnPickup: 60, reloadMs: 3e3, moveSpeed: 0.9, sound: "flame", flash: "none", shake: 0.12 }),
+  arbalet: primary({ name: "The Beat Cop\u2019s Crossbow", blurb: "A silent bolt: 90 damage, reload after every shot.", tier: "rare", damage: 90, fireIntervalMs: 400, range: 800, spread: 3e-3, magazine: 1, reserveMax: 20, reserveOnPickup: 12, reloadMs: 1100, silenced: true, sound: "bow", flash: "none", shake: 0.15 }),
+  gvozdomet: primary({ name: "Stroyka Nail Gun", blurb: "Forty nails in a row. Labour valour!", tier: "rare", damage: 14, fireIntervalMs: 85, range: 450, falloffStart: 250, minDamageFactor: 0.6, spread: 0.03, spreadPerShot: 6e-3, spreadMax: 0.08, spreadRecovery: 0.4, magazine: 40, reserveMax: 120, reserveOnPickup: 80, reloadMs: 2400, sound: "nail", flash: "pistol", shake: 0.12 }),
+  muha: primary({
+    name: "Mukha RPG",
+    blurb: "A light disposable launcher: faster than the RPG, a smaller blast.",
+    tier: "rare",
+    kind: "projectile",
+    damage: 25,
+    fireIntervalMs: 700,
+    range: 760,
+    spread: 0.012,
+    magazine: 1,
+    reserveMax: 3,
+    reserveOnPickup: 3,
+    reloadMs: 2e3,
+    projectile: { speed: 600, radius: 60, splash: 95, selfFactor: 0.5 },
+    moveSpeed: 0.92,
+    sound: "rocket",
+    flash: "obrez",
+    shake: 0.5
+  }),
+  granatomet: primary({
+    name: "GM-94 Grenade Launcher",
+    blurb: "Three grenades in the magazine. Smaller blasts, but more often.",
+    tier: "rare",
+    kind: "projectile",
+    damage: 20,
+    fireIntervalMs: 700,
+    range: 620,
+    spread: 0.02,
+    magazine: 3,
+    reserveMax: 9,
+    reserveOnPickup: 6,
+    reloadMs: 3200,
+    projectile: { speed: 420, radius: 56, splash: 75, selfFactor: 0.5 },
+    moveSpeed: 0.88,
+    sound: "rocket",
+    flash: "obrez",
+    shake: 0.45
+  })
 };
-var WEAPON_BY_INDEX = WEAPON_IDS.slice().sort(
-  (a, b2) => WEAPONS[a].index - WEAPONS[b2].index
-);
+var WEAPONS = Object.fromEntries(WEAPON_IDS.map((id, index) => [id, { ...DEFS[id], id, index }]));
+var SIDEARMS = WEAPON_IDS.filter((w) => DEFS[w].slot === 1);
+var MELEE_WEAPONS = WEAPON_IDS.filter((w) => DEFS[w].slot === 2);
+var PRIMARY_WEAPONS = WEAPON_IDS.filter((w) => DEFS[w].slot === 3);
+function isWeaponId(v) {
+  return typeof v === "string" && WEAPON_IDS.includes(v);
+}
 function isHeavy(id) {
-  return id === "obrez" || id === "avtomat";
+  return WEAPONS[id].slot === 3;
 }
 function damageFalloff(w, d) {
   if (d <= w.falloffStart) return 1;
@@ -10403,6 +10772,275 @@ function damageFalloff(w, d) {
   const t = (d - w.falloffStart) / (w.range - w.falloffStart);
   return 1 + (w.minDamageFactor - 1) * t;
 }
+var MOD_IDS = ["silencer", "reddot", "scope", "laser", "grip", "extmag"];
+var MODS = {
+  silencer: { id: "silencer", name: "Silencer", mount: "muzzle", plus: "Quiet: you don\u2019t show on the enemies\u2019 minimap", minus: "Range \u221215%" },
+  reddot: { id: "reddot", name: "Red Dot", mount: "optic", plus: "Spread \u221225%", minus: "Slower to draw: +0.06 s" },
+  scope: { id: "scope", name: "Scope", mount: "optic", plus: "Range +25%, spread \u221215%", minus: "Speed \u22125%, draw +0.15 s" },
+  laser: { id: "laser", name: "Laser", mount: "rail", plus: "Spread \u221230%, recoil \u221220%", minus: "Every enemy sees the beam" },
+  grip: { id: "grip", name: "Grip", mount: "rail", plus: "Recoil \u221240%, settles faster", minus: "Reload +10%" },
+  extmag: { id: "extmag", name: "Extended Mag", mount: "mag", plus: "Magazine +50%", minus: "Reload +25%" }
+};
+function isModId(v) {
+  return typeof v === "string" && MOD_IDS.includes(v);
+}
+function modsFor(w) {
+  if (w.kind !== "hitscan" || w.sound === "flame") return [];
+  if (w.id === "arbalet") return ["reddot", "scope"];
+  const out = [];
+  if (!w.silenced) out.push("silencer");
+  out.push("reddot");
+  if (w.pose === "long" && w.pellets === 1) out.push("scope");
+  out.push("laser");
+  if (w.pose === "long") out.push("grip");
+  if (w.magazine >= 5) out.push("extmag");
+  return out;
+}
+function sanitizeMods(raw, weapon) {
+  if (!Array.isArray(raw)) return [];
+  const fit2 = modsFor(WEAPONS[weapon]);
+  const mounts = /* @__PURE__ */ new Set();
+  const picked = /* @__PURE__ */ new Set();
+  for (const m of raw) {
+    if (!isModId(m) || !fit2.includes(m) || mounts.has(MODS[m].mount)) continue;
+    mounts.add(MODS[m].mount);
+    picked.add(m);
+  }
+  return MOD_IDS.filter((m) => picked.has(m));
+}
+function applyMods(w, mods) {
+  if (!mods || mods.length === 0) return w;
+  const fit2 = modsFor(w);
+  const on = (m) => mods.includes(m) && fit2.includes(m);
+  if (!MOD_IDS.some(on)) return w;
+  const d = { ...w };
+  if (on("silencer")) {
+    d.silenced = true;
+    d.range = Math.round(d.range * 0.85);
+    if (d.falloffStart < 9999) d.falloffStart = Math.round(d.falloffStart * 0.85);
+    d.flash = "none";
+    if (d.sound !== "shotgun" && d.sound !== "obrez") d.sound = "silenced";
+  }
+  if (on("reddot")) {
+    d.spread *= 0.75;
+    d.drawMs += 60;
+  }
+  if (on("scope")) {
+    d.range = Math.round(d.range * 1.25);
+    if (d.falloffStart < 9999) d.falloffStart = Math.round(d.falloffStart * 1.25);
+    d.spread *= 0.85;
+    d.moveSpeed *= 0.95;
+    d.drawMs += 150;
+  }
+  if (on("laser")) {
+    d.spread *= 0.7;
+    d.spreadMax *= 0.8;
+    d.laser = true;
+  }
+  if (on("grip")) {
+    d.spreadPerShot *= 0.6;
+    d.spreadRecovery *= 1.3;
+    d.reloadMs = Math.round(d.reloadMs * 1.1);
+  }
+  if (on("extmag")) {
+    d.magazine = Math.ceil(d.magazine * 1.5);
+    d.reloadMs = Math.round(d.reloadMs * 1.25);
+  }
+  return d;
+}
+
+// packages/shared/src/game-rules/gadgets.ts
+var GADGET_IDS = ["f1", "smoke", "flash", "molotov", "mine", "c4", "turret"];
+var D = (d) => d;
+var DEFS2 = {
+  f1: D({ name: "F-1 Grenade", blurb: "The classic \u201Climonka\u201D: goes off after 1.8 s. Bounces off walls.", use: "throw", charges: 2, throwSpeed: 520, fuseMs: 1800, radius: 100, damage: 110, durationMs: 0, selfFactor: 0.6, cooldownMs: 700 }),
+  smoke: D({ name: "Smoke Grenade", blurb: "A cloud of smoke for 9 s: nobody sees you inside, bots lose their target.", use: "throw", charges: 2, throwSpeed: 480, fuseMs: 1e3, radius: 96, damage: 0, durationMs: 9e3, selfFactor: 0, cooldownMs: 700 }),
+  flash: D({ name: "Flashbang", blurb: "Blinds everyone looking its way for a couple of seconds.", use: "throw", charges: 2, throwSpeed: 540, fuseMs: 1400, radius: 260, damage: 0, durationMs: 2600, selfFactor: 1, cooldownMs: 700 }),
+  molotov: D({ name: "Molotov Cocktail", blurb: "Shatters on a wall or the floor \u2014 5 s of fire that burns everyone inside.", use: "throw", charges: 1, throwSpeed: 500, fuseMs: 900, radius: 72, damage: 7, durationMs: 5e3, selfFactor: 0.5, cooldownMs: 700 }),
+  mine: D({ name: "Mine", blurb: "Placed at your feet, armed in a second. Goes off when an enemy comes near.", use: "place", charges: 2, throwSpeed: 0, fuseMs: 1200, radius: 78, damage: 120, durationMs: 6e4, selfFactor: 0.6, cooldownMs: 600 }),
+  c4: D({ name: "C4", blurb: "A remote charge: one press to place it, the same button to blow it.", use: "place", charges: 1, throwSpeed: 0, fuseMs: 500, radius: 120, damage: 150, durationMs: 45e3, selfFactor: 0.6, cooldownMs: 400 }),
+  turret: D({ name: "Turret", blurb: "A home-made turret: fires at enemies in sight for 20 s. It can be destroyed.", use: "deploy", charges: 1, throwSpeed: 0, fuseMs: 600, radius: 320, damage: 7, durationMs: 2e4, selfFactor: 0, cooldownMs: 600 })
+};
+var GADGETS = Object.fromEntries(GADGET_IDS.map((id, index) => [id, { ...DEFS2[id], id, index }]));
+function isGadgetId(v) {
+  return typeof v === "string" && GADGET_IDS.includes(v);
+}
+var TURRET = Object.freeze({ hp: 100, radius: 9, fireIntervalMs: 160, spread: 0.06, ammo: 90, turnRate: 6 });
+var THROW_FRICTION = 700;
+var THROW_BOUNCE = 0.45;
+var FIRE_TICK_MS = 250;
+var MINE_TRIGGER = 26;
+function armsIndex(id) {
+  const w = WEAPON_IDS.indexOf(id);
+  return w >= 0 ? w : WEAPON_IDS.length + GADGETS[id].index;
+}
+
+// packages/shared/src/game-rules/loadout.ts
+var DEFAULT_LOADOUT = Object.freeze({ sidearm: "pistol", melee: "montirovka", primary: "avtomat", gadget: "f1", mods: {} });
+function sanitizeLoadout(raw, own = {}) {
+  const r = raw && typeof raw === "object" ? raw : {};
+  const ownsW = own.weapon ?? (() => true);
+  const ownsG = own.gadget ?? (() => true);
+  const ownsM = own.mod ?? (() => true);
+  const pick = (v, slot, fallback) => isWeaponId(v) && WEAPONS[v].slot === slot && ownsW(v) ? v : fallback;
+  const mods = {};
+  if (r.mods && typeof r.mods === "object" && !Array.isArray(r.mods)) {
+    for (const [k, v] of Object.entries(r.mods)) {
+      if (!isWeaponId(k) || !ownsW(k)) continue;
+      const m = sanitizeMods(v, k).filter((x) => ownsM(k, x));
+      if (m.length) mods[k] = m;
+    }
+  }
+  const gadget = r.gadget === null ? null : isGadgetId(r.gadget) && ownsG(r.gadget) ? r.gadget : DEFAULT_LOADOUT.gadget;
+  return {
+    sidearm: pick(r.sidearm, 1, DEFAULT_LOADOUT.sidearm),
+    melee: pick(r.melee, 2, DEFAULT_LOADOUT.melee),
+    primary: r.primary === null ? null : pick(r.primary, 3, DEFAULT_LOADOUT.primary),
+    gadget,
+    mods
+  };
+}
+
+// packages/shared/src/game-rules/economy.ts
+var FREE_WEAPONS = WEAPON_IDS.filter((w) => WEAPONS[w].tier === "base");
+var WEAPON_PRICES = {
+  // three for tokens (the first one after about four matches)
+  nozh: { currency: "tokens", amount: 120, level: 1 },
+  tt: { currency: "tokens", amount: 150, level: 1 },
+  uzi: { currency: "tokens", amount: 200, level: 1 },
+  // five for tokens from a level
+  p92: { currency: "tokens", amount: 250, level: 3 },
+  bita: { currency: "tokens", amount: 300, level: 5 },
+  ksyuha: { currency: "tokens", amount: 400, level: 7 },
+  ppsh: { currency: "tokens", amount: 500, level: 10 },
+  m24: { currency: "tokens", amount: 650, level: 13 },
+  // ten for diamonds: $1.99 – $4.99
+  deagle: { currency: "diamonds", amount: 199, level: 1 },
+  topor: { currency: "diamonds", amount: 199, level: 1 },
+  mp5: { currency: "diamonds", amount: 299, level: 1 },
+  s12: { currency: "diamonds", amount: 299, level: 1 },
+  m4: { currency: "diamonds", amount: 399, level: 1 },
+  g36: { currency: "diamonds", amount: 399, level: 1 },
+  m249: { currency: "diamonds", amount: 399, level: 1 },
+  svd: { currency: "diamonds", amount: 499, level: 1 },
+  awm: { currency: "diamonds", amount: 499, level: 1 },
+  rpg: { currency: "diamonds", amount: 499, level: 1 }
+};
+var CHARACTER_PRICES = {
+  // five for experience (level) + tokens
+  vorona: { currency: "tokens", amount: 200, level: 2 },
+  zmeya: { currency: "tokens", amount: 350, level: 4 },
+  varan: { currency: "tokens", amount: 500, level: 6 },
+  popugay: { currency: "tokens", amount: 650, level: 8 },
+  piranya: { currency: "tokens", amount: 800, level: 11 },
+  // five for diamonds
+  leopard: { currency: "diamonds", amount: 299, level: 1 },
+  lobster: { currency: "diamonds", amount: 299, level: 1 },
+  akula: { currency: "diamonds", amount: 399, level: 1 },
+  oryol: { currency: "diamonds", amount: 399, level: 1 },
+  slon: { currency: "diamonds", amount: 499, level: 1 }
+};
+var FREE_GADGETS = ["f1"];
+var GADGET_PRICES = {
+  smoke: { currency: "tokens", amount: 100, level: 1 },
+  flash: { currency: "tokens", amount: 150, level: 2 },
+  molotov: { currency: "tokens", amount: 250, level: 4 },
+  mine: { currency: "tokens", amount: 300, level: 6 },
+  c4: { currency: "tokens", amount: 350, level: 8 },
+  turret: { currency: "tokens", amount: 450, level: 12 }
+};
+var MOD_PRICES = { silencer: 150, reddot: 100, scope: 200, laser: 100, grip: 120, extmag: 150 };
+var CASE_PRICE = 299;
+var CASE_TABLE = [
+  { weapon: "mauser", rarity: "rare", chance: 12 },
+  { weapon: "kuvalda", rarity: "rare", chance: 12 },
+  { weapon: "tulka", rarity: "rare", chance: 12 },
+  { weapon: "arbalet", rarity: "rare", chance: 12 },
+  { weapon: "gvozdomet", rarity: "rare", chance: 12 },
+  { weapon: "tommy", rarity: "epic", chance: 10 },
+  { weapon: "ognemet", rarity: "epic", chance: 10 },
+  { weapon: "muha", rarity: "epic", chance: 10 },
+  { weapon: "zolotoy", rarity: "legendary", chance: 5 },
+  { weapon: "granatomet", rarity: "legendary", chance: 5 }
+];
+function drawCase(owned, r) {
+  const left = CASE_TABLE.filter((e) => !owned.has(e.weapon));
+  if (left.length === 0) return null;
+  const total = left.reduce((s, e) => s + e.chance, 0);
+  let x = Math.min(Math.max(r, 0), 0.999999999) * total;
+  for (const e of left) {
+    x -= e.chance;
+    if (x < 0) return e;
+  }
+  return left[left.length - 1];
+}
+var DIAMOND_PACKS = [
+  { id: "d199", diamonds: 199, usdCents: 199 },
+  { id: "d299", diamonds: 299, usdCents: 299 },
+  { id: "d499", diamonds: 499, usdCents: 499 },
+  { id: "d999", diamonds: 999, usdCents: 999 },
+  { id: "d1999", diamonds: 1999, usdCents: 1999 }
+];
+function diamondPack(id) {
+  return DIAMOND_PACKS.find((p) => p.id === id);
+}
+var TOKEN_REWARD = Object.freeze({ completion: 10, perKill: 3, perAssist: 1, placement: [10, 6, 3], maxPerMatch: 60 });
+function tokensForMatch(p) {
+  if (!p.completed) return 0;
+  let t = TOKEN_REWARD.completion + TOKEN_REWARD.perKill * p.kills + TOKEN_REWARD.perAssist * (p.assists ?? 0);
+  if (p.playersAtEnd >= 2) {
+    const bonus = TOKEN_REWARD.placement[p.place - 1];
+    if (bonus && (p.place === 1 || p.playersAtEnd >= p.place + 1)) t += bonus;
+  }
+  return Math.min(t, TOKEN_REWARD.maxPerMatch);
+}
+function priceOf(kind, id) {
+  return kind === "weapon" ? WEAPON_PRICES[id] : kind === "character" ? CHARACTER_PRICES[id] : GADGET_PRICES[id];
+}
+function ownsWeapon(inv, w) {
+  return FREE_WEAPONS.includes(w) || inv.weapons.includes(w);
+}
+function ownsCharacter(inv, c) {
+  return FREE_CHARACTERS.includes(c) || inv.characters.includes(c);
+}
+function ownsGadget(inv, g) {
+  return FREE_GADGETS.includes(g) || inv.gadgets.includes(g);
+}
+function ownsMod(inv, w, m) {
+  return inv.mods[w]?.includes(m) ?? false;
+}
+function owns(inv, kind, id) {
+  return kind === "weapon" ? ownsWeapon(inv, id) : kind === "character" ? ownsCharacter(inv, id) : ownsGadget(inv, id);
+}
+function buyRefusal(inv, kind, id) {
+  const price = priceOf(kind, id);
+  if (!price) return "not_for_sale";
+  if (owns(inv, kind, id)) return "owned";
+  if (inv.level < price.level) return "level";
+  if ((price.currency === "tokens" ? inv.tokens : inv.diamonds) < price.amount) return "funds";
+  return null;
+}
+function modQuote(inv, w, m) {
+  if (!ownsWeapon(inv, w)) return "not_owned";
+  if (!modsFor(WEAPONS[w]).includes(m)) return "not_fit";
+  if (ownsMod(inv, w, m)) return "owned";
+  const cost = MOD_PRICES[m];
+  if (inv.tokens < cost) return "funds";
+  return { cost };
+}
+var REFUSAL_TEXT = {
+  owned: "Already yours",
+  level: "You need a higher level",
+  funds: "Not enough funds",
+  not_for_sale: "Not for sale",
+  not_fit: "Doesn\u2019t fit this weapon",
+  not_owned: "Buy the weapon first",
+  collection_complete: "The case collection is complete"
+};
+var SHOP_WEAPONS = WEAPON_IDS.filter((w) => WEAPON_PRICES[w]);
+var SHOP_CHARACTERS = CHARACTER_IDS.filter((c) => CHARACTER_PRICES[c]);
+var SHOP_GADGETS = GADGET_IDS.filter((g) => GADGET_PRICES[g]);
+var CASE_WEAPONS = CASE_TABLE.map((e) => e.weapon);
 
 // packages/shared/src/game-rules/match.ts
 var MATCH_PHASES = ["waiting", "ready", "countdown", "active", "finished", "closed"];
@@ -10485,25 +11123,25 @@ var ACHIEVEMENT_IDS = [
 var WIN_STREAK_TARGET = 3;
 var MULTI_KILL_TARGET = 5;
 var ACHIEVEMENTS = {
-  first_match: { id: "first_match", title: "\u041F\u0435\u0440\u0432\u043E\u0435 \u0434\u0435\u043B\u043E", description: "\u0414\u043E\u0438\u0433\u0440\u0430\u0442\u044C \u043F\u0435\u0440\u0432\u044B\u0439 \u043C\u0430\u0442\u0447.", xpReward: 25 },
-  first_win: { id: "first_win", title: "\u0410\u0432\u0442\u043E\u0440\u0438\u0442\u0435\u0442", description: "\u041F\u043E\u0431\u0435\u0434\u0438\u0442\u044C \u0432 \u043C\u0430\u0442\u0447\u0435.", xpReward: 50 },
-  ten_matches: { id: "ten_matches", title: "\u0421\u0432\u043E\u0439 \u0447\u0435\u043B\u043E\u0432\u0435\u043A", description: "\u0414\u043E\u0438\u0433\u0440\u0430\u0442\u044C 10 \u043C\u0430\u0442\u0447\u0435\u0439.", xpReward: 75 },
+  first_match: { id: "first_match", title: "First Job", description: "Finish your first match.", xpReward: 25 },
+  first_win: { id: "first_win", title: "Avtoritet", description: "Win a match.", xpReward: 50 },
+  ten_matches: { id: "ten_matches", title: "One of Us", description: "Finish 10 matches.", xpReward: 75 },
   win_streak: {
     id: "win_streak",
-    title: "\u0414\u0435\u0440\u0436\u0438\u0442 \u0440\u0430\u0439\u043E\u043D",
-    description: `\u041F\u043E\u0431\u0435\u0434\u0438\u0442\u044C ${WIN_STREAK_TARGET} \u043C\u0430\u0442\u0447\u0430 \u043F\u043E\u0434\u0440\u044F\u0434.`,
+    title: "Runs the District",
+    description: `Win ${WIN_STREAK_TARGET} matches in a row.`,
     xpReward: 100
   },
   multi_kill: {
     id: "multi_kill",
-    title: "\u0420\u0430\u0437\u0431\u043E\u0440\u043A\u0430",
-    description: `${MULTI_KILL_TARGET} \u0443\u0441\u0442\u0440\u0430\u043D\u0435\u043D\u0438\u0439 \u0437\u0430 \u043E\u0434\u0438\u043D \u043C\u0430\u0442\u0447.`,
+    title: "Showdown",
+    description: `${MULTI_KILL_TARGET} eliminations in one match.`,
     xpReward: 50
   },
   played_with_friends: {
     id: "played_with_friends",
-    title: "\u0421\u0432\u043E\u0438 \u043B\u044E\u0434\u0438",
-    description: "\u0421\u044B\u0433\u0440\u0430\u0442\u044C \u043C\u0430\u0442\u0447 \u0441 \u0434\u0440\u0443\u0437\u044C\u044F\u043C\u0438 \u043F\u043E \u043F\u0440\u0438\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u044E.",
+    title: "Our Crowd",
+    description: "Play a match with friends you invited.",
     xpReward: 25
   }
 };
@@ -10553,6 +11191,7 @@ var MapBuilder = class {
       spawns: [],
       pickups: [],
       supplyPoints: [],
+      medkits: [],
       ambient: { color: 2766160, level: 0.55 },
       minimapFloor: "#3a3632"
     };
@@ -10630,6 +11269,11 @@ var MapBuilder = class {
     this.def.pickups.push({ weapon, x, y, respawnMs });
     return this;
   }
+  /** A first-aid kit (heals MEDKIT_HEAL, respawns after `respawnMs`). */
+  medkit(x, y, respawnMs = 22e3) {
+    this.def.medkits.push({ x, y, respawnMs });
+    return this;
+  }
   /** A spot where a «дефицит» supply crate may appear during the match. */
   supply(x, y) {
     this.def.supplyPoints.push({ x, y });
@@ -10661,9 +11305,9 @@ function buildFactoryMap() {
   const RED = 16726570;
   const b2 = new MapBuilder(
     "factory",
-    "\u0417\u0430\u0432\u043E\u0434\u0441\u043A\u0430\u044F \u043F\u0440\u043E\u0445\u043E\u0434\u043D\u0430\u044F",
-    "\u0420\u0430\u0431\u043E\u0442\u0430\u0435\u043C \u043A\u0440\u0443\u0433\u043B\u043E\u0441\u0443\u0442\u043E\u0447\u043D\u043E",
-    "\u041F\u0440\u043E\u043C\u044B\u0448\u043B\u0435\u043D\u043D\u044B\u0435 \u043F\u043E\u043C\u0435\u0449\u0435\u043D\u0438\u044F, \u043C\u0435\u0442\u0430\u043B\u043B\u0438\u0447\u0435\u0441\u043A\u0438\u0435 \u043A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0446\u0438\u0438, \u043A\u043E\u0440\u0438\u0434\u043E\u0440\u044B \u0438 \u043E\u0442\u043A\u0440\u044B\u0442\u044B\u0435 \u0443\u0447\u0430\u0441\u0442\u043A\u0438. \u041A\u043E\u043D\u0442\u0440\u043E\u043B\u044C \u043A\u043B\u044E\u0447\u0435\u0432\u044B\u0445 \u0442\u043E\u0447\u0435\u043A.",
+    "Factory Checkpoint",
+    "Working round the clock",
+    "Workshops, steel structures, corridors and open ground. Hold the key points.",
     W,
     H,
     "concrete_slab"
@@ -10737,6 +11381,7 @@ function buildFactoryMap() {
   b2.spawn(1395, 985, -135);
   b2.pickup("obrez", 680, 536, 16e3).pickup("avtomat", 1280, 52, 2e4).pickup("obrez", 52, 616, 16e3).pickup("avtomat", 920, 960, 2e4).pickup("avtomat", 384, 496, 2e4).pickup("obrez", 952, 568, 16e3);
   b2.supply(784, 288).supply(544, 744).supply(792, 752).supply(544, 272).supply(920, 112).supply(128, 96);
+  b2.medkit(544, 160).medkit(1180, 576).medkit(240, 680).medkit(824, 880);
   return b2.build();
 }
 
@@ -10748,9 +11393,9 @@ function buildGaragesMap() {
   const WARM = 16764810;
   const b2 = new MapBuilder(
     "garages",
-    "\u0413\u0430\u0440\u0430\u0436\u043D\u044B\u0439 \u043A\u043E\u043E\u043F\u0435\u0440\u0430\u0442\u0438\u0432",
-    "\u0421\u0432\u043E\u0438 \u0433\u0430\u0440\u0430\u0436\u0438 \u2014 \u0441\u0432\u043E\u0438 \u0437\u0430\u043A\u043E\u043D\u044B",
-    "\u0420\u044F\u0434\u044B \u0433\u0430\u0440\u0430\u0436\u0435\u0439, \u0443\u0437\u043A\u0438\u0435 \u043F\u0440\u043E\u0445\u043E\u0434\u044B, \u043E\u0442\u043A\u0440\u044B\u0442\u044B\u0435 \u043F\u0440\u043E\u0435\u0437\u0434\u044B. \u0411\u043B\u0438\u0436\u043D\u0438\u0435 \u0434\u0438\u0441\u0442\u0430\u043D\u0446\u0438\u0438, \u0437\u0430\u0441\u0430\u0434\u044B \u0438 \u0432\u043D\u0435\u0437\u0430\u043F\u043D\u044B\u0435 \u0432\u0441\u0442\u0440\u0435\u0447\u0438.",
+    "Garage Cooperative",
+    "Our garages, our laws",
+    "Rows of garages, narrow lanes and ambushes at close range.",
     W,
     H,
     "asphalt_cracked"
@@ -10800,6 +11445,7 @@ function buildGaragesMap() {
   b2.spawn(200, 160, 0).spawn(1420, 160, 180).spawn(200, 830, 0).spawn(1420, 830, 180).spawn(992, 496, 90).spawn(60, 380, 45);
   b2.pickup("obrez", 600, 152, 16e3).pickup("avtomat", 856, 840, 2e4).pickup("obrez", 1144, 736, 16e3).pickup("avtomat", 408, 360, 2e4).pickup("obrez", 1256, 360, 16e3).pickup("avtomat", 52, 632, 2e4);
   b2.supply(248, 528).supply(624, 800).supply(824, 192).supply(1144, 192).supply(960, 680).supply(688, 320);
+  b2.medkit(330, 760).medkit(860, 310).medkit(1266, 644);
   return b2.build();
 }
 
@@ -10812,9 +11458,9 @@ function buildYardMap() {
   const WINDOW = 16762743;
   const b2 = new MapBuilder(
     "yard",
-    "\u0421\u043E\u0432\u0435\u0442\u0441\u043A\u0438\u0439 \u0434\u0432\u043E\u0440",
-    "\u0417\u0434\u0435\u0441\u044C \u0432\u0441\u0451 \u043D\u0430\u0447\u0438\u043D\u0430\u0435\u0442\u0441\u044F",
-    "\u041F\u0430\u043D\u0435\u043B\u044C\u043A\u0438, \u043F\u0440\u043E\u0445\u043E\u0434\u044B, \u0434\u0435\u0442\u0441\u043A\u0430\u044F \u043F\u043B\u043E\u0449\u0430\u0434\u043A\u0430, \u043B\u0430\u0432\u043E\u0447\u043A\u0438, \u043C\u0443\u0441\u043E\u0440\u043D\u044B\u0435 \u043A\u043E\u043D\u0442\u0435\u0439\u043D\u0435\u0440\u044B. \u0411\u0430\u043B\u0430\u043D\u0441 \u0434\u043B\u044F \u0431\u044B\u0441\u0442\u0440\u044B\u0445 \u0438 \u0434\u0438\u043D\u0430\u043C\u0438\u0447\u043D\u044B\u0445 \u043C\u0430\u0442\u0447\u0435\u0439.",
+    "Soviet Courtyard",
+    "Where it all begins",
+    "Panel blocks, archways and a playground. Flanks and mid-range fights.",
     W,
     H,
     "asphalt"
@@ -10869,6 +11515,472 @@ function buildYardMap() {
   b2.spawn(290, 290, 45).spawn(1118, 296, 135).spawn(296, 798, -45).spawn(1100, 808, -135).spawn(44, 44, 45).spawn(1364, 44, 135).spawn(44, 1044, -45).spawn(1364, 1044, -135);
   b2.pickup("obrez", 664, 52, 16e3).pickup("avtomat", 592, 744, 2e4).pickup("obrez", 992, 544, 16e3).pickup("avtomat", 400, 544, 2e4).pickup("obrez", 552, 280, 16e3).pickup("avtomat", 52, 728, 2e4);
   b2.supply(848, 752).supply(888, 320).supply(1328, 256).supply(1312, 840).supply(88, 248).supply(728, 232);
+  b2.medkit(560, 560).medkit(1e3, 680).medkit(820, 1040);
+  return b2.build();
+}
+
+// packages/shared/src/maps/stroyka.ts
+function buildStroykaMap() {
+  const W = 1440;
+  const H = 900;
+  const SODIUM = 16756810;
+  const WARM = 16764810;
+  const RED = 16726570;
+  const b2 = new MapBuilder(
+    "stroyka",
+    "Construction Site",
+    "Building the future together",
+    "A half-built block under the crane: concrete sections, a pit in the middle and stacks of bricks. Close quarters inside, open lanes outside.",
+    W,
+    H,
+    "dirt"
+  ).ambient(1843762, 0.44).minimap("#4a3c2c");
+  b2.floor("gravel", 626, 330, 220, 160).floor("sand", 1060, 790, 150, 90).floor("gravel", 1020, 12, 300, 70);
+  for (const [x, y, r, seed] of [
+    [210, 380, 46, 31],
+    [214, 520, 44, 32],
+    [300, 230, 40, 33],
+    [600, 580, 42, 34],
+    [700, 580, 40, 35],
+    [1270, 360, 44, 36],
+    [1276, 520, 46, 37],
+    [1270, 680, 42, 38],
+    [420, 780, 44, 39],
+    [640, 790, 42, 40],
+    [900, 460, 40, 41]
+  ])
+    b2.decal({ kind: "stain", x, y, r, color: "#7a6448", alpha: 0.35, seed });
+  b2.wall("roof_flat", 0, 0, 270, 160, "neighbour").hwall("corrugated", 270, W, 0, 12).vwall("corrugated", 0, 160, H - 20, 12).vwall("corrugated", W - 12, 12, H - 20, 12).hwall("fence_concrete", 0, W, H - 20, 20);
+  for (const [x, w] of [
+    [250, 110],
+    [380, 130],
+    [530, 120]
+  ])
+    b2.decal({ kind: "line", x, y: H - 18, w, h: 16, color: "#7a1c16", alpha: 0.95, layer: "roof" });
+  b2.decal({ kind: "text", x: 305, y: H - 10, text: "\u0421\u0422\u0420\u041E\u0418\u041C", size: 11, color: "#e8dcc0", alpha: 0.9, layer: "roof" }).decal({ kind: "text", x: 445, y: H - 10, text: "\u0411\u0423\u0414\u0423\u0429\u0415\u0415", size: 11, color: "#e8dcc0", alpha: 0.9, layer: "roof" }).decal({ kind: "text", x: 590, y: H - 10, text: "\u0412\u041C\u0415\u0421\u0422\u0415!", size: 11, color: "#e8dcc0", alpha: 0.9, layer: "roof" }).decal({ kind: "line", x: 1240, y: H - 18, w: 130, h: 16, color: "#d9c7a3", alpha: 0.9, layer: "roof" }).decal({ kind: "text", x: 1305, y: H - 10, text: "\u0411\u0415\u0420\u0415\u0413\u0418\u0421\u042C \u041A\u0420\u0410\u041D\u0410!", size: 9, color: "#9e2a22", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 135, y: 80, text: "\u0421\u041A\u041B\u0410\u0414 \u0421\u041C\u0423-4", size: 12, color: "#d9c7a3", alpha: 0.5, layer: "roof" });
+  b2.room("concrete", 20, 160, 90, 180, 10, [{ side: "e", at: 126, width: 36 }], "concrete_slab").decal({ kind: "stairs", x: 34, y: 174, w: 36, h: 120 }).decal({ kind: "text", x: 64, y: 316, text: "\u041B\u0415\u0421\u0422\u041D.", size: 8, color: "#d9c7a3", alpha: 0.5 });
+  b2.prop("container", 96, 545, 0, 1).prop("timber", 160, 520, 90).prop("timber", 182, 520, 90).prop("pallet", 171, 566).prop("barrel_rust", 230, 560).prop("barrel_rust", 246, 572).prop("brick_pallet", 84, 628).prop("brick_pallet", 110, 628).prop("barrel_rust", 150, 220).prop("barrel_rust", 166, 232).prop("barrel_blue", 150, 246).prop("lamp_post", 214, 392);
+  b2.light(214, 400, 200, SODIUM, 0.85, { fixture: "street" }).light(64, 250, 110, WARM, 0.7, { flicker: "soft" });
+  b2.spawn(154, 430, 0).spawn(120, 830, -45);
+  b2.decal({ kind: "stain", x: 196, y: 470, r: 26, color: "#2c241a", alpha: 0.5, seed: 4 });
+  b2.prop("cinder_blocks", 306, 96).prop("cinder_blocks", 330, 96).prop("cinder_blocks", 306, 120).prop("barrel_blue", 302, 152).prop("brick_pallet", 226, 240).prop("cinder_blocks", 276, 248).prop("cinder_blocks", 228, 312).prop("cinder_blocks", 252, 312).prop("brick_pallet", 290, 316).prop("timber", 421, 150, 90).prop("timber", 421, 200, 90).prop("cement_bags", 380, 44);
+  b2.light(330, 60, 160, SODIUM, 0.7, { fixture: "street", flicker: "soft" });
+  b2.room("concrete", 446, 96, 104, 164, 10, [
+    { side: "s", at: 30, width: 36 },
+    { side: "e", at: 70, width: 34 }
+  ], "concrete_dirty");
+  b2.prop("brick_pallet", 480, 140).prop("cement_bags", 520, 126).prop("timber", 492, 226).prop("wheelbarrow", 520, 200, 90);
+  b2.light(498, 176, 110, WARM, 0.75, { flicker: "soft" });
+  b2.decal({ kind: "text", x: 498, y: 112, text: "\u0421\u0415\u041A\u0426\u0418\u042F 1", size: 9, color: "#d9c7a3", alpha: 0.45 });
+  b2.prop("crane_mast", 621, 290).prop("cinder_blocks", 584, 254).prop("cinder_blocks", 584, 330).prop("sandbags", 640, 344).prop("cable_reel", 690, 130).prop("cable_reel", 708, 150).prop("electric_box", 600, 20, 0);
+  b2.overhead({ kind: "crane", x: 621, y: 290, w: 330, h: 262, angle: 28, seed: 3 });
+  b2.decal({ kind: "hazard", x: 600, y: 270, w: 42, h: 5, alpha: 0.8 });
+  b2.room("concrete", 706, 196, 220, 96, 10, [
+    { side: "w", at: 30, width: 36 },
+    { side: "s", at: 96, width: 40 },
+    { side: "e", at: 30, width: 36 }
+  ], "concrete_slab");
+  b2.decal({ kind: "hazard", x: 706, y: 186, w: 220, h: 7, alpha: 0.85 });
+  b2.prop("cinder_blocks", 760, 240).prop("brick_pallet", 850, 228).prop("cement_bags", 884, 262).prop("rebar", 790, 270);
+  b2.light(816, 244, 120, WARM, 0.8, { flicker: "soft" });
+  b2.decal({ kind: "text", x: 816, y: 214, text: "\u0421\u0415\u041A\u0426\u0418\u042F 2", size: 9, color: "#d9c7a3", alpha: 0.45 });
+  b2.room("concrete", 936, 56, 84, 180, 10, [
+    { side: "w", at: 120, width: 36 },
+    { side: "s", at: 24, width: 36 },
+    { side: "n", at: 24, width: 36 }
+  ], "concrete_dirty");
+  b2.decal({ kind: "stairs", x: 986, y: 88, w: 24, h: 70 });
+  b2.prop("cinder_blocks", 960, 196);
+  b2.light(978, 146, 100, WARM, 0.7);
+  b2.prop("brick_pallet", 752, 140).prop("brick_pallet", 778, 140).prop("cinder_blocks", 812, 128).prop("cinder_blocks", 836, 128).prop("barrel_red", 660, 40).prop("barrel_red", 676, 52).prop("lamp_post", 880, 30);
+  b2.light(880, 40, 190, SODIUM, 0.85, { fixture: "street" });
+  b2.spawn(786, 60, 90);
+  b2.prop("container", 1118, 40, 90, 1).prop("barrel_rust", 1215, 30).prop("barrel_rust", 1232, 42).prop("tire_stack", 1252, 28).prop("mixer_truck", 1340, 150).prop("concrete_pipes", 1300, 255, 90).prop("lamp_post", 1260, 120);
+  b2.room("concrete", 1096, 100, 130, 140, 10, [
+    { side: "w", at: 50, width: 36 },
+    { side: "s", at: 46, width: 36 }
+  ], "concrete_dirty");
+  b2.prop("barrel_blue", 1180, 136).prop("barrel_blue", 1196, 148).prop("barrel_blue", 1180, 160).prop("cinder_blocks", 1130, 210);
+  b2.light(1161, 170, 110, WARM, 0.7, { flicker: "broken" }).light(1270, 130, 190, SODIUM, 0.8, { fixture: "street" });
+  b2.spawn(1290, 50, 135);
+  b2.room("concrete", 356, 266, 180, 150, 10, [
+    { side: "n", at: 60, width: 36 },
+    { side: "e", at: 56, width: 36 },
+    { side: "s", at: 20, width: 36 }
+  ], "concrete_slab");
+  b2.room("concrete", 356, 406, 180, 160, 10, [
+    { side: "n", at: 20, width: 36 },
+    { side: "w", at: 50, width: 36 },
+    { side: "e", at: 90, width: 36 },
+    { side: "s", at: 110, width: 36 }
+  ], "concrete_slab");
+  b2.decal({ kind: "stairs", x: 372, y: 282, w: 30, h: 84 }).decal({ kind: "text", x: 470, y: 290, text: "\u0421\u0415\u041A\u0426\u0418\u042F 4", size: 9, color: "#d9c7a3", alpha: 0.45 }).decal({ kind: "star", x: 500, y: 440, r: 11, color: "#9e2a22", alpha: 0.55 });
+  b2.prop("brick_pallet", 480, 330).prop("timber", 474, 384).prop("cinder_blocks", 420, 470).prop("cement_bags", 500, 520).prop("wheelbarrow", 440, 532);
+  b2.light(446, 340, 120, WARM, 0.8, { flicker: "soft" }).light(446, 486, 120, WARM, 0.75);
+  b2.prop("timber", 330, 500, 90).prop("brick_pallet", 296, 575).prop("brick_pallet", 322, 575).prop("brick_pallet", 296, 597).prop("cinder_blocks", 340, 600);
+  b2.decal({ kind: "dashrect", x: 626, y: 330, w: 220, h: 160, color: "#c8312a", alpha: 0.85 }).decal({ kind: "dashrect", x: 838, y: 404, w: 64, h: 52, color: "#c8312a", alpha: 0.7 }).decal({ kind: "text", x: 736, y: 346, text: "\u041E\u041F\u0410\u0421\u041D\u0410\u042F \u0417\u041E\u041D\u0410", size: 10, color: "#c8312a", alpha: 0.7 }).decal({ kind: "stain", x: 700, y: 430, r: 30, color: "#1c1610", alpha: 0.5, seed: 9 });
+  b2.prop("crate_wood", 660, 372).prop("brick_pallet", 744, 452).prop("timber", 806, 400, 90).prop("rebar", 690, 470).prop("wheelbarrow", 604, 470);
+  b2.light(736, 410, 220, SODIUM, 0.9, { fixture: "none" }).light(632, 470, 70, RED, 0.9, { flicker: "broken", fixture: "neon" });
+  b2.supply(736, 410);
+  b2.room("concrete", 951, 280, 120, 150, 10, [
+    { side: "w", at: 60, width: 36 },
+    { side: "n", at: 40, width: 36 },
+    { side: "s", at: 40, width: 36 },
+    { side: "e", at: 90, width: 36 }
+  ], "concrete_slab");
+  b2.room("concrete", 1061, 280, 165, 150, 10, [
+    { side: "w", at: 90, width: 36 },
+    { side: "e", at: 56, width: 36 },
+    { side: "s", at: 100, width: 36 },
+    { side: "n", at: 60, width: 36 }
+  ], "concrete_dirty");
+  b2.prop("brick_pallet", 1e3, 320).prop("brick_pallet", 1026, 320).prop("cinder_blocks", 990, 396);
+  b2.prop("crate_stack", 1120, 318).prop("brick_pallet", 1186, 396).prop("cement_bags", 1100, 400);
+  b2.light(1011, 356, 110, WARM, 0.75).light(1143, 356, 120, WARM, 0.8, { flicker: "soft" });
+  b2.decal({ kind: "text", x: 1143, y: 296, text: "\u0421\u0415\u041A\u0426\u0418\u042F 7", size: 9, color: "#d9c7a3", alpha: 0.45 });
+  b2.prop("container", 1400, 360, 0, 1).prop("container", 1400, 600, 0, 0).prop("concrete_pipes", 1300, 620, 90).prop("crate_wood", 1340, 666).prop("crate_wood", 1357, 666).prop("container", 1366, 720, 90, 1).prop("lamp_post", 1330, 470).prop("scaffold", 1210, 600, 90);
+  b2.light(1330, 478, 200, SODIUM, 0.85, { fixture: "street" }).light(1390, 790, 160, SODIUM, 0.7, { fixture: "street", flicker: "soft" });
+  b2.spawn(1386, 455, 180).spawn(1360, 840, -135);
+  b2.room("concrete", 796, 520, 140, 210, 10, [
+    { side: "n", at: 40, width: 36 },
+    { side: "s", at: 60, width: 36 },
+    { side: "w", at: 100, width: 36 },
+    { side: "e", at: 80, width: 36 }
+  ], "concrete_slab");
+  b2.room("concrete", 926, 580, 150, 150, 10, [
+    { side: "w", at: 20, width: 36 },
+    { side: "n", at: 50, width: 40 },
+    { side: "s", at: 40, width: 36 },
+    { side: "e", at: 60, width: 36 }
+  ], "concrete_dirty");
+  b2.room("concrete", 1066, 470, 130, 260, 10, [
+    { side: "n", at: 40, width: 36 },
+    { side: "w", at: 170, width: 36 },
+    { side: "s", at: 40, width: 36 },
+    { side: "e", at: 110, width: 36 }
+  ], "concrete_dirty");
+  b2.decal({ kind: "stairs", x: 1080, y: 490, w: 40, h: 90 }).decal({ kind: "text", x: 866, y: 540, text: "\u041A\u041E\u0420\u041F\u0423\u0421 \u21162", size: 10, color: "#d9c7a3", alpha: 0.45 });
+  b2.prop("cinder_blocks", 840, 566).prop("timber", 880, 650).prop("brick_pallet", 900, 548);
+  b2.prop("brick_pallet", 1e3, 624).prop("cement_bags", 966, 690);
+  b2.prop("crate_stack", 1160, 520).prop("barrel_blue", 1170, 664).prop("rebar", 1130, 610);
+  b2.light(866, 625, 120, WARM, 0.8).light(1001, 655, 110, WARM, 0.7, { flicker: "soft" }).light(1131, 610, 130, WARM, 0.75);
+  b2.room("concrete", 446, 606, 180, 120, 10, [
+    { side: "n", at: 70, width: 40 },
+    { side: "e", at: 40, width: 36 },
+    { side: "w", at: 40, width: 36 }
+  ], "concrete_slab");
+  b2.prop("crate_stack", 500, 660).prop("cement_bags", 584, 692).prop("wheelbarrow", 560, 640, 90);
+  b2.light(536, 666, 120, WARM, 0.75, { flicker: "broken" });
+  b2.prop("brick_pallet", 330, 710, 90).prop("brick_pallet", 330, 736, 90).prop("brick_pallet", 330, 762, 90).prop("cinder_blocks", 380, 740).prop("cinder_blocks", 404, 740).prop("concrete_pipes", 420, 800).prop("concrete_pipes", 420, 842).prop("cinder_blocks", 270, 800).prop("cinder_blocks", 294, 800).prop("barrel_red", 300, 842).prop("timber", 240, 700, 90).prop("timber", 258, 700, 90).prop("crate_wood", 600, 780).prop("crate_green", 626, 792).prop("brick_pallet", 530, 842).prop("brick_pallet", 556, 842).prop("container", 730, 836, 90, 1).prop("brick_pallet", 720, 770).prop("brick_pallet", 746, 770).prop("crate_wood", 772, 770).prop("container", 1006, 815, 0, 0).prop("barrel_rust", 1066, 790).prop("barrel_rust", 1082, 802).prop("barrel_blue", 1066, 814).prop("sand_pile", 1130, 845).prop("excavator", 1205, 820).prop("timber", 1262, 760, 90).prop("lamp_post", 640, 740).prop("lamp_post", 920, 790);
+  b2.light(640, 748, 200, SODIUM, 0.85, { fixture: "street" }).light(920, 798, 200, SODIUM, 0.8, { fixture: "street", flicker: "soft" }).light(300, 760, 170, SODIUM, 0.7, { fixture: "street" }).light(1160, 760, 150, WARM, 0.6);
+  b2.decal({ kind: "stain", x: 1130, y: 760, r: 36, color: "#3a3024", alpha: 0.45, seed: 15 }).decal({ kind: "stain", x: 860, y: 790, r: 28, color: "#1c1610", alpha: 0.4, seed: 17 }).decal({ kind: "stain", x: 560, y: 470, r: 22, color: "#8a8478", alpha: 0.25, seed: 19 });
+  b2.spawn(600, 845, -90);
+  b2.pickup("obrez", 360, 200, 16e3).pickup("avtomat", 500, 180, 2e4).pickup("obrez", 820, 250, 16e3).pickup("avtomat", 1006, 360, 2e4).pickup("obrez", 450, 340, 16e3).pickup("avtomat", 870, 620, 2e4).pickup("obrez", 1130, 660, 16e3).pickup("avtomat", 520, 790, 2e4).pickup("obrez", 1270, 540, 16e3);
+  b2.medkit(150, 690).medkit(706, 110).medkit(1310, 400).medkit(940, 800);
+  b2.supply(300, 470).supply(1160, 190).supply(640, 820).supply(1250, 700).supply(880, 70);
+  return b2.build();
+}
+
+// packages/shared/src/maps/dk.ts
+function buildDkMap() {
+  const W = 1500;
+  const H = 1e3;
+  const WARM = 16764810;
+  const LAMP = 16758880;
+  const SODIUM = 16756810;
+  const STAGE = 16747098;
+  const b2 = new MapBuilder(
+    "dk",
+    "House of Culture",
+    "Art belongs to the people",
+    "An auditorium with rows of seats, the stage, dressing rooms, a caf\xE9 and a billiard room. Doors, corridors and long lines of fire.",
+    W,
+    H,
+    "paving"
+  ).ambient(1712178, 0.42).minimap("#3c3430");
+  b2.floor("grass", 12, 12, 238, 280).floor("grass", 12, 640, 230, 344).floor("grass", 1350, 600, 138, 384).floor("grass", 1400, 12, 88, 230).floor("asphalt", 20, 300, 230, 330).floor("asphalt", 1350, 250, 138, 340).floor("paving", 250, 96, 1150, 94).floor("paving", 250, 870, 1100, 114).floor("carpet_red", 800, 870, 60, 114);
+  b2.hwall("fence_concrete", 0, 300, 0, 12).hwall("fence_concrete", 1400, W, 0, 12).vwall("fence_concrete", 0, 12, H - 16, 12).vwall("fence_concrete", W - 12, 12, H - 16, 12).hwall("fence_concrete", 0, W, H - 16, 16);
+  b2.wall("roof_flat", 300, 0, 200, 96, "dk_west").wall("roof_flat", 500, 0, 710, 90, "dk_facade").wall("roof_flat", 1210, 0, 190, 96, "dk_east");
+  b2.decal({ kind: "line", x: 640, y: 14, w: 380, h: 30, color: "#7a1c16", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 830, y: 30, text: "\u0414\u041E\u041C \u041A\u0423\u041B\u042C\u0422\u0423\u0420\u042B", size: 20, color: "#e8dcc0", alpha: 0.95, layer: "roof" }).decal({ kind: "line", x: 520, y: 30, w: 70, h: 52, color: "#8a2a20", alpha: 0.85, layer: "roof" }).decal({ kind: "text", x: 555, y: 66, text: "\u041A\u0423\u041B\u042C\u0422\u0423\u0420\u0410 \u041E\u0411\u042A\u0415\u0414\u0418\u041D\u042F\u0415\u0422", size: 6, color: "#e8dcc0", alpha: 0.85, layer: "roof" }).decal({ kind: "line", x: 1040, y: 24, w: 160, h: 58, color: "#8a2a20", alpha: 0.85, layer: "roof" }).decal({ kind: "text", x: 1120, y: 52, text: "\u0418\u0421\u041A\u0423\u0421\u0421\u0422\u0412\u041E \u041D\u0410\u0420\u041E\u0414\u0423!", size: 11, color: "#e8dcc0", alpha: 0.9, layer: "roof" });
+  b2.decal({ kind: "stairs", x: 700, y: 112, w: 220, h: 64 });
+  b2.prop("planter", 672, 150).prop("planter", 950, 150).prop("statue", 430, 150).prop("bench", 560, 170).prop("bench", 1090, 170).prop("lamp_post", 650, 104).prop("lamp_post", 970, 104).prop("trash_container", 1260, 128).prop("container", 1240, 160, 90, 3);
+  b2.light(650, 112, 170, LAMP, 0.9, { fixture: "street" }).light(970, 112, 170, LAMP, 0.9, { fixture: "street" }).light(430, 150, 120, WARM, 0.55, { fixture: "none" });
+  b2.spawn(820, 132, 90).spawn(1440, 140, 135);
+  b2.prop("bus_paz", 130, 330, 90).prop("truck", 46, 520).prop("crate_wood", 210, 420).prop("crate_wood", 210, 437).prop("bench", 160, 600).prop("lamp_post", 236, 270).prop("lamp_post", 236, 620).prop("trash_container", 196, 250);
+  b2.tree(120, 120, 64, 1).tree(220, 60, 56, 2).tree(60, 230, 56, 3).tree(90, 700, 72, 4).tree(180, 780, 56, 5).tree(70, 900, 64, 6).tree(410, 70, 56, 7);
+  b2.light(236, 278, 180, SODIUM, 0.8, { fixture: "street" }).light(236, 628, 180, SODIUM, 0.8, { fixture: "street", flicker: "soft" });
+  b2.spawn(158, 480, 0).spawn(120, 170, 45).spawn(130, 930, -45);
+  b2.hwall("brick", 250, 512, 236, 12).vwall("brick", 500, 190, 248, 12).hwall("brick", 500, 1110, 190, 12, [[790, 850]]).vwall("brick", 1098, 190, 228, 12).hwall("brick", 1098, 1340, 216, 12).vwall("brick", 250, 236, 800, 12, [
+    [380, 416],
+    [610, 646]
+  ]).hwall("brick", 250, 512, 788, 12, [[384, 430]]).vwall("brick", 500, 788, 870, 12).hwall("brick", 500, 1030, 858, 12, [[792, 868]]).vwall("brick", 1018, 700, 870, 12, [[760, 796]]).hwall("brick", 1018, 1340, 688, 12, [[1240, 1276]]).vwall("brick", 1328, 216, 700, 12, [
+    [430, 466],
+    [590, 626]
+  ]);
+  b2.floor("parquet", 512, 202, 586, 418).floor("wood", 640, 202, 380, 128).floor("linoleum_checker", 512, 202, 128, 128).floor("concrete_painted", 1020, 202, 78, 128);
+  b2.vwall("plaster", 640, 202, 330, 8, [[284, 320]]).hwall("plaster", 512, 648, 330, 8, [[530, 566]]).vwall("plaster", 1012, 202, 330, 8, [[284, 320]]).hwall("plaster", 1012, 1098, 330, 8, [[1040, 1076]]);
+  for (const x of [664, 712, 760, 880, 928, 976]) b2.prop("curtain", x, 212);
+  b2.decal({ kind: "line", x: 744, y: 222, w: 172, h: 18, color: "#9e2a22", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 830, y: 231, text: "\u0421\u041B\u0410\u0412\u0410 \u0422\u0420\u0423\u0414\u0423!", size: 12, color: "#e8dcc0", alpha: 0.95, layer: "roof" }).decal({ kind: "line", x: 640, y: 326, w: 372, h: 4, color: "#d9c7a3", alpha: 0.5 });
+  b2.prop("drum_kit", 830, 268).prop("stage_speaker", 726, 296).prop("stage_speaker", 940, 296).prop("stage_speaker", 990, 250).prop("piano", 690, 252).prop("desk", 560, 240).prop("chair", 560, 258).prop("file_cabinet", 600, 214).prop("crate_wood", 526, 228).prop("crate_wood", 1040, 230).prop("chair", 1070, 290).prop("locker_row", 1056, 214);
+  b2.light(830, 280, 210, STAGE, 1, { fixture: "none" }).light(720, 270, 120, 16765072, 0.8, { fixture: "none" }).light(940, 270, 120, 16765072, 0.8, { fixture: "none" }).light(576, 266, 100, WARM, 0.7).light(1055, 266, 90, WARM, 0.6, { flicker: "soft" });
+  b2.vwall("plaster", 560, 338, 620, 8, [
+    [400, 440],
+    [540, 580]
+  ]).vwall("plaster", 1092, 338, 620, 8, [
+    [400, 440],
+    [540, 580]
+  ]);
+  b2.hwall("plaster", 568, 1092, 620, 8, [[800, 860]]);
+  for (let i = 0; i < 7; i++) {
+    const y = 394 + i * 22;
+    b2.prop("theater_seats", 726, y).prop("theater_seats", 782, y).prop("theater_seats", 878, y).prop("theater_seats", 934, y);
+  }
+  b2.prop("theater_seats", 655, 420, 90).prop("theater_seats", 655, 486, 90).prop("theater_seats", 1005, 420, 90).prop("theater_seats", 1005, 486, 90);
+  b2.prop("mixing_desk", 830, 576).prop("chair", 830, 592).prop("cafe_table", 600, 360).prop("cafe_table", 1056, 360).prop("plant_pot", 580, 604).prop("plant_pot", 1076, 604);
+  b2.decal({ kind: "line", x: 812, y: 340, w: 36, h: 276, color: "#7a1c16", alpha: 0.6 });
+  b2.light(700, 470, 150, WARM, 0.55).light(960, 470, 150, WARM, 0.55).light(830, 560, 110, 16769184, 0.7);
+  b2.floor("linoleum_checker", 262, 248, 238, 102).floor("wood", 262, 358, 238, 102).floor("carpet_red", 262, 468, 238, 112).floor("parquet", 262, 588, 238, 200).floor("carpet_red", 512, 338, 48, 282);
+  b2.vwall("plaster", 492, 248, 620, 8, [
+    [270, 306],
+    [400, 436],
+    [520, 556]
+  ]);
+  b2.hwall("plaster", 262, 492, 350, 8, [
+    [300, 336],
+    [430, 466]
+  ]).vwall("plaster", 380, 248, 350, 8, [[290, 326]]).hwall("plaster", 262, 492, 460, 8, [[440, 476]]).hwall("plaster", 262, 492, 580, 8, [[300, 336]]);
+  b2.decal({ kind: "stairs", x: 516, y: 450, w: 40, h: 56 });
+  b2.prop("desk", 320, 296).prop("chair", 304, 312).prop("chair", 336, 312).prop("file_cabinet", 276, 262, 90).prop("shelf", 440, 258, 0, 3).prop("sofa", 440, 310);
+  b2.prop("counter", 330, 446, 0, 0).prop("cafe_table", 330, 420).prop("cafe_table", 390, 400).prop("cafe_table", 450, 430).prop("cafe_table", 300, 440).prop("plant_pot", 478, 372);
+  b2.prop("pool_table", 356, 522).prop("chair", 290, 490).prop("sofa", 450, 566).prop("cafe_table", 460, 492);
+  b2.prop("sofa", 320, 620).prop("sofa", 320, 700, 180).prop("cafe_table", 320, 660).prop("plant_pot", 480, 600).prop("piano", 450, 760).prop("shelf", 290, 760, 0, 3);
+  b2.light(320, 296, 100, WARM, 0.75).light(440, 296, 100, WARM, 0.65).light(380, 410, 120, LAMP, 0.85).light(370, 522, 120, 16771248, 0.9).light(380, 690, 140, WARM, 0.75, { flicker: "soft" }).light(536, 480, 100, WARM, 0.6);
+  b2.decal({ kind: "text", x: 380, y: 370, text: "\u041A\u0410\u0424\u0415", size: 9, color: "#d9c7a3", alpha: 0.5 });
+  b2.floor("carpet_red", 1104, 338, 66, 350).floor("linoleum_checker", 1110, 228, 218, 112).floor("wood", 1178, 348, 150, 340);
+  b2.vwall("plaster", 1170, 340, 688, 8, [
+    [400, 436],
+    [530, 566],
+    [630, 666]
+  ]).hwall("plaster", 1104, 1328, 340, 8, [
+    [1120, 1156],
+    [1270, 1306]
+  ]).vwall("plaster", 1230, 228, 340, 8, [[264, 300]]).hwall("plaster", 1178, 1328, 480, 8, [[1240, 1276]]).hwall("plaster", 1178, 1328, 600, 8, [[1200, 1236]]);
+  b2.decal({ kind: "stairs", x: 1112, y: 470, w: 40, h: 80 });
+  b2.prop("coat_rack", 1250, 380, 0, 1).prop("coat_rack", 1250, 430, 0, 1).prop("coat_rack", 1290, 456, 0, 1).prop("desk", 1150, 260).prop("chair", 1150, 276).prop("locker_row", 1290, 240).prop("sofa", 1290, 320).prop("cafe_table", 1230, 540).prop("cafe_table", 1290, 520).prop("chair", 1210, 560).prop("crate_wood", 1310, 640).prop("file_cabinet", 1200, 650);
+  b2.light(1170, 284, 100, WARM, 0.7).light(1280, 284, 100, WARM, 0.65).light(1250, 414, 120, LAMP, 0.8).light(1250, 540, 120, WARM, 0.75, { flicker: "soft" }).light(1137, 600, 100, WARM, 0.6);
+  b2.floor("marble", 512, 628, 506, 230).floor("marble", 1018, 628, 90, 60).floor("carpet_red", 800, 628, 60, 230);
+  b2.prop("bust", 830, 716).prop("plant_pot", 798, 740).prop("plant_pot", 862, 740).prop("counter", 966, 742, 0, 3).prop("coat_rack", 966, 712, 0, 0).prop("bench", 700, 680).prop("bench", 960, 680).prop("shelf", 600, 648, 0, 3).prop("sofa", 580, 800).prop("plant_pot", 530, 640).prop("plant_pot", 1e3, 830).prop("column", 770, 886).prop("column", 890, 886);
+  b2.decal({ kind: "text", x: 966, y: 762, text: "\u0413\u0410\u0420\u0414\u0415\u0420\u041E\u0411", size: 8, color: "#e8dcc0", alpha: 0.6 }).decal({ kind: "stairs", x: 680, y: 904, w: 300, h: 50 }).decal({ kind: "stairs", x: 380, y: 800, w: 50, h: 56 }).decal({ kind: "stairs", x: 1340, y: 586, w: 50, h: 44 });
+  b2.overhead({ kind: "canopy", x: 740, y: 868, w: 180, h: 36, seed: 2 });
+  b2.light(830, 700, 170, 16769184, 0.9).light(620, 720, 130, WARM, 0.7).light(980, 720, 110, WARM, 0.7).light(1060, 660, 90, WARM, 0.6).light(770, 900, 100, LAMP, 0.8, { fixture: "street" }).light(890, 900, 100, LAMP, 0.8, { fixture: "street" });
+  b2.prop("planter", 540, 900).prop("planter", 1130, 900).prop("bench", 420, 940).prop("bench", 1250, 940).prop("lamp_post", 640, 940).prop("lamp_post", 1020, 940).prop("barrel_blue", 1380, 452).prop("barrel_blue", 1396, 464).prop("barrel_blue", 1380, 476).prop("barrel_blue", 1396, 488).prop("ambulance", 1466, 470, 0, 1).prop("container", 1440, 300, 0, 1).prop("truck", 1400, 830).prop("crate_wood", 1360, 720).prop("crate_wood", 1360, 737).prop("lamp_post", 1360, 260).prop("lamp_post", 1360, 620);
+  b2.tree(300, 930, 56, 8).tree(1180, 950, 64, 9).tree(1450, 620, 64, 10).tree(1440, 80, 64, 11).tree(1370, 940, 56, 12).tree(560, 952, 48, 13);
+  b2.light(640, 948, 170, SODIUM, 0.8, { fixture: "street" }).light(1020, 948, 170, SODIUM, 0.8, { fixture: "street", flicker: "soft" }).light(1360, 268, 180, SODIUM, 0.8, { fixture: "street" }).light(1360, 628, 180, SODIUM, 0.75, { fixture: "street" });
+  b2.spawn(1427, 540, 180).spawn(1180, 930, -90).spawn(1440, 920, -135);
+  b2.pickup("obrez", 300, 270, 16e3).pickup("avtomat", 440, 524, 2e4).pickup("obrez", 600, 300, 16e3).pickup("avtomat", 1066, 300, 2e4).pickup("obrez", 740, 600, 16e3).pickup("avtomat", 1210, 410, 2e4).pickup("obrez", 660, 760, 16e3).pickup("avtomat", 1250, 900, 2e4).pickup("obrez", 200, 700, 16e3).pickup("avtomat", 1420, 380, 2e4);
+  b2.medkit(430, 700).medkit(1260, 640).medkit(920, 800).medkit(110, 270);
+  b2.supply(830, 460).supply(220, 860).supply(1420, 720).supply(600, 140).supply(1100, 920).supply(700, 780);
+  return b2.build();
+}
+
+// packages/shared/src/maps/gastronom.ts
+function buildGastronomMap() {
+  const W = 1500;
+  const H = 1e3;
+  const WARM = 16764810;
+  const SHOP = 16770736;
+  const COLD = 14216447;
+  const SODIUM = 16756810;
+  const NEON = 16730682;
+  const b2 = new MapBuilder(
+    "gastronom",
+    "Gastronom",
+    "Groceries \xB7 drinks \xB7 always nearby",
+    "A sales floor of shelves and counters, the bakery, the butcher\u2019s and the deli, the warehouse and the loading dock. Narrow aisles and ambushes behind the counters.",
+    W,
+    H,
+    "asphalt"
+  ).ambient(1712694, 0.42).minimap("#3e3830");
+  b2.floor("paving", 330, 140, 1e3, 56).floor("asphalt_cracked", 12, 196, 224, 790).floor("asphalt_cracked", 1300, 560, 188, 426).floor("asphalt", 336, 800, 1e3, 186).floor("grass", 1300, 196, 188, 60);
+  b2.hwall("fence_concrete", 0, 330, 0, 12).hwall("fence_concrete", 1260, W, 0, 12).vwall("fence_concrete", 0, 12, H - 16, 12).vwall("fence_concrete", W - 12, 12, H - 16, 12).hwall("fence_concrete", 0, W, H - 16, 16);
+  b2.wall("roof_flat", 330, 0, 170, 140, "house").wall("roof_flat", 500, 0, 760, 140, "gastronom");
+  b2.decal({ kind: "line", x: 560, y: 16, w: 680, h: 34, color: "#7a1c16", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 720, y: 33, text: "\u0413\u0410\u0421\u0422\u0420\u041E\u041D\u041E\u041C", size: 22, color: "#e8dcc0", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 1050, y: 33, text: "\u041F\u0420\u041E\u0414\u0423\u041A\u0422\u042B \xB7 \u041D\u0410\u041F\u0418\u0422\u041A\u0418 \xB7 \u0412\u0421\u0415\u0413\u0414\u0410 \u0420\u042F\u0414\u041E\u041C", size: 7, color: "#e8dcc0", alpha: 0.8, layer: "roof" }).decal({ kind: "line", x: 1290, y: 40, w: 170, h: 70, color: "#8a2a20", alpha: 0.9 });
+  b2.wall("concrete", 1290, 108, 170, 8, "billboard");
+  b2.decal({ kind: "text", x: 1375, y: 75, text: "\u0412\u041A\u0423\u0421\u041D\u041E \xB7 \u041F\u041E\u041B\u0415\u0417\u041D\u041E \xB7 \u0414\u041E\u0421\u0422\u0423\u041F\u041D\u041E", size: 7, color: "#e8dcc0", alpha: 0.85 });
+  b2.prop("soda_machine", 560, 150).prop("soda_machine", 580, 150).prop("soda_machine", 1040, 150).prop("soda_machine", 1060, 150).prop("bench", 680, 156).prop("lamp_post", 640, 186).prop("lamp_post", 1100, 186).prop("car_zhiguli", 1400, 216, 90, 3).prop("truck", 130, 250, 90);
+  b2.tree(1340, 150, 56, 2).tree(1460, 250, 56, 3).tree(560, 970, 48, 4).tree(300, 960, 56, 5).tree(1240, 960, 64, 6);
+  b2.light(640, 194, 170, SODIUM, 0.85, { fixture: "street" }).light(1100, 194, 170, SODIUM, 0.85, { fixture: "street", flicker: "soft" });
+  b2.spawn(850, 170, 90).spawn(1460, 150, 135);
+  b2.hwall("brick", 236, 1312, 196, 12, [[826, 906]]).vwall("brick", 236, 196, 286, 12).hwall("brick", 140, 248, 286, 12).vwall("brick", 140, 286, 660, 12, [
+    [330, 366],
+    [600, 636]
+  ]).hwall("brick", 140, 340, 660, 12).vwall("brick", 328, 660, 802, 12).hwall("brick", 328, 1290, 790, 12, [
+    [430, 500],
+    [660, 712],
+    [1240, 1276]
+  ]).vwall("brick", 1278, 600, 802, 12).hwall("brick", 1278, 1312, 600, 12).vwall("brick", 1300, 196, 612, 12, [[380, 416]]).hwall("brick", 1300, 1440, 266, 12).vwall("brick", 1428, 266, 542, 12).hwall("brick", 1300, 1440, 530, 12, [[1360, 1396]]);
+  b2.floor("tile_beige", 248, 208, 1052, 392).floor("tile_beige", 640, 600, 360, 190);
+  b2.hwall("plaster", 248, 630, 300, 8, [
+    [362, 398],
+    [440, 476],
+    [560, 596]
+  ]).vwall("plaster", 405, 208, 300, 8).vwall("plaster", 505, 208, 300, 8).vwall("plaster", 630, 208, 308, 8).vwall("plaster", 1040, 208, 308, 8).hwall("plaster", 1040, 1300, 300, 8, [[1180, 1220]]);
+  b2.floor("concrete_dirty", 248, 208, 157, 92).floor("linoleum_checker", 413, 208, 92, 92).floor("wood", 513, 208, 117, 92).floor("carpet_red", 1048, 208, 252, 92);
+  b2.prop("sacks", 270, 236).prop("sacks", 270, 260).prop("sacks", 296, 236).prop("crate_stack", 360, 240).prop("crate_wood", 390, 224).prop("desk", 456, 236).prop("chair", 456, 252).prop("file_cabinet", 490, 280, 90).prop("desk", 570, 240).prop("chair", 570, 256).prop("shelf", 590, 214, 0, 5).prop("counter", 1100, 238, 0, 1).prop("counter", 1152, 238, 0, 1).prop("fridge_case", 1250, 230, 0, 0).prop("crate_wood", 1280, 280);
+  b2.decal({ kind: "text", x: 1170, y: 220, text: "\u041C\u042F\u0421\u041E", size: 8, color: "#e8dcc0", alpha: 0.55 });
+  b2.light(320, 254, 100, WARM, 0.6, { flicker: "soft" }).light(456, 254, 90, WARM, 0.7).light(570, 254, 90, WARM, 0.75).light(1170, 254, 120, 16765104, 0.8);
+  b2.prop("cash_desk", 712, 336).prop("counter", 756, 336, 0, 0).prop("cash_desk", 902, 336).prop("counter", 946, 336, 0, 0).prop("fridge_case", 560, 352, 0, 1).prop("fridge_case", 1110, 336, 0, 1).prop("fridge_case", 1158, 336, 0, 2);
+  b2.decal({ kind: "text", x: 712, y: 316, text: "1", size: 10, color: "#e8dcc0", alpha: 0.7 }).decal({ kind: "text", x: 902, y: 316, text: "2", size: 10, color: "#e8dcc0", alpha: 0.7 });
+  b2.prop("shelf", 290, 316, 0, 4).prop("shelf", 334, 316, 0, 4).prop("counter", 300, 370, 0, 0).prop("counter", 352, 370, 0, 0);
+  b2.decal({ kind: "line", x: 262, y: 386, w: 120, h: 14, color: "#7a1c16", alpha: 0.85 }).decal({ kind: "text", x: 322, y: 393, text: "\u0425\u041B\u0415\u0411", size: 9, color: "#e8dcc0", alpha: 0.9 });
+  const AISLE = [
+    [0, 5, 1],
+    [1, 0, 5],
+    [5, 1, 0],
+    [0, 1, 5],
+    [1, 5, 0]
+  ];
+  [660, 750, 840, 930, 1020].forEach((x, i) => {
+    const [a, c, d] = AISLE[i];
+    b2.prop("shelf", x, 404, 90, a).prop("shelf", x, 448, 90, c).prop("shelf", x, 492, 90, d);
+  });
+  b2.prop("shelf", 300, 440, 0, 1).prop("shelf", 344, 440, 0, 0).prop("shelf", 500, 410, 0, 5).prop("shelf", 544, 410, 0, 0).prop("fridge_case", 500, 476, 0, 1).prop("fridge_case", 548, 476, 0, 2).prop("fridge_case", 470, 580, 0, 0).prop("fridge_case", 518, 580, 0, 1).prop("shelf", 1140, 420, 0, 1).prop("shelf", 1184, 420, 0, 0).prop("fridge_case", 1150, 520, 0, 1).prop("fridge_case", 1198, 520, 0, 0).prop("shelf", 700, 572, 0, 5).prop("shelf", 744, 572, 0, 0).prop("shelf", 900, 572, 0, 1).prop("shelf", 944, 572, 0, 5).prop("shelf", 1260, 404, 90, 1).prop("shelf", 1260, 448, 90, 0).prop("shelf", 420, 520, 90, 5).prop("shelf", 420, 476, 90, 1).prop("crate_wood", 600, 560).prop("crate_wood", 1256, 360).prop("plant_pot", 1280, 580);
+  b2.light(500, 450, 170, SHOP, 0.75).light(750, 450, 180, SHOP, 0.8, { flicker: "soft" }).light(930, 450, 180, SHOP, 0.8).light(1180, 460, 170, SHOP, 0.75).light(830, 300, 160, SHOP, 0.85).light(300, 360, 110, WARM, 0.8);
+  b2.vwall("plaster", 640, 600, 790, 8, [[640, 680]]).hwall("plaster", 1e3, 1278, 600, 8, [[1030, 1070]]).vwall("plaster", 995, 600, 790, 8, [[700, 740]]);
+  b2.prop("fridge_case", 690, 640, 0, 2).prop("fridge_case", 738, 640, 0, 0).prop("fridge_case", 690, 700, 0, 1).prop("fridge_case", 738, 700, 0, 2).prop("fridge_case", 786, 700, 0, 0).prop("fridge_case", 660, 760, 90, 1).prop("produce_stall", 880, 650).prop("produce_stall", 940, 650).prop("produce_stall", 910, 700);
+  b2.decal({ kind: "line", x: 856, y: 612, w: 120, h: 16, color: "#3a5a2a", alpha: 0.9 }).decal({ kind: "text", x: 916, y: 620, text: "\u041E\u0412\u041E\u0429\u0418 \u0424\u0420\u0423\u041A\u0422\u042B", size: 8, color: "#e8dcc0", alpha: 0.9 });
+  b2.floor("tile_beige", 1003, 608, 275, 182).floor("carpet_red", 1003, 700, 275, 90);
+  b2.prop("counter", 1100, 676, 0, 1).prop("counter", 1152, 676, 0, 1).prop("counter", 1204, 676, 0, 1).prop("shelf", 1150, 640, 0, 0).prop("crate_wood", 1260, 640).prop("sacks", 1030, 640);
+  b2.decal({ kind: "line", x: 1100, y: 606, w: 120, h: 14, color: "#7a1c16", alpha: 0.9 }).decal({ kind: "text", x: 1160, y: 613, text: "\u041A\u041E\u041B\u0411\u0410\u0421\u042B", size: 9, color: "#e8dcc0", alpha: 0.95 });
+  b2.light(740, 690, 150, COLD, 0.8).light(910, 670, 120, WARM, 0.75).light(1150, 700, 150, 16763040, 0.85).light(1240, 760, 80, NEON, 0.7, { flicker: "broken", fixture: "neon" });
+  b2.hwall("plaster", 148, 236, 420, 8, [[170, 206]]).hwall("plaster", 148, 248, 530, 8, [[190, 226]]).vwall("plaster", 236, 286, 530, 8, [[380, 416]]).vwall("plaster", 248, 530, 660, 8, [[600, 636]]);
+  b2.floor("linoleum_checker", 152, 298, 84, 122).floor("concrete_dirty", 152, 428, 96, 232);
+  b2.prop("desk", 190, 330).prop("chair", 190, 346).prop("file_cabinet", 162, 400, 90).prop("crate_stack", 180, 470).prop("sacks", 220, 500).prop("crate_wood", 170, 600).prop("crate_wood", 187, 600).prop("sacks", 214, 630);
+  b2.decal({ kind: "text", x: 290, y: 560, text: "\u0421\u041A\u041B\u0410\u0414", size: 12, color: "#d9c7a3", alpha: 0.6 });
+  b2.light(190, 356, 90, WARM, 0.7).light(200, 560, 110, WARM, 0.65, { flicker: "soft" });
+  b2.floor("concrete_slab", 340, 612, 300, 178);
+  b2.hwall("fence_chain", 340, 640, 612, 4, [[440, 520]]);
+  b2.prop("forklift", 380, 700, 90).prop("crate_stack", 470, 660).prop("crate_stack", 506, 660).prop("sacks", 560, 700).prop("pallet", 600, 740).prop("barrel_blue", 360, 640).prop("crate_green", 520, 740);
+  b2.decal({ kind: "hazard", x: 430, y: 786, w: 70, h: 6, alpha: 0.8 });
+  b2.light(480, 700, 160, SODIUM, 0.8, { flicker: "soft" });
+  b2.floor("linoleum_checker", 1312, 278, 116, 252);
+  b2.prop("locker_row", 1370, 286).prop("desk", 1380, 360).prop("chair", 1380, 376).prop("crate_wood", 1406, 470).prop("crate_wood", 1406, 487).prop("file_cabinet", 1324, 320, 90);
+  b2.decal({ kind: "stairs", x: 1316, y: 470, w: 36, h: 54 }).decal({ kind: "text", x: 1370, y: 420, text: "\u0421\u041B\u0423\u0416\u0415\u0411\u041D\u041E\u0415", size: 8, color: "#d9c7a3", alpha: 0.6 });
+  b2.light(1370, 380, 110, WARM, 0.75);
+  b2.prop("kiosk", 120, 455, 90).prop("crate_stack", 40, 490).prop("crate_wood", 36, 530).prop("trash_container", 60, 700).prop("lamp_post", 100, 760).prop("crate_stack", 1470, 620).prop("crate_stack", 1470, 656).prop("crate_stack", 1470, 740).prop("pallet", 1460, 800).prop("barrel_red", 1336, 640).prop("barrel_red", 1352, 652).prop("lamp_post", 1340, 580).prop("truck", 995, 890, 90).prop("ambulance", 365, 880, 0, 2).prop("pallet", 460, 880).prop("pallet", 460, 906).prop("crate_wood", 600, 880).prop("crate_wood", 617, 880).prop("lamp_post", 760, 840).prop("lamp_post", 1220, 850).prop("trash_container", 1160, 940);
+  b2.decal({ kind: "dashrect", x: 860, y: 830, w: 260, h: 120, color: "#d9c7a3", alpha: 0.35 }).decal({ kind: "line", x: 336, y: 822, w: 1e3, h: 3, color: "#d9c7a3", alpha: 0.25 }).decal({ kind: "stain", x: 1e3, y: 920, r: 30, color: "#0f0d0b", alpha: 0.5, seed: 8 });
+  b2.light(100, 768, 180, SODIUM, 0.8, { fixture: "street" }).light(1340, 588, 180, SODIUM, 0.8, { fixture: "street" }).light(760, 848, 190, SODIUM, 0.85, { fixture: "street" }).light(1220, 858, 180, SODIUM, 0.75, { fixture: "street", flicker: "soft" }).light(130, 300, 150, SODIUM, 0.6, { fixture: "none" });
+  b2.spawn(108, 590, 0).spawn(1380, 600, 180).spawn(100, 920, -45).spawn(720, 930, -90).spawn(1440, 930, -135);
+  b2.pickup("obrez", 330, 280, 16e3).pickup("avtomat", 600, 270, 2e4).pickup("obrez", 1220, 270, 16e3).pickup("avtomat", 705, 450, 2e4).pickup("obrez", 975, 450, 16e3).pickup("avtomat", 1370, 440, 2e4).pickup("obrez", 200, 560, 16e3).pickup("avtomat", 600, 660, 2e4).pickup("obrez", 1110, 750, 16e3).pickup("avtomat", 820, 930, 2e4);
+  b2.medkit(190, 380).medkit(1400, 330).medkit(700, 750).medkit(560, 930);
+  b2.supply(840, 530).supply(1200, 470).supply(420, 560).supply(700, 880).supply(1380, 760).supply(90, 650);
+  return b2.build();
+}
+
+// packages/shared/src/maps/hospital.ts
+function buildHospitalMap() {
+  const W = 1500;
+  const H = 1e3;
+  const COLD = 14217471;
+  const PALE = 13168856;
+  const WARM = 16764810;
+  const SODIUM = 16756810;
+  const ER = 16726578;
+  const XRAY = 6349055;
+  const b2 = new MapBuilder(
+    "hospital",
+    "City Hospital No. 3",
+    "The people\u2019s health is the country\u2019s wealth",
+    "Wards, the operating theatre, X-ray and the pharmacy along one long corridor, with the registration hall in the middle. Tight rooms and an open corridor.",
+    W,
+    H,
+    "asphalt_cracked"
+  ).ambient(1581618, 0.42).minimap("#38403a");
+  b2.floor("grass", 12, 12, 188, 200).floor("grass", 12, 620, 188, 364).floor("grass", 1355, 560, 133, 240).floor("paving", 340, 150, 1015, 75).floor("paving", 200, 790, 1155, 194).floor("asphalt", 12, 212, 188, 408).floor("asphalt", 1355, 130, 133, 430);
+  b2.hwall("fence_chain", 0, 340, 0, 4).vwall("fence_chain", 0, 0, H - 16, 4).vwall("fence_chain", W - 4, 0, H - 16, 4).hwall("fence_concrete", 0, W, H - 16, 16);
+  b2.wall("roof_flat", 340, 0, 200, 110, "wing_w").wall("roof_flat", 540, 0, 590, 150, "main").wall("roof_flat", 1130, 0, 370, 118, "wing_e");
+  b2.decal({ kind: "line", x: 600, y: 54, w: 500, h: 38, color: "#d9c7a3", alpha: 0.92, layer: "roof" }).decal({ kind: "cross", x: 630, y: 73, r: 12, color: "#c8312a", alpha: 0.95 }).decal({ kind: "text", x: 860, y: 73, text: "\u0413\u041E\u0420\u041E\u0414\u0421\u041A\u0410\u042F \u0411\u041E\u041B\u042C\u041D\u0418\u0426\u0410 \u21163", size: 15, color: "#9e2a22", alpha: 0.95, layer: "roof" }).decal({ kind: "line", x: 1240, y: 36, w: 220, h: 60, color: "#d9c7a3", alpha: 0.9, layer: "roof" }).decal({ kind: "text", x: 1350, y: 56, text: "\u0417\u0414\u041E\u0420\u041E\u0412\u042C\u0415 \u041D\u0410\u0420\u041E\u0414\u0410 \u2014", size: 9, color: "#9e2a22", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 1350, y: 76, text: "\u0411\u041E\u0413\u0410\u0422\u0421\u0422\u0412\u041E \u0421\u0422\u0420\u0410\u041D\u042B!", size: 9, color: "#9e2a22", alpha: 0.95, layer: "roof" });
+  b2.prop("planter", 732, 182).prop("planter", 962, 182).prop("bench", 1050, 176).prop("bench", 640, 176).prop("lamp_post", 780, 160).prop("lamp_post", 920, 160).prop("ambulance", 1380, 186, 90, 0).prop("lamp_post", 1470, 140);
+  b2.decal({ kind: "stairs", x: 812, y: 196, w: 76, h: 66 });
+  b2.light(780, 168, 150, WARM, 0.85, { fixture: "street" }).light(920, 168, 150, WARM, 0.85, { fixture: "street" }).light(1470, 148, 170, SODIUM, 0.8, { fixture: "street" });
+  b2.spawn(850, 176, 90).spawn(1460, 260, 180);
+  b2.hwall("brick", 200, 1355, 225, 12, [[810, 890]]).vwall("brick", 200, 237, 778, 12, [[396, 432]]).vwall("brick", 1343, 237, 778, 12, [
+    [396, 432],
+    [540, 576]
+  ]).hwall("brick", 200, 680, 778, 12, [[444, 504]]).vwall("brick", 680, 778, 870, 12).hwall("brick", 680, 1030, 858, 12, [[790, 890]]).vwall("brick", 1018, 778, 870, 12).hwall("brick", 1018, 1355, 778, 12);
+  b2.floor("tile_green", 212, 237, 1131, 541).floor("tile_green", 692, 778, 326, 80);
+  b2.decal({ kind: "line", x: 690, y: 860, w: 330, h: 14, color: "#d9c7a3", alpha: 0.9, layer: "roof" }).decal({ kind: "text", x: 855, y: 867, text: "\u0411\u041E\u041B\u042C\u041D\u0418\u0426\u0410 \u0421\u041F\u0410\u0421\u0410\u0415\u0422 \u0416\u0418\u0417\u041D\u0418", size: 9, color: "#9e2a22", alpha: 0.95, layer: "roof" });
+  b2.hwall("plaster", 212, 1343, 380, 8, [
+    [396, 432],
+    [470, 500],
+    [540, 576],
+    [690, 726],
+    [800, 900],
+    [976, 1012],
+    [1100, 1136],
+    [1200, 1236]
+  ]);
+  for (const x of [435, 520, 600, 800, 900, 1075, 1160]) b2.vwall("plaster", x, 237, 380, 8);
+  b2.floor("tile_white", 212, 237, 223, 143).floor("tile_white", 443, 237, 77, 143).floor("concrete_painted", 528, 237, 72, 143).floor("concrete_painted", 1083, 237, 77, 143);
+  b2.prop("operating_table", 330, 310, 90).prop("med_cabinet", 300, 246).prop("med_cabinet", 400, 246).prop("hospital_bed", 236, 300).prop("iv_stand", 360, 280).prop("stretcher", 410, 340, 90).prop("xray", 250, 352, 0);
+  b2.decal({ kind: "stain", x: 380, y: 330, r: 10, color: "#6a0e0a", alpha: 0.55, seed: 3 });
+  b2.prop("med_cabinet", 478, 246).prop("wheelchair", 490, 340);
+  b2.decal({ kind: "stairs", x: 536, y: 250, w: 56, h: 90 }).decal({ kind: "line", x: 540, y: 342, w: 48, h: 16, color: "#9e2a22", alpha: 0.85 }).decal({ kind: "text", x: 564, y: 350, text: "\u041B\u0415\u0421\u0422\u041D\u0418\u0426\u0410 1", size: 6, color: "#e8dcc0", alpha: 0.9 });
+  b2.prop("hospital_bed", 640, 290).prop("hospital_bed", 710, 290).prop("med_screen", 676, 330, 90).prop("iv_stand", 740, 260).prop("file_cabinet", 780, 250, 90);
+  b2.prop("desk", 960, 256).prop("chair", 960, 272).prop("hospital_bed", 1040, 290).prop("med_screen", 1e3, 330).prop("med_screen", 920, 330).prop("med_cabinet", 1050, 246);
+  b2.decal({ kind: "stairs", x: 1091, y: 250, w: 56, h: 90 }).decal({ kind: "line", x: 1094, y: 342, w: 50, h: 16, color: "#9e2a22", alpha: 0.85 }).decal({ kind: "text", x: 1119, y: 350, text: "\u041B\u0415\u0421\u0422\u041D\u0418\u0426\u0410 2", size: 6, color: "#e8dcc0", alpha: 0.9 });
+  b2.prop("med_screen", 1220, 300, 90).prop("med_screen", 1280, 300, 90).prop("hospital_bed", 1250, 270).prop("hospital_bed", 1312, 270).prop("stretcher", 1320, 350, 90).prop("iv_stand", 1190, 260);
+  b2.light(330, 300, 130, COLD, 0.95).light(478, 300, 80, PALE, 0.6, { flicker: "soft" }).light(560, 300, 80, COLD, 0.55).light(700, 300, 120, PALE, 0.75).light(990, 300, 120, PALE, 0.75, { flicker: "soft" }).light(1118, 300, 80, COLD, 0.55).light(1250, 300, 120, PALE, 0.7, { flicker: "broken" });
+  b2.decal({ kind: "cross", x: 850, y: 426, r: 14, color: "#9e2a22", alpha: 0.6 }).decal({ kind: "cross", x: 850, y: 268, r: 10, color: "#9e2a22", alpha: 0.55 }).decal({ kind: "stain", x: 620, y: 420, r: 12, color: "#6a0e0a", alpha: 0.5, seed: 7 }).decal({ kind: "stain", x: 1180, y: 440, r: 9, color: "#6a0e0a", alpha: 0.5, seed: 11 });
+  b2.prop("bench_row", 300, 448).prop("plant_pot", 230, 448).prop("wheelchair", 1300, 444).prop("plant_pot", 1330, 400).prop("stretcher", 760, 420, 90);
+  b2.light(300, 420, 150, COLD, 0.7, { flicker: "soft" }).light(600, 420, 150, COLD, 0.7).light(1100, 420, 150, COLD, 0.7, { flicker: "broken" }).light(1300, 420, 120, COLD, 0.65);
+  b2.hwall("plaster", 212, 688, 460, 8, [
+    [260, 296],
+    [420, 456],
+    [620, 656]
+  ]).hwall("plaster", 1022, 1343, 460, 8, [
+    [1050, 1086],
+    [1150, 1186],
+    [1270, 1306]
+  ]).vwall("plaster", 350, 460, 600, 8).vwall("plaster", 540, 460, 600, 8).vwall("plaster", 600, 460, 600, 8).vwall("plaster", 1110, 460, 600, 8).vwall("plaster", 1240, 460, 600, 8).vwall("plaster", 680, 460, 778, 8, [
+    [520, 556],
+    [680, 716]
+  ]).vwall("plaster", 1022, 460, 778, 8, [
+    [520, 556],
+    [680, 716]
+  ]).hwall("plaster", 212, 688, 600, 8, [
+    [290, 326],
+    [560, 596]
+  ]).hwall("plaster", 1022, 1343, 600, 8, [
+    [1060, 1096],
+    [1240, 1276]
+  ]);
+  b2.floor("concrete_painted", 358, 468, 182, 132);
+  b2.prop("xray", 460, 520).prop("med_cabinet", 400, 476).prop("desk", 500, 580).prop("chair", 500, 564).prop("stretcher", 380, 560, 90);
+  b2.decal({ kind: "line", x: 410, y: 588, w: 70, h: 12, color: "#1a3a40", alpha: 0.9 }).decal({ kind: "text", x: 445, y: 594, text: "\u0420\u0415\u041D\u0422\u0413\u0415\u041D", size: 7, color: "#bfefff", alpha: 0.9 });
+  b2.prop("desk", 270, 520).prop("chair", 270, 536).prop("file_cabinet", 330, 480, 90).prop("med_cabinet", 640, 476, 90).prop("desk", 640, 560, 90);
+  b2.prop("desk", 1060, 520, 90).prop("med_cabinet", 1210, 476).prop("hospital_bed", 1200, 540).prop("desk", 1290, 500).prop("chair", 1290, 516).prop("file_cabinet", 1320, 580, 90);
+  b2.light(460, 530, 130, XRAY, 1, { fixture: "none" }).light(280, 530, 90, WARM, 0.6).light(640, 530, 80, COLD, 0.55).light(1176, 530, 100, PALE, 0.6).light(1290, 530, 100, WARM, 0.6, { flicker: "soft" });
+  b2.prop("counter", 800, 560, 0, 2).prop("counter", 850, 560, 0, 2).prop("counter", 900, 560, 0, 2).prop("counter", 776, 520, 90, 2).prop("counter", 924, 520, 90, 2).prop("file_cabinet", 830, 486).prop("file_cabinet", 870, 486).prop("bench_row", 790, 640).prop("bench_row", 910, 640).prop("bench_row", 790, 684).prop("bench_row", 910, 684).prop("bench_row", 790, 728).prop("bench_row", 910, 728).prop("plant_pot", 704, 640).prop("plant_pot", 996, 640).prop("plant_pot", 704, 760).prop("plant_pot", 996, 760);
+  b2.decal({ kind: "line", x: 790, y: 590, w: 120, h: 14, color: "#d9c7a3", alpha: 0.9 }).decal({ kind: "text", x: 850, y: 597, text: "\u0420\u0415\u0413\u0418\u0421\u0422\u0420\u0410\u0422\u0423\u0420\u0410", size: 8, color: "#9e2a22", alpha: 0.95 });
+  b2.light(850, 520, 140, WARM, 0.9).light(850, 690, 170, PALE, 0.7).light(850, 820, 120, WARM, 0.8);
+  b2.vwall("plaster", 540, 600, 778, 8, [[680, 716]]).vwall("plaster", 1180, 600, 778, 8, [[690, 726]]);
+  b2.prop("hospital_bed", 260, 690).prop("hospital_bed", 320, 690).prop("stretcher", 400, 700).prop("med_screen", 290, 740).prop("med_cabinet", 480, 616).prop("iv_stand", 360, 650).prop("wheelchair", 500, 740);
+  b2.decal({ kind: "line", x: 330, y: 610, w: 110, h: 14, color: "#7a1c16", alpha: 0.95 }).decal({ kind: "text", x: 385, y: 617, text: "\u041F\u0420\u0418\u0401\u041C\u041D\u041E\u0415 \u041E\u0422\u0414\u0415\u041B\u0415\u041D\u0418\u0415", size: 6, color: "#e8dcc0", alpha: 0.95 }).decal({ kind: "stain", x: 350, y: 720, r: 14, color: "#6a0e0a", alpha: 0.55, seed: 13 }).decal({ kind: "stairs", x: 444, y: 790, w: 60, h: 44 });
+  b2.prop("hospital_bed", 580, 660).prop("med_cabinet", 650, 616).prop("iv_stand", 610, 700);
+  b2.prop("hospital_bed", 1060, 660).prop("med_cabinet", 1130, 616).prop("med_screen", 1100, 720);
+  b2.floor("linoleum_checker", 1188, 608, 155, 170);
+  b2.prop("shelf", 1230, 616, 0, 2).prop("shelf", 1274, 616, 0, 2).prop("shelf", 1318, 650, 90, 2).prop("counter", 1240, 700, 0, 2).prop("counter", 1290, 700, 0, 2);
+  b2.decal({ kind: "line", x: 1220, y: 740, w: 80, h: 14, color: "#2a4a3a", alpha: 0.9 }).decal({ kind: "text", x: 1260, y: 747, text: "\u0410\u041F\u0422\u0415\u041A\u0410", size: 8, color: "#e8dcc0", alpha: 0.95 });
+  b2.light(370, 690, 170, ER, 1, { flicker: "soft" }).light(610, 690, 90, PALE, 0.55).light(1100, 690, 90, PALE, 0.55, { flicker: "broken" }).light(1270, 680, 120, COLD, 0.8);
+  b2.prop("container", 120, 300, 0, 3).prop("kiosk", 160, 490, 90).prop("trash_container", 60, 420).prop("lamp_post", 180, 240).prop("lamp_post", 180, 600).prop("ambulance", 470, 890, 90, 0).prop("stretcher", 300, 850).prop("bench", 600, 950).prop("planter", 720, 920).prop("planter", 980, 920).prop("lamp_post", 640, 800).prop("lamp_post", 1060, 800).prop("bench", 1160, 950).prop("container", 1410, 340, 0, 3).prop("crate_wood", 1400, 420).prop("crate_wood", 1417, 420).prop("barrel_blue", 1400, 450).prop("barrel_blue", 1416, 462).prop("tent", 1452, 680).prop("crate_stack", 1460, 760).prop("car_volga", 1380, 870, 90, 2).prop("lamp_post", 1370, 600);
+  b2.decal({ kind: "stairs", x: 790, y: 872, w: 100, h: 56 });
+  b2.tree(110, 110, 64, 1).tree(60, 700, 72, 2).tree(150, 860, 64, 3).tree(330, 940, 56, 4).tree(1250, 930, 64, 5).tree(1460, 560, 56, 6).tree(1470, 920, 56, 7).tree(440, 140, 56, 8).tree(1100, 940, 48, 9);
+  b2.light(180, 248, 170, SODIUM, 0.8, { fixture: "street" }).light(180, 608, 170, SODIUM, 0.75, { fixture: "street", flicker: "soft" }).light(640, 808, 160, SODIUM, 0.8, { fixture: "street" }).light(1060, 808, 160, SODIUM, 0.8, { fixture: "street" }).light(1370, 608, 170, SODIUM, 0.75, { fixture: "street" }).light(470, 880, 100, ER, 0.6, { flicker: "soft", fixture: "none" });
+  b2.spawn(98, 540, 0).spawn(1427, 520, 180).spawn(100, 130, 45).spawn(300, 930, -45).spawn(1200, 900, -90).spawn(1450, 960, -135);
+  b2.pickup("obrez", 365, 352, 16e3).pickup("avtomat", 660, 340, 2e4).pickup("obrez", 990, 350, 16e3).pickup("avtomat", 1290, 350, 2e4).pickup("obrez", 510, 520, 16e3).pickup("avtomat", 1160, 560, 2e4).pickup("obrez", 440, 680, 16e3).pickup("avtomat", 1230, 745, 2e4).pickup("obrez", 110, 700, 16e3).pickup("avtomat", 1440, 820, 2e4);
+  b2.medkit(1280, 655, 18e3).medkit(250, 260, 18e3).medkit(620, 740, 2e4).medkit(1e3, 430, 2e4).medkit(1452, 732, 2e4).medkit(850, 610, 2e4);
+  b2.supply(850, 460).supply(300, 410).supply(1250, 420).supply(720, 960).supply(120, 400).supply(1440, 500);
   return b2.build();
 }
 
@@ -10876,56 +11988,104 @@ function buildYardMap() {
 var P = (w, h, shape, layer, blocksShot, label, extra = {}) => ({ w, h, shape, layer, blocksMove: shape !== "none", blocksShot: shape !== "none" && blocksShot, label, ...extra });
 var PROP_DEFS = {
   // generic industrial
-  crate_wood: P(16, 16, "rect", "low", true, "\u042F\u0449\u0438\u043A"),
-  crate_stack: P(32, 32, "rect", "high", true, "\u0428\u0442\u0430\u0431\u0435\u043B\u044C \u044F\u0449\u0438\u043A\u043E\u0432"),
-  crate_green: P(20, 14, "rect", "low", true, "\u0410\u0440\u043C\u0435\u0439\u0441\u043A\u0438\u0439 \u044F\u0449\u0438\u043A"),
-  barrel_red: P(14, 14, "circle", "low", true, "\u0411\u043E\u0447\u043A\u0430", { radius: 7 }),
-  barrel_blue: P(14, 14, "circle", "low", true, "\u0411\u043E\u0447\u043A\u0430", { radius: 7 }),
-  barrel_rust: P(14, 14, "circle", "low", true, "\u0420\u0436\u0430\u0432\u0430\u044F \u0431\u043E\u0447\u043A\u0430", { radius: 7 }),
-  pallet: P(26, 20, "none", "floor", false, "\u041F\u043E\u0434\u0434\u043E\u043D"),
-  sandbags: P(40, 12, "rect", "low", true, "\u041C\u0435\u0448\u043A\u0438 \u0441 \u043F\u0435\u0441\u043A\u043E\u043C"),
-  forklift: P(26, 52, "rect", "high", true, "\u041F\u043E\u0433\u0440\u0443\u0437\u0447\u0438\u043A", { inset: 1 }),
-  truck: P(50, 144, "rect", "high", true, "\u0413\u0440\u0443\u0437\u043E\u0432\u0438\u043A", { inset: 2 }),
-  machine_lathe: P(40, 22, "rect", "high", true, "\u0421\u0442\u0430\u043D\u043E\u043A"),
-  machine_press: P(32, 32, "rect", "high", true, "\u041F\u0440\u0435\u0441\u0441"),
-  tank_vertical: P(32, 32, "circle", "high", true, "\u0426\u0438\u0441\u0442\u0435\u0440\u043D\u0430", { radius: 16 }),
-  tank_horizontal: P(30, 68, "rect", "high", true, "\u0401\u043C\u043A\u043E\u0441\u0442\u044C", { inset: 2 }),
-  turbine: P(76, 76, "circle", "high", true, "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0430", { radius: 34 }),
-  locker_row: P(52, 12, "rect", "high", true, "\u0428\u043A\u0430\u0444\u0447\u0438\u043A\u0438"),
-  desk: P(30, 16, "rect", "low", false, "\u0421\u0442\u043E\u043B"),
-  chair: P(9, 9, "none", "floor", false, "\u0421\u0442\u0443\u043B"),
-  file_cabinet: P(18, 12, "rect", "high", true, "\u0428\u043A\u0430\u0444"),
-  plant_pot: P(14, 14, "circle", "low", false, "\u0424\u0438\u043A\u0443\u0441", { radius: 5 }),
-  turnstile: P(8, 22, "rect", "low", false, "\u0422\u0443\u0440\u043D\u0438\u043A\u0435\u0442"),
-  boom_barrier: P(60, 6, "none", "floor", false, "\u0428\u043B\u0430\u0433\u0431\u0430\u0443\u043C"),
-  conveyor: P(88, 22, "rect", "low", false, "\u041A\u043E\u043D\u0432\u0435\u0439\u0435\u0440"),
-  electric_box: P(16, 8, "rect", "high", true, "\u0429\u0438\u0442\u043E\u043A"),
-  cable_reel: P(18, 18, "circle", "low", true, "\u041A\u0430\u0442\u0443\u0448\u043A\u0430 \u043A\u0430\u0431\u0435\u043B\u044F", { radius: 9 }),
-  tire_stack: P(16, 16, "circle", "low", true, "\u041F\u043E\u043A\u0440\u044B\u0448\u043A\u0438", { radius: 8 }),
-  workbench: P(36, 14, "rect", "low", false, "\u0412\u0435\u0440\u0441\u0442\u0430\u043A"),
-  scrap_pile: P(30, 26, "rect", "low", true, "\u041C\u0435\u0442\u0430\u043B\u043B\u043E\u043B\u043E\u043C", { inset: 3 }),
-  container: P(48, 116, "rect", "high", true, "\u041A\u043E\u043D\u0442\u0435\u0439\u043D\u0435\u0440"),
+  crate_wood: P(16, 16, "rect", "low", true, "Crate"),
+  crate_stack: P(32, 32, "rect", "high", true, "Stack of crates"),
+  crate_green: P(20, 14, "rect", "low", true, "Army crate"),
+  barrel_red: P(14, 14, "circle", "low", true, "Barrel", { radius: 7 }),
+  barrel_blue: P(14, 14, "circle", "low", true, "Barrel", { radius: 7 }),
+  barrel_rust: P(14, 14, "circle", "low", true, "Rusty barrel", { radius: 7 }),
+  pallet: P(26, 20, "none", "floor", false, "Pallet"),
+  sandbags: P(40, 12, "rect", "low", true, "Sandbags"),
+  forklift: P(26, 52, "rect", "high", true, "Forklift", { inset: 1 }),
+  truck: P(50, 144, "rect", "high", true, "Lorry", { inset: 2 }),
+  machine_lathe: P(40, 22, "rect", "high", true, "Lathe"),
+  machine_press: P(32, 32, "rect", "high", true, "Press"),
+  tank_vertical: P(32, 32, "circle", "high", true, "Tank", { radius: 16 }),
+  tank_horizontal: P(30, 68, "rect", "high", true, "Vessel", { inset: 2 }),
+  turbine: P(76, 76, "circle", "high", true, "Plant unit", { radius: 34 }),
+  locker_row: P(52, 12, "rect", "high", true, "Lockers"),
+  desk: P(30, 16, "rect", "low", false, "Desk"),
+  chair: P(9, 9, "none", "floor", false, "Chair"),
+  file_cabinet: P(18, 12, "rect", "high", true, "Cabinet"),
+  plant_pot: P(14, 14, "circle", "low", false, "Ficus", { radius: 5 }),
+  turnstile: P(8, 22, "rect", "low", false, "Turnstile"),
+  boom_barrier: P(60, 6, "none", "floor", false, "Boom barrier"),
+  conveyor: P(88, 22, "rect", "low", false, "Conveyor"),
+  electric_box: P(16, 8, "rect", "high", true, "Fuse box"),
+  cable_reel: P(18, 18, "circle", "low", true, "Cable drum", { radius: 9 }),
+  tire_stack: P(16, 16, "circle", "low", true, "Tyres", { radius: 8 }),
+  workbench: P(36, 14, "rect", "low", false, "Workbench"),
+  scrap_pile: P(30, 26, "rect", "low", true, "Scrap metal", { inset: 3 }),
+  container: P(48, 116, "rect", "high", true, "Container"),
   // vehicles
-  car_zhiguli: P(34, 80, "rect", "low", true, "\u0416\u0438\u0433\u0443\u043B\u0438", { inset: 1 }),
-  car_volga: P(36, 92, "rect", "low", true, "\u0412\u043E\u043B\u0433\u0430", { inset: 1 }),
-  car_wreck: P(34, 80, "rect", "low", true, "\u041E\u0441\u0442\u043E\u0432 \u043C\u0430\u0448\u0438\u043D\u044B", { inset: 2 }),
-  bus_paz: P(50, 136, "rect", "high", true, "\u0410\u0432\u0442\u043E\u0431\u0443\u0441", { inset: 1 }),
+  car_zhiguli: P(34, 80, "rect", "low", true, "Zhiguli", { inset: 1 }),
+  car_volga: P(36, 92, "rect", "low", true, "Volga", { inset: 1 }),
+  car_wreck: P(34, 80, "rect", "low", true, "Car wreck", { inset: 2 }),
+  bus_paz: P(50, 136, "rect", "high", true, "Bus", { inset: 1 }),
   // garages & yard
-  garage: P(64, 112, "rect", "high", true, "\u0413\u0430\u0440\u0430\u0436"),
-  garage_shell: P(46, 92, "rect", "high", true, "\u0413\u0430\u0440\u0430\u0436-\u0440\u0430\u043A\u0443\u0448\u043A\u0430", { inset: 1 }),
-  trash_container: P(34, 20, "rect", "low", true, "\u041C\u0443\u0441\u043E\u0440\u043D\u044B\u0439 \u043A\u043E\u043D\u0442\u0435\u0439\u043D\u0435\u0440"),
-  bench: P(38, 11, "rect", "low", false, "\u041B\u0430\u0432\u043E\u0447\u043A\u0430"),
-  domino_table: P(22, 22, "rect", "low", false, "\u0421\u0442\u043E\u043B \u0434\u043E\u043C\u0438\u043D\u043E\u0448\u043D\u0438\u043A\u043E\u0432", { inset: 3 }),
-  swing: P(50, 14, "rect", "low", false, "\u041A\u0430\u0447\u0435\u043B\u0438", { inset: 4 }),
-  slide: P(16, 44, "rect", "low", false, "\u0413\u043E\u0440\u043A\u0430", { inset: 2 }),
-  carousel: P(34, 34, "circle", "low", false, "\u041A\u0430\u0440\u0443\u0441\u0435\u043B\u044C", { radius: 14 }),
-  sandbox: P(44, 44, "none", "floor", false, "\u041F\u0435\u0441\u043E\u0447\u043D\u0438\u0446\u0430"),
-  monkey_bars: P(40, 10, "rect", "low", false, "\u0422\u0443\u0440\u043D\u0438\u043A", { inset: 2 }),
-  kiosk: P(40, 30, "rect", "high", true, "\u041A\u0438\u043E\u0441\u043A"),
-  lamp_post: P(8, 8, "circle", "low", true, "\u0424\u043E\u043D\u0430\u0440\u044C", { radius: 3 }),
-  tree_trunk: P(10, 10, "circle", "low", true, "\u0414\u0435\u0440\u0435\u0432\u043E", { radius: 4 }),
-  phone_booth: P(18, 18, "rect", "high", true, "\u0422\u0435\u043B\u0435\u0444\u043E\u043D\u043D\u0430\u044F \u0431\u0443\u0434\u043A\u0430"),
-  water_pump: P(12, 12, "circle", "low", true, "\u041A\u043E\u043B\u043E\u043D\u043A\u0430", { radius: 4 })
+  garage: P(64, 112, "rect", "high", true, "Garage"),
+  garage_shell: P(46, 92, "rect", "high", true, "Shell garage", { inset: 1 }),
+  trash_container: P(34, 20, "rect", "low", true, "Rubbish skip"),
+  bench: P(38, 11, "rect", "low", false, "Bench"),
+  domino_table: P(22, 22, "rect", "low", false, "Dominoes table", { inset: 3 }),
+  swing: P(50, 14, "rect", "low", false, "Swing", { inset: 4 }),
+  slide: P(16, 44, "rect", "low", false, "Slide", { inset: 2 }),
+  carousel: P(34, 34, "circle", "low", false, "Roundabout", { radius: 14 }),
+  sandbox: P(44, 44, "none", "floor", false, "Sandpit"),
+  monkey_bars: P(40, 10, "rect", "low", false, "Pull-up bar", { inset: 2 }),
+  kiosk: P(40, 30, "rect", "high", true, "Kiosk"),
+  lamp_post: P(8, 8, "circle", "low", true, "Street lamp", { radius: 3 }),
+  tree_trunk: P(10, 10, "circle", "low", true, "Tree", { radius: 4 }),
+  phone_booth: P(18, 18, "rect", "high", true, "Phone box"),
+  water_pump: P(12, 12, "circle", "low", true, "Water pump", { radius: 4 }),
+  // construction site «Стройка»
+  brick_pallet: P(24, 20, "rect", "low", true, "Brick pallet"),
+  cinder_blocks: P(24, 24, "rect", "high", true, "Cinder blocks"),
+  concrete_pipes: P(66, 40, "rect", "high", true, "Concrete pipes", { inset: 2 }),
+  timber: P(46, 16, "rect", "low", true, "Timber"),
+  cement_bags: P(26, 18, "rect", "low", true, "Cement bags"),
+  mixer_truck: P(46, 116, "rect", "high", true, "Mixer truck", { inset: 2 }),
+  excavator: P(58, 92, "rect", "high", true, "Excavator", { inset: 3 }),
+  sand_pile: P(64, 52, "circle", "low", true, "Sand pile", { radius: 23 }),
+  crane_mast: P(28, 28, "rect", "high", true, "Tower crane"),
+  scaffold: P(64, 14, "rect", "high", false, "Scaffolding", { inset: 2 }),
+  rebar: P(40, 12, "none", "floor", false, "Rebar"),
+  wheelbarrow: P(14, 24, "none", "floor", false, "Wheelbarrow"),
+  // shop «Гастроном» (shelves also serve the pharmacy and the library)
+  shelf: P(44, 14, "rect", "high", true, "Shelving"),
+  fridge_case: P(46, 18, "rect", "low", true, "Fridge counter"),
+  counter: P(50, 14, "rect", "low", true, "Counter"),
+  cash_desk: P(34, 16, "rect", "low", true, "Cash desk"),
+  produce_stall: P(40, 24, "rect", "low", true, "Produce stall"),
+  sacks: P(26, 20, "rect", "low", true, "Sacks"),
+  soda_machine: P(16, 14, "rect", "high", true, "Soda machine"),
+  // house of culture «Дом культуры»
+  theater_seats: P(54, 12, "rect", "low", false, "Row of seats"),
+  stage_speaker: P(14, 14, "rect", "high", true, "Water pump"),
+  drum_kit: P(28, 22, "rect", "low", false, "Drum kit", { inset: 2 }),
+  pool_table: P(46, 26, "rect", "low", true, "Pool table"),
+  cafe_table: P(20, 20, "circle", "low", false, "Caf\xE9 table", { radius: 7 }),
+  piano: P(34, 14, "rect", "high", true, "Piano"),
+  statue: P(30, 30, "rect", "high", true, "Monument"),
+  bust: P(18, 18, "rect", "high", true, "Bust"),
+  planter: P(32, 32, "rect", "low", true, "Flower bed"),
+  column: P(18, 18, "circle", "high", true, "Column", { radius: 8 }),
+  coat_rack: P(44, 10, "rect", "high", false, "Coat rack"),
+  sofa: P(36, 14, "rect", "low", false, "Sofa"),
+  curtain: P(48, 8, "rect", "high", false, "Stage curtain"),
+  mixing_desk: P(30, 14, "rect", "low", true, "Mixing desk"),
+  // hospital «Больница»
+  hospital_bed: P(22, 40, "rect", "low", false, "Hospital bed"),
+  operating_table: P(20, 40, "rect", "low", false, "Operating table"),
+  med_screen: P(36, 6, "rect", "high", false, "Screen"),
+  med_cabinet: P(32, 12, "rect", "high", true, "Medicine cabinet"),
+  xray: P(40, 32, "rect", "high", true, "X-ray machine"),
+  bench_row: P(54, 12, "rect", "low", false, "Row of seats"),
+  wheelchair: P(14, 16, "none", "floor", false, "Wheelchair"),
+  stretcher: P(16, 36, "rect", "low", false, "Stretcher"),
+  ambulance: P(36, 80, "rect", "high", true, "Ambulance", { inset: 1 }),
+  tent: P(52, 52, "rect", "high", true, "Tent"),
+  iv_stand: P(8, 8, "none", "floor", false, "IV stand")
 };
 var PROP_TYPES = Object.keys(PROP_DEFS);
 
@@ -11208,13 +12368,17 @@ function rayCircle(ox, oy, dx, dy, cx, cy, r) {
 }
 
 // packages/shared/src/maps/types.ts
-var MAP_IDS = ["factory", "garages", "yard"];
+var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital"];
 
 // packages/shared/src/maps/index.ts
 var builders2 = {
   factory: buildFactoryMap,
   garages: buildGaragesMap,
-  yard: buildYardMap
+  yard: buildYardMap,
+  stroyka: buildStroykaMap,
+  dk: buildDkMap,
+  gastronom: buildGastronomMap,
+  hospital: buildHospitalMap
 };
 var mapCache = /* @__PURE__ */ new Map();
 var collisionCache = /* @__PURE__ */ new Map();
@@ -11237,7 +12401,7 @@ function getCollision(id) {
 function isMapId(v) {
   return typeof v === "string" && MAP_IDS.includes(v);
 }
-var MAP_ORDER = ["factory", "garages", "yard"];
+var MAP_ORDER = ["factory", "stroyka", "dk", "gastronom", "hospital", "garages", "yard"];
 
 // packages/shared/src/sim/math.ts
 var TAU = Math.PI * 2;
@@ -11290,9 +12454,12 @@ var BTN = {
   RELOAD: 2,
   WALK: 4,
   INTERACT: 8,
-  NEXT_WEAPON: 16
+  NEXT_WEAPON: 16,
+  /** Throw / place / deploy the equipment (slot 4); detonates a placed C4. */
+  GADGET: 32
 };
 var MAX_SLOTS = 8;
+var SUPPLY_POOL = ["avtomat", "obrez", "ksyuha", "s12", "mp5", "m4", "g36", "svd", "m249", "rpg"];
 function createPlayerState(id, slot, name, character, isBot, now, seed) {
   return {
     id,
@@ -11314,7 +12481,15 @@ function createPlayerState(id, slot, name, character, isBot, now, seed) {
     respawnAt: 0,
     invulnUntil: 0,
     weapon: "pistol",
-    pistolMag: WEAPONS.pistol.magazine,
+    sidearm: "pistol",
+    melee: "montirovka",
+    primary: null,
+    mods: {},
+    gadget: null,
+    gadgetCharges: 0,
+    gadgetReadyAt: 0,
+    flashedUntil: 0,
+    sideMag: WEAPONS.pistol.magazine,
     heavy: null,
     heavyMag: 0,
     heavyReserve: 0,
@@ -11352,7 +12527,7 @@ function stepMovement(p, input, collision, normals) {
     mag = 1;
   }
   const walking = (input.buttons & BTN.WALK) !== 0;
-  const maxSpeed = walking ? WALK_SPEED : RUN_SPEED;
+  const maxSpeed = (walking ? WALK_SPEED : RUN_SPEED) * WEAPONS[p.weapon].moveSpeed;
   const tx = mx * maxSpeed;
   const ty = my * maxSpeed;
   let dvx = tx - p.vx;
@@ -11384,14 +12559,30 @@ function stepMovement(p, input, collision, normals) {
   }
   p.walking = walking || mag > 0.01 && mag < 0.6;
 }
+var modCache = /* @__PURE__ */ new WeakMap();
+function weaponFor(p, w) {
+  const mods = p.mods[w];
+  if (!mods || mods.length === 0) return WEAPONS[w];
+  let per = modCache.get(mods);
+  if (!per) {
+    per = /* @__PURE__ */ new Map();
+    modCache.set(mods, per);
+  }
+  let def = per.get(w);
+  if (!def) {
+    def = applyMods(WEAPONS[w], mods);
+    per.set(w, def);
+  }
+  return def;
+}
 function weaponAmmo(p, w) {
-  if (w === "pistol") return { mag: p.pistolMag, reserve: -1 };
-  if (w === "montirovka") return { mag: 0, reserve: 0 };
+  if (w === p.sidearm) return { mag: p.sideMag, reserve: -1 };
+  if (w === p.melee) return { mag: 0, reserve: 0 };
   if (p.heavy === w) return { mag: p.heavyMag, reserve: p.heavyReserve };
   return { mag: 0, reserve: 0 };
 }
 function availableWeapons(p) {
-  const out = ["pistol", "montirovka"];
+  const out = [p.sidearm, p.melee];
   if (p.heavy) out.push(p.heavy);
   return out;
 }
@@ -11405,10 +12596,10 @@ function setWeapon(p, w) {
   p.reloadWeapon = null;
   p.reloadUntil = 0;
   p.spreadHeat = 0;
-  p.nextFireAt = Math.max(p.nextFireAt, p.clock + 150);
+  p.nextFireAt = Math.max(p.nextFireAt, p.clock + weaponFor(p, w).drawMs);
 }
 function switchToSlot(p, slot) {
-  const target = slot === 1 ? "pistol" : slot === 2 ? "montirovka" : p.heavy;
+  const target = slot === 1 ? p.sidearm : slot === 2 ? p.melee : p.heavy;
   if (!target || target === p.weapon) return;
   setWeapon(p, target);
 }
@@ -11418,8 +12609,8 @@ function cycleWeapon(p) {
   setWeapon(p, list[(i + 1) % list.length]);
 }
 function startReload(p, emit) {
-  const w = WEAPONS[p.weapon];
-  if (w.kind !== "hitscan" || p.reloadWeapon) return false;
+  const w = weaponFor(p, p.weapon);
+  if (w.kind === "melee" || p.reloadWeapon) return false;
   const ammo = weaponAmmo(p, p.weapon);
   if (ammo.mag >= w.magazine) return false;
   if (ammo.reserve === 0) return false;
@@ -11430,8 +12621,8 @@ function startReload(p, emit) {
 }
 function finishReload(p) {
   if (!p.reloadWeapon) return;
-  const w = WEAPONS[p.reloadWeapon];
-  if (p.reloadWeapon === "pistol") p.pistolMag = w.magazine;
+  const w = weaponFor(p, p.reloadWeapon);
+  if (p.reloadWeapon === p.sidearm) p.sideMag = w.magazine;
   else if (p.heavy === p.reloadWeapon) {
     const take = Math.min(w.magazine - p.heavyMag, p.heavyReserve);
     p.heavyMag += take;
@@ -11441,7 +12632,7 @@ function finishReload(p) {
   p.reloadUntil = 0;
 }
 function stepWeapons(p, input, pressed, hooks) {
-  const w = WEAPONS[p.weapon];
+  const w = weaponFor(p, p.weapon);
   if (w.spreadRecovery > 0 && p.clock - p.lastShotAt > w.fireIntervalMs * 1.5) {
     p.spreadHeat = Math.max(0, p.spreadHeat - w.spreadRecovery * TICK_DT);
   }
@@ -11450,15 +12641,16 @@ function stepWeapons(p, input, pressed, hooks) {
   if (pressed & BTN.NEXT_WEAPON) cycleWeapon(p);
   if (pressed & BTN.RELOAD) startReload(p, hooks.event);
   if ((input.buttons & BTN.FIRE) === 0) return;
-  const cur = WEAPONS[p.weapon];
+  const cur = weaponFor(p, p.weapon);
   if (p.reloadWeapon) return;
   if (p.clock + 1e-6 < p.nextFireAt) return;
   if (!cur.automatic && (pressed & BTN.FIRE) === 0) return;
+  const fireBase = p.clock - p.nextFireAt < TICK_MS - 1e-6 ? p.nextFireAt : p.clock;
   if (cur.kind === "melee") {
     p.shotCounter++;
     p.lastShotAt = p.clock;
     hooks.melee(p, cur);
-    p.nextFireAt = p.clock + cur.fireIntervalMs;
+    p.nextFireAt = fireBase + cur.fireIntervalMs;
     return;
   }
   const ammo = weaponAmmo(p, p.weapon);
@@ -11466,14 +12658,14 @@ function stepWeapons(p, input, pressed, hooks) {
     if (!startReload(p, hooks.event) && pressed & BTN.FIRE) hooks.event({ t: "dry", slot: p.slot });
     return;
   }
-  if (p.weapon === "pistol") p.pistolMag--;
+  if (p.weapon === p.sidearm) p.sideMag--;
   else p.heavyMag--;
   p.shotCounter++;
   p.lastShotAt = p.clock;
   const spread = cur.spread + p.spreadHeat;
   p.spreadHeat = Math.min(cur.spreadMax, p.spreadHeat + cur.spreadPerShot);
   hooks.shot(p, cur, spread);
-  p.nextFireAt = p.clock + cur.fireIntervalMs;
+  p.nextFireAt = fireBase + cur.fireIntervalMs;
   if (weaponAmmo(p, p.weapon).mag <= 0) startReload(p, hooks.event);
 }
 var World = class {
@@ -11490,8 +12682,12 @@ var World = class {
   endReason = null;
   players = /* @__PURE__ */ new Map();
   pickups = [];
+  projectiles = [];
+  gadgets = [];
   events = [];
   nextPickupId = 1;
+  nextProjectileId = 1;
+  nextGadgetId = 1;
   /** World time of the next «дефицит» supply drop (active phase only). */
   nextSupplyAt = 0;
   history = [];
@@ -11506,6 +12702,7 @@ var World = class {
     map.pickups.forEach((ps, i) => {
       this.pickups.push({
         id: this.nextPickupId++,
+        kind: "weapon",
         weapon: ps.weapon,
         x: ps.x,
         y: ps.y,
@@ -11519,6 +12716,9 @@ var World = class {
         supply: false
       });
     });
+    map.medkits.forEach((m, i) => {
+      this.pickups.push({ id: this.nextPickupId++, kind: "medkit", weapon: null, x: m.x, y: m.y, active: true, dropped: false, mag: 0, reserve: 0, respawnAt: 0, expiresAt: 0, spawnIndex: i, supply: false });
+    });
   }
   // ── Roster ──────────────────────────────────────────────────────────────
   freeSlot() {
@@ -11526,21 +12726,43 @@ var World = class {
     for (let s = 0; s < MAX_SLOTS; s++) if (!used.has(s)) return s;
     return -1;
   }
-  addPlayer(id, name, character, isBot = false) {
+  addPlayer(id, name, character, isBot = false, loadout = DEFAULT_LOADOUT) {
     const existing = this.players.get(id);
     if (existing) return existing;
     const slot = this.freeSlot();
     if (slot < 0) throw new Error("room full");
     const p = createPlayerState(id, slot, name, character, isBot, this.time, hash32(slot + 1, Math.floor(this.rng() * 4294967295)));
+    this.applyLoadout(p, loadout);
     this.players.set(id, p);
     if (this.phase === "countdown" || this.phase === "active") this.spawnPlayer(p, this.phase === "countdown");
     return p;
+  }
+  /** Loadout used from the next spawn on (the weapon in hand is not swapped mid-life). */
+  setLoadout(id, loadout) {
+    const p = this.players.get(id);
+    if (p) this.applyLoadout(p, loadout);
+  }
+  applyLoadout(p, raw) {
+    const l = sanitizeLoadout(raw);
+    p.sidearm = l.sidearm;
+    p.melee = l.melee;
+    p.primary = l.primary;
+    p.mods = l.mods;
+    p.gadget = l.gadget;
+    if (!p.alive) {
+      p.weapon = l.primary ?? l.sidearm;
+      p.sideMag = weaponFor(p, l.sidearm).magazine;
+    }
   }
   removePlayer(id) {
     const p = this.players.get(id);
     if (!p) return;
     if (p.alive && p.heavy) this.dropHeavy(p);
     this.players.delete(id);
+    for (let i = this.gadgets.length - 1; i >= 0; i--) {
+      const g = this.gadgets[i];
+      if (g.ownerId === id && (g.kind === "mine" || g.kind === "c4" || g.kind === "turret")) this.gadgets.splice(i, 1);
+    }
   }
   playerBySlot(slot) {
     for (const p of this.players.values()) if (p.slot === slot) return p;
@@ -11596,6 +12818,8 @@ var World = class {
       p.heavy = null;
     }
     this.pickups.splice(0, this.pickups.length, ...this.pickups.filter((pk) => !pk.dropped));
+    this.projectiles.length = 0;
+    this.gadgets.length = 0;
     this.resetPickups();
   }
   close() {
@@ -11617,9 +12841,13 @@ var World = class {
     for (let i = this.pickups.length - 1; i >= 0; i--) if (this.pickups[i].dropped) this.pickups.splice(i, 1);
     for (const pk of this.pickups) {
       pk.active = true;
-      pk.mag = WEAPONS[pk.weapon].magazine;
-      pk.reserve = WEAPONS[pk.weapon].reserveOnPickup;
+      if (pk.weapon) {
+        pk.mag = WEAPONS[pk.weapon].magazine;
+        pk.reserve = WEAPONS[pk.weapon].reserveOnPickup;
+      }
     }
+    this.projectiles.length = 0;
+    this.gadgets.length = 0;
   }
   get matchTimeLeftMs() {
     if (this.phase === "active") return Math.max(0, this.matchEndsAt - this.time);
@@ -11669,17 +12897,28 @@ var World = class {
     p.alive = true;
     p.spawned = true;
     p.invulnUntil = this.time + (frozen ? this.config.countdownMs + this.config.spawnProtectionMs : this.config.spawnProtectionMs);
-    p.weapon = "pistol";
-    p.pistolMag = WEAPONS.pistol.magazine;
-    p.heavy = null;
-    p.heavyMag = 0;
-    p.heavyReserve = 0;
+    p.sideMag = weaponFor(p, p.sidearm).magazine;
+    if (p.primary) {
+      const def = weaponFor(p, p.primary);
+      p.heavy = p.primary;
+      p.heavyMag = def.magazine;
+      p.heavyReserve = Math.min(WEAPONS[p.primary].reserveMax, def.magazine);
+      p.weapon = p.primary;
+    } else {
+      p.heavy = null;
+      p.heavyMag = 0;
+      p.heavyReserve = 0;
+      p.weapon = p.sidearm;
+    }
     p.reloadUntil = 0;
     p.reloadWeapon = null;
     p.nextFireAt = p.clock;
     p.spreadHeat = 0;
     p.lastDamagedBy = null;
     p.recentDamage = [];
+    p.gadgetCharges = p.gadget ? GADGETS[p.gadget].charges : 0;
+    p.gadgetReadyAt = 0;
+    p.flashedUntil = 0;
     this.events.push({ t: "respawn", slot: p.slot, x: p.x, y: p.y });
   }
   // ── Inputs ──────────────────────────────────────────────────────────────
@@ -11696,6 +12935,7 @@ var World = class {
     if (this.phase !== "active") return;
     stepMovement(p, input, this.collision, this.normals);
     this.applyWeaponInput(p, input, pressed);
+    if (pressed & BTN.GADGET) this.useGadget(p);
     this.checkPickups(p, (pressed & BTN.INTERACT) !== 0);
   }
   applyWeaponInput(p, input, pressed) {
@@ -11726,15 +12966,19 @@ var World = class {
   }
   doShot(p, w, spread, viewTime) {
     p.invulnUntil = Math.min(p.invulnUntil, this.time);
+    if (w.kind === "projectile" && w.projectile) return this.launch(p, w, spread);
     const targets = this.targetsAt(viewTime, p);
+    const turrets = this.gadgets.filter((g) => g.kind === "turret" && g.ownerId !== p.id);
     const pellets = [];
     const dmgByVictim = /* @__PURE__ */ new Map();
+    const dmgByTurret = /* @__PURE__ */ new Map();
     for (const a of pelletAngles(p, w, spread)) {
       const dx = Math.cos(a);
       const dy = Math.sin(a);
       const wallHit = this.collision.raycast(p.x, p.y, dx, dy, w.range, "shot");
       let maxT = wallHit ? wallHit.t : w.range;
       let victim = null;
+      let turret = null;
       for (const tgt of targets) {
         const t = rayCircle(p.x, p.y, dx, dy, tgt.x, tgt.y, PLAYER_RADIUS);
         if (t !== null && t < maxT) {
@@ -11742,16 +12986,106 @@ var World = class {
           victim = tgt.p;
         }
       }
+      for (const g of turrets) {
+        const t = rayCircle(p.x, p.y, dx, dy, g.x, g.y, TURRET.radius);
+        if (t !== null && t < maxT) {
+          maxT = t;
+          victim = null;
+          turret = g;
+        }
+      }
       if (victim) {
         const dmg = w.damage * damageFalloff(w, maxT);
         dmgByVictim.set(victim, (dmgByVictim.get(victim) ?? 0) + dmg);
         pellets.push({ angle: a, dist: maxT, hit: victim.slot, kind: 2 });
+      } else if (turret) {
+        dmgByTurret.set(turret, (dmgByTurret.get(turret) ?? 0) + w.damage * damageFalloff(w, maxT));
+        pellets.push({ angle: a, dist: maxT, hit: -1, kind: 1 });
       } else {
         pellets.push({ angle: a, dist: maxT, hit: -1, kind: wallHit ? 1 : 0 });
       }
     }
-    this.events.push({ t: "shot", shooter: p.slot, weapon: w.id, shotId: p.shotCounter, ox: p.x, oy: p.y, pellets });
+    this.events.push({ t: "shot", shooter: p.slot, weapon: w.id, shotId: p.shotCounter, ox: p.x, oy: p.y, pellets, ...w.silenced ? { silenced: true } : {} });
     for (const [victim, dmg] of dmgByVictim) this.applyDamage(victim, p, Math.round(dmg), w.id);
+    for (const [g, dmg] of dmgByTurret) this.damageTurret(g, dmg);
+  }
+  /** Rockets and grenades: fly in a straight line, explode on walls, players or at max range. */
+  launch(p, w, spread) {
+    const pr = w.projectile;
+    const angle = pelletAngles(p, w, spread)[0];
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    const start = Math.min(14, this.collision.raycast(p.x, p.y, dx, dy, 14, "shot")?.t ?? 14);
+    const proj = {
+      id: this.nextProjectileId++,
+      ownerId: p.id,
+      ownerSlot: p.slot,
+      weapon: w.id,
+      x: p.x + dx * start,
+      y: p.y + dy * start,
+      dx,
+      dy,
+      speed: pr.speed,
+      traveled: start,
+      maxRange: w.range,
+      radius: pr.radius,
+      splash: pr.splash,
+      direct: w.damage,
+      selfFactor: pr.selfFactor
+    };
+    this.projectiles.push(proj);
+    this.events.push({ t: "rocket", id: proj.id, shooter: p.slot, weapon: w.id, x: proj.x, y: proj.y, angle, speed: pr.speed, range: w.range });
+  }
+  stepProjectiles() {
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const pr = this.projectiles[i];
+      const step = Math.min(pr.speed * (TICK_MS / 1e3), pr.maxRange - pr.traveled);
+      const wall = this.collision.raycast(pr.x, pr.y, pr.dx, pr.dy, step, "shot");
+      let t = wall ? wall.t : step;
+      let direct = null;
+      for (const q of this.players.values()) {
+        if (!q.alive || q.id === pr.ownerId && pr.traveled < 40) continue;
+        const ht = rayCircle(pr.x, pr.y, pr.dx, pr.dy, q.x, q.y, PLAYER_RADIUS);
+        if (ht !== null && ht <= t) {
+          t = ht;
+          direct = q;
+        }
+      }
+      pr.x += pr.dx * t;
+      pr.y += pr.dy * t;
+      pr.traveled += t;
+      if (wall || direct || pr.traveled >= pr.maxRange - 0.01) {
+        const bx = pr.x - pr.dx * (wall && !direct ? 2 : 0);
+        const by = pr.y - pr.dy * (wall && !direct ? 2 : 0);
+        this.projectiles.splice(i, 1);
+        this.explode(pr, bx, by, direct);
+      }
+    }
+  }
+  explode(pr, x, y, direct) {
+    this.blast({ id: pr.id, ownerId: pr.ownerId, ownerSlot: pr.ownerSlot, arms: pr.weapon, x, y, radius: pr.radius, splash: pr.splash, selfFactor: pr.selfFactor, direct, directDamage: pr.direct });
+  }
+  /** An explosion: splash damage with line of sight to players and turrets around (x, y). */
+  blast(b2) {
+    const { x, y, radius } = b2;
+    this.events.push({ t: "boom", id: b2.id, shooter: b2.ownerSlot, weapon: b2.arms, x, y, radius });
+    const owner = this.players.get(b2.ownerId) ?? null;
+    for (const q of [...this.players.values()]) {
+      if (!q.alive) continue;
+      const d = Math.hypot(q.x - x, q.y - y);
+      if (d > radius + PLAYER_RADIUS) continue;
+      if (q !== b2.direct && !this.collision.lineOfSight(x, y, q.x, q.y)) continue;
+      const k = Math.max(0, Math.min(1, (d - PLAYER_RADIUS * 0.5) / radius));
+      let dmg = b2.splash * (1 - 0.7 * k) + (q === b2.direct ? b2.directDamage ?? 0 : 0);
+      if (q.id === b2.ownerId) dmg *= b2.selfFactor;
+      this.applyDamage(q, owner, Math.round(dmg), b2.arms);
+    }
+    for (const g of [...this.gadgets]) {
+      if (g.kind !== "turret") continue;
+      const d = Math.hypot(g.x - x, g.y - y);
+      if (d > radius + TURRET.radius || !this.collision.lineOfSight(x, y, g.x, g.y)) continue;
+      this.damageTurret(g, b2.splash * (1 - 0.7 * Math.max(0, Math.min(1, d / radius))));
+    }
   }
   doMelee(p, w, viewTime) {
     p.invulnUntil = Math.min(p.invulnUntil, this.time);
@@ -11772,7 +13106,15 @@ var World = class {
       }
     }
     this.events.push({ t: "melee", shooter: p.slot, angle: p.aim, hit: best ? best.slot : -1 });
-    if (best) this.applyDamage(best, p, w.damage, w.id);
+    if (best) return this.applyDamage(best, p, w.damage, w.id);
+    for (const g of this.gadgets) {
+      if (g.kind !== "turret" || g.ownerId === p.id) continue;
+      const d = Math.hypot(g.x - p.x, g.y - p.y);
+      if (d > w.meleeRange + TURRET.radius) continue;
+      if (Math.abs(angleDiff(p.aim, Math.atan2(g.y - p.y, g.x - p.x))) > w.meleeArc / 2 && d > TURRET.radius * 1.6) continue;
+      this.damageTurret(g, w.damage);
+      return;
+    }
   }
   applyDamage(victim, attacker, amount, weapon) {
     if (!victim.alive || amount <= 0) return;
@@ -11782,8 +13124,8 @@ var World = class {
     victim.lastHitAt = this.time;
     if (attacker) {
       victim.lastDamagedBy = attacker.id;
-      attacker.damageDealt += amount;
       if (attacker !== victim) {
+        attacker.damageDealt += amount;
         const rec = victim.recentDamage.find((r) => r.id === attacker.id);
         if (rec) {
           rec.amount += amount;
@@ -11828,6 +13170,276 @@ var World = class {
     this.events.push({ t: "kill", killer: killer ? killer.slot : -1, victim: victim.slot, weapon, assists });
     if (scorers.some((p) => p.score >= this.config.scoreLimit)) this.finish("score");
   }
+  // ── Equipment (slot 4) ──────────────────────────────────────────────────
+  /** Throw / place / deploy the equipped gadget, or detonate this player's armed C4. */
+  useGadget(p) {
+    const armedC4 = this.gadgets.filter((g2) => g2.kind === "c4" && g2.ownerId === p.id && this.time >= g2.fuseAt);
+    if (armedC4.length > 0) {
+      for (const g2 of armedC4) this.detonateGadget(g2);
+      return;
+    }
+    if (!p.gadget || p.gadgetCharges <= 0 || this.time < p.gadgetReadyAt) return;
+    const kind = p.gadget;
+    const def = GADGETS[kind];
+    const dx = Math.cos(p.aim);
+    const dy = Math.sin(p.aim);
+    const reach = def.use === "deploy" ? PLAYER_RADIUS + TURRET.radius + 8 : 12;
+    const clearance = def.use === "deploy" ? TURRET.radius + 2 : 5;
+    const wall = this.collision.raycast(p.x, p.y, dx, dy, reach + 4, "shot");
+    const d = wall ? Math.max(0, wall.t - clearance) : reach;
+    let x = p.x + dx * d;
+    let y = p.y + dy * d;
+    if (def.use === "deploy" && this.collision.overlapsCircle(x, y, TURRET.radius)) {
+      x = p.x;
+      y = p.y;
+    }
+    const g = {
+      id: this.nextGadgetId,
+      kind,
+      ownerId: p.id,
+      ownerSlot: p.slot,
+      x,
+      y,
+      vx: def.use === "throw" ? dx * def.throwSpeed + p.vx * 0.5 : 0,
+      vy: def.use === "throw" ? dy * def.throwSpeed + p.vy * 0.5 : 0,
+      phase: def.use === "throw" ? "moving" : "armed",
+      born: this.time,
+      fuseAt: this.time + def.fuseMs,
+      endsAt: def.use === "throw" ? 0 : this.time + def.fuseMs + def.durationMs,
+      hp: def.use === "deploy" ? TURRET.hp : 0,
+      aim: p.aim,
+      nextTickAt: 0,
+      ammo: def.use === "deploy" ? TURRET.ammo : 0,
+      shots: 0,
+      triggeredAt: 0
+    };
+    this.nextGadgetId = this.nextGadgetId >= 65535 ? 1 : this.nextGadgetId + 1;
+    const limit = kind === "mine" ? 2 : def.use === "throw" ? Infinity : 1;
+    if (limit < Infinity) {
+      const mine = this.gadgets.filter((o) => o.ownerId === p.id && o.kind === kind);
+      while (mine.length >= limit) this.removeGadget(mine.shift());
+    }
+    this.gadgets.push(g);
+    p.gadgetCharges--;
+    p.gadgetReadyAt = this.time + def.cooldownMs;
+    p.invulnUntil = Math.min(p.invulnUntil, this.time);
+    this.events.push({ t: "gadget", id: g.id, kind, slot: p.slot, x, y });
+  }
+  removeGadget(g) {
+    const i = this.gadgets.indexOf(g);
+    if (i >= 0) this.gadgets.splice(i, 1);
+  }
+  detonateGadget(g) {
+    const def = GADGETS[g.kind];
+    this.removeGadget(g);
+    this.blast({ id: 65536 + g.id, ownerId: g.ownerId, ownerSlot: g.ownerSlot, arms: g.kind, x: g.x, y: g.y, radius: def.radius, splash: def.damage, selfFactor: def.selfFactor });
+  }
+  damageTurret(g, amount) {
+    if (g.kind !== "turret" || !this.gadgets.includes(g)) return;
+    g.hp -= amount;
+    if (g.hp <= 0) {
+      this.removeGadget(g);
+      this.events.push({ t: "turretDown", id: g.id, x: g.x, y: g.y });
+    }
+  }
+  /** Is the segment a→b hidden by an active smoke cloud? */
+  smokeBlocks(ax, ay, bx, by) {
+    const r = GADGETS.smoke.radius * 0.85;
+    for (const g of this.gadgets) {
+      if (g.kind !== "smoke" || g.phase !== "active") continue;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const l2 = dx * dx + dy * dy || 1;
+      const t = Math.max(0, Math.min(1, ((g.x - ax) * dx + (g.y - ay) * dy) / l2));
+      const px = ax + dx * t - g.x;
+      const py = ay + dy * t - g.y;
+      if (px * px + py * py < r * r) return true;
+    }
+    return false;
+  }
+  /** Is the point inside an active smoke cloud? */
+  inSmoke(x, y) {
+    const r = GADGETS.smoke.radius * 0.85;
+    return this.gadgets.some((g) => g.kind === "smoke" && g.phase === "active" && (g.x - x) ** 2 + (g.y - y) ** 2 < r * r);
+  }
+  /** Slides a thrown item along the floor with friction and wall bounces. Returns true if it hit a wall. */
+  slide(g) {
+    const dt = TICK_MS / 1e3;
+    const sp = Math.hypot(g.vx, g.vy);
+    if (sp <= 0) return false;
+    const nsp = Math.max(0, sp - THROW_FRICTION * dt);
+    let dist = (sp + nsp) / 2 * dt;
+    let dx = g.vx / sp;
+    let dy = g.vy / sp;
+    let bounced = false;
+    for (let k = 0; k < 3 && dist > 0.01; k++) {
+      const hit = this.collision.raycast(g.x, g.y, dx, dy, dist + 3, "shot");
+      if (!hit) {
+        g.x += dx * dist;
+        g.y += dy * dist;
+        break;
+      }
+      const t = Math.max(0, hit.t - 3);
+      g.x += dx * t;
+      g.y += dy * t;
+      dist = (dist - t) * THROW_BOUNCE;
+      const dot = dx * hit.nx + dy * hit.ny;
+      dx -= 2 * dot * hit.nx;
+      dy -= 2 * dot * hit.ny;
+      bounced = true;
+      if (g.kind === "molotov") break;
+    }
+    const out = bounced ? nsp * THROW_BOUNCE : nsp;
+    g.vx = out < 6 ? 0 : dx * out;
+    g.vy = out < 6 ? 0 : dy * out;
+    return bounced;
+  }
+  stepGadgets() {
+    for (const g of [...this.gadgets]) {
+      if (!this.gadgets.includes(g)) continue;
+      const def = GADGETS[g.kind];
+      if (g.phase === "moving") {
+        const hitWall = this.slide(g);
+        const stopped = g.vx === 0 && g.vy === 0;
+        if (g.kind === "molotov") {
+          if (hitWall || stopped || this.time >= g.fuseAt) this.ignite(g);
+        } else if (this.time >= g.fuseAt) {
+          if (g.kind === "f1") this.detonateGadget(g);
+          else if (g.kind === "flash") this.flashbang(g);
+          else if (g.kind === "smoke") {
+            g.phase = "active";
+            g.vx = 0;
+            g.vy = 0;
+            g.endsAt = this.time + def.durationMs;
+            this.events.push({ t: "smoke", id: g.id, x: g.x, y: g.y, radius: def.radius });
+          }
+        }
+        continue;
+      }
+      switch (g.kind) {
+        case "molotov":
+          if (this.time >= g.endsAt) this.removeGadget(g);
+          else if (this.time >= g.nextTickAt) {
+            g.nextTickAt += FIRE_TICK_MS;
+            this.burn(g);
+          }
+          break;
+        case "smoke":
+          if (this.time >= g.endsAt) this.removeGadget(g);
+          break;
+        case "mine":
+          if (this.time >= g.endsAt) this.removeGadget(g);
+          else if (g.triggeredAt > 0) {
+            if (this.time >= g.triggeredAt + 250) this.detonateGadget(g);
+          } else if (this.time >= g.fuseAt) {
+            for (const q of this.players.values()) {
+              if (!q.alive || q.id === g.ownerId) continue;
+              if ((q.x - g.x) ** 2 + (q.y - g.y) ** 2 > (MINE_TRIGGER + PLAYER_RADIUS) ** 2) continue;
+              g.triggeredAt = this.time;
+              this.events.push({ t: "beep", id: g.id, x: g.x, y: g.y });
+              break;
+            }
+          }
+          break;
+        case "c4":
+          if (this.time >= g.endsAt) this.removeGadget(g);
+          break;
+        case "turret":
+          this.stepTurret(g);
+          break;
+        default:
+          break;
+      }
+    }
+  }
+  ignite(g) {
+    const def = GADGETS.molotov;
+    g.phase = "active";
+    g.vx = 0;
+    g.vy = 0;
+    g.endsAt = this.time + def.durationMs;
+    g.nextTickAt = this.time;
+    this.events.push({ t: "ignite", id: g.id, x: g.x, y: g.y, radius: def.radius });
+  }
+  /** One damage tick of a burning molotov. */
+  burn(g) {
+    const def = GADGETS.molotov;
+    const owner = this.players.get(g.ownerId) ?? null;
+    for (const q of [...this.players.values()]) {
+      if (!q.alive) continue;
+      if ((q.x - g.x) ** 2 + (q.y - g.y) ** 2 > def.radius * def.radius) continue;
+      if (!this.collision.lineOfSight(g.x, g.y, q.x, q.y)) continue;
+      const dmg = q.id === g.ownerId ? def.damage * def.selfFactor : def.damage;
+      this.applyDamage(q, owner, Math.max(1, Math.round(dmg)), "molotov");
+    }
+    for (const t of [...this.gadgets]) if (t.kind === "turret" && (t.x - g.x) ** 2 + (t.y - g.y) ** 2 <= def.radius * def.radius) this.damageTurret(t, def.damage);
+  }
+  /** Flashbang: blinds everyone with line of sight, longer when close and looking at it. */
+  flashbang(g) {
+    const def = GADGETS.flash;
+    this.removeGadget(g);
+    this.events.push({ t: "flashbang", x: g.x, y: g.y });
+    for (const q of this.players.values()) {
+      if (!q.alive) continue;
+      const d = Math.hypot(q.x - g.x, q.y - g.y);
+      if (d > def.radius || !this.collision.lineOfSight(g.x, g.y, q.x, q.y)) continue;
+      const look = Math.abs(angleDiff(q.aim, Math.atan2(g.y - q.y, g.x - q.x)));
+      const facing = look < Math.PI / 3 ? 1 : look < Math.PI * 2 / 3 ? 0.6 : 0.3;
+      const ms = def.durationMs * facing * (1 - 0.4 * (d / def.radius));
+      q.flashedUntil = Math.max(q.flashedUntil, this.time + ms);
+    }
+  }
+  /** Turret: turns to the nearest visible opponent in range and fires short bursts. */
+  stepTurret(g) {
+    const def = GADGETS.turret;
+    if (this.time >= g.endsAt || g.ammo <= 0) {
+      this.removeGadget(g);
+      this.events.push({ t: "turretDown", id: g.id, x: g.x, y: g.y });
+      return;
+    }
+    if (g.phase === "armed") {
+      if (this.time >= g.fuseAt) {
+        g.phase = "active";
+        g.nextTickAt = this.time;
+      }
+      return;
+    }
+    let target = null;
+    let bestD = def.radius;
+    for (const q of this.players.values()) {
+      if (!q.alive || q.id === g.ownerId || this.time < q.invulnUntil) continue;
+      const d = Math.hypot(q.x - g.x, q.y - g.y);
+      if (d > bestD) continue;
+      if (!this.collision.lineOfSight(g.x, g.y, q.x, q.y) || this.smokeBlocks(g.x, g.y, q.x, q.y)) continue;
+      bestD = d;
+      target = q;
+    }
+    if (!target) return;
+    const want = Math.atan2(target.y - g.y, target.x - g.x);
+    const maxTurn = TURRET.turnRate * (TICK_MS / 1e3);
+    g.aim = wrapAngle(g.aim + Math.max(-maxTurn, Math.min(maxTurn, angleDiff(g.aim, want))));
+    if (Math.abs(angleDiff(g.aim, want)) > 0.12 || this.time < g.nextTickAt) return;
+    g.nextTickAt = this.time + TURRET.fireIntervalMs;
+    g.ammo--;
+    g.shots++;
+    const a = wrapAngle(g.aim + spreadNoise(g.id * 7919 + 13, g.shots, 0) * TURRET.spread);
+    const dx = Math.cos(a);
+    const dy = Math.sin(a);
+    const range = def.radius + 40;
+    const wall = this.collision.raycast(g.x, g.y, dx, dy, range, "shot");
+    let maxT = wall ? wall.t : range;
+    let victim = null;
+    for (const q of this.players.values()) {
+      if (!q.alive || q.id === g.ownerId) continue;
+      const t = rayCircle(g.x, g.y, dx, dy, q.x, q.y, PLAYER_RADIUS);
+      if (t !== null && t < maxT) {
+        maxT = t;
+        victim = q;
+      }
+    }
+    this.events.push({ t: "shot", shooter: g.ownerSlot, weapon: "turret", shotId: g.shots & 65535, ox: g.x, oy: g.y, pellets: [{ angle: a, dist: maxT, hit: victim ? victim.slot : -1, kind: victim ? 2 : wall ? 1 : 0 }], turret: true });
+    if (victim) this.applyDamage(victim, this.players.get(g.ownerId) ?? null, def.damage, "turret");
+  }
   // ── Pickups ─────────────────────────────────────────────────────────────
   dropHeavy(p) {
     if (!p.heavy) return;
@@ -11835,6 +13447,7 @@ var World = class {
     if (total > 0) {
       this.pickups.push({
         id: this.nextPickupId++,
+        kind: "weapon",
         weapon: p.heavy,
         x: p.x,
         y: p.y,
@@ -11852,7 +13465,7 @@ var World = class {
     p.heavy = null;
     p.heavyMag = 0;
     p.heavyReserve = 0;
-    if (isHeavy(p.weapon)) p.weapon = "pistol";
+    if (isHeavy(p.weapon)) p.weapon = p.sidearm;
   }
   checkPickups(p, interact) {
     for (const pk of this.pickups) {
@@ -11860,6 +13473,14 @@ var World = class {
       const dx = pk.x - p.x;
       const dy = pk.y - p.y;
       if (dx * dx + dy * dy > PICKUP_RADIUS * PICKUP_RADIUS) continue;
+      if (pk.kind === "medkit" || !pk.weapon) {
+        if (p.hp >= MAX_HP) continue;
+        const amount = Math.min(MEDKIT_HEAL, MAX_HP - p.hp);
+        p.hp += amount;
+        this.consumePickup(pk);
+        this.events.push({ t: "heal", slot: p.slot, amount, x: pk.x, y: pk.y });
+        return;
+      }
       const def = WEAPONS[pk.weapon];
       if (!p.heavy) {
         p.heavy = pk.weapon;
@@ -11885,6 +13506,7 @@ var World = class {
         this.consumePickup(pk);
         this.pickups.push({
           id: this.nextPickupId++,
+          kind: "weapon",
           weapon: old.weapon,
           x: p.x,
           y: p.y,
@@ -11905,7 +13527,7 @@ var World = class {
   consumePickup(pk) {
     pk.active = false;
     if (!pk.dropped) {
-      const spec = this.map.pickups[pk.spawnIndex];
+      const spec = pk.kind === "medkit" ? this.map.medkits[pk.spawnIndex] : this.map.pickups[pk.spawnIndex];
       pk.respawnAt = this.time + (spec ? spec.respawnMs : 2e4);
     }
   }
@@ -11937,10 +13559,14 @@ var World = class {
           if (!pk.active || this.time >= pk.expiresAt) this.pickups.splice(i, 1);
         } else if (!pk.active && this.time >= pk.respawnAt) {
           pk.active = true;
-          pk.mag = WEAPONS[pk.weapon].magazine;
-          pk.reserve = WEAPONS[pk.weapon].reserveOnPickup;
+          if (pk.weapon) {
+            pk.mag = WEAPONS[pk.weapon].magazine;
+            pk.reserve = WEAPONS[pk.weapon].reserveOnPickup;
+          }
         }
       }
+      this.stepProjectiles();
+      this.stepGadgets();
       if (this.nextSupplyAt > 0 && this.time >= this.nextSupplyAt) {
         this.nextSupplyAt = this.time + this.config.supplyIntervalMs;
         this.dropSupply();
@@ -11962,10 +13588,11 @@ var World = class {
     });
     if (free.length === 0) return null;
     const pt = free[Math.floor(this.rng() * free.length)];
-    const weapon = this.rng() < 0.5 ? "obrez" : "avtomat";
+    const weapon = SUPPLY_POOL[Math.floor(this.rng() * SUPPLY_POOL.length)];
     const def = WEAPONS[weapon];
     const crate = {
       id: this.nextPickupId++,
+      kind: "weapon",
       weapon,
       x: pt.x,
       y: pt.y,
@@ -12067,7 +13694,7 @@ function decodeInputs(data) {
   for (let i = 0; i < n; i++) {
     const buttons = v.getUint8(o + 8);
     const slot = v.getUint8(o + 9);
-    if (buttons > 31 || slot > 3) throw new ProtocolError("bad input flags");
+    if (buttons > 63 || slot > 3) throw new ProtocolError("bad input flags");
     const mx = v.getInt8(o + 4);
     const my = v.getInt8(o + 5);
     if (mx === -128 || my === -128) throw new ProtocolError("bad move axis");
@@ -12084,7 +13711,9 @@ function decodeInputs(data) {
   }
   return out;
 }
-var PLAYER_BYTES = 40;
+var PLAYER_BYTES = 46;
+var GADGET_BYTES = 15;
+var GADGET_PHASES = ["moving", "armed", "active"];
 var u16 = (x) => clamp(Math.round(x), 0, 65535);
 var i16 = (x) => clamp(Math.round(x), -32768, 32767);
 var u8c = (x) => clamp(Math.round(x), 0, 255);
@@ -12093,9 +13722,10 @@ function encodeSnapshot(src) {
   const shots = src.events.filter((e) => e.t === "shot");
   const melees = src.events.filter((e) => e.t === "melee");
   const pickups = src.pickups.filter((p) => p.active || !p.dropped);
-  let size2 = 1 + 4 + 4 + 1 + 4 + 1 + players.length * PLAYER_BYTES + 1 + pickups.length * 8 + 2 + 1;
+  const gadgets = src.gadgets.slice(0, 255);
+  let size2 = 1 + 4 + 4 + 1 + 4 + 1 + players.length * PLAYER_BYTES + 1 + pickups.length * 8 + 2 + 1 + 1;
   for (const s of shots) size2 += 10 + s.pellets.length * 6;
-  size2 += melees.length * 4;
+  size2 += melees.length * 4 + gadgets.length * GADGET_BYTES;
   const buf = new ArrayBuffer(size2);
   const v = new DataView(buf);
   let o = 0;
@@ -12107,7 +13737,7 @@ function encodeSnapshot(src) {
   v.setUint8(o + 14, players.length);
   o += 15;
   for (const p of players) {
-    const flags = (p.alive ? 1 : 0) | (p.connected ? 2 : 0) | (p.reloadWeapon ? 4 : 0) | (src.now < p.invulnUntil ? 8 : 0) | (p.walking ? 16 : 0) | (p.heavy ? 32 : 0);
+    const flags = (p.alive ? 1 : 0) | (p.connected ? 2 : 0) | (p.reloadWeapon ? 4 : 0) | (src.now < p.invulnUntil ? 8 : 0) | (p.walking ? 16 : 0) | (p.heavy ? 32 : 0) | (p.mods[p.weapon]?.includes("laser") ? 64 : 0);
     v.setUint8(o, p.slot);
     v.setUint8(o + 1, flags);
     v.setUint16(o + 2, u16(p.x * POS_SCALE), true);
@@ -12117,7 +13747,7 @@ function encodeSnapshot(src) {
     v.setUint16(o + 10, quantizeAngle(p.aim), true);
     v.setUint8(o + 12, u8c(p.hp));
     v.setUint8(o + 13, WEAPONS[p.weapon].index);
-    v.setUint8(o + 14, u8c(p.pistolMag));
+    v.setUint8(o + 14, u8c(p.sideMag));
     v.setUint8(o + 15, p.heavy ? WEAPONS[p.heavy].index : 255);
     v.setUint8(o + 16, u8c(p.heavyMag));
     v.setUint8(o + 17, u8c(p.heavyReserve));
@@ -12131,14 +13761,19 @@ function encodeSnapshot(src) {
     v.setUint16(o + 34, p.shotCounter & 65535, true);
     v.setUint16(o + 36, u16(p.alive ? 0 : Math.max(0, p.respawnAt - src.time)), true);
     v.setUint16(o + 38, u16(p.assists), true);
+    v.setUint8(o + 40, WEAPONS[p.sidearm].index);
+    v.setUint8(o + 41, WEAPONS[p.melee].index);
+    v.setUint8(o + 42, p.gadget ? GADGETS[p.gadget].index : 255);
+    v.setUint8(o + 43, u8c(p.gadgetCharges));
+    v.setUint16(o + 44, u16(Math.max(0, p.flashedUntil - src.time)), true);
     o += PLAYER_BYTES;
   }
   v.setUint8(o, pickups.length);
   o += 1;
   for (const pk of pickups) {
     v.setUint16(o, pk.id & 65535, true);
-    v.setUint8(o + 2, WEAPONS[pk.weapon].index);
-    v.setUint8(o + 3, (pk.active ? 1 : 0) | (pk.dropped ? 2 : 0) | (pk.supply ? 4 : 0));
+    v.setUint8(o + 2, pk.weapon ? WEAPONS[pk.weapon].index : 255);
+    v.setUint8(o + 3, (pk.active ? 1 : 0) | (pk.dropped ? 2 : 0) | (pk.supply ? 4 : 0) | (pk.kind === "medkit" ? 8 : 0));
     v.setUint16(o + 4, u16(pk.x * POS_SCALE), true);
     v.setUint16(o + 6, u16(pk.y * POS_SCALE), true);
     o += 8;
@@ -12147,12 +13782,12 @@ function encodeSnapshot(src) {
   o += 2;
   for (const s of shots) {
     v.setUint8(o, s.shooter);
-    v.setUint8(o + 1, WEAPONS[s.weapon].index);
+    v.setUint8(o + 1, armsIndex(s.weapon));
     v.setUint16(o + 2, s.shotId & 65535, true);
     v.setUint16(o + 4, u16(s.ox * POS_SCALE), true);
     v.setUint16(o + 6, u16(s.oy * POS_SCALE), true);
     v.setUint8(o + 8, s.pellets.length);
-    v.setUint8(o + 9, 0);
+    v.setUint8(o + 9, (s.turret ? 1 : 0) | (s.silenced ? 2 : 0));
     o += 10;
     for (const pl of s.pellets) {
       v.setUint16(o, quantizeAngle(pl.angle), true);
@@ -12170,12 +13805,28 @@ function encodeSnapshot(src) {
     v.setUint8(o + 3, m.hit < 0 ? 255 : m.hit);
     o += 4;
   }
+  v.setUint8(o, gadgets.length);
+  o += 1;
+  for (const g of gadgets) {
+    const left = g.phase === "active" || g.phase === "armed" && src.time >= g.fuseAt ? g.endsAt - src.time : g.fuseAt - src.time;
+    v.setUint16(o, g.id & 65535, true);
+    v.setUint8(o + 2, GADGETS[g.kind].index);
+    v.setUint8(o + 3, g.ownerSlot);
+    v.setUint8(o + 4, GADGET_PHASES.indexOf(g.phase) | (g.triggeredAt > 0 ? 8 : 0));
+    v.setUint16(o + 5, u16(g.x * POS_SCALE), true);
+    v.setUint16(o + 7, u16(g.y * POS_SCALE), true);
+    v.setUint16(o + 9, quantizeAngle(g.aim), true);
+    v.setUint8(o + 11, u8c(g.hp));
+    v.setUint16(o + 12, u16(Math.max(0, left) / 10), true);
+    v.setUint8(o + 14, 0);
+    o += GADGET_BYTES;
+  }
   if (o !== size2) throw new Error(`snapshot size mismatch ${o} != ${size2}`);
   return buf;
 }
 
 // packages/shared/src/net/protocol.ts
-var PROTOCOL_VERSION = 2;
+var PROTOCOL_VERSION = 4;
 var roomId = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 var ClientMessageSchema = external_exports.discriminatedUnion("type", [
   external_exports.object({
@@ -12192,6 +13843,8 @@ var ClientMessageSchema = external_exports.discriminatedUnion("type", [
   external_exports.object({ type: external_exports.literal("map"), mapId: external_exports.enum(MAP_IDS) }),
   external_exports.object({ type: external_exports.literal("start") }),
   external_exports.object({ type: external_exports.literal("rematch") }),
+  /** The player changed their loadout over the API: the server re-reads it (applies from the next spawn). */
+  external_exports.object({ type: external_exports.literal("loadout") }),
   external_exports.object({ type: external_exports.literal("leave") }),
   external_exports.object({ type: external_exports.literal("ping"), t: external_exports.number().finite() })
 ]);
@@ -12241,7 +13894,7 @@ var CLIENT_EVENT_PROPS = {
   }).strict()
 };
 var SERVER_EVENT_PROPS = {
-  session_started: external_exports.object({ platform, method: external_exports.enum(["telegram", "dev", "guest"]) }),
+  session_started: external_exports.object({ platform, method: external_exports.enum(["telegram", "dev", "guest", "email"]) }),
   profile_created: external_exports.object({ method: external_exports.enum(["telegram", "dev", "guest"]) }),
   lobby_created: external_exports.object({ roomId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean() }),
   lobby_joined: external_exports.object({ roomId: external_exports.string(), viaInvite: external_exports.boolean() }),
@@ -12250,7 +13903,12 @@ var SERVER_EVENT_PROPS = {
   match_completed: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), durationMs: external_exports.number().int(), players: external_exports.number().int(), reason: external_exports.string() }),
   match_abandoned: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), phase: external_exports.string() }),
   map_played: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS) }),
-  invite_created: external_exports.object({ code: external_exports.string(), roomId: external_exports.string() })
+  invite_created: external_exports.object({ code: external_exports.string(), roomId: external_exports.string() }),
+  shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
+  mod_bought: external_exports.object({ weapon: external_exports.string(), mod: external_exports.string(), cost: external_exports.number().int() }),
+  case_opened: external_exports.object({ weapon: external_exports.string(), rarity: external_exports.enum(["rare", "epic", "legendary"]), price: external_exports.number().int() }),
+  payment_completed: external_exports.object({ provider: external_exports.string(), packId: external_exports.string(), diamonds: external_exports.number().int(), amountCents: external_exports.number().int() }),
+  email_linked: external_exports.object({})
 };
 var ClientEventEnvelopeSchema = external_exports.object({
   id: external_exports.string().uuid(),
@@ -12265,8 +13923,14 @@ function parseClientEventProps(name, props) {
 }
 
 // packages/shared/src/schemas/api.ts
-var displayNameSchema = external_exports.string().trim().min(2).max(MAX_NAME_LENGTH).regex(/^[\p{L}\p{N} _.\-’']+$/u, "\u0418\u043C\u044F \u043C\u043E\u0436\u0435\u0442 \u0441\u043E\u0434\u0435\u0440\u0436\u0430\u0442\u044C \u0431\u0443\u043A\u0432\u044B, \u0446\u0438\u0444\u0440\u044B, \u043F\u0440\u043E\u0431\u0435\u043B, _ . -");
-var TelegramAuthRequest = external_exports.object({ initData: external_exports.string().min(10).max(8192), platform: PlatformSchema.optional(), clientVersion: external_exports.string().max(32).optional() }).strict();
+var displayNameSchema = external_exports.string().trim().min(2).max(MAX_NAME_LENGTH).regex(/^[\p{L}\p{N} _.\-’']+$/u, "A name may contain letters, digits, spaces and _ . -");
+var TelegramAuthRequest = external_exports.object({
+  initData: external_exports.string().min(10).max(8192),
+  platform: PlatformSchema.optional(),
+  clientVersion: external_exports.string().max(32).optional(),
+  /** Optional anonymous browser id (see VisitRequest) that links a new player to the visitor funnel. */
+  visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional()
+}).strict();
 var DevAuthRequest = external_exports.object({
   name: displayNameSchema,
   deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
@@ -12277,8 +13941,36 @@ var GuestAuthRequest = external_exports.object({
   name: displayNameSchema,
   deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{20,64}$/),
   platform: PlatformSchema.optional(),
+  clientVersion: external_exports.string().max(32).optional(),
+  visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional()
+}).strict();
+var visitorIdSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/);
+var emailSchema = external_exports.string().trim().toLowerCase().max(254).email("That is not a valid email address");
+var passwordSchema = external_exports.string().min(8, "The password needs at least 8 characters").max(128);
+var EmailLoginRequest = external_exports.object({
+  email: emailSchema,
+  password: external_exports.string().min(1).max(128),
+  deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{20,64}$/).optional(),
+  platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional()
 }).strict();
+var EmailLinkRequest = external_exports.object({ email: emailSchema, password: passwordSchema }).strict();
+var PasswordChangeRequest = external_exports.object({ current: external_exports.string().min(1).max(128), password: passwordSchema }).strict();
+var PasswordResetRequest = external_exports.object({ email: emailSchema }).strict();
+var PasswordResetConfirm = external_exports.object({ token: external_exports.string().regex(/^[A-Za-z0-9_-]{20,64}$/), password: passwordSchema }).strict();
+var VisitRequest = external_exports.object({ visitorId: visitorIdSchema, platform: PlatformSchema.optional(), referrer: external_exports.string().max(120).optional() }).strict();
+var BuyRequest = external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget"]), id: external_exports.string().regex(/^[a-z0-9_]{2,24}$/) }).strict();
+var ModBuyRequest = external_exports.object({ weapon: external_exports.enum(WEAPON_IDS), mod: external_exports.enum(MOD_IDS) }).strict();
+var LoadoutRequest = external_exports.object({
+  sidearm: external_exports.enum(WEAPON_IDS),
+  melee: external_exports.enum(WEAPON_IDS),
+  primary: external_exports.enum(WEAPON_IDS).nullable(),
+  gadget: external_exports.enum(GADGET_IDS).nullable().optional(),
+  /** Equipped modifications per weapon (validated against ownership and mounts). */
+  mods: external_exports.record(external_exports.enum(WEAPON_IDS), external_exports.array(external_exports.enum(MOD_IDS)).max(4)).optional()
+}).strict();
+var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true) }).strict();
+var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card", "crypto"]) }).strict();
 var UpdateProfileRequest = external_exports.object({ displayName: displayNameSchema.optional(), preferredCharacter: external_exports.enum(CHARACTER_IDS).optional() }).strict();
 var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true) }).strict();
 var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional() }).strict();
@@ -12287,6 +13979,11 @@ var AdminCreateUserRequest = external_exports.object({
   username: external_exports.string().regex(/^[a-z0-9_.-]{3,32}$/),
   password: external_exports.string().min(12).max(256),
   role: external_exports.enum(["admin", "viewer"])
+}).strict();
+var AdminGrantRequest = external_exports.object({
+  currency: external_exports.enum(["tokens", "diamonds"]),
+  amount: external_exports.number().int().min(-1e6).max(1e6).refine((v) => v !== 0, "amount must not be 0"),
+  note: external_exports.string().trim().min(3).max(120)
 }).strict();
 
 // apps/server/src/http/auth.ts
@@ -12362,7 +14059,7 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
     try {
       room = rooms2.create(body.mapId, body.isPrivate, user.userId);
     } catch {
-      throw new HttpError(503, "capacity", "\u0421\u0435\u0440\u0432\u0435\u0440 \u043F\u0435\u0440\u0435\u043F\u043E\u043B\u043D\u0435\u043D, \u043F\u043E\u043F\u0440\u043E\u0431\u0443\u0439\u0442\u0435 \u043F\u043E\u0437\u0436\u0435");
+      throw new HttpError(503, "capacity", "The server is full, try again later");
     }
     let inviteCode = null;
     let inviteUrl = null;
@@ -12387,13 +14084,13 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
   });
   router.get("/api/rooms/:id", auth, (ctx) => {
     const room = rooms2.get(ctx.params.id ?? "");
-    if (!room) throw new HttpError(404, "room_not_found", "\u041A\u043E\u043C\u043D\u0430\u0442\u0430 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u0430");
+    if (!room) throw new HttpError(404, "room_not_found", "Room not found");
     const user = currentUser(ctx);
     ctx.json(200, { ...room.info(), joinable: room.isJoinable(user.userId), mapName: getMap(room.mapId).name });
   });
   router.get("/api/invites/:code", rateLimit(lookupLimiter), async (ctx) => {
     const code = ctx.params.code ?? "";
-    if (!/^[A-Za-z0-9]{6,16}$/.test(code)) throw new HttpError(400, "bad_code", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u043A\u043E\u0434 \u043F\u0440\u0438\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u044F");
+    if (!/^[A-Za-z0-9]{6,16}$/.test(code)) throw new HttpError(400, "bad_code", "Invalid invitation code");
     const resolved = await services2.invites.resolve(code);
     let info = { code, status: "not_found", roomId: null, mapId: null, players: 0, maxPlayers: 0, hostName: null };
     if (resolved) {
@@ -12410,7 +14107,7 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
 };
 
 // apps/server/src/api/auth.ts
-import { createHmac as createHmac4, randomBytes as randomBytes4 } from "node:crypto";
+import { createHmac as createHmac5, randomBytes as randomBytes4 } from "node:crypto";
 
 // apps/server/src/auth/telegram.ts
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -12471,7 +14168,7 @@ function validateInitData(initData, botToken, maxAgeSec, nowSec = Math.floor(Dat
 function displayNameFromTelegram(u) {
   const raw = `${u.firstName} ${u.lastName ?? ""}`.normalize("NFKC");
   const cleaned = raw.replace(/[^\p{L}\p{N} _.\-’']/gu, "").replace(/\s+/g, " ").trim().slice(0, 24).trim();
-  return cleaned.length >= 2 ? cleaned : `\u0418\u0433\u0440\u043E\u043A ${String(u.id).slice(-4)}`;
+  return cleaned.length >= 2 ? cleaned : `Comrade ${String(u.id).slice(-4)}`;
 }
 
 // apps/server/src/services/persistence.ts
@@ -12604,7 +14301,7 @@ var SessionStore = class {
   async verify(token) {
     if (!TOKEN_RE.test(token)) return null;
     const rows = await this.sql`
-      SELECT s.id AS session_id, s.user_id, s.platform, s.last_seen_at, u.display_name, p.level
+      SELECT s.id AS session_id, s.user_id, s.platform, s.method, s.last_seen_at, u.display_name, p.level
       FROM sessions s
       JOIN users u ON u.id = s.user_id
       LEFT JOIN profiles p ON p.user_id = u.id
@@ -12623,7 +14320,7 @@ var SessionStore = class {
       this.sql`UPDATE users SET last_seen_at = now() WHERE id = ${r.user_id}`.catch((e) => this.log.warn("user touch failed", { err: e }));
     }
     void this.activity.touch(r.user_id);
-    return { userId: r.user_id, sessionId: r.session_id, displayName: r.display_name, level: r.level ?? 1, platform: r.platform ?? null };
+    return { userId: r.user_id, sessionId: r.session_id, displayName: r.display_name, level: r.level ?? 1, platform: r.platform ?? null, method: r.method };
   }
   async revoke(token) {
     if (!TOKEN_RE.test(token)) return false;
@@ -12657,7 +14354,10 @@ function toPublicProfile(r) {
     playtimeSec: r.playtime_sec,
     currentWinStreak: r.current_win_streak,
     bestWinStreak: r.best_win_streak,
-    preferredCharacter: r.preferred_character
+    preferredCharacter: r.preferred_character,
+    tokens: r.tokens,
+    diamonds: r.diamonds,
+    email: r.email
   };
 }
 var ProfileRepo = class {
@@ -12674,7 +14374,7 @@ var ProfileRepo = class {
              COALESCE(p.assists, 0) AS assists,
              COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
-             p.preferred_character
+             p.preferred_character, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
       WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
     return rows[0] ? toPublicProfile(rows[0]) : null;
@@ -12731,6 +14431,176 @@ var ProfileRepo = class {
     return rows.length > 0;
   }
 };
+
+// apps/server/src/economy/repo.ts
+import { randomInt } from "node:crypto";
+var EconomyError = class extends Error {
+  constructor(refusal) {
+    super(REFUSAL_TEXT[refusal]);
+    this.refusal = refusal;
+  }
+  refusal;
+};
+function secureRandom() {
+  return randomInt(0, 2 ** 32) / 2 ** 32;
+}
+var EconomyRepo = class {
+  constructor(sql2, log2) {
+    this.sql = sql2;
+    this.log = log2;
+  }
+  sql;
+  log;
+  /** Builds the inventory from the wallet row, owned items and modifications. */
+  async load(tx, userId, wallet) {
+    const items = await tx`SELECT kind, item_id FROM user_items WHERE user_id = ${userId}`;
+    const modRows = await tx`SELECT weapon_id, mod_id FROM weapon_mods WHERE user_id = ${userId}`;
+    const weapons = new Set(FREE_WEAPONS);
+    const characters = new Set(FREE_CHARACTERS);
+    const gadgets = new Set(FREE_GADGETS);
+    for (const it of items) {
+      if (it.kind === "weapon" && isWeaponId(it.item_id)) weapons.add(it.item_id);
+      if (it.kind === "character" && isCharacterId(it.item_id)) characters.add(it.item_id);
+      if (it.kind === "gadget" && isGadgetId(it.item_id)) gadgets.add(it.item_id);
+    }
+    const mods = {};
+    for (const r of modRows) {
+      if (!isWeaponId(r.weapon_id) || !weapons.has(r.weapon_id) || !isModId(r.mod_id) || !modsFor(WEAPONS[r.weapon_id]).includes(r.mod_id)) continue;
+      (mods[r.weapon_id] ??= []).push(r.mod_id);
+    }
+    for (const w of Object.keys(mods)) mods[w] = MOD_IDS.filter((m) => mods[w].includes(m));
+    const raw = wallet.loadout && typeof wallet.loadout === "object" ? wallet.loadout : {};
+    const loadout = sanitizeLoadout({ ...DEFAULT_LOADOUT, ...raw }, { weapon: (w) => weapons.has(w), gadget: (g) => gadgets.has(g), mod: (w, m) => mods[w]?.includes(m) ?? false });
+    return {
+      tokens: wallet.tokens,
+      diamonds: wallet.diamonds,
+      level: wallet.level,
+      weapons: [...weapons],
+      characters: CHARACTER_IDS.filter((c) => characters.has(c)),
+      gadgets: GADGET_IDS.filter((g) => gadgets.has(g)),
+      mods,
+      loadout
+    };
+  }
+  async lockWallet(tx, userId) {
+    await tx`INSERT INTO profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
+    const rows = await tx`SELECT tokens, diamonds, level, loadout FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+    return rows[0];
+  }
+  async debit(tx, userId, currency, amount, balanceBefore, reason, ref) {
+    const after = balanceBefore - amount;
+    if (after < 0) throw new EconomyError("funds");
+    if (currency === "tokens") await tx`UPDATE profiles SET tokens = ${after}, updated_at = now() WHERE user_id = ${userId}`;
+    else await tx`UPDATE profiles SET diamonds = ${after}, updated_at = now() WHERE user_id = ${userId}`;
+    await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, ${currency}, ${-amount}, ${after}, ${reason}, ${ref})`;
+  }
+  async inventory(userId) {
+    await this.sql`INSERT INTO profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
+    const rows = await this.sql`SELECT tokens, diamonds, level, loadout FROM profiles WHERE user_id = ${userId}`;
+    return this.load(this.sql, userId, rows[0]);
+  }
+  /** Loadout and owned characters of a player joining a room. */
+  async gear(userId) {
+    const inv = await this.inventory(userId);
+    return { loadout: inv.loadout, characters: new Set(inv.characters) };
+  }
+  async buy(userId, kind, id) {
+    if (kind === "weapon" ? !isWeaponId(id) : kind === "character" ? !isCharacterId(id) : !isGadgetId(id)) throw new EconomyError("not_for_sale");
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      const refusal = buyRefusal(inv, kind, id);
+      if (refusal) throw new EconomyError(refusal);
+      const price = priceOf(kind, id);
+      await this.debit(tx, userId, price.currency, price.amount, price.currency === "tokens" ? wallet.tokens : wallet.diamonds, "purchase", `${kind}:${id}`);
+      await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${id}, ${kind}, ${price.currency})`;
+      this.log.info("shop purchase", { userId, kind, id, currency: price.currency, amount: price.amount });
+      return this.load(tx, userId, { ...wallet, [price.currency]: (price.currency === "tokens" ? wallet.tokens : wallet.diamonds) - price.amount });
+    });
+  }
+  /** Buys a modification for one weapon (tokens) and equips it (replacing the one on the same mount). */
+  async buyMod(userId, weapon, mod) {
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      const q = modQuote(inv, weapon, mod);
+      if (typeof q === "string") throw new EconomyError(q);
+      await this.debit(tx, userId, "tokens", q.cost, wallet.tokens, "mod", `${weapon}:${mod}`);
+      await tx`INSERT INTO weapon_mods (user_id, weapon_id, mod_id) VALUES (${userId}, ${weapon}, ${mod}) ON CONFLICT DO NOTHING`;
+      const l = inv.loadout;
+      const equipped = [mod, ...l.mods[weapon] ?? []];
+      const stored = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: { ...l.mods, [weapon]: equipped } };
+      await tx`UPDATE profiles SET loadout = ${tx.json(stored)}, updated_at = now() WHERE user_id = ${userId}`;
+      this.log.info("mod purchase", { userId, weapon, mod, cost: q.cost });
+      return this.load(tx, userId, { ...wallet, tokens: wallet.tokens - q.cost, loadout: stored });
+    });
+  }
+  /** Opens a case: a rare weapon the player does not own yet (never a duplicate). */
+  async openCase(userId, rand = secureRandom) {
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      const entry = drawCase(new Set(inv.weapons), rand());
+      if (!entry) throw new EconomyError("collection_complete");
+      if (wallet.diamonds < CASE_PRICE) throw new EconomyError("funds");
+      const [opening] = await tx`
+        INSERT INTO case_openings (user_id, weapon_id, rarity, price) VALUES (${userId}, ${entry.weapon}, ${entry.rarity}, ${CASE_PRICE}) RETURNING id`;
+      await this.debit(tx, userId, "diamonds", CASE_PRICE, wallet.diamonds, "case", `case:${opening.id}`);
+      await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${entry.weapon}, 'weapon', 'case') ON CONFLICT DO NOTHING`;
+      this.log.info("case opened", { userId, weapon: entry.weapon, rarity: entry.rarity });
+      return { entry, inventory: await this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - CASE_PRICE }) };
+    });
+  }
+  /**
+   * Stores the spawn loadout. Anything the player does not own falls back to the free default;
+   * `gadget`/`mods` left out keep their current values.
+   */
+  async setLoadout(userId, raw) {
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      const owned = new Set(inv.weapons);
+      const l = sanitizeLoadout(
+        { ...raw, gadget: raw.gadget === void 0 ? inv.loadout.gadget : raw.gadget, mods: raw.mods ?? inv.loadout.mods },
+        { weapon: (w) => owned.has(w), gadget: (g) => inv.gadgets.includes(g), mod: (w, m) => inv.mods[w]?.includes(m) ?? false }
+      );
+      const stored = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods };
+      await tx`UPDATE profiles SET loadout = ${tx.json(stored)}, updated_at = now() WHERE user_id = ${userId}`;
+      return this.load(tx, userId, { ...wallet, loadout: stored });
+    });
+  }
+  /** Administrator grant (or correction with a negative amount); returns the new balance. */
+  async grant(userId, currency, amount, adminId, note) {
+    if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 1e6) throw new Error("bad amount");
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const before = currency === "tokens" ? wallet.tokens : wallet.diamonds;
+      const after = before + amount;
+      if (after < 0) throw new EconomyError("funds");
+      if (currency === "tokens") await tx`UPDATE profiles SET tokens = ${after}, updated_at = now() WHERE user_id = ${userId}`;
+      else await tx`UPDATE profiles SET diamonds = ${after}, updated_at = now() WHERE user_id = ${userId}`;
+      await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref, admin_id) VALUES (${userId}, ${currency}, ${amount}, ${after}, 'grant', ${note.slice(0, 120) || null}, ${adminId})`;
+      return after;
+    });
+  }
+  /** Grants an item without payment (administrator). */
+  async grantItem(userId, kind, id) {
+    if (kind === "weapon" ? !isWeaponId(id) : kind === "character" ? !isCharacterId(id) : !isGadgetId(id)) throw new EconomyError("not_for_sale");
+    await this.sql`INSERT INTO profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
+    await this.sql`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${id}, ${kind}, 'grant') ON CONFLICT DO NOTHING`;
+  }
+  async ledger(userId, limit = 50) {
+    const rows = await this.sql`
+      SELECT created_at, currency, delta, balance_after, reason, ref FROM currency_ledger WHERE user_id = ${userId} ORDER BY id DESC LIMIT ${limit}`;
+    return rows.map((r) => ({ at: r.created_at.toISOString(), currency: r.currency, delta: r.delta, balanceAfter: r.balance_after, reason: r.reason, ref: r.ref }));
+  }
+};
+async function awardMatchTokens(tx, userId, matchId, tokens) {
+  const rows = await tx`UPDATE profiles SET tokens = tokens + ${tokens} WHERE user_id = ${userId} RETURNING tokens`;
+  const total = rows[0]?.tokens ?? 0;
+  if (tokens > 0) await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${tokens}, ${total}, 'match', ${matchId})`;
+  return total;
+}
 
 // apps/server/src/progression/recorder.ts
 var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -12794,6 +14664,7 @@ var PgMatchRecorder = class {
         const ownedRows = await tx`SELECT achievement_id FROM player_achievements WHERE user_id = ${p.userId}`;
         const prev = { xp: prof.xp, level: prof.level, matchesCompleted: prof.matches_completed, wins: prof.wins, currentWinStreak: prof.current_win_streak };
         const { won, lost, streak, unlocked, xpGained: xp, totalXp, level } = applyMatchProgress(prev, perf, new Set(ownedRows.map((r) => r.achievement_id)));
+        const tokens = tokensForMatch(perf);
         await tx`
           UPDATE profiles SET
             xp = ${totalXp},
@@ -12814,14 +14685,16 @@ var PgMatchRecorder = class {
         for (const a of unlocked) {
           await tx`INSERT INTO player_achievements (user_id, achievement_id, match_id) VALUES (${p.userId}, ${a}, ${m.matchId}) ON CONFLICT DO NOTHING`;
         }
+        const totalTokens = await awardMatchTokens(tx, p.userId, m.matchId, tokens);
         await tx`
-          INSERT INTO match_participants (match_id, user_id, character, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, joined_at, left_at)
-          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
+          INSERT INTO match_participants (match_id, user_id, character, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, tokens_awarded, joined_at, left_at)
+          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${tokens}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
           ON CONFLICT (match_id, user_id) DO UPDATE SET
             character = EXCLUDED.character, place = EXCLUDED.place, kills = EXCLUDED.kills, assists = EXCLUDED.assists, deaths = EXCLUDED.deaths,
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
-            via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded, left_at = EXCLUDED.left_at`;
-        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof.level, newAchievements: unlocked });
+            via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
+            tokens_awarded = EXCLUDED.tokens_awarded, left_at = EXCLUDED.left_at`;
+        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof.level, newAchievements: unlocked, tokensGained: tokens, totalTokens });
       }
       await tx`
         UPDATE matches SET status = 'completed', ended_at = ${m.endedAt}, duration_ms = ${Math.max(0, Math.round(m.durationMs))},
@@ -12834,7 +14707,7 @@ var PgMatchRecorder = class {
     const out = /* @__PURE__ */ new Map();
     if (userIds.length === 0) return out;
     const rows = await tx`
-      SELECT mp.user_id, mp.xp_awarded, p.xp, p.level
+      SELECT mp.user_id, mp.xp_awarded, mp.tokens_awarded, p.xp, p.level, p.tokens
       FROM match_participants mp JOIN profiles p ON p.user_id = mp.user_id
       WHERE mp.match_id = ${matchId} AND mp.user_id IN ${tx(userIds)}`;
     const ach = await tx`
@@ -12845,7 +14718,9 @@ var PgMatchRecorder = class {
         totalXp: r.xp,
         level: r.level,
         leveledUp: false,
-        newAchievements: ach.filter((a) => a.user_id === r.user_id).map((a) => a.achievement_id)
+        newAchievements: ach.filter((a) => a.user_id === r.user_id).map((a) => a.achievement_id),
+        tokensGained: r.tokens_awarded,
+        totalTokens: r.tokens
       });
     }
     return out;
@@ -13186,7 +15061,11 @@ var RETENTION_DAYS = {
   /** Invitations, counted from expiry. */
   invitations: 7,
   /** Admin audit log, by created_at. */
-  adminAudit: 365
+  adminAudit: 365,
+  /** Password-reset links (valid for an hour), counted from expiry. */
+  passwordResets: 7,
+  /** Anonymous visitor funnel: visitor_days by day, visitors by their last visit. */
+  visitors: 400
 };
 var BATCH = 5e3;
 var DAY_MS = 864e5;
@@ -13208,6 +15087,9 @@ async function purgeExpired(sql2, now = /* @__PURE__ */ new Date(), days = RETEN
   const adminSessions = cutoff(days.adminSessions);
   const invitations = cutoff(days.invitations);
   const audit2 = cutoff(days.adminAudit);
+  const resets = cutoff(days.passwordResets);
+  const visitorDay = cutoff(days.visitors).toISOString().slice(0, 10);
+  const visitors = cutoff(days.visitors);
   return {
     analyticsEvents: await batched(
       async () => (await sql2`DELETE FROM analytics_events WHERE ctid IN (SELECT ctid FROM analytics_events WHERE occurred_at < ${events} LIMIT ${BATCH})`).count
@@ -13225,7 +15107,11 @@ async function purgeExpired(sql2, now = /* @__PURE__ */ new Date(), days = RETEN
           SELECT ctid FROM admin_sessions WHERE expires_at < ${adminSessions} OR revoked_at < ${adminSessions} LIMIT ${BATCH})`).count
     ),
     invitations: await batched(async () => (await sql2`DELETE FROM invitations WHERE ctid IN (SELECT ctid FROM invitations WHERE expires_at < ${invitations} LIMIT ${BATCH})`).count),
-    adminAudit: await batched(async () => (await sql2`DELETE FROM admin_audit_log WHERE ctid IN (SELECT ctid FROM admin_audit_log WHERE created_at < ${audit2} LIMIT ${BATCH})`).count)
+    adminAudit: await batched(async () => (await sql2`DELETE FROM admin_audit_log WHERE ctid IN (SELECT ctid FROM admin_audit_log WHERE created_at < ${audit2} LIMIT ${BATCH})`).count),
+    passwordResets: await batched(async () => (await sql2`DELETE FROM password_resets WHERE ctid IN (SELECT ctid FROM password_resets WHERE expires_at < ${resets} LIMIT ${BATCH})`).count),
+    visitors: await batched(
+      async () => (await sql2`DELETE FROM visitor_days WHERE ctid IN (SELECT ctid FROM visitor_days WHERE day < ${visitorDay}::date LIMIT ${BATCH})`).count + (await sql2`DELETE FROM visitors WHERE ctid IN (SELECT ctid FROM visitors WHERE last_seen_at < ${visitors} LIMIT ${BATCH})`).count
+    )
   };
 }
 function scheduleRetention(sql2, log2, opts = {}) {
@@ -13254,6 +15140,330 @@ function scheduleRetention(sql2, log2, opts = {}) {
     clearInterval(every);
   };
 }
+
+// apps/server/src/auth/email.ts
+var RESET_TTL_MS = 36e5;
+var EmailAuth = class {
+  constructor(sql2, secret, log2) {
+    this.sql = sql2;
+    this.secret = secret;
+    this.log = log2;
+  }
+  sql;
+  secret;
+  log;
+  /** Returns the user id for valid credentials (constant-time-ish when the email is unknown). */
+  async verify(email, password) {
+    const rows = await this.sql`
+      SELECT id, password_hash FROM users WHERE email = ${email} AND deleted_at IS NULL`;
+    const r = rows[0];
+    const ok = await verifyPassword(password, r?.password_hash ?? DUMMY_HASH);
+    return r && r.password_hash && ok ? r.id : null;
+  }
+  async link(userId, email, password) {
+    const hash = await hashPassword(password);
+    return this.sql.begin(async (tx) => {
+      const [me] = await tx`SELECT email FROM users WHERE id = ${userId} FOR UPDATE`;
+      if (me?.email) return "already_linked";
+      const taken = await tx`SELECT 1 FROM users WHERE email = ${email} AND id <> ${userId}`;
+      if (taken.length) return "email_taken";
+      await tx`UPDATE users SET email = ${email}, password_hash = ${hash}, email_linked_at = now() WHERE id = ${userId}`;
+      this.log.info("email linked", { userId });
+      return "ok";
+    });
+  }
+  async changePassword(userId, current, next) {
+    const rows = await this.sql`SELECT password_hash FROM users WHERE id = ${userId}`;
+    const stored = rows[0]?.password_hash;
+    if (!stored || !await verifyPassword(current, stored)) return false;
+    await this.sql`UPDATE users SET password_hash = ${await hashPassword(next)} WHERE id = ${userId}`;
+    return true;
+  }
+  /** Creates a single-use reset token for the account with this email (null when unknown). */
+  async createReset(by, target) {
+    const rows = "email" in target ? await this.sql`SELECT id FROM users WHERE email = ${target.email} AND deleted_at IS NULL` : await this.sql`SELECT id FROM users WHERE id = ${target.userId} AND email IS NOT NULL AND deleted_at IS NULL`;
+    const userId = rows[0]?.id;
+    if (!userId) return null;
+    const token = newToken(24);
+    await this.sql`INSERT INTO password_resets (token_hash, user_id, expires_at, created_by) VALUES (${hashToken(this.secret, token, "reset")}, ${userId}, ${new Date(Date.now() + RESET_TTL_MS)}, ${by})`;
+    return { token, userId };
+  }
+  /** Sets a new password with a valid reset token; revokes every session of the account. */
+  async consumeReset(token, password) {
+    const hash = await hashPassword(password);
+    return this.sql.begin(async (tx) => {
+      const rows = await tx`
+        UPDATE password_resets SET used_at = now()
+        WHERE token_hash = ${hashToken(this.secret, token, "reset")} AND used_at IS NULL AND expires_at > now()
+        RETURNING user_id`;
+      const userId = rows[0]?.user_id;
+      if (!userId) return null;
+      await tx`UPDATE users SET password_hash = ${hash} WHERE id = ${userId}`;
+      await tx`UPDATE sessions SET revoked_at = now() WHERE user_id = ${userId} AND revoked_at IS NULL`;
+      return userId;
+    });
+  }
+};
+async function sendResetMail(env2, to, link, log2) {
+  if (!env2.RESEND_API_KEY || !env2.MAIL_FROM) return false;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { authorization: `Bearer ${env2.RESEND_API_KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        from: env2.MAIL_FROM,
+        to: [to],
+        subject: "BLATKOM \u201989 \u2014 a new password",
+        text: `Someone (hopefully you) asked to change the password of a BLATKOM \u201989 account.
+
+You can set a new password with this link (valid for 1 hour):
+${link}
+
+If it wasn\u2019t you, just delete this letter \u2014 nothing will change.`
+      })
+    });
+    if (!res.ok) log2.warn("reset mail failed", { status: res.status });
+    return res.ok;
+  } catch (e) {
+    log2.warn("reset mail failed", { err: e });
+    return false;
+  }
+}
+
+// apps/server/src/payments/service.ts
+var PaymentService = class {
+  constructor(sql2, log2, analytics, publicUrl, card, crypto2) {
+    this.sql = sql2;
+    this.log = log2;
+    this.analytics = analytics;
+    this.publicUrl = publicUrl;
+    this.card = card;
+    this.crypto = crypto2;
+  }
+  sql;
+  log;
+  analytics;
+  publicUrl;
+  card;
+  crypto;
+  async checkout(userId, packId, method) {
+    const pack = diamondPack(packId);
+    if (!pack) throw new HttpError(400, "bad_pack", "No such diamond pack");
+    const provider = method === "card" ? this.card : this.crypto;
+    if (!provider) throw new HttpError(503, "payments_not_configured", method === "card" ? "Card payments aren\u2019t connected yet" : "Crypto payments aren\u2019t connected yet");
+    const providerName = method === "card" ? "stripe" : "nowpayments";
+    const [row] = await this.sql`
+      INSERT INTO payments (user_id, provider, pack_id, diamonds, amount_cents, status)
+      VALUES (${userId}, ${providerName}, ${pack.id}, ${pack.diamonds}, ${pack.usdCents}, 'created') RETURNING id`;
+    const id = row.id;
+    const base2 = this.publicUrl.replace(/\/$/, "");
+    try {
+      const s = await provider.createCheckout({
+        paymentId: id,
+        pack,
+        successUrl: `${base2}/?pay=success&pid=${id}`,
+        cancelUrl: `${base2}/?pay=cancel&pid=${id}`,
+        ipnUrl: `${base2}/api/pay/nowpayments/ipn`
+      });
+      await this.sql`UPDATE payments SET provider_ref = ${s.providerRef}, updated_at = now() WHERE id = ${id}`;
+      this.log.info("checkout created", { paymentId: id, provider: providerName, pack: pack.id, userId });
+      return { paymentId: id, url: s.url };
+    } catch (e) {
+      await this.sql`UPDATE payments SET status = 'failed', updated_at = now() WHERE id = ${id}`;
+      this.log.error("checkout failed", { paymentId: id, provider: providerName, err: e });
+      throw new HttpError(502, "payment_provider_error", "The payment system didn\u2019t answer \u2014 try again later");
+    }
+  }
+  async status(userId, paymentId) {
+    const rows = await this.sql`SELECT * FROM payments WHERE id = ${paymentId} AND user_id = ${userId}`;
+    if (!rows[0]) throw new HttpError(404, "not_found", "Payment not found");
+    return { status: rows[0].status, diamonds: rows[0].diamonds };
+  }
+  /**
+   * Marks a payment paid and credits its diamonds exactly once. `paidCents` (when the provider
+   * reports it) must cover the price. Returns true when diamonds were credited by this call.
+   */
+  async markPaid(paymentId, provider, paidCents) {
+    if (!/^[0-9a-f-]{36}$/i.test(paymentId)) return false;
+    return this.sql.begin(async (tx) => {
+      const rows = await tx`SELECT * FROM payments WHERE id = ${paymentId} FOR UPDATE`;
+      const p = rows[0];
+      if (!p || p.provider !== provider || !p.user_id) return false;
+      if (p.status === "paid" || p.status === "refunded") return false;
+      if (paidCents !== void 0 && paidCents + 1 < p.amount_cents) {
+        this.log.warn("underpaid payment ignored", { paymentId, paidCents, expected: p.amount_cents });
+        return false;
+      }
+      await tx`UPDATE payments SET status = 'paid', paid_at = now(), updated_at = now() WHERE id = ${paymentId}`;
+      await tx`INSERT INTO profiles (user_id) VALUES (${p.user_id}) ON CONFLICT DO NOTHING`;
+      const [w] = await tx`SELECT diamonds FROM profiles WHERE user_id = ${p.user_id} FOR UPDATE`;
+      const after = w.diamonds + p.diamonds;
+      await tx`UPDATE profiles SET diamonds = ${after}, updated_at = now() WHERE user_id = ${p.user_id}`;
+      await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${p.user_id}, 'diamonds', ${p.diamonds}, ${after}, 'topup', ${paymentId})`;
+      this.log.info("payment credited", { paymentId, provider, diamonds: p.diamonds, userId: p.user_id });
+      this.analytics.server("payment_completed", { provider, packId: p.pack_id, diamonds: p.diamonds, amountCents: p.amount_cents }, { userId: p.user_id });
+      return true;
+    });
+  }
+  async markClosed(paymentId, provider, status) {
+    if (!/^[0-9a-f-]{36}$/i.test(paymentId)) return;
+    await this.sql`UPDATE payments SET status = ${status}, updated_at = now() WHERE id = ${paymentId} AND provider = ${provider} AND status = 'created'`;
+  }
+  /** Refund reported by the provider: takes back the diamonds that are still unspent. */
+  async markRefunded(paymentId, provider) {
+    if (!/^[0-9a-f-]{36}$/i.test(paymentId)) return;
+    await this.sql.begin(async (tx) => {
+      const rows = await tx`SELECT * FROM payments WHERE id = ${paymentId} FOR UPDATE`;
+      const p = rows[0];
+      if (!p || p.provider !== provider || p.status !== "paid" || !p.user_id) return;
+      await tx`UPDATE payments SET status = 'refunded', updated_at = now() WHERE id = ${paymentId}`;
+      const [w] = await tx`SELECT diamonds FROM profiles WHERE user_id = ${p.user_id} FOR UPDATE`;
+      const take = Math.min(w?.diamonds ?? 0, p.diamonds);
+      if (take > 0) {
+        const after = w.diamonds - take;
+        await tx`UPDATE profiles SET diamonds = ${after}, updated_at = now() WHERE user_id = ${p.user_id}`;
+        await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${p.user_id}, 'diamonds', ${-take}, ${after}, 'refund', ${paymentId})`;
+      }
+      this.log.warn("payment refunded", { paymentId, provider, takenBack: take, userId: p.user_id });
+    });
+  }
+  /** Stripe webhook (signature already verified). */
+  async onStripeEvent(event) {
+    const o = event.data?.object ?? {};
+    const meta = o.metadata ?? {};
+    const pid = String(meta.payment_id ?? o.client_reference_id ?? "");
+    switch (event.type) {
+      case "checkout.session.completed":
+      case "checkout.session.async_payment_succeeded":
+        if (o.payment_status === "paid" && String(o.currency ?? "usd").toLowerCase() === "usd") await this.markPaid(pid, "stripe", typeof o.amount_total === "number" ? o.amount_total : void 0);
+        return;
+      case "checkout.session.async_payment_failed":
+        await this.markClosed(pid, "stripe", "failed");
+        return;
+      case "checkout.session.expired":
+        await this.markClosed(pid, "stripe", "expired");
+        return;
+      case "charge.refunded":
+        if (pid) await this.markRefunded(pid, "stripe");
+        return;
+      default:
+        return;
+    }
+  }
+  /** NOWPayments IPN (signature already verified). */
+  async onNowPaymentsIpn(body) {
+    const pid = String(body.order_id ?? "");
+    const status = String(body.payment_status ?? "");
+    if (status === "finished") {
+      const priceUsd = Number(body.price_amount);
+      await this.markPaid(pid, "nowpayments", Number.isFinite(priceUsd) ? Math.round(priceUsd * 100) : void 0);
+    } else if (status === "failed") await this.markClosed(pid, "nowpayments", "failed");
+    else if (status === "expired") await this.markClosed(pid, "nowpayments", "expired");
+    else if (status === "refunded") await this.markRefunded(pid, "nowpayments");
+  }
+};
+
+// apps/server/src/payments/providers.ts
+import { createHmac as createHmac4, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
+var ProviderError = class extends Error {
+};
+var StripeProvider = class {
+  constructor(secretKey, webhookSecret, fetchImpl = fetch) {
+    this.secretKey = secretKey;
+    this.webhookSecret = webhookSecret;
+    this.fetchImpl = fetchImpl;
+  }
+  secretKey;
+  webhookSecret;
+  fetchImpl;
+  async createCheckout(i) {
+    const form = new URLSearchParams({
+      mode: "payment",
+      success_url: i.successUrl,
+      cancel_url: i.cancelUrl,
+      client_reference_id: i.paymentId,
+      "metadata[payment_id]": i.paymentId,
+      "payment_intent_data[metadata][payment_id]": i.paymentId,
+      "line_items[0][quantity]": "1",
+      "line_items[0][price_data][currency]": "usd",
+      "line_items[0][price_data][unit_amount]": String(i.pack.usdCents),
+      "line_items[0][price_data][product_data][name]": `${i.pack.diamonds} diamonds \u2014 BLATKOM \u201989`
+    });
+    const res = await this.fetchImpl("https://api.stripe.com/v1/checkout/sessions", {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.secretKey}`, "content-type": "application/x-www-form-urlencoded", "idempotency-key": i.paymentId },
+      body: form.toString()
+    });
+    if (!res.ok) throw new ProviderError(`stripe checkout failed: ${res.status}`);
+    const data = await res.json();
+    if (!data.id || !data.url) throw new ProviderError("stripe checkout: malformed response");
+    return { providerRef: data.id, url: data.url };
+  }
+  /** Verifies the `Stripe-Signature` header (v1 HMAC-SHA256 of "t.body", 5-minute tolerance). */
+  verifyWebhook(rawBody, header, nowSec = Math.floor(Date.now() / 1e3)) {
+    if (!header) return false;
+    let t = 0;
+    const sigs = [];
+    for (const part of header.split(",")) {
+      const [k, v] = part.split("=", 2);
+      if (k === "t") t = Number(v);
+      else if (k === "v1" && v) sigs.push(v);
+    }
+    if (!t || sigs.length === 0 || Math.abs(nowSec - t) > 300) return false;
+    const expected = createHmac4("sha256", this.webhookSecret).update(`${t}.`).update(rawBody).digest();
+    return sigs.some((s) => {
+      const got = Buffer.from(s, "hex");
+      return got.length === expected.length && timingSafeEqual4(got, expected);
+    });
+  }
+};
+function sortKeysDeep(v) {
+  if (Array.isArray(v)) return v.map(sortKeysDeep);
+  if (v && typeof v === "object") {
+    const out = {};
+    for (const k of Object.keys(v).sort()) out[k] = sortKeysDeep(v[k]);
+    return out;
+  }
+  return v;
+}
+var NowPaymentsProvider = class {
+  constructor(apiKey, ipnSecret, sandbox = false, fetchImpl = fetch) {
+    this.apiKey = apiKey;
+    this.ipnSecret = ipnSecret;
+    this.fetchImpl = fetchImpl;
+    this.base = sandbox ? "https://api-sandbox.nowpayments.io" : "https://api.nowpayments.io";
+  }
+  apiKey;
+  ipnSecret;
+  fetchImpl;
+  base;
+  async createCheckout(i) {
+    const res = await this.fetchImpl(`${this.base}/v1/invoice`, {
+      method: "POST",
+      headers: { "x-api-key": this.apiKey, "content-type": "application/json" },
+      body: JSON.stringify({
+        price_amount: i.pack.usdCents / 100,
+        price_currency: "usd",
+        order_id: i.paymentId,
+        order_description: `${i.pack.diamonds} diamonds \u2014 BLATKOM 89`,
+        ipn_callback_url: i.ipnUrl,
+        success_url: i.successUrl,
+        cancel_url: i.cancelUrl
+      })
+    });
+    if (!res.ok) throw new ProviderError(`nowpayments invoice failed: ${res.status}`);
+    const data = await res.json();
+    if (data.id === void 0 || !data.invoice_url) throw new ProviderError("nowpayments invoice: malformed response");
+    return { providerRef: String(data.id), url: data.invoice_url };
+  }
+  /** Verifies `x-nowpayments-sig` (HMAC-SHA512 of the key-sorted JSON body). */
+  verifyIpn(body, header) {
+    if (!header || !/^[0-9a-f]{128}$/i.test(header)) return false;
+    const expected = createHmac4("sha512", this.ipnSecret).update(JSON.stringify(sortKeysDeep(body))).digest();
+    const got = Buffer.from(header, "hex");
+    return got.length === expected.length && timingSafeEqual4(got, expected);
+  }
+};
 
 // apps/server/src/services/persistence.ts
 var CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
@@ -13303,7 +15513,17 @@ function pgContext(sql2, env2, log2) {
     recorder: new PgMatchRecorder(sql2, log2),
     invites: new PgInvites(sql2),
     analytics,
-    adminAuth: new AdminAuth(sql2, env2.SESSION_SECRET, env2.ADMIN_SESSION_TTL_HOURS, env2.PUBLIC_URL.startsWith("https://"), origins)
+    adminAuth: new AdminAuth(sql2, env2.SESSION_SECRET, env2.ADMIN_SESSION_TTL_HOURS, env2.PUBLIC_URL.startsWith("https://"), origins),
+    economy: new EconomyRepo(sql2, log2),
+    emailAuth: new EmailAuth(sql2, env2.SESSION_SECRET, log2),
+    payments: new PaymentService(
+      sql2,
+      log2,
+      analytics,
+      env2.PUBLIC_URL,
+      env2.STRIPE_SECRET_KEY && env2.STRIPE_WEBHOOK_SECRET ? new StripeProvider(env2.STRIPE_SECRET_KEY, env2.STRIPE_WEBHOOK_SECRET) : null,
+      env2.NOWPAYMENTS_API_KEY && env2.NOWPAYMENTS_IPN_SECRET ? new NowPaymentsProvider(env2.NOWPAYMENTS_API_KEY, env2.NOWPAYMENTS_IPN_SECRET, env2.NOWPAYMENTS_SANDBOX) : null
+    )
   };
   contexts.set(sql2, ctx);
   return ctx;
@@ -13315,7 +15535,7 @@ async function createPersistence(deps) {
   const stopRetention = deps.env.NODE_ENV === "test" ? () => {
   } : scheduleRetention(deps.sql, deps.log);
   return {
-    services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics },
+    services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy },
     close: async () => {
       stopRetention();
       await ctx.analytics.close();
@@ -13324,13 +15544,19 @@ async function createPersistence(deps) {
 }
 
 // apps/server/src/api/auth.ts
+async function linkVisitor(sql2, visitorId, userId, platform2) {
+  await sql2`
+    INSERT INTO visitors (visitor_id, platform, user_id) VALUES (${visitorId}, ${platform2}, ${userId})
+    ON CONFLICT (visitor_id) DO UPDATE SET user_id = COALESCE(visitors.user_id, EXCLUDED.user_id), last_seen_at = now()`;
+  await sql2`INSERT INTO visitor_days (visitor_id, day) VALUES (${visitorId}, (now() AT TIME ZONE 'UTC')::date) ON CONFLICT DO NOTHING`;
+}
 var REASONS = {
-  malformed: "\u041F\u043E\u0432\u0440\u0435\u0436\u0434\u0451\u043D\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0430\u0432\u0442\u043E\u0440\u0438\u0437\u0430\u0446\u0438\u0438",
-  missing_hash: "\u041D\u0435\u0442 \u043F\u043E\u0434\u043F\u0438\u0441\u0438 Telegram",
-  bad_signature: "\u041F\u043E\u0434\u043F\u0438\u0441\u044C Telegram \u043D\u0435 \u043F\u0440\u043E\u0448\u043B\u0430 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443",
-  stale: "\u0414\u0430\u043D\u043D\u044B\u0435 \u0430\u0432\u0442\u043E\u0440\u0438\u0437\u0430\u0446\u0438\u0438 \u0443\u0441\u0442\u0430\u0440\u0435\u043B\u0438 \u2014 \u043F\u0435\u0440\u0435\u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u0435 \u043C\u0438\u043D\u0438-\u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435",
-  future: "\u041D\u0435\u0432\u0435\u0440\u043D\u043E\u0435 \u0432\u0440\u0435\u043C\u044F \u0430\u0432\u0442\u043E\u0440\u0438\u0437\u0430\u0446\u0438\u0438",
-  no_user: "\u041D\u0435\u0442 \u0434\u0430\u043D\u043D\u044B\u0445 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044F Telegram"
+  malformed: "Damaged sign-in data",
+  missing_hash: "No Telegram signature",
+  bad_signature: "The Telegram signature didn\u2019t check out",
+  stale: "The sign-in data has gone stale \u2014 restart the mini app",
+  future: "Wrong sign-in time",
+  no_user: "No Telegram user data"
 };
 var registerAuthRoutes = (router, deps) => {
   const { env: env2, services: services2 } = deps;
@@ -13338,18 +15564,23 @@ var registerAuthRoutes = (router, deps) => {
   const newGuestPerIp = new RateLimiter(10, 10 / 3600);
   const newGuestGlobal = new RateLimiter(200, 200 / 3600);
   const guestEnabled = env2.GUEST_AUTH_ENABLED || env2.DEV_AUTH_ENABLED && env2.NODE_ENV !== "production";
+  const emailLimiter = new RateLimiter(20, 20 / 300);
+  const emailAccountLimiter = new RateLimiter(10, 10 / 900);
+  const emailUserLimiter = new RateLimiter(6, 6 / 300);
+  const byUser = (ctx) => currentUser(ctx).userId;
+  const visitLimiter = new RateLimiter(30, 30 / 60);
   const unavailable = () => {
-    throw new HttpError(503, "persistence_unavailable", "\u0421\u0435\u0440\u0432\u0438\u0441 \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D");
+    throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
   };
   router.post("/api/auth/telegram", rateLimit(limiter), async (ctx) => {
     if (!deps.sql) return unavailable();
     const body = await ctx.body(TelegramAuthRequest, 16 * 1024);
-    if (!env2.TELEGRAM_BOT_TOKEN) throw new HttpError(503, "telegram_not_configured", "\u0412\u0445\u043E\u0434 \u0447\u0435\u0440\u0435\u0437 Telegram \u043D\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D \u043D\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0435");
+    if (!env2.TELEGRAM_BOT_TOKEN) throw new HttpError(503, "telegram_not_configured", "Telegram sign-in isn\u2019t set up on this server");
     const pg = pgContext(deps.sql, env2, deps.log);
     const v = validateInitData(body.initData, env2.TELEGRAM_BOT_TOKEN, env2.TELEGRAM_AUTH_MAX_AGE_SEC);
     if (!v.ok) {
       deps.log.info("telegram auth rejected", { reason: v.reason, ip: ctx.ip });
-      throw new HttpError(401, "invalid_init_data", REASONS[v.reason] ?? "\u041E\u0448\u0438\u0431\u043A\u0430 \u0430\u0432\u0442\u043E\u0440\u0438\u0437\u0430\u0446\u0438\u0438");
+      throw new HttpError(401, "invalid_init_data", REASONS[v.reason] ?? "Sign-in error");
     }
     const platform2 = body.platform ?? null;
     const up = await pg.users.upsertTelegram(v.user, platform2);
@@ -13357,35 +15588,37 @@ var registerAuthRoutes = (router, deps) => {
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform: platform2 };
     services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "telegram" }, evCtx);
     if (up.isNew) services2.analytics.server("profile_created", { method: "telegram" }, evCtx);
+    if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform2);
     const profile = await pg.profiles.get(up.userId);
-    if (!profile) throw new HttpError(500, "internal", "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    if (!profile) throw new HttpError(500, "internal", "Profile not found");
     const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew };
     ctx.json(200, res);
   });
   router.post("/api/auth/guest", rateLimit(limiter), async (ctx) => {
-    if (!guestEnabled) throw new HttpError(403, "guest_auth_disabled", "\u0412\u0445\u043E\u0434 \u0431\u0435\u0437 Telegram \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D \u043D\u0430 \u044D\u0442\u043E\u043C \u0441\u0435\u0440\u0432\u0435\u0440\u0435");
+    if (!guestEnabled) throw new HttpError(403, "guest_auth_disabled", "Signing in without Telegram is switched off on this server");
     if (!deps.sql) return unavailable();
     const body = await ctx.body(GuestAuthRequest, 4 * 1024);
     const pg = pgContext(deps.sql, env2, deps.log);
-    const deviceKey = "g1:" + createHmac4("sha256", env2.SESSION_SECRET).update(body.deviceId).digest("base64url");
+    const deviceKey = "g1:" + createHmac5("sha256", env2.SESSION_SECRET).update(body.deviceId).digest("base64url");
     const existing = await pg.users.findGuest(deviceKey);
     if (!existing && (!newGuestPerIp.take(ctx.ip) || !newGuestGlobal.take("all"))) {
       deps.log.warn("guest sign-up rate limited", { ip: ctx.ip });
-      throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043D\u043E\u0432\u044B\u0445 \u0438\u0433\u0440\u043E\u043A\u043E\u0432 \u043F\u043E\u0434\u0440\u044F\u0434 \u2014 \u043F\u043E\u043F\u0440\u043E\u0431\u0443\u0439\u0442\u0435 \u0447\u0435\u0440\u0435\u0437 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u043C\u0438\u043D\u0443\u0442", { "retry-after": "60" });
+      throw new HttpError(429, "rate_limited", "Too many new players in a row \u2014 try again in a few minutes", { "retry-after": "60" });
     }
     const platform2 = body.platform ?? null;
     const up = await pg.users.upsertGuest(deviceKey, body.name, platform2);
+    if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform2);
     const s = await pg.sessions.issue(up.userId, "guest", platform2, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform: platform2 };
     services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "guest" }, evCtx);
     if (up.isNew) services2.analytics.server("profile_created", { method: "guest" }, evCtx);
     const profile = await pg.profiles.get(up.userId);
-    if (!profile) throw new HttpError(500, "internal", "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    if (!profile) throw new HttpError(500, "internal", "Profile not found");
     const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew };
     ctx.json(200, res);
   });
   router.post("/api/auth/dev", rateLimit(limiter), async (ctx) => {
-    if (!env2.DEV_AUTH_ENABLED || env2.NODE_ENV === "production") throw new HttpError(403, "dev_auth_disabled", "\u0412\u0445\u043E\u0434 \u0434\u043B\u044F \u0440\u0430\u0437\u0440\u0430\u0431\u043E\u0442\u043A\u0438 \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D");
+    if (!env2.DEV_AUTH_ENABLED || env2.NODE_ENV === "production") throw new HttpError(403, "dev_auth_disabled", "Developer sign-in is switched off");
     if (!deps.sql) return unavailable();
     const body = await ctx.body(DevAuthRequest, 4 * 1024);
     const pg = pgContext(deps.sql, env2, deps.log);
@@ -13397,9 +15630,70 @@ var registerAuthRoutes = (router, deps) => {
     services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "dev" }, evCtx);
     if (up.isNew) services2.analytics.server("profile_created", { method: "dev" }, evCtx);
     const profile = await pg.profiles.get(up.userId);
-    if (!profile) throw new HttpError(500, "internal", "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    if (!profile) throw new HttpError(500, "internal", "Profile not found");
     const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew, deviceId };
     ctx.json(200, res);
+  });
+  router.post("/api/visit", rateLimit(visitLimiter), async (ctx) => {
+    if (!deps.sql) return ctx.json(204, null);
+    const body = await ctx.body(VisitRequest, 2 * 1024);
+    const referrer = body.referrer ? body.referrer.replace(/^https?:\/\//, "").split("/")[0].slice(0, 80) : null;
+    await deps.sql`
+      INSERT INTO visitors (visitor_id, platform, referrer) VALUES (${body.visitorId}, ${body.platform ?? null}, ${referrer})
+      ON CONFLICT (visitor_id) DO UPDATE SET last_seen_at = now()`;
+    await deps.sql`INSERT INTO visitor_days (visitor_id, day) VALUES (${body.visitorId}, (now() AT TIME ZONE 'UTC')::date) ON CONFLICT DO NOTHING`;
+    ctx.json(204, null);
+  });
+  router.post("/api/auth/email/login", rateLimit(emailLimiter), async (ctx) => {
+    if (!deps.sql) return unavailable();
+    const body = await ctx.body(EmailLoginRequest, 4 * 1024);
+    if (!emailAccountLimiter.take(body.email)) throw new HttpError(429, "rate_limited", "Too many attempts \u2014 wait a few minutes", { "retry-after": "120" });
+    const pg = pgContext(deps.sql, env2, deps.log);
+    const userId = await pg.emailAuth.verify(body.email, body.password);
+    if (!userId) throw new HttpError(401, "bad_credentials", "Wrong email or password");
+    const platform2 = body.platform ?? null;
+    const s = await pg.sessions.issue(userId, "email", platform2, body.clientVersion ?? null);
+    services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "email" }, { userId, sessionId: s.sessionId, platform: platform2 });
+    const profile = await pg.profiles.get(userId);
+    if (!profile) throw new HttpError(500, "internal", "Profile not found");
+    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: false };
+    ctx.json(200, res);
+  });
+  router.post("/api/auth/email/link", requireUser(services2.sessions), rateLimit(emailUserLimiter, byUser), async (ctx) => {
+    if (!deps.sql) return unavailable();
+    const user = currentUser(ctx);
+    const body = await ctx.body(EmailLinkRequest, 4 * 1024);
+    const pg = pgContext(deps.sql, env2, deps.log);
+    const r = await pg.emailAuth.link(user.userId, body.email, body.password);
+    if (r === "already_linked") throw new HttpError(409, "already_linked", "An email is already registered to this account");
+    if (r === "email_taken") throw new HttpError(409, "email_taken", "This email is already registered to another account");
+    services2.analytics.server("email_linked", {}, user);
+    ctx.json(200, await pg.profiles.get(user.userId));
+  });
+  router.post("/api/auth/email/password", requireUser(services2.sessions), rateLimit(emailUserLimiter, byUser), async (ctx) => {
+    if (!deps.sql) return unavailable();
+    const user = currentUser(ctx);
+    const body = await ctx.body(PasswordChangeRequest, 4 * 1024);
+    const ok = await pgContext(deps.sql, env2, deps.log).emailAuth.changePassword(user.userId, body.current, body.password);
+    if (!ok) throw new HttpError(401, "bad_credentials", "The current password doesn\u2019t match");
+    ctx.json(200, { ok: true });
+  });
+  router.post("/api/auth/email/reset-request", rateLimit(emailLimiter), async (ctx) => {
+    if (!deps.sql) return unavailable();
+    const body = await ctx.body(PasswordResetRequest, 2 * 1024);
+    if (!env2.RESEND_API_KEY || !env2.MAIL_FROM) throw new HttpError(503, "mail_not_configured", "Password reset by email isn\u2019t connected yet \u2014 write to the game\u2019s administration");
+    if (!emailAccountLimiter.take(`reset:${body.email}`)) throw new HttpError(429, "rate_limited", "The letter is already on its way \u2014 check your inbox", { "retry-after": "300" });
+    const pg = pgContext(deps.sql, env2, deps.log);
+    const r = await pg.emailAuth.createReset("email", { email: body.email });
+    if (r) await sendResetMail(env2, body.email, `${env2.PUBLIC_URL.replace(/\/$/, "")}/?reset=${r.token}`, deps.log);
+    ctx.json(200, { ok: true });
+  });
+  router.post("/api/auth/email/reset", rateLimit(emailLimiter), async (ctx) => {
+    if (!deps.sql) return unavailable();
+    const body = await ctx.body(PasswordResetConfirm, 2 * 1024);
+    const userId = await pgContext(deps.sql, env2, deps.log).emailAuth.consumeReset(body.token, body.password);
+    if (!userId) throw new HttpError(400, "bad_token", "The link has expired or was already used");
+    ctx.json(200, { ok: true });
   });
   router.post("/api/auth/logout", requireUser(services2.sessions), async (ctx) => {
     if (!deps.sql) return unavailable();
@@ -13415,18 +15709,22 @@ var registerProfileRoutes = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
   const writeLimiter = new RateLimiter(10, 10 / 60);
   const pg = () => {
-    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "\u0421\u0435\u0440\u0432\u0438\u0441 \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D");
+    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
     return pgContext(deps.sql, deps.env, deps.log);
   };
   router.get("/api/me", auth, async (ctx) => {
     const user = currentUser(ctx);
     const profile = await pg().profiles.get(user.userId);
-    if (!profile) throw new HttpError(404, "not_found", "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    if (!profile) throw new HttpError(404, "not_found", "Profile not found");
     ctx.json(200, profile);
   });
   router.patch("/api/me", auth, rateLimit(writeLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
     const user = currentUser(ctx);
     const body = await ctx.body(UpdateProfileRequest, 4 * 1024);
+    if (body.preferredCharacter) {
+      const inv = await pg().economy.inventory(user.userId);
+      if (!inv.characters.includes(body.preferredCharacter)) throw new HttpError(409, "not_owned", "This character isn\u2019t unlocked yet");
+    }
     await pg().profiles.update(user.userId, body);
     const profile = await pg().profiles.get(user.userId);
     ctx.json(200, profile);
@@ -13502,7 +15800,7 @@ async function ingestClientEvents(sql2, user, events, now = Date.now()) {
 var registerEventRoutes = (router, deps) => {
   const limiter = new RateLimiter(30, 30 / 60);
   router.post("/api/events", requireUser(deps.services.sessions), rateLimit(limiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
-    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "\u0421\u0435\u0440\u0432\u0438\u0441 \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D");
+    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
     const user = currentUser(ctx);
     const body = await ctx.body(EventsBatchSchema, 64 * 1024);
     const result = await ingestClientEvents(deps.sql, user, body.events);
@@ -13747,7 +16045,7 @@ async function listPlayers(sql2, opts) {
     playtime: sql2`COALESCE(p.playtime_sec, 0)`
   }[sort];
   const order = dir === "asc" ? sql2`ASC` : sql2`DESC`;
-  const filter = q ? /^\d{1,20}$/.test(q) ? sql2`AND (u.telegram_id::text = ${q} OR ${folded} LIKE ${like})` : /^[0-9a-f-]{36}$/i.test(q) ? sql2`AND (u.id::text = ${q.toLowerCase()} OR ${folded} LIKE ${like})` : sql2`AND ${folded} LIKE ${like}` : sql2``;
+  const filter = q ? q.includes("@") ? sql2`AND u.email = ${q.toLowerCase()}` : /^\d{1,20}$/.test(q) ? sql2`AND (u.telegram_id::text = ${q} OR ${folded} LIKE ${like})` : /^[0-9a-f-]{36}$/i.test(q) ? sql2`AND (u.id::text = ${q.toLowerCase()} OR ${folded} LIKE ${like})` : sql2`AND ${folded} LIKE ${like}` : sql2``;
   const rows = await sql2`
     SELECT u.id, u.display_name, u.telegram_id::text AS telegram_id, u.created_at, u.last_seen_at,
            COALESCE(p.level, 1) AS level, COALESCE(p.xp, 0) AS xp, COALESCE(p.matches_played, 0) AS matches_played,
@@ -13827,11 +16125,169 @@ async function dailyMetrics(sql2, r) {
   return [...rows];
 }
 
+// apps/server/src/analytics/economy.ts
+var cohort = (r) => ({
+  entered: r.entered,
+  registered: r.registered,
+  played: r.played,
+  returned: r.returned,
+  paid: r.paid,
+  emailLinked: r.email_linked
+});
+async function funnel(sql2, r) {
+  const from = new Date(r.from);
+  const to = new Date(r.to);
+  const [v] = await sql2`
+    WITH v AS (SELECT visitor_id, user_id FROM visitors WHERE first_seen_at BETWEEN ${from} AND ${to}),
+    u AS (
+      SELECT u.id, u.email, (u.created_at AT TIME ZONE 'UTC')::date AS d,
+             EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed) AS played
+      FROM users u WHERE u.deleted_at IS NULL AND u.id IN (SELECT user_id FROM v WHERE user_id IS NOT NULL)
+    )
+    SELECT (SELECT count(*) FROM v)::int AS entered,
+           (SELECT count(*) FROM u)::int AS registered,
+           (SELECT count(*) FROM u WHERE played)::int AS played,
+           (SELECT count(*) FROM u WHERE played AND EXISTS (SELECT 1 FROM user_daily_activity a WHERE a.user_id = u.id AND a.day > u.d))::int AS returned,
+           (SELECT count(*) FROM u WHERE EXISTS (SELECT 1 FROM payments p WHERE p.user_id = u.id AND p.status IN ('paid', 'refunded')))::int AS paid,
+           (SELECT count(*) FROM u WHERE email IS NOT NULL)::int AS email_linked`;
+  const [p] = await sql2`
+    WITH u AS (
+      SELECT u.id, u.email, (u.created_at AT TIME ZONE 'UTC')::date AS d,
+             EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed) AS played
+      FROM users u WHERE u.deleted_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}
+    )
+    SELECT (SELECT count(*) FROM u)::int AS entered,
+           (SELECT count(*) FROM u)::int AS registered,
+           (SELECT count(*) FROM u WHERE played)::int AS played,
+           (SELECT count(*) FROM u WHERE played AND EXISTS (SELECT 1 FROM user_daily_activity a WHERE a.user_id = u.id AND a.day > u.d))::int AS returned,
+           (SELECT count(*) FROM u WHERE EXISTS (SELECT 1 FROM payments p WHERE p.user_id = u.id AND p.status IN ('paid', 'refunded')))::int AS paid,
+           (SELECT count(*) FROM u WHERE email IS NOT NULL)::int AS email_linked`;
+  const referrers = await sql2`
+    SELECT COALESCE(referrer, '') AS key, count(*)::int AS visitors, count(user_id)::int AS registered
+    FROM visitors WHERE first_seen_at BETWEEN ${from} AND ${to}
+    GROUP BY 1 ORDER BY visitors DESC, registered DESC, key LIMIT 10`;
+  const daily = await sql2`
+    SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
+      (SELECT count(*) FROM visitor_days vd WHERE vd.day = g.day::date)::int AS unique_visitors,
+      (SELECT count(*) FROM visitors x WHERE x.first_seen_at >= (g.day AT TIME ZONE 'UTC') AND x.first_seen_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS new_visitors,
+      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL
+         AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS registrations
+    FROM generate_series(${r.firstDay}::date, ${r.lastDay}::date, interval '1 day') AS g(day)
+    ORDER BY g.day`;
+  return {
+    range: r,
+    visitors: cohort(v),
+    players: cohort(p),
+    referrers: [...referrers],
+    daily: daily.map((d) => ({ day: d.day, uniqueVisitors: d.unique_visitors, newVisitors: d.new_visitors, registrations: d.registrations }))
+  };
+}
+function flow(rows, currency, circulating, holders) {
+  const issued = {};
+  const spent = {};
+  for (const r of rows) {
+    if (r.currency !== currency) continue;
+    if (r.plus > 0) issued[r.reason] = r.plus;
+    if (r.minus > 0) spent[r.reason] = r.minus;
+  }
+  const sum = (o) => Object.values(o).reduce((a, b2) => a + b2, 0);
+  return { issued, spent, issuedTotal: sum(issued), spentTotal: sum(spent), circulating, holders };
+}
+async function economy(sql2, r, now = /* @__PURE__ */ new Date()) {
+  const from = new Date(r.from);
+  const to = new Date(r.to);
+  const ledger = await sql2`
+    SELECT currency, reason,
+           COALESCE(sum(delta) FILTER (WHERE delta > 0), 0)::int AS plus,
+           COALESCE(sum(-delta) FILTER (WHERE delta < 0), 0)::int AS minus
+    FROM currency_ledger WHERE created_at BETWEEN ${from} AND ${to}
+    GROUP BY currency, reason`;
+  const [bal] = await sql2`
+    SELECT COALESCE(sum(p.tokens), 0)::int AS tokens, COALESCE(sum(p.diamonds), 0)::int AS diamonds,
+           count(*) FILTER (WHERE p.tokens > 0)::int AS token_holders, count(*) FILTER (WHERE p.diamonds > 0)::int AS diamond_holders
+    FROM profiles p JOIN users u ON u.id = p.user_id WHERE u.deleted_at IS NULL`;
+  const [rev] = await sql2`
+    SELECT count(*) FILTER (WHERE status IN ('paid', 'refunded') AND paid_at BETWEEN ${from} AND ${to})::int AS payments,
+           count(DISTINCT user_id) FILTER (WHERE status IN ('paid', 'refunded') AND paid_at BETWEEN ${from} AND ${to})::int AS payers,
+           count(*) FILTER (WHERE status = 'created' AND created_at BETWEEN ${from} AND ${to})::int AS pending,
+           count(*) FILTER (WHERE status IN ('failed', 'expired') AND created_at BETWEEN ${from} AND ${to})::int AS failed
+    FROM payments`;
+  const byCurrency = await sql2`
+    SELECT currency, sum(amount_cents)::int AS gross, COALESCE(sum(amount_cents) FILTER (WHERE status = 'refunded'), 0)::int AS refunded
+    FROM payments WHERE status IN ('paid', 'refunded') AND paid_at BETWEEN ${from} AND ${to}
+    GROUP BY currency ORDER BY gross DESC`;
+  const byProvider = await sql2`
+    SELECT provider, count(*)::int AS payments, sum(amount_cents)::int AS gross
+    FROM payments WHERE status IN ('paid', 'refunded') AND paid_at BETWEEN ${from} AND ${to}
+    GROUP BY provider ORDER BY gross DESC`;
+  const byPack = await sql2`
+    SELECT pack_id, count(*)::int AS payments FROM payments
+    WHERE status IN ('paid', 'refunded') AND paid_at BETWEEN ${from} AND ${to}
+    GROUP BY pack_id ORDER BY payments DESC, pack_id`;
+  const byKind = await sql2`
+    SELECT kind, source, count(*)::int AS count FROM user_items
+    WHERE acquired_at BETWEEN ${from} AND ${to} GROUP BY kind, source ORDER BY count DESC, kind, source`;
+  const top = await sql2`
+    SELECT kind, item_id AS id, count(*)::int AS count FROM user_items
+    WHERE acquired_at BETWEEN ${from} AND ${to} AND source IN ('tokens', 'diamonds')
+    GROUP BY kind, item_id ORDER BY count DESC, kind, item_id LIMIT 12`;
+  const mods = await sql2`
+    SELECT mod_id AS id, count(*)::int AS count FROM weapon_mods
+    WHERE acquired_at BETWEEN ${from} AND ${to} GROUP BY mod_id ORDER BY count DESC, mod_id`;
+  const cases = await sql2`
+    SELECT rarity, count(*)::int AS count, sum(price)::int AS spent FROM case_openings
+    WHERE created_at BETWEEN ${from} AND ${to} GROUP BY rarity ORDER BY count DESC, rarity`;
+  const daily = await sql2`
+    WITH l AS (
+      SELECT (created_at AT TIME ZONE 'UTC')::date AS d, currency, delta FROM currency_ledger WHERE created_at BETWEEN ${from} AND ${to}
+    ), p AS (
+      SELECT (paid_at AT TIME ZONE 'UTC')::date AS d, amount_cents FROM payments WHERE status IN ('paid', 'refunded') AND paid_at BETWEEN ${from} AND ${to}
+    )
+    SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
+      COALESCE((SELECT sum(delta) FROM l WHERE l.d = g.day::date AND currency = 'tokens' AND delta > 0), 0)::int AS ti,
+      COALESCE((SELECT sum(-delta) FROM l WHERE l.d = g.day::date AND currency = 'tokens' AND delta < 0), 0)::int AS ts,
+      COALESCE((SELECT sum(delta) FROM l WHERE l.d = g.day::date AND currency = 'diamonds' AND delta > 0), 0)::int AS di,
+      COALESCE((SELECT sum(-delta) FROM l WHERE l.d = g.day::date AND currency = 'diamonds' AND delta < 0), 0)::int AS ds,
+      COALESCE((SELECT sum(amount_cents) FROM p WHERE p.d = g.day::date), 0)::int AS rev
+    FROM generate_series(${r.firstDay}::date, ${r.lastDay}::date, interval '1 day') AS g(day)
+    ORDER BY g.day`;
+  const sum = (xs) => xs.reduce((a, b2) => a + b2.count, 0);
+  return {
+    range: r,
+    generatedAt: now.toISOString(),
+    tokens: flow([...ledger], "tokens", bal.tokens, bal.token_holders),
+    diamonds: flow([...ledger], "diamonds", bal.diamonds, bal.diamond_holders),
+    revenue: {
+      payments: rev.payments,
+      payers: rev.payers,
+      byCurrency: byCurrency.map((c) => ({ currency: c.currency, grossCents: c.gross, refundedCents: c.refunded })),
+      byProvider: byProvider.map((p) => ({ provider: p.provider, payments: p.payments, grossCents: p.gross })),
+      byPack: byPack.map((p) => ({ packId: p.pack_id, payments: p.payments })),
+      pending: rev.pending,
+      failed: rev.failed
+    },
+    purchases: { total: sum(byKind.filter((k) => k.source === "tokens" || k.source === "diamonds")), byKind: [...byKind], top: [...top] },
+    mods: { total: sum([...mods]), top: [...mods] },
+    cases: { total: sum([...cases]), diamondsSpent: cases.reduce((a, c) => a + c.spent, 0), byRarity: cases.map((c) => ({ rarity: c.rarity, count: c.count })) },
+    daily: daily.map((d) => ({ day: d.day, tokensIssued: d.ti, tokensSpent: d.ts, diamondsIssued: d.di, diamondsSpent: d.ds, revenueCents: d.rev }))
+  };
+}
+function maskEmail(email) {
+  if (!email) return null;
+  const at = email.lastIndexOf("@");
+  if (at <= 0) return "\u2022\u2022\u2022";
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  const masked = local.length <= 2 ? `${local[0]}\u2022\u2022\u2022` : `${local[0]}\u2022\u2022\u2022${local[local.length - 1]}`;
+  return `${masked}@${domain}`;
+}
+
 // apps/server/src/admin/routes.ts
 var UUID_RE3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var registerAdminRoutes = (router, deps) => {
   const loginPerIp = new RateLimiter(10, 10 / 60);
   const loginPerUser = new RateLimiter(5, 5 / 300);
+  const actionsPerAdmin = new RateLimiter(30, 30 / 300);
   const pg = () => {
     if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "\u0411\u0430\u0437\u0430 \u0434\u0430\u043D\u043D\u044B\u0445 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430");
     return pgContext(deps.sql, deps.env, deps.log);
@@ -13880,6 +16336,12 @@ var registerAdminRoutes = (router, deps) => {
   router.get("/api/admin/charts", viewer, async (ctx) => {
     ctx.json(200, await charts(pg().sql, range(ctx)));
   });
+  router.get("/api/admin/funnel", viewer, async (ctx) => {
+    ctx.json(200, await funnel(pg().sql, range(ctx)));
+  });
+  router.get("/api/admin/economy", viewer, async (ctx) => {
+    ctx.json(200, await economy(pg().sql, range(ctx)));
+  });
   router.get("/api/admin/rooms", viewer, (ctx) => {
     ctx.json(200, deps.rooms.list().map((r) => ({ ...r.info(), mapName: getMap(r.mapId).name, createdAt: new Date(r.createdAt).toISOString() })));
   });
@@ -13901,6 +16363,7 @@ var registerAdminRoutes = (router, deps) => {
     const p = pg();
     const rows = await p.sql`
       SELECT u.id, u.display_name, u.telegram_id::text AS telegram_id, u.created_at, u.last_seen_at, u.language_code, u.platform,
+             u.email, u.email_linked_at, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds,
              COALESCE(p.level, 1) AS level, COALESCE(p.xp, 0) AS xp, COALESCE(p.matches_played, 0) AS matches_played,
              COALESCE(p.matches_completed, 0) AS matches_completed, COALESCE(p.wins, 0) AS wins, COALESCE(p.losses, 0) AS losses,
              COALESCE(p.kills, 0) AS kills, COALESCE(p.assists, 0) AS assists, COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
@@ -13912,8 +16375,20 @@ var registerAdminRoutes = (router, deps) => {
       SELECT count(*)::int AS total,
              count(*) FILTER (WHERE revoked_at IS NULL AND expires_at > now())::int AS active,
              (array_agg(platform ORDER BY created_at DESC))[1] AS last_platform,
-             (array_agg(client_version ORDER BY created_at DESC))[1] AS last_client
+             (array_agg(client_version ORDER BY created_at DESC))[1] AS last_client,
+             array_agg(DISTINCT method) AS methods
       FROM sessions WHERE user_id = ${id}`;
+    const items = await p.sql`
+      SELECT kind, item_id, source, acquired_at FROM user_items WHERE user_id = ${id} ORDER BY acquired_at DESC`;
+    const mods = await p.sql`
+      SELECT weapon_id, mod_id, acquired_at FROM weapon_mods WHERE user_id = ${id} ORDER BY acquired_at DESC`;
+    const ledger = await p.sql`
+      SELECT l.created_at, l.currency, l.delta, l.balance_after, l.reason, l.ref, a.username AS admin
+      FROM currency_ledger l LEFT JOIN admin_users a ON a.id = l.admin_id
+      WHERE l.user_id = ${id} ORDER BY l.id DESC LIMIT 50`;
+    const payments = await p.sql`
+      SELECT id, created_at, paid_at, provider, pack_id, diamonds, amount_cents, currency, status
+      FROM payments WHERE user_id = ${id} ORDER BY created_at DESC LIMIT 30`;
     await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: "player_viewed", target: id, ip: ctx.ip });
     const lv = levelForXp(r.xp);
     const detail = {
@@ -13931,9 +16406,46 @@ var registerAdminRoutes = (router, deps) => {
       sessions: { total: s.total, active: s.active, lastPlatform: s.last_platform, lastClientVersion: s.last_client },
       achievements: await p.profiles.achievements(id),
       matches: await p.profiles.history(id, 50),
-      errors: await playerErrors(p.sql, id, 50)
+      errors: await playerErrors(p.sql, id, 50),
+      wallet: { tokens: r.tokens, diamonds: r.diamonds },
+      account: { emailMasked: maskEmail(r.email), emailLinkedAt: r.email_linked_at?.toISOString() ?? null, signInMethods: (s.methods ?? []).filter(Boolean).sort() },
+      items: items.map((i) => ({ kind: i.kind, id: i.item_id, source: i.source, acquiredAt: i.acquired_at.toISOString() })),
+      mods: mods.map((m) => ({ weapon: m.weapon_id, mod: m.mod_id, acquiredAt: m.acquired_at.toISOString() })),
+      ledger: ledger.map((l) => ({ at: l.created_at.toISOString(), currency: l.currency, delta: l.delta, balanceAfter: l.balance_after, reason: l.reason, ref: l.ref, admin: l.admin })),
+      payments: payments.map((x) => ({ id: x.id, createdAt: x.created_at.toISOString(), paidAt: x.paid_at?.toISOString() ?? null, provider: x.provider, packId: x.pack_id, diamonds: x.diamonds, amountCents: x.amount_cents, currency: x.currency, status: x.status }))
     };
     ctx.json(200, detail);
+  });
+  router.post("/api/admin/players/:id/grant", admin, async (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID_RE3.test(id)) throw new HttpError(400, "bad_id", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440");
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
+    const body = await ctx.body(AdminGrantRequest, 2048);
+    const p = pg();
+    const [u] = await p.sql`SELECT id FROM users WHERE id = ${id} AND deleted_at IS NULL`;
+    if (!u) throw new HttpError(404, "not_found", "\u0418\u0433\u0440\u043E\u043A \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    let balance;
+    try {
+      balance = await p.economy.grant(id, body.currency, body.amount, a.id, body.note);
+    } catch (e) {
+      if (e instanceof EconomyError) throw new HttpError(409, "insufficient_balance", "\u0411\u0430\u043B\u0430\u043D\u0441 \u043D\u0435 \u043C\u043E\u0436\u0435\u0442 \u0441\u0442\u0430\u0442\u044C \u043E\u0442\u0440\u0438\u0446\u0430\u0442\u0435\u043B\u044C\u043D\u044B\u043C");
+      throw e;
+    }
+    await audit(p.sql, deps.log, { adminId: a.id, action: "balance_grant", target: id, details: { currency: body.currency, amount: body.amount, note: body.note, balance }, ip: ctx.ip });
+    ctx.json(200, { currency: body.currency, balance });
+  });
+  router.post("/api/admin/players/:id/reset-link", admin, async (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID_RE3.test(id)) throw new HttpError(400, "bad_id", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440");
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
+    const p = pg();
+    const r = await p.emailAuth.createReset("admin", { userId: id });
+    if (!r) throw new HttpError(404, "no_email", "\u0423 \u0438\u0433\u0440\u043E\u043A\u0430 \u043D\u0435\u0442 \u043F\u0440\u0438\u0432\u044F\u0437\u0430\u043D\u043D\u043E\u0439 \u043F\u043E\u0447\u0442\u044B");
+    await audit(p.sql, deps.log, { adminId: a.id, action: "password_reset_link", target: id, ip: ctx.ip });
+    const out = { link: `${deps.env.PUBLIC_URL.replace(/\/$/, "")}/?reset=${r.token}`, expiresAt: new Date(Date.now() + RESET_TTL_MS).toISOString() };
+    ctx.json(200, out, { "cache-control": "no-store" });
   });
   router.get("/api/admin/errors", viewer, async (ctx) => {
     ctx.json(200, await errorGroups(pg().sql, range(ctx)));
@@ -14009,8 +16521,114 @@ var registerAdminRoutes = (router, deps) => {
   });
 };
 
+// apps/server/src/api/shop.ts
+var registerShopRoutes = (router, deps) => {
+  const auth = requireUser(deps.services.sessions);
+  const shopLimiter = new RateLimiter(20, 20 / 60);
+  const payLimiter = new RateLimiter(6, 6 / 60);
+  const hookLimiter = new RateLimiter(120, 2);
+  const byUser = (ctx) => currentUser(ctx).userId;
+  const pg = () => {
+    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
+    return pgContext(deps.sql, deps.env, deps.log);
+  };
+  const guard = async (f) => {
+    try {
+      return await f();
+    } catch (e) {
+      if (e instanceof EconomyError) throw new HttpError(409, e.refusal, e.message);
+      throw e;
+    }
+  };
+  router.get("/api/shop/config", (ctx) => {
+    const p = deps.sql ? pg().payments : null;
+    const res = { card: !!p?.card, crypto: !!p?.crypto, casesEnabled: deps.env.CASES_ENABLED, packs: [...DIAMOND_PACKS] };
+    ctx.json(200, res);
+  });
+  router.get("/api/me/inventory", auth, async (ctx) => {
+    ctx.json(200, await pg().economy.inventory(currentUser(ctx).userId));
+  });
+  router.get("/api/me/ledger", auth, async (ctx) => {
+    const limit = Math.min(100, Math.max(1, Number(ctx.query.get("limit") ?? 30) || 30));
+    ctx.json(200, { entries: await pg().economy.ledger(currentUser(ctx).userId, limit) });
+  });
+  router.post("/api/shop/buy", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    const user = currentUser(ctx);
+    const body = await ctx.body(BuyRequest, 1024);
+    const inv = await guard(() => pg().economy.buy(user.userId, body.kind, body.id));
+    const price = priceOf(body.kind, body.id);
+    if (price) deps.services.analytics.server("shop_purchase", { kind: body.kind, item: body.id, currency: price.currency, amount: price.amount }, user);
+    ctx.json(200, inv);
+  });
+  router.post("/api/shop/mod", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    const user = currentUser(ctx);
+    const body = await ctx.body(ModBuyRequest, 1024);
+    const inv = await guard(() => pg().economy.buyMod(user.userId, body.weapon, body.mod));
+    deps.services.analytics.server("mod_bought", { weapon: body.weapon, mod: body.mod, cost: MOD_PRICES[body.mod] }, user);
+    ctx.json(200, inv);
+  });
+  router.post("/api/shop/case", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    if (!deps.env.CASES_ENABLED) throw new HttpError(403, "cases_disabled", "Cases are switched off on this server");
+    const user = currentUser(ctx);
+    await ctx.body(CaseOpenRequest, 1024);
+    const { entry, inventory } = await guard(() => pg().economy.openCase(user.userId));
+    deps.services.analytics.server("case_opened", { weapon: entry.weapon, rarity: entry.rarity, price: CASE_PRICE }, user);
+    const res = { weapon: entry.weapon, rarity: entry.rarity, inventory };
+    ctx.json(200, res);
+  });
+  router.post("/api/me/loadout", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    const user = currentUser(ctx);
+    const body = await ctx.body(LoadoutRequest, 4096);
+    ctx.json(200, await pg().economy.setLoadout(user.userId, body));
+  });
+  router.post("/api/pay/checkout", auth, rateLimit(payLimiter, byUser), async (ctx) => {
+    const user = currentUser(ctx);
+    if (user.method === "telegram") throw new HttpError(403, "telegram_stars_only", "Inside Telegram, diamonds will be sold for Telegram Stars \u2014 coming soon");
+    const body = await ctx.body(CheckoutRequest, 1024);
+    ctx.json(200, await pg().payments.checkout(user.userId, body.packId, body.method));
+  });
+  router.get("/api/pay/:id", auth, async (ctx) => {
+    if (!/^[0-9a-f-]{36}$/i.test(ctx.params.id ?? "")) throw new HttpError(404, "not_found", "Payment not found");
+    ctx.json(200, await pg().payments.status(currentUser(ctx).userId, ctx.params.id));
+  });
+  router.post("/api/pay/stripe/webhook", rateLimit(hookLimiter), async (ctx) => {
+    const payments = pg().payments;
+    if (!payments.card) throw new HttpError(404, "not_found", "Not found");
+    const raw = await readBody(ctx.req, 256 * 1024);
+    if (!payments.card.verifyWebhook(raw, ctx.req.headers["stripe-signature"])) {
+      deps.log.warn("stripe webhook: bad signature", { ip: ctx.ip });
+      throw new HttpError(400, "bad_signature", "Bad signature");
+    }
+    let event;
+    try {
+      event = JSON.parse(raw.toString("utf8"));
+    } catch {
+      throw new HttpError(400, "bad_json", "Malformed JSON");
+    }
+    await payments.onStripeEvent(event);
+    ctx.json(200, { received: true });
+  });
+  router.post("/api/pay/nowpayments/ipn", rateLimit(hookLimiter), async (ctx) => {
+    const payments = pg().payments;
+    if (!payments.crypto) throw new HttpError(404, "not_found", "Not found");
+    const raw = await readBody(ctx.req, 64 * 1024);
+    let body;
+    try {
+      body = JSON.parse(raw.toString("utf8"));
+    } catch {
+      throw new HttpError(400, "bad_json", "Malformed JSON");
+    }
+    if (!payments.crypto.verifyIpn(body, ctx.req.headers["x-nowpayments-sig"])) {
+      deps.log.warn("nowpayments ipn: bad signature", { ip: ctx.ip });
+      throw new HttpError(400, "bad_signature", "Bad signature");
+    }
+    await payments.onNowPaymentsIpn(body);
+    ctx.json(200, { received: true });
+  });
+};
+
 // apps/server/src/app.ts
-var ROUTE_MODULES = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerAdminRoutes];
+var ROUTE_MODULES = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerAdminRoutes];
 function createApp(deps, modules = ROUTE_MODULES) {
   const router = new Router();
   const startedAt = Date.now();
@@ -14075,6 +16693,7 @@ import { randomBytes as randomBytes6 } from "node:crypto";
 // apps/server/src/rooms/MatchRoom.ts
 import { randomBytes as randomBytes5, randomUUID as randomUUID3 } from "node:crypto";
 var AUTO_START_DELAY_MS = 4e3;
+var FREE_GEAR = Object.freeze({ loadout: DEFAULT_LOADOUT, characters: new Set(FREE_CHARACTERS) });
 var SOLO_ABORT_MS = 2e4;
 var MAX_MSGS_PER_SEC = 150;
 var MatchRoom = class {
@@ -14139,10 +16758,13 @@ var MatchRoom = class {
   }
   // ── Connections ─────────────────────────────────────────────────────────
   /** Adds or resumes a player. Returns an error code when the join is refused. */
-  join(user, ws, character, viaInvite) {
+  join(user, ws, requested, viaInvite, gear = FREE_GEAR) {
     if (this.closed) return "room_closed";
+    const character = gear.characters.has(requested) ? requested : "petya";
     const existing = this.clients.get(user.userId);
     if (existing) {
+      existing.gear = gear;
+      this.world.setLoadout(user.userId, gear.loadout);
       if (existing.ws && existing.ws !== ws) {
         try {
           existing.ws.close(WS_CLOSE.REPLACED, "replaced");
@@ -14169,6 +16791,8 @@ var MatchRoom = class {
       user,
       ws,
       character,
+      gear,
+      lastGearAt: 0,
       ready: this.autoStart,
       rematch: false,
       viaInvite,
@@ -14186,7 +16810,7 @@ var MatchRoom = class {
     };
     this.clients.set(user.userId, client);
     if (!this.hostId) this.hostId = user.userId;
-    this.world.addPlayer(user.userId, user.displayName, character, false);
+    this.world.addPlayer(user.userId, user.displayName, character, false, gear.loadout);
     this.send(client, this.welcome(client, false));
     this.broadcastRoster();
     this.services.analytics.server("lobby_joined", { roomId: this.id, viaInvite }, user);
@@ -14293,6 +16917,7 @@ var MatchRoom = class {
         this.broadcastRoster();
         return;
       case "character": {
+        if (!c.gear.characters.has(msg.character)) return this.error(c, "invalid_state", "This character isn\u2019t unlocked yet");
         c.character = msg.character;
         const p = this.world.players.get(c.user.userId);
         if (p && (this.world.phase === "waiting" || !p.alive)) p.character = msg.character;
@@ -14300,17 +16925,31 @@ var MatchRoom = class {
         return;
       }
       case "map":
-        if (c.user.userId !== this.hostId) return this.error(c, "not_host", "\u0422\u043E\u043B\u044C\u043A\u043E \u0445\u043E\u0437\u044F\u0438\u043D \u043A\u043E\u043C\u043D\u0430\u0442\u044B \u043C\u0435\u043D\u044F\u0435\u0442 \u043A\u0430\u0440\u0442\u0443");
-        if (this.world.phase !== "waiting") return this.error(c, "invalid_state", "\u041C\u0430\u0442\u0447 \u0443\u0436\u0435 \u0438\u0434\u0451\u0442");
+        if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host changes the map");
+        if (this.world.phase !== "waiting") return this.error(c, "invalid_state", "The match is already on");
         if (!isMapId(msg.mapId)) return;
         this.changeMap(msg.mapId);
         return;
       case "start":
-        if (c.user.userId !== this.hostId) return this.error(c, "not_host", "\u0422\u043E\u043B\u044C\u043A\u043E \u0445\u043E\u0437\u044F\u0438\u043D \u043A\u043E\u043C\u043D\u0430\u0442\u044B \u0437\u0430\u043F\u0443\u0441\u043A\u0430\u0435\u0442 \u043C\u0430\u0442\u0447");
-        if (this.world.phase !== "waiting") return this.error(c, "invalid_state", "\u041C\u0430\u0442\u0447 \u0443\u0436\u0435 \u0438\u0434\u0451\u0442");
-        if (this.connectedCount < this.config.minPlayers) return this.error(c, "invalid_state", `\u041D\u0443\u0436\u043D\u043E \u043C\u0438\u043D\u0438\u043C\u0443\u043C ${this.config.minPlayers} \u0438\u0433\u0440\u043E\u043A\u0430`);
+        if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host starts the match");
+        if (this.world.phase !== "waiting") return this.error(c, "invalid_state", "The match is already on");
+        if (this.connectedCount < this.config.minPlayers) return this.error(c, "invalid_state", `At least ${this.config.minPlayers} players needed`);
         this.startMatch();
         return;
+      case "loadout": {
+        const now = Date.now();
+        if (now - c.lastGearAt < 1500) return;
+        c.lastGearAt = now;
+        const userId = c.user.userId;
+        void this.services.economy.gear(userId).then((g) => {
+          const cur = this.clients.get(userId);
+          if (!cur || this.closed) return;
+          cur.gear = g;
+          this.world.setLoadout(userId, g.loadout);
+          this.broadcastRoster();
+        }).catch((e) => this.log.warn("loadout refresh failed", { user: userId, err: e }));
+        return;
+      }
       case "rematch":
         if (this.world.phase !== "finished") return;
         c.rematch = true;
@@ -14329,7 +16968,7 @@ var MatchRoom = class {
     const roster = [...this.world.players.values()];
     this.mapId = mapId;
     this.world = this.createWorld();
-    for (const p of roster) this.world.addPlayer(p.id, p.name, p.character, p.isBot).connected = p.connected;
+    for (const p of roster) this.world.addPlayer(p.id, p.name, p.character, p.isBot, { sidearm: p.sidearm, melee: p.melee, primary: p.primary, gadget: p.gadget, mods: p.mods }).connected = p.connected;
     this.broadcastRoster();
   }
   // ── Match lifecycle ─────────────────────────────────────────────────────
@@ -14484,6 +17123,7 @@ var MatchRoom = class {
       phaseRemaining: w.phase === "active" ? w.matchTimeLeftMs : w.phaseEndsAt ? Math.max(0, w.phaseEndsAt - w.time) : 0,
       players: w.players.values(),
       pickups: w.pickups,
+      gadgets: w.gadgets,
       events: this.pendingShots,
       now: w.time
     });
@@ -14528,7 +17168,8 @@ var MatchRoom = class {
         connected: c.connected,
         isHost: c.user.userId === this.hostId,
         isBot: false,
-        level: c.user.level
+        level: c.user.level,
+        mods: c.gear.loadout.mods
       };
     });
     return { type: "roster", players, hostId: this.hostId, mapId: this.mapId, phase: this.world.phase, inviteCode: this.inviteCode, isPrivate: this.isPrivate, maxPlayers: this.config.maxPlayers };
@@ -14709,18 +17350,23 @@ function attachGateway(server2, rooms2, services2, log2, opts) {
       ws.off("message", onFirst);
       const user = await services2.sessions.verify(hello.token).catch(() => null);
       if (!user) {
-        ws.send(JSON.stringify({ type: "error", code: "unauthorized", message: "\u0421\u0435\u0441\u0441\u0438\u044F \u043D\u0435\u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0442\u0435\u043B\u044C\u043D\u0430" }));
+        ws.send(JSON.stringify({ type: "error", code: "unauthorized", message: "Session is not valid" }));
         return ws.close(WS_CLOSE.UNAUTHORIZED, "unauthorized");
       }
       const room = rooms2.get(hello.roomId);
       if (!room) {
-        ws.send(JSON.stringify({ type: "error", code: "room_not_found", message: "\u041A\u043E\u043C\u043D\u0430\u0442\u0430 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u0430" }));
+        ws.send(JSON.stringify({ type: "error", code: "room_not_found", message: "Room not found" }));
         return ws.close(WS_CLOSE.ROOM_NOT_FOUND, "room not found");
       }
       const viaInvite = room.isPrivate;
-      const result = room.join(user, ws, hello.character, viaInvite);
+      const gear = await services2.economy.gear(user.userId).catch((e) => {
+        log2.warn("gear lookup failed", { user: user.userId, err: e });
+        return void 0;
+      });
+      if (ws.readyState !== 1) return;
+      const result = room.join(user, ws, hello.character, viaInvite, gear);
       if (result === "room_full" || result === "room_closed") {
-        ws.send(JSON.stringify({ type: "error", code: result, message: result === "room_full" ? "\u041A\u043E\u043C\u043D\u0430\u0442\u0430 \u0437\u0430\u043F\u043E\u043B\u043D\u0435\u043D\u0430" : "\u041C\u0430\u0442\u0447 \u0437\u0430\u0432\u0435\u0440\u0448\u0451\u043D" }));
+        ws.send(JSON.stringify({ type: "error", code: result, message: result === "room_full" ? "The room is full" : "The match is over" }));
         return ws.close(result === "room_full" ? WS_CLOSE.ROOM_FULL : WS_CLOSE.ROOM_CLOSED, result);
       }
       joined = true;

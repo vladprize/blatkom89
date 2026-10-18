@@ -9,6 +9,18 @@ import { RateLimiter, rateLimit } from '../security/rateLimit.js';
 import { validateInitData } from '../auth/telegram.js';
 import { pgContext } from '../services/persistence.js';
 import { sendResetMail } from '../auth/email.js';
+import type { Sql } from '../database/db.js';
+
+/**
+ * Links a new account to the anonymous visitor id of the browser it was created in (admin funnel).
+ * An upsert, because the visit ping and the sign-up are sent concurrently on the first launch.
+ */
+async function linkVisitor(sql: Sql, visitorId: string, userId: string, platform: string | null): Promise<void> {
+  await sql`
+    INSERT INTO visitors (visitor_id, platform, user_id) VALUES (${visitorId}, ${platform}, ${userId})
+    ON CONFLICT (visitor_id) DO UPDATE SET user_id = COALESCE(visitors.user_id, EXCLUDED.user_id), last_seen_at = now()`;
+  await sql`INSERT INTO visitor_days (visitor_id, day) VALUES (${visitorId}, (now() AT TIME ZONE 'UTC')::date) ON CONFLICT DO NOTHING`;
+}
 
 const REASONS: Record<string, string> = {
   malformed: 'Damaged sign-in data',
@@ -53,6 +65,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform };
     services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'telegram' }, evCtx);
     if (up.isNew) services.analytics.server('profile_created', { method: 'telegram' }, evCtx);
+    if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform);
     const profile = await pg.profiles.get(up.userId);
     if (!profile) throw new HttpError(500, 'internal', 'Profile not found');
     const res: AuthResponse = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew };
@@ -74,7 +87,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     const platform = body.platform ?? null;
     const up = await pg.users.upsertGuest(deviceKey, body.name, platform);
     // the visitor funnel: link the anonymous visit to the account it became
-    if (up.isNew && body.visitorId) await deps.sql`UPDATE visitors SET user_id = ${up.userId} WHERE visitor_id = ${body.visitorId} AND user_id IS NULL`;
+    if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform);
     const s = await pg.sessions.issue(up.userId, 'guest', platform, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform };
     services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'guest' }, evCtx);

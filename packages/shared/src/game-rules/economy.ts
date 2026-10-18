@@ -1,9 +1,9 @@
 /**
  * In-game economy (configuration + pure rules; the server is the only authority that persists it).
  *
- *  - Tokens («жетоны») are earned by playing online matches and are never sold.
- *  - Diamonds («алмазы») are bought for real money (100 💎 = $1) or granted by an administrator.
- *  - The four starting characters, the base weapons and the Ф-1 grenade are free for everyone.
+ *  - Tokens (shown in the game as «talons») are earned by playing online matches and are never sold.
+ *  - Diamonds are bought for real money (100 💎 = $1) or granted by an administrator.
+ *  - The four starting characters, the base weapons and the F-1 grenade are free for everyone.
  *  - Shop weapons are sidegrades (see weapons.ts): 3 for tokens, 5 for tokens from a level, 10 for
  *    diamonds ($1.99–4.99). Rare weapons come only from cases ($2.99), never as duplicates.
  *  - Modifications (silencer, sights, laser, grip, magazine) and equipment (grenades, mines, C4,
@@ -71,7 +71,7 @@ export const CHARACTER_PRICES: Readonly<Partial<Record<CharacterId, ShopPrice>>>
   slon: { currency: 'diamonds', amount: 499, level: 1 },
 };
 
-/** Equipment: the Ф-1 is free; the rest is bought once with tokens (some from a level). */
+/** Equipment: the F-1 is free; the rest is bought once with tokens (some from a level). */
 export const FREE_GADGETS: readonly GadgetId[] = ['f1'];
 export const GADGET_PRICES: Readonly<Partial<Record<GadgetId, ShopPrice>>> = {
   smoke: { currency: 'tokens', amount: 100, level: 1 },

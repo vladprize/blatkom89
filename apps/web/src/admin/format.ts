@@ -37,8 +37,97 @@ export function shortDay(day: string): string {
   return dayf.format(new Date(`${day}T00:00:00Z`));
 }
 
-export const MAP_NAMES: Record<string, string> = { factory: 'Заводская проходная', garages: 'Гаражный кооператив', yard: 'Советский двор' };
-export const CHARACTER_NAMES: Record<string, string> = { petya: 'Петя «Комендант»', valuta: 'Валюта', uchastkovy: 'Участковый', mihalych: 'Михалыч «Дембель»' };
+export const MAP_NAMES: Record<string, string> = {
+  factory: 'Заводская проходная',
+  garages: 'Гаражный кооператив',
+  yard: 'Советский двор',
+  stroyka: 'Стройка',
+  dk: 'Дом культуры',
+  gastronom: 'Гастроном',
+  hospital: 'Больница №3',
+};
+export const CHARACTER_NAMES: Record<string, string> = {
+  petya: 'Петя «Комендант»',
+  valuta: 'Валюта «Фарцовщик»',
+  uchastkovy: 'Участковый «Всех знает»',
+  mihalych: 'Михалыч «Дембель»',
+  vorona: 'Карлыч «Информатор»',
+  zmeya: 'Сонька «Искусительница»',
+  varan: 'Толян «Технарь»',
+  popugay: 'Гоша «Связной»',
+  piranya: 'Витёк «Безумец»',
+  akula: 'Жора «Бизнесмен»',
+  oryol: 'Гарик «Пендос»',
+  leopard: 'Лёва «Наёмник»',
+  slon: 'Батя «Крыша»',
+  lobster: 'Славик «Барыга»',
+};
+/** The game itself is in English; the dashboard names things the way the owner's sheets do. */
+export const WEAPON_NAMES: Record<string, string> = {
+  pistol: 'Макаров (ПМ)',
+  montirovka: 'Монтировка',
+  obrez: 'Обрез',
+  avtomat: 'АК-47',
+  tt: 'ТТ',
+  p92: 'P92',
+  deagle: 'Дигл',
+  nozh: 'Нож',
+  bita: 'Бита',
+  topor: 'Топор',
+  uzi: 'Узи',
+  ppsh: 'ППШ-41',
+  mp5: 'MP5',
+  s12: 'С-12К',
+  ksyuha: 'АКС-74У',
+  m4: 'M4A1',
+  g36: 'G36',
+  svd: 'СВД',
+  awm: 'AWM',
+  m24: 'M24',
+  rpg: 'РПГ-7',
+  m249: 'M249',
+  mauser: 'Маузер комиссара',
+  kuvalda: 'Кувалда «Ударник»',
+  zolotoy: 'Золотой Калаш',
+  tommy: 'Томми-ган «Чикаго»',
+  tulka: 'Тулка с гравировкой',
+  ognemet: 'Огнемёт «Пламя-84»',
+  arbalet: 'Арбалет участкового',
+  gvozdomet: 'Гвоздомёт «Стройка»',
+  muha: 'РПГ «Муха»',
+  granatomet: 'Гранатомёт ГМ-94',
+};
+export const GADGET_NAMES: Record<string, string> = { f1: 'Граната Ф-1', smoke: 'Дымовая граната', flash: 'Светошумовая', molotov: 'Коктейль Молотова', mine: 'Мина', c4: 'C4', turret: 'Турель' };
+export const MOD_NAMES: Record<string, string> = { silencer: 'Глушитель', reddot: 'Коллиматор', scope: 'Оптика', laser: 'Лазер', grip: 'Рукоять', extmag: 'Увеличенный магазин' };
+export const ITEM_KINDS: Record<string, string> = { weapon: 'Оружие', character: 'Персонаж', gadget: 'Снаряжение' };
+export const ITEM_SOURCES: Record<string, string> = { tokens: 'за талоны', diamonds: 'за алмазы', case: 'из кейса', grant: 'выдано' };
+export const LEDGER_REASONS: Record<string, string> = {
+  match: 'За матчи',
+  purchase: 'Покупки',
+  mod: 'Модификации',
+  case: 'Кейсы',
+  topup: 'Пополнения',
+  grant: 'Начисления админа',
+  refund: 'Возвраты',
+};
+export const PAYMENT_STATUSES: Record<string, string> = { created: 'ожидает', paid: 'оплачен', failed: 'ошибка', expired: 'истёк', refunded: 'возврат' };
+export const PAYMENT_PROVIDERS: Record<string, string> = { stripe: 'Карта (Stripe)', nowpayments: 'Крипта (NOWPayments)', telegram: 'Telegram Stars' };
+export const SIGN_IN_METHODS: Record<string, string> = { telegram: 'Telegram', guest: 'браузер (гость)', email: 'почта', dev: 'разработка' };
+export const RARITIES: Record<string, string> = { rare: 'Редкое', epic: 'Эпическое', legendary: 'Легендарное' };
+
+export function itemName(kind: string, id: string): string {
+  return (kind === 'weapon' ? WEAPON_NAMES[id] : kind === 'character' ? CHARACTER_NAMES[id] : kind === 'gadget' ? GADGET_NAMES[id] : undefined) ?? id;
+}
+
+/** Cents in a payment currency → «4,99 $». Unknown codes fall back to a plain number. */
+export function money(cents: number | null | undefined, currency = 'usd'): string {
+  if (cents === null || cents === undefined) return NO_DATA;
+  try {
+    return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: currency.toUpperCase() }).format(cents / 100);
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`;
+  }
+}
 export const PLATFORM_NAMES: Record<string, string> = {
   telegram_ios: 'Telegram iOS',
   telegram_android: 'Telegram Android',
@@ -56,4 +145,12 @@ export const ACHIEVEMENT_NAMES: Record<string, string> = {
   win_streak: 'Держит район',
   multi_kill: 'Разборка',
   played_with_friends: 'Свои люди',
+};
+export const ACHIEVEMENT_DESCRIPTIONS: Record<string, string> = {
+  first_match: 'Доиграть первый матч.',
+  first_win: 'Победить в матче.',
+  ten_matches: 'Доиграть 10 матчей.',
+  win_streak: 'Победить 3 матча подряд.',
+  multi_kill: '5 устранений за один матч.',
+  played_with_friends: 'Сыграть матч с друзьями по приглашению.',
 };

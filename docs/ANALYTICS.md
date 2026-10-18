@@ -25,8 +25,13 @@ occurred_at, received_at, platform, props jsonb)`.
 
 | Event | Emitted by | Props |
 |---|---|---|
-| `session_started` | `POST /api/auth/telegram`, `POST /api/auth/dev` | `platform`, `method` (`telegram`\|`dev`) |
+| `session_started` | `POST /api/auth/telegram`, `/guest`, `/email/login`, `/dev` | `platform`, `method` (`telegram`\|`guest`\|`email`\|`dev`) |
 | `profile_created` | same, first login of a new user | `method` |
+| `email_linked` | `POST /api/auth/email/link` | — |
+| `shop_purchase` | `POST /api/shop/buy` | `kind` (`weapon`\|`character`\|`gadget`), `item`, `currency`, `amount` |
+| `mod_bought` | `POST /api/shop/mod` | `weapon`, `mod`, `cost` |
+| `case_opened` | `POST /api/shop/case` | `weapon`, `rarity`, `price` |
+| `payment_completed` | payment webhook credited diamonds | `provider`, `packId`, `diamonds`, `amountCents` |
 | `lobby_created` | `RoomManager.create` | `roomId`, `mapId`, `isPrivate` |
 | `lobby_joined` | `MatchRoom` join / resume | `roomId`, `viaInvite`, `resumed?` |
 | `lobby_left` | `MatchRoom` leave | `roomId`, `phase`, `reason` |
@@ -66,7 +71,11 @@ count, first/last seen, client/server versions and session ids per group.
 ## 3. Canonical data vs derived metrics
 
 Canonical (source of truth): `users`, `profiles`, `sessions`, `matches`, `match_participants`,
-`player_achievements`, `invitations`, `analytics_events`, `app_errors`, `admin_*`.
+`player_achievements`, `invitations`, `analytics_events`, `app_errors`, `admin_*`, and since
+`005_economy_email.sql`: `currency_ledger` (every balance change with the balance after it),
+`user_items`, `weapon_mods`, `case_openings`, `payments`, `password_resets`, `visitors`,
+`visitor_days`. The economy panel and the funnel read these tables directly; the economy analytics
+events above are for event-level exploration only and are not used for the dashboard numbers.
 
 `user_daily_activity (user_id, day)` is a de-duplicated activity index: one row per user per UTC day
 in which the user logged in or made any authenticated request / WebSocket connection (written by
@@ -130,17 +139,56 @@ Classic ("exact day N") retention by **registration cohort**:
 Deleted accounts disappear from cohorts (hard deletion, see PRIVACY.md), so historical numbers can
 change slightly after deletions. Activity older than the retention period (400 days) is purged.
 
-## 6. Exports
+## 6. Funnel (dashboard «Воронка»)
+
+Two cohorts for the range `[from, to]`; steps are nested (each is a subset of the previous one):
+
+| Step | Visitor cohort | New-player cohort |
+|---|---|---|
+| entered | `visitors.first_seen_at ∈ [from, to]` — an anonymous random id the browser (or Mini App) creates and pings once per UTC day (`POST /api/visit`) | — |
+| registered | of those, `visitors.user_id` set: the account created from that browser (linked on the guest or Telegram sign-up of a **new** user) | users with `created_at ∈ [from, to]` (any sign-in) |
+| played | registered and ≥1 *completed* match participation (any time up to now) | same |
+| returned | played and active (`user_daily_activity`) on any UTC day after the registration day | same |
+| paid *(side metric)* | registered and ≥1 payment with status `paid` or `refunded` | same |
+| email linked *(side metric)* | registered and `users.email` set now | same |
+
+Because the game creates the account automatically on first launch, the visitor → account gap
+measures failed loads/sign-ins rather than a decision. Visitors are linked with an upsert, so a
+sign-up that reaches the server before its own visit ping is still counted. Older Telegram
+clients did not send the visitor id; their players appear only in the new-player cohort.
+Referrers: only the domain of `document.referrer` (other sites only) is stored; `''` = direct /
+Telegram. Daily chart: unique visitors per day (`visitor_days`), new visitors, registrations.
+
+## 7. Economy (dashboard «Экономика»)
+
+All amounts come from `currency_ledger`, `user_items`, `weapon_mods`, `case_openings` and `payments`
+(rules and prices: [ECONOMY.md](ECONOMY.md)). Talons are `tokens` in the code.
+
+| Metric | Definition |
+|---|---|
+| Issued / spent by reason | sum of positive / negative `delta` per `currency` and `reason` with `created_at ∈ [from, to]`; reasons `match`, `topup`, `grant`, `purchase`, `mod`, `case`, `refund` (diamonds taken back after a refund) |
+| On hand now | sum of `profiles.tokens` / `diamonds` of existing users at request time, and how many hold > 0 (not range-dependent) |
+| Revenue | payments with status `paid` or `refunded` and `paid_at ∈ [from, to]`, per currency: gross, refunded, net = gross − refunded; by provider and by diamond pack |
+| Payers, ARPPU | distinct users with such payments; net revenue ÷ payers |
+| Waiting / failed | checkouts created in range still `created` / `failed` or `expired` |
+| Arsenal purchases | `user_items` with `acquired_at ∈ [from, to]` bought for talons or diamonds (case drops and grants are listed separately by source) |
+| Modifications, cases | `weapon_mods.acquired_at` / `case_openings.created_at` in range; cases by rarity and diamonds spent |
+| Daily chart | the same ledger sums and paid revenue per UTC day |
+
+## 8. Exports
 
 `players.csv`, `matches_<from>_<to>.csv`, `daily_<from>_<to>.csv` (registrations, DAU, matches
 started/completed, errors per day). Admin role only, every export is written to the audit log.
 Files are UTF-8 with BOM and CRLF; cells starting with `=`, `+`, `-`, `@`, TAB or CR are prefixed with
 `'` (formula-injection protection) and quoted when needed; numbers are written as numbers.
 
-## 7. Verification
+## 9. Verification
 
-`apps/server/src/analytics/events.test.ts`, `admin/admin.test.ts`, `progression/recorder.test.ts` and
-`analytics/retention.test.ts` run against a real PostgreSQL (isolated schema per test file) and cover:
+`apps/server/src/analytics/events.test.ts`, `admin/admin.test.ts`, `admin/economy-admin.test.ts`,
+`progression/recorder.test.ts` and `analytics/retention.test.ts` run against a real PostgreSQL
+(isolated schema per test file) and cover funnel and economy numbers on seeded data (nested steps,
+empty ranges, refunds, case drops vs purchases), balance grants and reset links (roles, CSRF, audit,
+no negative balances, single-use links), the visitor-link race, and:
 event validation and dedupe (within a batch and across requests), clock clamping, error sanitising,
 idempotent and concurrent match-result processing, metric values on seeded data (incl. D1/D7 with
 immature cohorts → `null`, empty datasets → `null`), date-range validation, player search/sort/

@@ -98,6 +98,24 @@
       .form-error { color: var(--red2); min-height: 1.2em; margin: 0; }
       .toast { position: fixed; right: 20px; bottom: 20px; background: var(--panel2); border: 1px solid var(--red); padding: 10px 14px; border-radius: 3px; z-index: 20; max-width: 420px; }
       .toast.ok { border-color: var(--ok); }
+      select { background: #0b0a09; color: var(--text); border: 1px solid var(--line); border-radius: 3px; padding: 7px 9px; font: inherit; }
+      .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .grow { flex: 1; min-width: 140px; }
+      h4.sub { font: 600 13px 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 4px; }
+      .action-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+      .reset-out { margin-top: 10px; }
+      .reset-out input { width: 100%; }
+      .funnel { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+      .funnel-row { display: grid; grid-template-columns: 190px 1fr 170px; gap: 12px; align-items: center; }
+      .funnel-label { color: var(--text); }
+      .funnel-bar { height: 24px; background: #0b0a09; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+      .funnel-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--red), var(--red2)); }
+      .funnel-num { font-family: 'Oswald'; font-size: 18px; text-align: right; font-variant-numeric: tabular-nums; }
+      .funnel-num small { display: block; font: 13px 'PT Sans Narrow', sans-serif; color: var(--muted); }
+      @media (max-width: 520px) {
+        .funnel-row { grid-template-columns: 1fr auto; } .funnel-bar { grid-column: 1 / -1; grid-row: 2; }
+        .range .custom { margin-left: 0; flex-wrap: wrap; padding: 2px 0; } .range .custom input { width: 136px; }
+      }
     </style>
   </head>
   <body>

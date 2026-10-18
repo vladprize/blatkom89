@@ -1,6 +1,6 @@
 /** БЛАТКОМ ’89 admin dashboard — entry point (bundled to /assets/admin.js). */
 import type { AdminMe } from '@blatkom/shared';
-import { h, clear } from './dom.js';
+import { h, clear, toast } from './dom.js';
 import { apiFetch, ApiError, setSession, setUnauthorizedHandler } from './api.js';
 import { renderOverview } from './views/overview.js';
 import { renderPlayers } from './views/players.js';
@@ -8,15 +8,11 @@ import { renderPlayer } from './views/player.js';
 import { renderErrors } from './views/errors.js';
 import { renderExports } from './views/exports.js';
 import { renderAudit } from './views/audit.js';
+import { renderFunnel } from './views/funnel.js';
+import { renderEconomy } from './views/economy.js';
 
 const app = document.getElementById('app')!;
 let me: AdminMe | null = null;
-
-function toast(text: string, kind: 'error' | 'ok' = 'error') {
-  const t = h('div', { class: `toast ${kind}`, role: 'status' }, text);
-  document.body.append(t);
-  setTimeout(() => t.remove(), 4500);
-}
 
 function showLogin(message?: string) {
   me = null;
@@ -56,6 +52,8 @@ function showLogin(message?: string) {
 
 const NAV: Array<[string, string, 'viewer' | 'admin']> = [
   ['#/overview', 'Обзор', 'viewer'],
+  ['#/funnel', 'Воронка', 'viewer'],
+  ['#/economy', 'Экономика', 'viewer'],
   ['#/players', 'Игроки', 'viewer'],
   ['#/errors', 'Ошибки', 'viewer'],
   ['#/exports', 'Экспорт', 'viewer'],
@@ -104,8 +102,10 @@ async function route(): Promise<void> {
   const content = shell(hash);
   try {
     const player = /^#\/players\/([0-9a-f-]{36})$/i.exec(hash);
-    if (player) await renderPlayer(content, player[1]!);
+    if (player) await renderPlayer(content, player[1]!, me);
     else if (hash.startsWith('#/players')) await renderPlayers(content);
+    else if (hash.startsWith('#/funnel')) await renderFunnel(content);
+    else if (hash.startsWith('#/economy')) await renderEconomy(content);
     else if (hash.startsWith('#/errors')) await renderErrors(content);
     else if (hash.startsWith('#/exports')) renderExports(content, me);
     else if (hash.startsWith('#/audit')) await renderAudit(content);

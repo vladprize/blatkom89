@@ -83,6 +83,8 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
   // ── Diamonds for real money ───────────────────────────────────────────────
   router.post('/api/pay/checkout', auth, rateLimit(payLimiter, byUser), async (ctx) => {
     const user = currentUser(ctx);
+    // Telegram requires digital goods inside Mini Apps to be sold for Telegram Stars (XTR) only
+    if (user.method === 'telegram') throw new HttpError(403, 'telegram_stars_only', 'Inside Telegram, diamonds will be sold for Telegram Stars — coming soon');
     const body = await ctx.body(CheckoutRequest, 1024);
     ctx.json(200, await pg().payments.checkout(user.userId, body.packId, body.method));
   });
