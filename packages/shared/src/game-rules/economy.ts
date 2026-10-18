@@ -57,11 +57,10 @@ export const CHARACTER_PRICES: Readonly<Partial<Record<CharacterId, ShopPrice>>>
   varan: { currency: 'tokens', amount: 500, level: 6 },
   popugay: { currency: 'tokens', amount: 650, level: 8 },
   piranya: { currency: 'tokens', amount: 800, level: 11 },
-  // five for diamonds
+  // four for diamonds
   leopard: { currency: 'diamonds', amount: 299, level: 1 },
   lobster: { currency: 'diamonds', amount: 299, level: 1 },
   akula: { currency: 'diamonds', amount: 399, level: 1 },
-  oryol: { currency: 'diamonds', amount: 399, level: 1 },
   slon: { currency: 'diamonds', amount: 499, level: 1 },
 };
 

@@ -1,6 +1,7 @@
 /**
- * Top-down rigs of the ten shop characters (see packages/shared/src/game-rules/characters.ts for
- * their stories). Same conventions as characters.ts: facing +x, y+ = right side, z up, world px.
+ * Top-down rigs of the nine shop characters, re-modelled from the product owner's sheets
+ * (references/08…16): outfit, palette, head shape and accessories as seen from straight above.
+ * Same conventions as characters.ts: facing +x, y+ = right side, z up, world px.
  */
 import { hex } from './lib/raster.js';
 import type { RGBA } from './lib/raster.js';
@@ -17,15 +18,6 @@ function surf(c: V3, r: V3, dx: number, dy: number, lift = 0): number {
   return c[2] + r[2] * Math.sqrt(Math.max(0, t)) + lift;
 }
 
-const eyes = (p: Prim[], hc: V3, hr: V3, x: number, y: number, iris: Material, size = 0.75, glint = true) => {
-  for (const s of [-1, 1]) {
-    const z = surf(hc, hr, x, s * y, 0.15);
-    p.push({ k: 'ell', c: [hc[0] + x, hc[1] + s * y, z], r: [size, size * 0.85, size * 0.7], mat: iris, group: 'eye' });
-    p.push({ k: 'ell', c: [hc[0] + x + size * 0.25, hc[1] + s * y, z + 0.25], r: [size * 0.45, size * 0.4, size * 0.5], mat: MAT.eyeDark, group: 'eye' });
-    if (glint) p.push({ k: 'ell', c: [hc[0] + x + size * 0.35, hc[1] + s * (y - size * 0.25), z + 0.55], r: [0.2, 0.2, 0.25], mat: MAT.glint, group: 'eye' });
-  }
-};
-
 const scales = (base: RGBA[], step = 1.2, light?: RGBA): Material => ({
   ramp: base,
   pattern: (c: PatternCtx) => {
@@ -40,154 +32,273 @@ const scales = (base: RGBA[], step = 1.2, light?: RGBA): Material => ({
 
 const fur = (ramp: RGBA[]): Material => ({ ramp, dither: true });
 
-// ── Ворона «Клава» — crow, cardigan, red headscarf, handbag ───────────────────
-const CROW = H('#07080c', '#11131a', '#1d2130', '#2e3448', '#4a5470');
-const CARDIGAN = H('#2a1a12', '#46301f', '#664830', '#856244');
-const SCARF = H('#5a0c10', '#9a1a1a', '#c8302a', '#e85a40');
+// ── shared outfit pieces ────────────────────────────────────────────────────
+const WHITE = hex('#ece6da');
+const WHITE_SH = hex('#a9a296');
+const SHADES: Material = { ramp: H('#040506', '#0a0c10', '#141820', '#202634'), spec: { color: hex('#9aaccc'), power: 18, threshold: 0.82 } };
+const CHAIN: Material = { ...MAT.gold, pattern: (c) => (Math.floor(c.t * 3) % 2 ? 0.7 : null) };
+const BLACK_CLOTH = H('#08080a', '#121215', '#1d1d22', '#2b2b32', '#3e3e48');
+
+/** Two white stripes over each shoulder (tracksuit), running front to back. */
+const shoulderStripes = (c: PatternCtx, from = 6.0): RGBA | null => {
+  const ay = Math.abs(c.ly);
+  if ((ay > from && ay < from + 1.0) || (ay > from + 1.8 && ay < from + 2.8)) return c.nz > 0.5 ? WHITE : WHITE_SH;
+  return null;
+};
+/** A white stripe down each side of a tracksuit sleeve (capsule lateral coordinate). */
+const sleeveStripes = (c: PatternCtx): RGBA | number | null => {
+  const s = Math.abs(c.s);
+  return s > 0.35 && s < 1.0 ? WHITE : s >= 1.0 && s < 1.25 ? -1 : null;
+};
+/** White side stripe on tracksuit trousers. */
+const legStripe = (c: PatternCtx): RGBA | null => (Math.abs(c.s) > 1.0 && Math.abs(c.s) < 1.5 ? WHITE : null);
+
+/** Gold chain around the front of the neck with a pendant on the chest. */
+function goldChain(p: Prim[], o: PoseOffsets, rx = 5.4, ry = 5.7, z = 13.6, pendant = 1.2, cx = 0.6) {
+  const N = 12;
+  for (let i = 0; i < N; i++) {
+    const a0 = -1.8 + (3.6 * i) / N;
+    const a1 = -1.8 + (3.6 * (i + 1)) / N;
+    const zA = z + o.dz - Math.abs(Math.sin(a0)) * 0.6;
+    const zB = z + o.dz - Math.abs(Math.sin(a1)) * 0.6;
+    p.push({ k: 'cap', a: [cx + Math.cos(a0) * rx + o.dx, Math.sin(a0) * ry + o.dy, zA], b: [cx + Math.cos(a1) * rx + o.dx, Math.sin(a1) * ry + o.dy, zB], r: 0.7, mat: CHAIN, group: 'chain' });
+  }
+  if (pendant > 0) p.push({ k: 'ell', c: [cx + rx + 0.9 + o.dx, o.dy, z - 0.7 + o.dz], r: [pendant, pendant * 0.9, 0.6], mat: MAT.gold, group: 'pendant' });
+}
+
+/** Sunglasses pushed up onto the crown (dx: offset along the head, spread: lens distance from the midline). */
+function shadesOnHead(p: Prim[], hc: V3, hr: V3, dx: number, spread: number, lens = 1.35, frame: Material = MAT.gold) {
+  for (const s of [-1, 1]) {
+    const z = surf(hc, hr, dx, s * spread, 0.35);
+    p.push({ k: 'ell', c: [hc[0] + dx, hc[1] + s * spread, z], r: [lens * 0.9, lens * 1.12, 0.5], mat: SHADES, group: 'shades' });
+  }
+  const zb = surf(hc, hr, dx, 0, 0.5);
+  p.push({ k: 'cap', a: [hc[0] + dx + 0.2, hc[1] - spread + lens * 0.8, zb], b: [hc[0] + dx + 0.2, hc[1] + spread - lens * 0.8, zb], r: 0.24, mat: frame, group: 'shades' });
+  for (const s of [-1, 1]) {
+    const y0 = s * (spread + lens * 1.0);
+    const y1 = s * hr[1] * 0.92;
+    p.push({ k: 'cap', a: [hc[0] + dx, hc[1] + y0, surf(hc, hr, dx, y0, 0.3)], b: [hc[0] + dx - 3.2, hc[1] + y1, surf(hc, hr, dx - 3.2, y1, 0.15)], r: 0.2, mat: frame, group: 'shades' });
+  }
+}
+
+/** Sunglasses worn over the eyes (front of the head). */
+function shadesOnEyes(p: Prim[], hc: V3, hr: V3, dx: number, spread: number, lens = 1.3) {
+  for (const s of [-1, 1]) {
+    const z = surf(hc, hr, dx, s * spread, 0.25);
+    p.push({ k: 'ell', c: [hc[0] + dx, hc[1] + s * spread, z], r: [lens * 0.8, lens * 1.1, 0.55], mat: SHADES, group: 'shades' });
+  }
+  const zb = surf(hc, hr, dx, 0, 0.35);
+  p.push({ k: 'cap', a: [hc[0] + dx, hc[1] - spread + lens * 0.8, zb], b: [hc[0] + dx, hc[1] + spread - lens * 0.8, zb], r: 0.24, mat: MAT.black, group: 'shades' });
+}
+
+/** Aviator goggles on the forehead: round lenses in metal rims + a strap round the back of the head. */
+function goggles(p: Prim[], hc: V3, hr: V3, dx: number, spread: number, lens: number, strap: Material) {
+  const rim: Material = { ramp: H('#2a2a2e', '#4a4a52', '#76767e', '#a8a8b0'), spec: { color: hex('#f0f0f8'), power: 16, threshold: 0.8 } };
+  for (const s of [-1, 1]) {
+    const z = surf(hc, hr, dx, s * spread, 0.45);
+    p.push({ k: 'ell', c: [hc[0] + dx, hc[1] + s * spread, z], r: [lens, lens, 0.8], mat: rim, group: 'goggles' });
+    p.push({ k: 'ell', c: [hc[0] + dx + 0.1, hc[1] + s * spread, z + 0.35], r: [lens * 0.7, lens * 0.7, 0.6], mat: SHADES, group: 'goggles' });
+  }
+  const N = 7;
+  for (let i = 0; i < N; i++) {
+    const a0 = Math.PI * 0.42 + (Math.PI * 1.16 * i) / N;
+    const a1 = Math.PI * 0.42 + (Math.PI * 1.16 * (i + 1)) / N;
+    const pt = (a: number): V3 => {
+      const x = Math.cos(a) * hr[0] * 0.98;
+      const y = Math.sin(a) * hr[1] * 0.98;
+      return [hc[0] + x + dx * 0.3, hc[1] + y, surf(hc, hr, x * 0.92, y * 0.92, 0.1) - 0.4];
+    };
+    p.push({ k: 'cap', a: pt(a0), b: pt(a1), r: 0.45, mat: strap, group: 'strap' });
+  }
+}
+
+/** Cigar (or cigarette) from `a` along direction (dx, dy), with a glowing tip. */
+function cigar(p: Prim[], a: V3, dx: number, dy: number, len = 3.6, r = 0.75, mat: Material = { ramp: H('#2a1408', '#4a2610', '#6a3a1a', '#8a5226') }) {
+  const l = Math.hypot(dx, dy) || 1;
+  const b: V3 = [a[0] + (dx / l) * len, a[1] + (dy / l) * len, a[2]];
+  p.push({ k: 'cap', a, b, r, mat, group: 'cigar' });
+  p.push({ k: 'ell', c: [b[0] + (dx / l) * 0.3, b[1] + (dy / l) * 0.3, b[2] + 0.1], r: [r * 0.85, r * 0.85, r * 0.7], mat: MAT.ember, group: 'ember' });
+}
+
+/** Backpack on the back with two shoulder straps. */
+function backpack(p: Prim[], o: PoseOffsets, rig: { torsoC: V3; torsoR: V3 }, mat: Material, strap: Material, size: V3 = [2.4, 4.8, 3.0]) {
+  const x = rig.torsoC[0] - rig.torsoR[0] + 0.6;
+  const z = rig.torsoC[2] + 1.6;
+  p.push({ k: 'box', c: [x + o.dx, o.dy, z + o.dz], h: size, yaw: o.yaw, mat, group: 'pack', bevel: 1.0 });
+  p.push({ k: 'box', c: [x - size[0] * 0.8 + o.dx, o.dy, z - 0.8 + o.dz], h: [1.0, size[1] * 0.75, size[2] * 0.6], yaw: o.yaw, mat, group: 'packpocket', bevel: 0.6 });
+  for (const s of [-1, 1]) {
+    const y = s * 3.4;
+    p.push({ k: 'cap', a: [x + 1.6 + o.dx, y + o.dy, z + size[2] - 0.2 + o.dz], b: [rig.torsoC[0] + 1.6 + o.dx, s * 4.2 + o.dy, rig.torsoC[2] + rig.torsoR[2] - 0.2 + o.dz], r: 0.55, mat: strap, group: 'strap' + s });
+  }
+}
+
+/** Pouches of a tactical vest on the front of the shoulders (visible around the head from above). */
+function pouches(p: Prim[], o: PoseOffsets, rig: { torsoC: V3; torsoR: V3 }, mat: Material, spots: Array<[number, number]>) {
+  for (const [x, y] of spots) {
+    const z = surf(rig.torsoC, rig.torsoR, x - rig.torsoC[0], y, -0.2);
+    p.push({ k: 'box', c: [x + o.dx, y + o.dy, z + o.dz], h: [1.05, 1.15, 0.9], yaw: o.yaw, mat, group: 'pouch', bevel: 0.35 });
+  }
+}
+
+// ── Карлыч «Информатор» — raven, worn leather jacket, red shirt, gold chain, tape player ──────
+const RAVEN = H('#030304', '#09090c', '#111216', '#1a1c22', '#292c35');
+const RAVEN_LEATHER: Material = { ramp: H('#0b0807', '#16110e', '#231a15', '#33261e', '#48382c'), spec: { color: hex('#b8a08a'), power: 10, threshold: 0.74 } };
+const DARK_RED = H('#3a080a', '#5e0e12', '#86161a', '#a82420', '#c83a30');
 const vorona: Rig = {
   id: 'vorona',
-  torsoC: [-0.2, 0, 8.2],
-  torsoR: [5.6, 10.6, 5.2],
-  shoulderY: 8.3,
-  shoulderZ: 11.3,
-  armR: 2.3,
-  headC: [0.4, 0, 14.8],
-  hipY: 4.0,
-  footR: [2.4, 1.5, 1.1],
+  torsoC: [-0.2, 0, 8.3],
+  torsoR: [5.7, 11.0, 5.3],
+  shoulderY: 8.6,
+  shoulderZ: 11.5,
+  armR: 2.4,
+  headC: [0.4, 0, 15.0],
+  hipY: 4.1,
+  footR: [2.6, 1.5, 1.1],
   toes: true,
   pal: {
     torso: {
-      ramp: CARDIGAN,
-      dither: true,
+      ...RAVEN_LEATHER,
       pattern: (c) => {
-        // flowered dress at the open front of the cardigan
-        if (c.lx > 1.5 && Math.abs(c.ly) < 3.0 - (c.lx - 1.5) * 0.3) {
-          const fx = c.x * 1.2;
-          const fy = c.y * 1.2;
-          const d = (Math.round(fx) - fx) ** 2 + (Math.round(fy) - fy) ** 2;
-          return d < 0.08 ? hex('#e8e0c8') : hex('#2a4a7a');
-        }
-        if (c.lx > 1.2 && Math.abs(Math.abs(c.ly) - 3.1) < 0.3) return hex('#1e130c');
+        // open jacket front: red shirt
+        if (c.lx > 1.0 && Math.abs(c.ly) < 3.6 - (c.lx - 1.0) * 0.25) return hex(c.nz > 0.6 ? '#a82420' : '#6e1014');
+        // worn creases on the leather
+        if (Math.abs(((c.x * 0.8 + c.y * 0.35 + 40) % 2.6) - 1.3) < 0.08) return 0.7;
         return null;
       },
     },
-    sleeve: { ramp: CARDIGAN, dither: true, pattern: (c) => (c.t > 0.86 ? 0.6 : null) },
-    hand: { ramp: H('#0a0b10', '#151822', '#232836', '#343c50') },
-    pants: { ramp: H('#2a1e18', '#3e2c22', '#56402e', '#6e5440') },
+    sleeve: { ...RAVEN_LEATHER, pattern: (c) => (c.t > 0.84 && c.t < 0.94 ? hex('#160f0c') : Math.abs(((c.t * 7) % 1) - 0.5) < 0.05 ? 0.7 : null) },
+    hand: { ramp: H('#050507', '#0d0e13', '#191c26', '#2a3040') },
+    pants: { ramp: H('#0a0a0e', '#141419', '#202028', '#30303a') },
     shoe: { ramp: H('#06060a', '#101014', '#1c1c22', '#2c2c34') },
   },
   torsoExtras(p, o) {
-    p.push({ k: 'ell', c: [1.0 + o.dx, o.dy, 12.4 + o.dz], r: [5.0, 6.0, 1.6], yaw: o.yaw, mat: { ramp: CARDIGAN, dither: true }, group: 'collar' });
-    // handbag hanging at the left
-    p.push({ k: 'box', c: [2.6 + o.dx, -11.6 + o.dy, 7.6 + o.dz], h: [2.7, 1.5, 1.8], yaw: 0.2 + o.yaw, mat: { ramp: H('#2a1408', '#4a2610', '#6e3c1c', '#8e5428'), spec: { color: hex('#c09060'), power: 10, threshold: 0.8 } }, group: 'bag', bevel: 0.7 });
-    p.push({ k: 'ell', c: [2.6 + o.dx, -11.6 + o.dy, 9.5 + o.dz], r: [0.6, 0.6, 0.4], mat: MAT.gold, group: 'clasp' });
+    // red shirt collar around the neck, then the wide leather collar flaps
+    for (const s of [-1, 1]) p.push({ k: 'ell', c: [-1.2 + o.dx, s * 6.2 + o.dy, 12.6 + o.dz], r: [3.6, 2.0, 1.5], yaw: s * 0.7 + o.yaw, mat: RAVEN_LEATHER, group: 'collar' + s });
+    p.push({ k: 'ell', c: [1.6 + o.dx, o.dy, 13.0 + o.dz], r: [5.2, 6.4, 1.6], yaw: o.yaw, mat: { ramp: DARK_RED, pattern: (c) => (c.lx > 3.0 && Math.abs(c.ly) < 1.0 ? hex('#3a080a') : null) }, group: 'shirt' });
+    goldChain(p, o, 5.5, 5.9, 13.7, 0);
+    // cassette player on a strap over the right shoulder, hanging at the left of the chest
+    p.push({ k: 'cap', a: [-3.0 + o.dx, 6.6 + o.dy, 13.4 + o.dz], b: [3.6 + o.dx, -6.4 + o.dy, 12.2 + o.dz], r: 0.45, mat: { ramp: H('#0a0a0c', '#18181c', '#26262c') }, group: 'tapestrap' });
+    p.push({ k: 'box', c: [4.4 + o.dx, -7.2 + o.dy, 11.0 + o.dz], h: [1.8, 2.6, 1.1], yaw: 0.25 + o.yaw, mat: { ramp: H('#1a1a1e', '#2e2e34', '#46464e', '#62626c'), spec: { color: hex('#d0d4e0'), power: 14, threshold: 0.84 }, pattern: (c) => (Math.abs(c.ly) < 1.6 && c.lx > -0.6 && c.lx < 0.7 ? hex('#7a1a16') : null) }, group: 'tape', bevel: 0.4 });
   },
   head(p, o) {
-    const hc: V3 = [0.4 + o.dx, o.dy, 14.8 + o.dz];
-    const hr: V3 = [4.6, 4.2, 3.9];
-    p.push({ k: 'ell', c: hc, r: hr, mat: { ramp: CROW, spec: { color: hex('#7f95c8'), power: 9, threshold: 0.84 } }, group: 'head' });
-    p.push({ k: 'cap', a: [hc[0] + 2.6, hc[1], hc[2] + 0.8], b: [hc[0] + 10.4, hc[1], hc[2] + 0.2], r: 2.0, r2: 0.4, mat: { ramp: H('#26262c', '#3e3e46', '#5e5e68', '#86868f', '#aeaeb6'), spec: { color: hex('#e0e4f0'), power: 14, threshold: 0.84 } }, group: 'beak' });
-    eyes(p, hc, hr, 2.4, 2.9, MAT.eyeDark, 0.7);
-    const scarf: Material = {
-      ramp: SCARF,
-      pattern: (c) => {
-        const fx = c.x * 1.05;
-        const fy = c.y * 1.05;
-        const d = (Math.round(fx) - fx) ** 2 + (Math.round(fy) - fy) ** 2;
-        return d < 0.07 && (Math.round(fx) + Math.round(fy)) % 2 === 0 ? hex('#f2e8d0') : null;
-      },
-    };
-    p.push({ k: 'ell', c: [hc[0] - 2.4, hc[1], hc[2] + 1.0], r: [4.2, 5.0, 3.6], yaw: o.yaw * 0.5, mat: scarf, group: 'scarf' });
-    p.push({ k: 'ell', c: [hc[0] + 0.6, hc[1] + 4.2, hc[2] - 1.4], r: [1.4, 1.2, 1.1], mat: { ramp: SCARF }, group: 'knot' });
-    for (const s of [-1, 1]) p.push({ k: 'cap', a: [hc[0] - 5.2, hc[1] + s * 0.9, hc[2] - 0.2], b: [hc[0] - 8.6, hc[1] + s * 2.4 + o.sway * 0.5, hc[2] - 1.4], r: 1.05, r2: 0.7, mat: { ramp: SCARF }, group: 'scarftail' });
+    const hc: V3 = [0.4 + o.dx, o.dy, 15.0 + o.dz];
+    const hr: V3 = [4.7, 4.3, 4.0];
+    const feathers: Material = { ramp: RAVEN, dither: true, spec: { color: hex('#5a6684'), power: 9, threshold: 0.86 } };
+    p.push({ k: 'ell', c: hc, r: hr, mat: feathers, group: 'head' });
+    // ruffled feather tufts at the back of the head
+    for (const [y, l] of [
+      [-1.4, 1.8],
+      [0, 2.4],
+      [1.4, 1.8],
+    ] as const)
+      p.push({ k: 'cap', a: [hc[0] - 2.6, hc[1] + y * 0.6, hc[2] + 2.4], b: [hc[0] - 2.6 - l, hc[1] + y, hc[2] + 2.0], r: 0.8, r2: 0.3, mat: feathers, group: 'tuft' });
+    // big charcoal beak with a lighter hooked tip
+    p.push({ k: 'cap', a: [hc[0] + 2.4, hc[1], hc[2] + 0.4], b: [hc[0] + 10.6, hc[1], hc[2] - 0.6], r: 2.3, r2: 0.55, mat: { ramp: H('#16161a', '#2a2a30', '#43434b', '#62626c', '#8e8e98'), spec: { color: hex('#e0e4f0'), power: 14, threshold: 0.82 } }, group: 'beak' });
+    p.push({ k: 'ell', c: [hc[0] + 10.4, hc[1], hc[2] - 1.0], r: [0.9, 0.55, 0.6], mat: { ramp: H('#5a5a64', '#8a8a96') }, group: 'beak' });
+    // amber eyes
+    for (const s of [-1, 1]) {
+      const z = surf(hc, hr, 2.2, s * 3.0, 0.15);
+      p.push({ k: 'ell', c: [hc[0] + 2.2, hc[1] + s * 3.0, z], r: [0.75, 0.62, 0.55], mat: { ramp: H('#f08a1a'), flat: true }, group: 'eye' });
+      p.push({ k: 'ell', c: [hc[0] + 2.45, hc[1] + s * 3.0, z + 0.25], r: [0.38, 0.34, 0.45], mat: MAT.eyeDark, group: 'eye' });
+    }
   },
   tail(p, o) {
-    const m: Material = { ramp: CROW, spec: { color: hex('#6f85b8'), power: 9, threshold: 0.86 } };
+    const m: Material = { ramp: RAVEN, spec: { color: hex('#4a5672'), power: 9, threshold: 0.9 } };
     for (const [y, l] of [
-      [-1.6, 11.5],
-      [0, 12.6],
-      [1.6, 11.5],
+      [-1.6, 11.0],
+      [0, 12.4],
+      [1.6, 11.0],
     ] as const)
-      p.push({ k: 'cap', a: [-5.2, y * 0.6, 7.2], b: [-l, y * 1.8 + o.sway * 0.6, 7.0], r: 1.3, r2: 0.7, mat: m, group: 'tail' });
+      p.push({ k: 'cap', a: [-5.2, y * 0.6, 7.0], b: [-l, y * 1.8 + o.sway * 0.6, 6.8], r: 1.3, r2: 0.7, mat: m, group: 'tail' });
   },
 };
 
-// ── Змея «Зинаида» — snake, office suit, auburn perm, long tail ──────────────
-const SNAKE = H('#0e2a12', '#1a4420', '#2a6430', '#3e8642', '#62aa5a');
-const SUIT_TEAL = H('#0e1c1e', '#182e32', '#244448', '#345e62', '#4c7c80');
+// ── Сонька «Искусительница» — olive python, red tracksuit, shades on the head, gold $ chain ────
+const PYTHON = H('#141c0a', '#243014', '#3a4a20', '#566a32', '#7a8e4a');
+const pythonSkin: Material = {
+  ramp: PYTHON,
+  pattern: (c) => {
+    // dark blotches with lighter edges + fine scale grid
+    const gx = c.x * 0.42 + (Math.floor(c.y * 0.42) % 2) * 0.5;
+    const gy = c.y * 0.42;
+    const d = (gx - Math.round(gx)) ** 2 + (gy - Math.round(gy)) ** 2;
+    if (d < 0.06) return hex('#121808');
+    if (d < 0.1) return hex('#a8a05a');
+    const u = c.x * 1.6 + (Math.floor(c.y * 1.6) % 2) * 0.5;
+    return u - Math.floor(u) < 0.14 ? -1 : null;
+  },
+};
+const TRACK_RED = H('#3a080c', '#68101a', '#9a1a24', '#c4282c', '#e2483e');
 const zmeya: Rig = {
   id: 'zmeya',
   torsoC: [-0.2, 0, 8.3],
-  torsoR: [5.4, 10.4, 5.2],
-  shoulderY: 8.2,
+  torsoR: [5.5, 10.6, 5.2],
+  shoulderY: 8.3,
   shoulderZ: 11.4,
-  armR: 2.2,
-  headC: [0.4, 0, 15.0],
+  armR: 2.25,
+  headC: [0.6, 0, 15.0],
   hipY: 3.9,
-  footR: [2.6, 1.3, 1.1],
+  footR: [2.6, 1.4, 1.1],
   pal: {
     torso: {
-      ramp: SUIT_TEAL,
+      ramp: TRACK_RED,
       pattern: (c) => {
-        if (c.lx > 1.8 && Math.abs(c.ly) < 2.6 - (c.lx - 1.8) * 0.35) return hex('#efe8da'); // blouse
-        if (c.lx > 1.5 && Math.abs(Math.abs(c.ly) - 2.9) < 0.3) return hex('#0a1416'); // lapels
-        return null;
+        if (c.lx > 1.6 && Math.abs(c.ly) < 2.8) return hex('#141416'); // black tee at the open zip
+        if (c.lx > 1.4 && Math.abs(Math.abs(c.ly) - 3.0) < 0.22) return WHITE_SH; // zip edges
+        return shoulderStripes(c);
       },
     },
-    sleeve: { ramp: SUIT_TEAL, pattern: (c) => (c.t > 0.88 ? hex('#efe8da') : null) },
-    hand: scales(SNAKE, 2.2),
-    pants: { ramp: H('#120e10', '#1e181c', '#2e262c', '#40363e') },
-    shoe: { ramp: H('#3a0808', '#640e10', '#8e1a1a', '#b83026'), spec: { color: hex('#ffb0a0'), power: 14, threshold: 0.84 } },
+    sleeve: { ramp: TRACK_RED, pattern: sleeveStripes },
+    hand: scales(PYTHON, 2.2),
+    pants: { ramp: H('#0c0c10', '#16161c', '#222228', '#323238') },
+    shoe: { ramp: H('#1c1c20', '#2e2e34', '#ccc6b8', '#ece6da') },
   },
   torsoExtras(p, o) {
-    p.push({ k: 'ell', c: [3.0 + o.dx, -3.6 + o.dy, 13.0 + o.dz], r: [0.9, 0.9, 0.5], mat: MAT.gold, group: 'brooch' });
-    p.push({ k: 'ell', c: [3.0 + o.dx, -3.6 + o.dy, 13.3 + o.dz], r: [0.45, 0.45, 0.4], mat: { ramp: H('#5a0a1a', '#a01a3a'), flat: false }, group: 'brooch' });
+    p.push({ k: 'ell', c: [1.4 + o.dx, o.dy, 12.8 + o.dz], r: [4.6, 5.6, 1.6], yaw: o.yaw, mat: { ramp: TRACK_RED, pattern: (c) => (Math.sqrt((c.lx / 4.6) ** 2 + (c.ly / 5.6) ** 2) > 0.82 ? WHITE : null) }, group: 'collar' });
+    goldChain(p, o, 5.3, 5.5, 13.7, 1.2);
+    backpack(p, o, zmeya, { ramp: H('#2a1608', '#44260e', '#623a18', '#7e5024') }, { ramp: H('#1a0e06', '#2e1a0c', '#46280e') }, [2.2, 4.2, 2.6]);
   },
   head(p, o) {
-    const hc: V3 = [0.8 + o.dx, o.dy, 14.4 + o.dz];
-    const hr: V3 = [5.2, 4.1, 2.9];
-    const skin = scales(SNAKE, 1.5, hex('#8acb6a'));
-    // triangular viper head: wide jaw at the back, snout forward
-    p.push({ k: 'ell', c: hc, r: hr, mat: skin, group: 'head' });
-    p.push({ k: 'cap', a: [hc[0] + 2.0, hc[1], hc[2] + 0.2], b: [hc[0] + 7.4, hc[1], hc[2] - 0.6], r: 2.9, r2: 1.5, mat: skin, group: 'snout' });
+    const hc: V3 = [0.9 + o.dx, o.dy, 14.4 + o.dz];
+    const hr: V3 = [5.2, 3.9, 3.0];
+    p.push({ k: 'ell', c: hc, r: hr, mat: pythonSkin, group: 'head' });
+    // long flat snout
+    p.push({ k: 'cap', a: [hc[0] + 2.0, hc[1], hc[2] + 0.3], b: [hc[0] + 7.6, hc[1], hc[2] - 0.4], r: 2.8, r2: 1.6, mat: pythonSkin, group: 'snout' });
+    // cream lip line along the jaw
+    for (const s of [-1, 1]) p.push({ k: 'cap', a: [hc[0] + 2.4, hc[1] + s * 2.7, hc[2] - 1.4], b: [hc[0] + 7.8, hc[1] + s * 1.4, hc[2] - 1.4], r: 0.5, mat: { ramp: H('#8a7a3a', '#c8b46a', '#e4d494') }, group: 'lip' });
+    // golden eyes with slit pupils
     for (const s of [-1, 1]) {
-      const z = surf(hc, hr, 2.6, s * 2.6, 0.3);
-      p.push({ k: 'ell', c: [hc[0] + 2.6, hc[1] + s * 2.6, z], r: [1.0, 0.75, 0.6], mat: MAT.eyeYellow, group: 'eye' });
-      p.push({ k: 'ell', c: [hc[0] + 2.75, hc[1] + s * 2.6, z + 0.3], r: [0.65, 0.18, 0.5], mat: MAT.eyeDark, group: 'eye' });
+      const z = surf(hc, hr, 3.0, s * 2.5, 0.35);
+      p.push({ k: 'ell', c: [hc[0] + 3.0, hc[1] + s * 2.5, z], r: [0.95, 0.72, 0.6], mat: { ramp: H('#e0a020'), flat: true }, group: 'eye' });
+      p.push({ k: 'ell', c: [hc[0] + 3.15, hc[1] + s * 2.5, z + 0.3], r: [0.62, 0.16, 0.5], mat: MAT.eyeDark, group: 'eye' });
     }
-    // forked tongue
-    p.push({ k: 'cap', a: [hc[0] + 8.2, hc[1], hc[2] - 1.0], b: [hc[0] + 10.6, hc[1], hc[2] - 1.2], r: 0.3, mat: { ramp: H('#a01020', '#e0304a'), flat: true }, group: 'tongue' });
-    for (const s of [-1, 1]) p.push({ k: 'cap', a: [hc[0] + 10.6, hc[1], hc[2] - 1.2], b: [hc[0] + 11.8, hc[1] + s * 0.9, hc[2] - 1.3], r: 0.22, mat: { ramp: H('#a01020', '#e0304a'), flat: true }, group: 'tongue' });
-    // the perm («химия»): copper curls on the crown and the back
-    const curls: Material = { ramp: H('#4a1a08', '#7a3010', '#a8481c', '#cc6a30', '#e8904c') };
-    const spots: Array<[number, number, number]> = [
-      [-3.2, -2.6, 1.6],
-      [-3.4, 0, 1.9],
-      [-3.2, 2.6, 1.6],
-      [-1.4, -3.4, 1.7],
-      [-1.0, -1.2, 2.3],
-      [-1.0, 1.2, 2.3],
-      [-1.4, 3.4, 1.7],
-      [0.8, -2.2, 2.0],
-      [0.8, 0, 2.3],
-      [0.8, 2.2, 2.0],
-      [-5.0, -1.2, 0.8],
-      [-5.0, 1.2, 0.8],
-    ];
-    for (const [x, y, zl] of spots) p.push({ k: 'ell', c: [hc[0] + x * 0.9 - 1.6, hc[1] + y * 0.85, hc[2] + zl + 0.8], r: [1.35, 1.35, 1.25], mat: curls, group: 'perm' });
+    shadesOnHead(p, hc, hr, -0.8, 1.9, 1.35);
+    // forked red tongue
+    const tongue: Material = { ramp: H('#7a0816', '#c8202e'), flat: true };
+    p.push({ k: 'cap', a: [hc[0] + 8.2, hc[1], hc[2] - 0.9], b: [hc[0] + 10.8, hc[1] + 0.3, hc[2] - 1.1], r: 0.32, mat: tongue, group: 'tongue' });
+    for (const s of [-1, 1]) p.push({ k: 'cap', a: [hc[0] + 10.8, hc[1] + 0.3, hc[2] - 1.1], b: [hc[0] + 12.0, hc[1] + 0.3 + s * 0.9, hc[2] - 1.2], r: 0.22, mat: tongue, group: 'tongue' });
   },
   tail(p, o) {
-    const skin = scales(SNAKE, 1.6);
     const sw = o.sway;
-    p.push({ k: 'cap', a: [-5.5, 0.5, 4.8], b: [-11, 2.4 + sw * 0.6, 3.6], r: 2.3, r2: 1.9, mat: skin, group: 'tail' });
-    p.push({ k: 'cap', a: [-11, 2.4 + sw * 0.6, 3.6], b: [-15, -0.6 + sw, 3.0], r: 1.9, r2: 1.3, mat: skin, group: 'tail' });
-    p.push({ k: 'cap', a: [-15, -0.6 + sw, 3.0], b: [-17.6, -4.2 + sw * 1.3, 2.6], r: 1.3, r2: 0.5, mat: skin, group: 'tail' });
+    p.push({ k: 'cap', a: [-5.5, 0.5, 4.8], b: [-11, 2.4 + sw * 0.6, 3.6], r: 2.4, r2: 1.9, mat: pythonSkin, group: 'tail' });
+    p.push({ k: 'cap', a: [-11, 2.4 + sw * 0.6, 3.6], b: [-15, -0.6 + sw, 3.0], r: 1.9, r2: 1.3, mat: pythonSkin, group: 'tail' });
+    p.push({ k: 'cap', a: [-15, -0.6 + sw, 3.0], b: [-17.8, -4.2 + sw * 1.3, 2.6], r: 1.3, r2: 0.45, mat: pythonSkin, group: 'tail' });
   },
 };
 
-// ── Варан «Валера» — monitor lizard, quilted jacket, flat cap ────────────────
-const LIZARD = H('#3a3218', '#5a4e26', '#7c6e38', '#a0904e', '#c4b26a');
-const VATNIK = H('#1c221c', '#2a332a', '#3a463a', '#4e5c4c', '#667662');
+// ── Толян «Технарь» — monitor lizard, black tactical jacket with pouches, goggles, cigar ──────
+const MONITOR = H('#241a0c', '#3c2c14', '#5a4420', '#78602e', '#9a8044');
+const monitorSkin: Material = {
+  ramp: MONITOR,
+  dither: true,
+  pattern: (c) => {
+    const n = Math.sin(c.x * 3.1 + Math.cos(c.y * 2.3) * 2) * Math.sin(c.y * 2.7 + c.x * 0.9);
+    if (n > 0.82) return hex('#b8a066');
+    if (n < -0.86) return hex('#1a1208');
+    return null;
+  },
+};
+const TACTICAL = { ramp: H('#0c0c0e', '#17171b', '#24242a', '#34343c', '#484852'), spec: { color: hex('#8890a0'), power: 12, threshold: 0.86 } } as Material;
 const varan: Rig = {
   id: 'varan',
   torsoC: [-0.3, 0, 8.4],
@@ -195,163 +306,228 @@ const varan: Rig = {
   shoulderY: 8.9,
   shoulderZ: 11.6,
   armR: 2.5,
-  headC: [0.4, 0, 15.0],
+  headC: [0.8, 0, 14.6],
   hipY: 4.4,
   footR: [3.0, 1.8, 1.2],
   pal: {
-    torso: { ramp: VATNIK, pattern: (c) => (Math.abs(((c.x + 20) % 1.8) - 0.9) < 0.14 ? -1 : c.lx > 3.6 && Math.abs(c.ly) < 0.35 ? hex('#0c1012') : null) },
-    sleeve: { ramp: VATNIK, pattern: (c) => (Math.abs(((c.t * 9) % 1) - 0.5) < 0.1 ? -1 : null) },
-    hand: scales(LIZARD, 2.0),
-    pants: { ramp: H('#16181e', '#22262e', '#323844', '#464e5c') },
-    shoe: { ramp: H('#0e0c0a', '#1c1814', '#2c2620', '#40382e') },
+    torso: {
+      ...TACTICAL,
+      pattern: (c) => {
+        // quilted seams
+        if (Math.abs(((c.y + 40) % 2.4) - 1.2) < 0.1 || Math.abs(((c.x + 40) % 3.2) - 1.6) < 0.08) return -1;
+        return null;
+      },
+    },
+    sleeve: { ...TACTICAL, pattern: (c) => (c.t > 0.82 && c.t < 0.94 ? -1 : null) },
+    hand: { ramp: H('#060608', '#101014', '#1c1c22', '#2c2c34') },
+    pants: { ramp: H('#0e0e12', '#18181e', '#26262e', '#363640') },
+    shoe: { ramp: H('#060608', '#0e0e12', '#1c1c22', '#2e2e36') },
   },
   torsoExtras(p, o) {
-    // a ledger tucked under the left arm and a pencil
-    p.push({ k: 'box', c: [1.2 + o.dx, -10.6 + o.dy, 9.4 + o.dz], h: [2.8, 0.7, 2.0], yaw: 0.1 + o.yaw, mat: { ramp: H('#2a3a5a', '#3a5078', '#4c6894') }, group: 'ledger', bevel: 0.3 });
-    p.push({ k: 'ell', c: [0.8 + o.dx, o.dy, 12.8 + o.dz], r: [5.2, 6.4, 1.7], mat: { ramp: VATNIK }, group: 'collar' });
+    p.push({ k: 'ell', c: [1.0 + o.dx, o.dy, 12.9 + o.dz], r: [5.0, 6.2, 1.7], yaw: o.yaw, mat: TACTICAL, group: 'collar' });
+    // red star patch on top of the left shoulder
+    p.push({ k: 'ell', c: [-0.2 + o.dx, -varan.shoulderY + o.dy, varan.shoulderZ + varan.armR + 0.15 + o.dz], r: [1.4, 1.4, 0.3], mat: { ramp: H('#5a0a0c', '#a01c1a', '#d0302a'), pattern: (c) => { const a = Math.atan2(c.ly, c.lx); const r = Math.hypot(c.lx, c.ly); return r < 0.55 + 0.5 * Math.abs(Math.cos(a * 2.5)) ? hex('#f0c040') : null; } }, group: 'patch' });
+    pouches(p, o, varan, { ramp: H('#1a1810', '#2e2a1a', '#463e26', '#5e5434') }, [
+      [3.4, -5.4],
+      [3.4, 5.4],
+      [1.4, -7.4],
+      [1.4, 7.4],
+      [4.4, -3.4],
+    ]);
+    backpack(p, o, varan, { ramp: H('#0a0a0c', '#16161a', '#24242a', '#36363e') }, { ramp: H('#060608', '#121216', '#1e1e24') }, [2.4, 4.6, 2.8]);
   },
   head(p, o) {
     const hc: V3 = [1.0 + o.dx, o.dy, 14.2 + o.dz];
-    const hr: V3 = [6.2, 3.7, 3.0];
-    const skin = scales(LIZARD, 1.4, hex('#b8a46a'));
-    p.push({ k: 'ell', c: hc, r: hr, mat: skin, group: 'head' });
-    p.push({ k: 'cap', a: [hc[0] + 2.6, hc[1], hc[2] + 0.6], b: [hc[0] + 10.0, hc[1], hc[2] - 0.2], r: 2.6, r2: 1.5, mat: skin, group: 'snout' });
-    eyes(p, hc, hr, 2.4, 2.7, { ramp: H('#e8b830'), flat: true }, 0.8);
-    // tongue
-    p.push({ k: 'cap', a: [hc[0] + 10.6, hc[1], hc[2] - 0.6], b: [hc[0] + 12.4, hc[1], hc[2] - 0.7], r: 0.3, mat: { ramp: H('#c06080', '#e890a8'), flat: true }, group: 'tongue' });
-    for (const s of [-1, 1]) p.push({ k: 'cap', a: [hc[0] + 12.4, hc[1], hc[2] - 0.7], b: [hc[0] + 13.4, hc[1] + s * 0.8, hc[2] - 0.8], r: 0.22, mat: { ramp: H('#c06080', '#e890a8'), flat: true }, group: 'tongue' });
-    // flat cap (кепка) with a short visor
-    const capM: Material = { ramp: H('#22242a', '#34383e', '#4a5058', '#62686e'), dither: true };
-    p.push({ k: 'ell', c: [hc[0] - 3.0, hc[1], hc[2] + 2.2], r: [3.8, 3.9, 1.5], mat: capM, group: 'cap' });
-    p.push({ k: 'ell', c: [hc[0] + 0.4, hc[1], hc[2] + 2.0], r: [1.6, 3.4, 0.55], mat: { ramp: H('#16181c', '#26292e', '#383c42') }, group: 'visor' });
-    // pencil behind the ear
-    p.push({ k: 'cap', a: [hc[0] - 1.0, hc[1] + 3.8, hc[2] + 1.0], b: [hc[0] - 4.2, hc[1] + 4.6, hc[2] + 1.6], r: 0.35, mat: { ramp: H('#c08a20', '#e8b440'), flat: true }, group: 'pencil' });
+    const hr: V3 = [6.0, 3.8, 3.0];
+    p.push({ k: 'ell', c: hc, r: hr, mat: monitorSkin, group: 'head' });
+    p.push({ k: 'cap', a: [hc[0] + 2.6, hc[1], hc[2] + 0.5], b: [hc[0] + 10.0, hc[1], hc[2] - 0.3], r: 2.6, r2: 1.6, mat: monitorSkin, group: 'snout' });
+    for (const s of [-1, 1]) {
+      const z = surf(hc, hr, 2.6, s * 2.8, 0.25);
+      p.push({ k: 'ell', c: [hc[0] + 2.6, hc[1] + s * 2.8, z], r: [0.8, 0.6, 0.55], mat: { ramp: H('#e89a20'), flat: true }, group: 'eye' });
+      p.push({ k: 'ell', c: [hc[0] + 2.8, hc[1] + s * 2.8, z + 0.25], r: [0.4, 0.2, 0.45], mat: MAT.eyeDark, group: 'eye' });
+      // heavy brow ridge
+      p.push({ k: 'cap', a: [hc[0] + 1.6, hc[1] + s * 2.0, z + 0.6], b: [hc[0] + 3.6, hc[1] + s * 3.0, z + 0.4], r: 0.5, mat: monitorSkin, group: 'brow' });
+    }
+    goggles(p, hc, hr, -1.2, 1.9, 1.45, { ramp: H('#0a0a0c', '#18181c', '#26262c') });
+    cigar(p, [hc[0] + 6.6, hc[1] + 2.2, hc[2] - 1.0], 1.0, 0.9, 3.6, 0.72);
   },
   tail(p, o) {
-    const skin: Material = { ...scales(LIZARD, 1.3), pattern: (c) => (Math.floor(c.x * 0.6) % 2 === 0 ? -1 : null) };
+    const banded: Material = { ...monitorSkin, pattern: (c) => (Math.floor((c.x + 40) * 0.6) % 2 === 0 ? -1 : null) };
     const sw = o.sway;
-    p.push({ k: 'cap', a: [-5.8, 0, 5.4], b: [-12, -1.6 + sw * 0.6, 3.8], r: 2.6, r2: 1.9, mat: skin, group: 'tail' });
-    p.push({ k: 'cap', a: [-12, -1.6 + sw * 0.6, 3.8], b: [-18.5, 1.2 + sw * 1.2, 2.8], r: 1.9, r2: 0.6, mat: skin, group: 'tail' });
+    p.push({ k: 'cap', a: [-5.8, 0, 5.4], b: [-12, -1.6 + sw * 0.6, 3.8], r: 2.6, r2: 1.9, mat: banded, group: 'tail' });
+    p.push({ k: 'cap', a: [-12, -1.6 + sw * 0.6, 3.8], b: [-18.5, 1.2 + sw * 1.2, 2.8], r: 1.9, r2: 0.6, mat: banded, group: 'tail' });
   },
 };
 
-// ── Попугай «Кеша» — parrot, white shirt, bow tie, suspenders, headphones ───
-const PARROT = H('#0e3a14', '#1a5e20', '#2a8a2e', '#46b444', '#7ad66a');
+// ── Гоша «Связной» — scarlet macaw, red tracksuit, olive tactical vest, goggles, pipe ─────────
+const MACAW_RED = H('#4a0606', '#7e0e0e', '#b41a16', '#dc3020', '#f45a36');
+const macawHead: Material = {
+  ramp: MACAW_RED,
+  dither: true,
+  pattern: (c) => {
+    // bare white face patch with fine feather lines around the eyes
+    if (c.lx > 0.8 && Math.abs(c.ly) > 1.4 && Math.abs(c.ly) < 4.0 && c.lx < 4.4) return Math.abs(((c.lx + c.ly * 0.3) * 2.4) % 1) < 0.12 ? hex('#7a6a64') : hex(c.nz > 0.5 ? '#f2ece4' : '#c8c0b6');
+    // yellow on the nape
+    if (c.lx < -2.6 && Math.abs(c.ly) > 2.2) return hex('#e8b018');
+    return null;
+  },
+};
+const VEST_OLIVE = H('#1c2010', '#2e341a', '#444c28', '#5c6636', '#76824a');
 const popugay: Rig = {
   id: 'popugay',
   torsoC: [-0.2, 0, 8.3],
-  torsoR: [5.6, 10.8, 5.3],
-  shoulderY: 8.4,
+  torsoR: [5.7, 10.9, 5.3],
+  shoulderY: 8.5,
   shoulderZ: 11.5,
-  armR: 2.3,
+  armR: 2.35,
   headC: [0.4, 0, 15.0],
   hipY: 4.1,
   footR: [2.5, 1.5, 1.1],
   toes: true,
   pal: {
     torso: {
-      ramp: H('#8a8478', '#b4ae9e', '#d8d2c2', '#efeadc', '#fbf8ee'),
-      pattern: (c) => (Math.abs(Math.abs(c.ly) - 4.2) < 0.75 && c.lx > -5 ? hex(c.nz > 0.6 ? '#7a4a1e' : '#5a3412') : c.lx > 3.0 && Math.abs(c.ly) < 0.25 ? hex('#a8a294') : null),
+      ramp: VEST_OLIVE,
+      pattern: (c) => {
+        // olive vest over the jacket; the red tracksuit shows at the shoulders
+        const ay = Math.abs(c.ly);
+        if (ay > 6.6) return shoulderStripes(c, 7.4) ?? (c.nz > 0.7 ? TRACK_RED[3]! : c.nz > 0.4 ? TRACK_RED[2]! : TRACK_RED[1]!);
+        if (ay > 6.1) return hex('#14180a');
+        return Math.abs(((c.x + 40) % 2.0) - 1.0) < 0.1 ? -1 : null;
+      },
     },
-    sleeve: { ramp: H('#8a8478', '#b4ae9e', '#d8d2c2', '#efeadc'), pattern: (c) => (c.t > 0.55 && c.t < 0.62 ? -1 : null) },
-    hand: fur(PARROT),
-    pants: { ramp: H('#1a1e2a', '#262c3c', '#343c52', '#46506a') },
-    shoe: { ramp: H('#4a3a10', '#7a6018', '#a88420', '#d0a830') },
+    sleeve: { ramp: TRACK_RED, pattern: sleeveStripes },
+    hand: { ramp: MACAW_RED, dither: true },
+    pants: { ramp: H('#141c34', '#1e2a4c', '#2a3a66', '#3a4e84') },
+    shoe: { ramp: H('#2a1608', '#44260e', '#623a18', '#7e5024') },
   },
   torsoExtras(p, o) {
-    // red bow tie
-    for (const s of [-1, 1]) p.push({ k: 'ell', c: [4.6 + o.dx, s * 1.2 + o.dy, 13.2 + o.dz], r: [0.9, 1.3, 0.6], mat: { ramp: H('#6a0a10', '#b01a1a', '#e03a2a') }, group: 'bow' });
-    p.push({ k: 'ell', c: [4.7 + o.dx, o.dy, 13.4 + o.dz], r: [0.5, 0.5, 0.5], mat: { ramp: H('#6a0a10', '#b01a1a') }, group: 'bow' });
+    p.push({ k: 'ell', c: [1.2 + o.dx, o.dy, 12.9 + o.dz], r: [4.8, 5.8, 1.6], yaw: o.yaw, mat: { ramp: TRACK_RED, pattern: (c) => (Math.sqrt((c.lx / 4.8) ** 2 + (c.ly / 5.8) ** 2) > 0.82 ? WHITE : null) }, group: 'collar' });
+    pouches(p, o, popugay, { ramp: H('#14180a', '#242a14', '#36401e', '#4a562a') }, [
+      [3.6, -5.0],
+      [3.6, 5.0],
+      [1.8, -6.0],
+    ]);
+    // walkie-talkie clipped at the right of the chest, antenna up
+    p.push({ k: 'box', c: [2.6 + o.dx, 6.4 + o.dy, 12.4 + o.dz], h: [0.9, 1.3, 1.0], yaw: o.yaw, mat: { ramp: H('#0a0a0c', '#1a1a1e', '#2c2c32') }, group: 'radio', bevel: 0.3 });
+    p.push({ k: 'cap', a: [2.0 + o.dx, 6.8 + o.dy, 13.2 + o.dz], b: [0.4 + o.dx, 7.6 + o.dy, 15.6 + o.dz], r: 0.22, mat: MAT.black, group: 'radio' });
+    // gold hammer-and-sickle medallion on a chain
+    goldChain(p, o, 5.3, 5.6, 13.7, 1.3);
+    backpack(p, o, popugay, { ramp: H('#1a1e0e', '#2c3218', '#424a24', '#5a6432') }, { ramp: H('#14180a', '#222812', '#323a1a') }, [2.3, 4.4, 2.8]);
   },
   head(p, o) {
     const hc: V3 = [0.6 + o.dx, o.dy, 15.0 + o.dz];
-    const hr: V3 = [4.7, 4.3, 4.1];
-    p.push({ k: 'ell', c: hc, r: hr, mat: { ...fur(PARROT), pattern: (c) => (c.lx > 2.2 ? hex(c.lx > 3.4 ? '#f2c230' : '#e8402a') : null) }, group: 'head' });
-    // hooked beak
-    p.push({ k: 'cap', a: [hc[0] + 3.6, hc[1], hc[2] + 0.6], b: [hc[0] + 7.4, hc[1], hc[2] - 0.6], r: 2.0, r2: 0.9, mat: { ramp: H('#5a5650', '#8a8478', '#bab4a6', '#e2dccc') }, group: 'beak' });
-    p.push({ k: 'cap', a: [hc[0] + 7.2, hc[1], hc[2] - 0.6], b: [hc[0] + 7.9, hc[1], hc[2] - 2.0], r: 0.8, r2: 0.4, mat: { ramp: H('#3a3630', '#6a6458') }, group: 'beak' });
+    const hr: V3 = [4.8, 4.4, 4.1];
+    p.push({ k: 'ell', c: hc, r: hr, mat: macawHead, group: 'head' });
+    // big hooked beak: pale upper mandible, black lower
+    p.push({ k: 'cap', a: [hc[0] + 3.4, hc[1], hc[2] + 0.8], b: [hc[0] + 7.6, hc[1], hc[2] - 0.4], r: 2.4, r2: 1.1, mat: { ramp: H('#5a5650', '#8a847a', '#b8b2a6', '#e0dace'), spec: { color: hex('#ffffff'), power: 12, threshold: 0.84 } }, group: 'beak' });
+    p.push({ k: 'cap', a: [hc[0] + 7.4, hc[1], hc[2] - 0.4], b: [hc[0] + 8.2, hc[1], hc[2] - 2.2], r: 1.0, r2: 0.45, mat: { ramp: H('#2a2824', '#4a4640', '#6a645a') }, group: 'beak' });
+    p.push({ k: 'ell', c: [hc[0] + 4.4, hc[1], hc[2] - 1.8], r: [2.0, 1.8, 1.2], mat: { ramp: H('#060608', '#121216', '#202026') }, group: 'jaw' });
     for (const s of [-1, 1]) {
-      const z = surf(hc, hr, 2.0, s * 3.0, 0.2);
-      p.push({ k: 'ell', c: [hc[0] + 2.0, hc[1] + s * 3.0, z], r: [1.15, 0.95, 0.6], mat: { ramp: H('#e8e4dc'), flat: true }, group: 'eyering' });
-      p.push({ k: 'ell', c: [hc[0] + 2.2, hc[1] + s * 3.0, z + 0.35], r: [0.5, 0.45, 0.45], mat: MAT.eyeDark, group: 'eye' });
+      const z = surf(hc, hr, 2.2, s * 3.1, 0.25);
+      p.push({ k: 'ell', c: [hc[0] + 2.2, hc[1] + s * 3.1, z], r: [0.75, 0.65, 0.55], mat: { ramp: H('#f2d24a'), flat: true }, group: 'eye' });
+      p.push({ k: 'ell', c: [hc[0] + 2.4, hc[1] + s * 3.1, z + 0.3], r: [0.4, 0.36, 0.45], mat: MAT.eyeDark, group: 'eye' });
     }
-    // red crest
-    for (let i = 0; i < 4; i++) p.push({ k: 'cap', a: [hc[0] - 0.5 - i * 0.6, hc[1], hc[2] + 3.6], b: [hc[0] - 3.2 - i * 0.9, hc[1] + (i - 1.5) * 0.7, hc[2] + 4.6 - i * 0.3], r: 0.7, r2: 0.35, mat: { ramp: H('#7a0a10', '#c01a1a', '#ee4a2a') }, group: 'crest' });
-    // headphones: band over the crown, cups on the sides
-    p.push({ k: 'cap', a: [hc[0] - 0.4, hc[1] - 4.6, hc[2] + 1.4], b: [hc[0] - 0.4, hc[1] + 4.6, hc[2] + 1.4], r: 0.55, mat: { ramp: H('#0c0c10', '#1c1c24', '#30303c') }, group: 'phones' });
-    for (const s of [-1, 1]) p.push({ k: 'ell', c: [hc[0] - 0.4, hc[1] + s * 4.6, hc[2] + 0.4], r: [1.7, 1.0, 1.7], mat: { ramp: H('#0c0c10', '#1c1c24', '#30303c', '#4a4a5a') }, group: 'cup' + s });
+    goggles(p, hc, hr, -0.9, 1.9, 1.4, { ramp: H('#2a1608', '#44260e', '#623a18') });
+    // pipe in the corner of the beak
+    p.push({ k: 'cap', a: [hc[0] + 5.6, hc[1] + 1.8, hc[2] - 1.2], b: [hc[0] + 8.0, hc[1] + 4.2, hc[2] - 1.0], r: 0.4, mat: { ramp: H('#1a0e06', '#3a200e', '#5a3418') }, group: 'pipe' });
+    p.push({ k: 'cyl', c: [hc[0] + 8.3, hc[1] + 4.5, 0], r: 0.95, z0: hc[2] - 1.6, z1: hc[2] - 0.2, mat: { ramp: H('#1a0e06', '#3a200e', '#5a3418', '#784a24'), pattern: (c) => (c.nz > 0.9 ? hex('#ff8a24') : null) }, group: 'pipe' });
   },
   tail(p, o) {
-    const cols: Array<[string[], number]> = [
-      [['#5a0a10', '#a01a1a', '#d8302a'], -1.4],
-      [['#0a1e5a', '#16349a', '#2a54d0'], 0],
-      [['#5a0a10', '#a01a1a', '#d8302a'], 1.4],
+    const cols: Array<[string[], number, number]> = [
+      [['#5a0a0a', '#9a1414', '#d02a1e'], -1.6, 13.0],
+      [['#0a1e5a', '#16349a', '#2a54d0'], -0.5, 15.0],
+      [['#5a0a0a', '#9a1414', '#d02a1e'], 0.5, 15.5],
+      [['#6a4a06', '#b0820e', '#e8b018'], 1.6, 13.0],
     ];
-    for (const [c, y] of cols) p.push({ k: 'cap', a: [-5.0, y * 0.5, 7.2], b: [-14.5, y * 1.4 + o.sway * 0.7, 6.4], r: 1.0, r2: 0.55, mat: { ramp: H(...c) }, group: 'tail' });
+    for (const [c, y, l] of cols) p.push({ k: 'cap', a: [-5.0, y * 0.5, 7.2], b: [-l, y * 1.4 + o.sway * 0.7, 6.4], r: 1.0, r2: 0.5, mat: { ramp: H(...c) }, group: 'tail' });
   },
 };
 
-// ── Пиранья «Рая» — piranha, padded vest, apron, vendor cap ──────────────────
-const FISH = H('#2a3036', '#46525a', '#6a7882', '#96a4ac', '#c4ced4');
+// ── Витёк «Безумец» — piranha, black hooded jacket, red bandana, red mohawk fin, vest ────────
+const PIRANHA = H('#1a2024', '#2c363c', '#46525a', '#66747c', '#8c9aa2');
+const piranhaSkin: Material = {
+  ramp: PIRANHA,
+  spec: { color: hex('#dfeaf0'), power: 12, threshold: 0.84 },
+  pattern: (c) => {
+    const n = Math.sin(c.x * 4.1 + c.y * 1.3) * Math.sin(c.y * 3.7 - c.x * 0.7);
+    return n > 0.86 ? hex('#141a1e') : null;
+  },
+};
 const piranya: Rig = {
   id: 'piranya',
-  torsoC: [-0.2, 0, 8.0],
-  torsoR: [5.5, 10.2, 5.0],
-  shoulderY: 8.0,
-  shoulderZ: 11.0,
-  armR: 2.2,
-  headC: [0.4, 0, 14.5],
-  hipY: 3.9,
-  footR: [2.4, 1.5, 1.1],
+  torsoC: [-0.2, 0, 8.2],
+  torsoR: [5.7, 10.8, 5.2],
+  shoulderY: 8.4,
+  shoulderZ: 11.3,
+  armR: 2.35,
+  headC: [0.6, 0, 14.6],
+  hipY: 4.0,
+  footR: [2.6, 1.5, 1.1],
   pal: {
     torso: {
-      ramp: H('#0c1424', '#16223a', '#223456', '#324a74'),
+      ramp: BLACK_CLOTH,
       pattern: (c) => {
-        if (c.lx > 0.5 && Math.abs(c.ly) < 4.2) return c.lx > 3.2 && Math.abs(c.ly) < 2 && Math.abs(c.lx - 4.0) < 0.3 ? hex('#a8a296') : hex(c.nz > 0.7 ? '#efeadc' : '#cfc8b8'); // apron
-        if (Math.abs(((c.y + 20) % 2.2) - 1.1) < 0.12) return -1; // quilting
+        // brown tactical vest panels over the hoodie
+        if (Math.abs(c.ly) < 6.0 && c.lx > -3.5) return Math.abs(((c.x + 40) % 2.2) - 1.1) < 0.1 ? hex('#1e140a') : c.nz > 0.7 ? hex('#4e3a22') : hex('#36281a');
         return null;
       },
     },
-    sleeve: { ramp: H('#4a0a10', '#7a1418', '#a8241e', '#cc3a28'), dither: true },
-    hand: { ramp: FISH },
-    pants: { ramp: H('#1e1a18', '#2e2824', '#423a34', '#58504a') },
-    shoe: { ramp: H('#1a1410', '#2c241c', '#40362a', '#584a3a') },
+    sleeve: { ramp: BLACK_CLOTH, pattern: (c) => (c.t > 0.18 && c.t < 0.34 && c.s < 0 ? hex('#a82020') : c.t > 0.85 ? -1 : null) },
+    hand: { ramp: PIRANHA },
+    pants: { ramp: H('#141820', '#1e2430', '#2a3242', '#3a4456') },
+    shoe: { ramp: H('#0a0806', '#16120e', '#241e18', '#342c24') },
   },
   torsoExtras(p, o) {
-    p.push({ k: 'ell', c: [0.8 + o.dx, o.dy, 12.3 + o.dz], r: [5.0, 5.8, 1.6], mat: { ramp: H('#4a0a10', '#7a1418', '#a8241e'), dither: true }, group: 'sweater' });
+    // hood bunched up behind the neck
+    p.push({ k: 'ell', c: [-3.6 + o.dx, o.dy, 13.0 + o.dz], r: [3.0, 5.2, 2.0], yaw: o.yaw, mat: { ramp: BLACK_CLOTH, dither: true }, group: 'hood' });
+    // red bandana round the neck, knot at the back
+    p.push({ k: 'ell', c: [1.0 + o.dx, o.dy, 12.9 + o.dz], r: [5.2, 5.9, 1.7], yaw: o.yaw, mat: { ramp: H('#4a080a', '#7e1014', '#b01c1c', '#d63426'), pattern: (c) => (((Math.floor((c.x + 40) * 1.6) + Math.floor((c.y + 40) * 1.6)) % 5 === 0 ? hex('#e8d8c0') : null)) }, group: 'bandana' });
+    pouches(p, o, piranya, { ramp: H('#1e140a', '#33240f', '#4a3618', '#604824') }, [
+      [3.4, -5.2],
+      [3.4, 5.2],
+      [1.6, -6.6],
+    ]);
+    backpack(p, o, piranya, { ramp: H('#22180c', '#3a2a14', '#56401e', '#70562a') }, { ramp: H('#140e06', '#24180c', '#382612') }, [2.2, 4.2, 2.6]);
   },
   head(p, o) {
-    const hc: V3 = [1.2 + o.dx, o.dy, 14.6 + o.dz];
-    const hr: V3 = [6.0, 4.8, 4.0];
-    // silver back, red belly showing at the sides of the jaw
-    p.push({ k: 'ell', c: hc, r: hr, mat: { ramp: FISH, spec: { color: hex('#eef6fa'), power: 12, threshold: 0.82 }, pattern: (c) => (c.nz < 0.45 ? hex(c.nz < 0.25 ? '#a8241e' : '#cc4a30') : null) }, group: 'head' });
-    // underbite jaw with teeth along the front edge
-    p.push({ k: 'ell', c: [hc[0] + 4.0, hc[1], hc[2] - 1.0], r: [3.4, 4.2, 2.4], mat: { ramp: H('#6a1410', '#a8241e', '#d04a32', '#e8705a') }, group: 'jaw' });
-    for (let i = -3; i <= 3; i++) {
-      const y = i * 1.1;
-      const x = hc[0] + 4.0 + 3.3 * Math.sqrt(Math.max(0, 1 - (y / 4.2) ** 2));
-      p.push({ k: 'cap', a: [x - 0.6, hc[1] + y, hc[2] + 0.6], b: [x + 0.7, hc[1] + y, hc[2] + 1.6], r: 0.55, r2: 0.12, mat: { ramp: H('#e8e4d8', '#ffffff'), flat: true }, group: 'teeth' });
+    const hc: V3 = [1.0 + o.dx, o.dy, 14.6 + o.dz];
+    const hr: V3 = [5.8, 4.6, 3.9];
+    p.push({ k: 'ell', c: hc, r: hr, mat: piranhaSkin, group: 'head' });
+    // huge underbite jaw with a row of fangs along the front
+    p.push({ k: 'ell', c: [hc[0] + 4.2, hc[1], hc[2] - 1.2], r: [3.6, 4.4, 2.4], mat: { ...piranhaSkin, pattern: undefined, ramp: H('#2c363c', '#46525a', '#66747c', '#c8c0a8') }, group: 'jaw' });
+    p.push({ k: 'ell', c: [hc[0] + 4.6, hc[1], hc[2] - 0.6], r: [2.6, 3.6, 1.0], mat: { ramp: H('#3a0608', '#5e0c10'), flat: true }, group: 'mouth' });
+    for (let i = -4; i <= 4; i++) {
+      const y = i * 0.95;
+      const x = hc[0] + 4.2 + 3.4 * Math.sqrt(Math.max(0, 1 - (y / 4.4) ** 2));
+      p.push({ k: 'cap', a: [x - 0.6, hc[1] + y, hc[2] + 0.2], b: [x + 0.6, hc[1] + y, hc[2] + 1.4], r: 0.5, r2: 0.1, mat: { ramp: H('#d8d0c0', '#fbf8ee'), flat: true }, group: 'teeth' });
     }
+    // red eyes, a scar across the left one
     for (const s of [-1, 1]) {
       const z = surf(hc, hr, 1.8, s * 3.3, 0.2);
-      p.push({ k: 'ell', c: [hc[0] + 1.8, hc[1] + s * 3.3, z], r: [1.15, 0.9, 0.8], mat: { ramp: H('#e8a020'), flat: true }, group: 'eye' });
-      p.push({ k: 'ell', c: [hc[0] + 2.0, hc[1] + s * 3.35, z + 0.35], r: [0.6, 0.5, 0.5], mat: MAT.eyeDark, group: 'eye' });
+      p.push({ k: 'ell', c: [hc[0] + 1.8, hc[1] + s * 3.3, z], r: [1.05, 0.85, 0.7], mat: { ramp: H('#e02a1a'), flat: true }, group: 'eye' });
+      p.push({ k: 'ell', c: [hc[0] + 2.0, hc[1] + s * 3.35, z + 0.3], r: [0.42, 0.38, 0.45], mat: MAT.eyeDark, group: 'eye' });
     }
-    // white vendor cap, dorsal fin peeking out behind it
-    p.push({ k: 'ell', c: [hc[0] - 3.0, hc[1], hc[2] + 2.6], r: [2.8, 3.4, 1.5], mat: { ramp: H('#a8a294', '#cfc8b8', '#efeadc', '#fbf8ee') }, group: 'cap' });
-    p.push({ k: 'cap', a: [hc[0] - 4.4, hc[1], hc[2] + 2.0], b: [hc[0] - 7.4, hc[1], hc[2] + 1.0], r: 0.7, r2: 0.3, mat: { ramp: H('#2a3036', '#46525a', '#6a7882') }, group: 'fin' });
+    p.push({ k: 'cap', a: [hc[0] + 0.2, hc[1] - 4.4, surf(hc, hr, -0.8, -4.0, 0.2)], b: [hc[0] + 3.6, hc[1] - 1.8, surf(hc, hr, 2.6, -1.8, 0.25)], r: 0.28, mat: { ramp: H('#8a1a1a', '#c03030'), flat: true }, group: 'scar' });
+    // red spiky dorsal fin like a mohawk, front to back
+    const finM: Material = { ramp: H('#4a0606', '#7e0e0e', '#b41a16', '#dc3020') };
+    for (let i = 0; i < 6; i++) {
+      const x = hc[0] + 1.6 - i * 1.5;
+      const z = surf(hc, hr, x - hc[0], 0, 0);
+      p.push({ k: 'cap', a: [x, hc[1], z - 0.4], b: [x - 1.6, hc[1] + (i % 2 ? 0.4 : -0.4), z + 2.4 - i * 0.15], r: 0.85, r2: 0.2, mat: finM, group: 'fin' });
+    }
   },
   tail(p, o) {
-    const m: Material = { ramp: H('#2a3036', '#46525a', '#6a7882', '#8e9ca4') };
+    const m: Material = { ramp: PIRANHA };
     const sw = o.sway * 0.8;
     p.push({ k: 'cap', a: [-5.2, 0, 5.4], b: [-8.6, sw * 0.5, 5.0], r: 1.6, r2: 1.0, mat: m, group: 'tail' });
-    for (const s of [-1, 1]) p.push({ k: 'cap', a: [-8.6, sw * 0.5, 5.0], b: [-12.2, s * 3.6 + sw, 4.8], r: 1.0, r2: 0.4, mat: m, group: 'tailfin' });
+    for (const s of [-1, 1]) p.push({ k: 'cap', a: [-8.6, sw * 0.5, 5.0], b: [-12.2, s * 3.6 + sw, 4.8], r: 1.1, r2: 0.45, mat: { ramp: H('#4a0606', '#7e0e0e', '#b41a16') }, group: 'tailfin' });
   },
 };
 
-// ── Акула «Аркадий» — shark, burgundy double-breasted jacket, cigar ──────────
-const SHARK = H('#1e2832', '#30404e', '#4a5e6e', '#6a8090', '#9ab0be');
-const BURGUNDY = H('#2a0610', '#4a0c1c', '#6e1428', '#94203a', '#b8344c');
+// ── Жора «Бизнесмен» — blue shark, navy pinstripe suit, white shirt, gold $ chain, cigar ──────
+const SHARK = H('#18222e', '#283a4e', '#3e5670', '#5c7896', '#8aa4c0');
+const NAVY_SUIT = H('#070a16', '#0e1428', '#18223e', '#24325a', '#344678');
+const pinstripe = (c: PatternCtx): number | null => (Math.abs(((c.y + 40) % 2.0) - 1.0) < 0.09 ? 0.6 : null);
 const akula: Rig = {
   id: 'akula',
   torsoC: [-0.3, 0, 8.5],
@@ -359,50 +535,59 @@ const akula: Rig = {
   shoulderY: 9.4,
   shoulderZ: 11.8,
   armR: 2.5,
-  headC: [0.4, 0, 15.4],
+  headC: [0.6, 0, 15.2],
   hipY: 4.4,
   footR: [3.0, 1.6, 1.2],
   pal: {
     torso: {
-      ramp: BURGUNDY,
+      ramp: NAVY_SUIT,
+      spec: { color: hex('#8a9ac8'), power: 10, threshold: 0.86 },
       pattern: (c) => {
-        if (c.lx > 2.0 && Math.abs(c.ly) < 2.2 - (c.lx - 2.0) * 0.4) return Math.abs(c.ly) < 0.5 ? hex('#101014') : hex('#efeadc'); // shirt + tie
-        for (const y of [-2.6, 2.6]) for (const x of [0.5, 2.8]) if ((c.lx - x) ** 2 + (c.ly - y) ** 2 < 0.3) return hex('#e8c050'); // gold buttons
-        return null;
+        if (c.lx > 1.8 && Math.abs(c.ly) < 2.6 - (c.lx - 1.8) * 0.35) return Math.abs(c.ly) < 0.55 ? hex(Math.floor(c.lx * 2) % 2 ? '#c8a040' : '#2a1a10') : hex('#efeadc'); // shirt + patterned tie
+        if (c.lx > 1.4 && Math.abs(Math.abs(c.ly) - 3.0) < 0.3) return hex('#05070e'); // lapels
+        return pinstripe(c);
       },
     },
-    sleeve: { ramp: BURGUNDY, pattern: (c) => (c.t > 0.86 ? hex('#efeadc') : null) },
+    sleeve: { ramp: NAVY_SUIT, pattern: (c) => (c.t > 0.93 ? hex('#efeadc') : pinstripe(c)) },
     hand: { ramp: SHARK },
-    pants: { ramp: H('#14141a', '#202028', '#30303a', '#44444f') },
+    pants: { ramp: NAVY_SUIT, pattern: pinstripe },
     shoe: { ramp: H('#0a0806', '#1a120c', '#2c2016', '#463422'), spec: { color: hex('#c0a080'), power: 16, threshold: 0.82 } },
   },
+  hand(p, at, side, rig) {
+    p.push({ k: 'ell', c: at, r: [rig.armR * 0.85, rig.armR * 0.8, rig.armR * 0.75], mat: rig.pal.hand, group: 'hand' + side });
+    // gold watch on the left wrist
+    if (side === -1) p.push({ k: 'ell', c: [at[0] - 1.6, at[1], at[2] + 0.4], r: [0.7, 1.4, 0.9], mat: MAT.gold, group: 'watch' });
+  },
   torsoExtras(p, o) {
-    // wide 80s shoulder pads
-    for (const s of [-1, 1]) p.push({ k: 'ell', c: [-0.8 + o.dx, s * 8.6 + o.dy, 12.2 + o.dz], r: [3.4, 3.0, 1.5], mat: { ramp: BURGUNDY }, group: 'pad' + s });
+    for (const s of [-1, 1]) p.push({ k: 'ell', c: [1.4 + o.dx, s * 5.6 + o.dy, 12.9 + o.dz], r: [3.8, 2.0, 1.5], yaw: s * 0.5 + o.yaw, mat: { ramp: NAVY_SUIT, pattern: pinstripe }, group: 'lapel' + s });
+    goldChain(p, o, 5.8, 6.2, 13.8, 1.3);
   },
   head(p, o) {
-    const hc: V3 = [0.6 + o.dx, o.dy, 14.8 + o.dz];
+    const hc: V3 = [0.8 + o.dx, o.dy, 14.8 + o.dz];
     const hr: V3 = [5.8, 4.6, 3.6];
-    const skin: Material = { ramp: SHARK, spec: { color: hex('#d8e4ec'), power: 12, threshold: 0.84 }, pattern: (c) => (c.nz < 0.4 ? hex('#e8ecee') : null) };
+    const skin: Material = { ramp: SHARK, spec: { color: hex('#d8e4ec'), power: 12, threshold: 0.84 }, pattern: (c) => (c.nz < 0.4 ? hex('#e4e8e8') : null) };
     p.push({ k: 'ell', c: hc, r: hr, mat: skin, group: 'head' });
     p.push({ k: 'cap', a: [hc[0] + 3.0, hc[1], hc[2] + 0.2], b: [hc[0] + 8.8, hc[1], hc[2] - 0.6], r: 3.1, r2: 1.2, mat: skin, group: 'snout' });
-    // grin: a row of teeth along the jaw line
-    for (let i = -4; i <= 4; i++) {
-      const y = i * 0.75;
-      const x = hc[0] + 5.6 - Math.abs(i) * 0.45;
-      p.push({ k: 'cap', a: [x, hc[1] + y, hc[2] - 1.0], b: [x + 0.6, hc[1] + y, hc[2] - 0.6], r: 0.3, r2: 0.1, mat: { ramp: H('#e8e4d8', '#fbf8ee'), flat: true }, group: 'teeth' });
+    // wide grin full of teeth
+    p.push({ k: 'ell', c: [hc[0] + 5.2, hc[1], hc[2] - 1.6], r: [2.4, 3.8, 1.0], mat: { ramp: H('#3a0a10', '#5e121a'), flat: true }, group: 'mouth' });
+    for (let i = -5; i <= 5; i++) {
+      const y = i * 0.7;
+      const x = hc[0] + 6.4 - Math.abs(i) * 0.38;
+      p.push({ k: 'cap', a: [x - 0.3, hc[1] + y, hc[2] - 1.4], b: [x + 0.5, hc[1] + y, hc[2] - 0.8], r: 0.32, r2: 0.1, mat: { ramp: H('#e8e4d8', '#fbf8ee'), flat: true }, group: 'teeth' });
     }
     for (const s of [-1, 1]) {
-      const z = surf(hc, hr, 2.4, s * 3.6, 0.1);
-      p.push({ k: 'ell', c: [hc[0] + 2.4, hc[1] + s * 3.6, z], r: [0.6, 0.5, 0.5], mat: MAT.eyeDark, group: 'eye' });
-      // gills
-      for (let g = 0; g < 3; g++) p.push({ k: 'cap', a: [hc[0] - 1.6 - g * 0.9, hc[1] + s * 3.5, hc[2] + 0.6], b: [hc[0] - 1.9 - g * 0.9, hc[1] + s * 4.3, hc[2] - 0.6], r: 0.18, mat: { ramp: H('#141c24'), flat: true }, group: 'gill' });
+      const z = surf(hc, hr, 2.6, s * 3.4, 0.15);
+      p.push({ k: 'ell', c: [hc[0] + 2.6, hc[1] + s * 3.4, z], r: [0.7, 0.55, 0.5], mat: { ramp: H('#e8b030'), flat: true }, group: 'eye' });
+      p.push({ k: 'ell', c: [hc[0] + 2.8, hc[1] + s * 3.4, z + 0.25], r: [0.38, 0.32, 0.45], mat: MAT.eyeDark, group: 'eye' });
+      for (let g = 0; g < 3; g++) p.push({ k: 'cap', a: [hc[0] - 1.6 - g * 0.9, hc[1] + s * 3.5, hc[2] + 0.6], b: [hc[0] - 1.9 - g * 0.9, hc[1] + s * 4.3, hc[2] - 0.6], r: 0.18, mat: { ramp: H('#101820'), flat: true }, group: 'gill' });
     }
+    // scar «×» on the snout
+    const sz = surf(hc, hr, 4.4, -1.4, 0.35);
+    p.push({ k: 'cap', a: [hc[0] + 3.8, hc[1] - 2.0, sz], b: [hc[0] + 5.0, hc[1] - 0.8, sz], r: 0.2, mat: { ramp: H('#0c1218'), flat: true }, group: 'scar' });
+    p.push({ k: 'cap', a: [hc[0] + 3.8, hc[1] - 0.8, sz], b: [hc[0] + 5.0, hc[1] - 2.0, sz], r: 0.2, mat: { ramp: H('#0c1218'), flat: true }, group: 'scar' });
     // dorsal fin rising from the back of the head
-    p.push({ k: 'cap', a: [hc[0] - 3.0, hc[1], hc[2] + 2.6], b: [hc[0] - 7.6, hc[1], hc[2] + 6.4], r: 1.4, r2: 0.25, mat: { ramp: H('#16202a', '#26343e', '#3a4c5a', '#566c7c') }, group: 'fin' });
-    // cigar
-    p.push({ k: 'cap', a: [hc[0] + 6.2, hc[1] + 2.4, hc[2] - 0.8], b: [hc[0] + 9.6, hc[1] + 4.8, hc[2] - 0.8], r: 0.75, mat: { ramp: H('#3a2010', '#5e3418', '#7e4a24') }, group: 'cigar' });
-    p.push({ k: 'ell', c: [hc[0] + 9.9, hc[1] + 5.0, hc[2] - 0.7], r: [0.7, 0.7, 0.55], mat: MAT.ember, group: 'ember' });
+    p.push({ k: 'cap', a: [hc[0] - 3.0, hc[1], hc[2] + 2.6], b: [hc[0] - 7.6, hc[1], hc[2] + 6.4], r: 1.5, r2: 0.25, mat: { ramp: H('#121a24', '#22303e', '#34485c', '#4e667e') }, group: 'fin' });
+    cigar(p, [hc[0] + 6.6, hc[1] + 2.6, hc[2] - 1.0], 1.0, 0.75, 3.8, 0.8);
   },
   tail(p, o) {
     const m: Material = { ramp: SHARK };
@@ -413,66 +598,8 @@ const akula: Rig = {
   },
 };
 
-// ── Орёл «Орлов» — eagle, grey suit, party pin, fur hat, long coat ───────────
-const COAT_GREY = H('#121418', '#1e2228', '#2c3138', '#3e444c', '#565e68');
-const oryol: Rig = {
-  id: 'oryol',
-  torsoC: [-0.4, 0, 8.5],
-  torsoR: [6.0, 11.4, 5.5],
-  shoulderY: 9.0,
-  shoulderZ: 11.7,
-  armR: 2.4,
-  headC: [0.4, 0, 15.4],
-  hipY: 4.3,
-  footR: [3.0, 1.6, 1.2],
-  pal: {
-    torso: {
-      ramp: COAT_GREY,
-      pattern: (c) => {
-        if (c.lx > 2.0 && Math.abs(c.ly) < 2.1 - (c.lx - 2.0) * 0.4) return Math.abs(c.ly) < 0.5 ? hex('#a01a1a') : hex('#efeadc');
-        if ((c.lx - 2.6) ** 2 + (c.ly + 3.4) ** 2 < 0.45) return hex('#d02020'); // party pin
-        return null;
-      },
-    },
-    sleeve: { ramp: COAT_GREY },
-    hand: { ramp: H('#060608', '#121216', '#202028', '#32323c'), spec: { color: hex('#8a90a0'), power: 14, threshold: 0.84 } },
-    pants: { ramp: COAT_GREY },
-    shoe: { ramp: H('#040405', '#0e0e12', '#1c1c22', '#33343c'), spec: { color: hex('#9aa2c0'), power: 18, threshold: 0.8 } },
-  },
-  torsoExtras(p, o) {
-    // long coat flaring behind
-    p.push({ k: 'ell', c: [-6.4 + o.dx, o.dy, 6.4 + o.dz * 0.5], r: [4.4, 11.6, 3.6], mat: { ramp: COAT_GREY }, group: 'skirt' });
-    for (const s of [-1, 1]) p.push({ k: 'ell', c: [1.6 + o.dx, s * 5.8 + o.dy, 13.0 + o.dz], r: [3.6, 2.2, 1.6], yaw: s * 0.5 + o.yaw, mat: { ramp: COAT_GREY }, group: 'collar' + s });
-  },
-  head(p, o) {
-    const hc: V3 = [0.6 + o.dx, o.dy, 15.0 + o.dz];
-    const hr: V3 = [4.8, 4.4, 4.0];
-    p.push({ k: 'ell', c: hc, r: hr, mat: fur(H('#8a8478', '#b8b2a4', '#ddd8cc', '#f2eee4', '#fbf8f0')), group: 'head' });
-    // hooked yellow beak
-    p.push({ k: 'cap', a: [hc[0] + 3.0, hc[1], hc[2] + 1.2], b: [hc[0] + 8.4, hc[1], hc[2] + 0.4], r: 2.3, r2: 1.1, mat: { ramp: H('#7a5008', '#b88010', '#e8b020', '#ffd84a') }, group: 'beak' });
-    p.push({ k: 'cap', a: [hc[0] + 8.2, hc[1], hc[2] + 0.4], b: [hc[0] + 9.2, hc[1], hc[2] - 1.2], r: 1.0, r2: 0.45, mat: { ramp: H('#5a3a06', '#8a600c') }, group: 'beak' });
-    for (const s of [-1, 1]) {
-      const z = surf(hc, hr, 2.6, s * 2.8, 0.15);
-      p.push({ k: 'ell', c: [hc[0] + 2.6, hc[1] + s * 2.8, z], r: [0.85, 0.7, 0.6], mat: MAT.eyeYellow, group: 'eye' });
-      p.push({ k: 'ell', c: [hc[0] + 2.85, hc[1] + s * 2.8, z + 0.3], r: [0.42, 0.38, 0.45], mat: MAT.eyeDark, group: 'eye' });
-      // stern brow
-      p.push({ k: 'cap', a: [hc[0] + 1.6, hc[1] + s * 1.6, z + 0.9], b: [hc[0] + 3.4, hc[1] + s * 3.4, z + 0.5], r: 0.45, mat: fur(H('#b8b2a4', '#ddd8cc')), group: 'brow' });
-    }
-    // пыжиковая шапка: a tall round fur hat
-    p.push({ k: 'ell', c: [hc[0] - 2.6, hc[1], hc[2] + 2.8], r: [3.8, 4.4, 2.8], mat: fur(H('#2e2216', '#4a3824', '#6a5236', '#8a6e4c', '#a88a64')), group: 'hat' });
-  },
-  tail(p, o) {
-    for (const [y, c] of [
-      [-1.4, '#6a4a2a'],
-      [0, '#f2eee4'],
-      [1.4, '#6a4a2a'],
-    ] as const)
-      p.push({ k: 'cap', a: [-7.0, y * 0.5, 6.4], b: [-13.0, y * 1.5 + o.sway * 0.4, 6.0], r: 1.2, r2: 0.7, mat: { ramp: H('#2a1a0e', c) }, group: 'tail' });
-  },
-};
-
-// ── Леопард «Лео» — leopard, plaid jacket, aviator sunglasses ────────────────
-const LEO = H('#6a3a0a', '#a0601a', '#cc8a2c', '#e8b048', '#f6d27a');
+// ── Лёва «Наёмник» — leopard, brown leather jacket with a shearling collar, black turtleneck ──
+const LEO = H('#5a3008', '#94561a', '#c4822c', '#e2a84a', '#f4cc7a');
 const leoSpots = (base: RGBA[]): Material => ({
   ramp: base,
   dither: true,
@@ -480,35 +607,40 @@ const leoSpots = (base: RGBA[]): Material => ({
     const gx = c.x * 0.55 + (Math.floor(c.y * 0.55) % 2) * 0.5;
     const gy = c.y * 0.55;
     const d = (gx - Math.round(gx)) ** 2 + (gy - Math.round(gy)) ** 2;
-    return d < 0.05 ? hex('#1a120a') : d < 0.09 ? hex('#7a4a14') : null;
+    return d < 0.035 ? hex('#7a4a14') : d < 0.085 ? hex('#140c06') : null;
   },
 });
-const PLAID = (c: PatternCtx): RGBA | number | null => {
-  const a = Math.floor((c.x + 40) * 0.9) % 4 === 0;
-  const b = Math.floor((c.y + 40) * 0.9) % 4 === 0;
-  return a && b ? hex('#0a0c20') : a || b ? -1 : null;
-};
+const BROWN_LEATHER: Material = { ramp: H('#120a06', '#21130b', '#331e12', '#482c1b', '#603d26'), spec: { color: hex('#d0a888'), power: 10, threshold: 0.74 } };
+const SHEARLING: Material = { ramp: H('#6a5438', '#8e7652', '#b29a72', '#d2bc94', '#e8d6b2'), dither: true };
 const leopard: Rig = {
   id: 'leopard',
   torsoC: [-0.2, 0, 8.4],
-  torsoR: [5.7, 11.0, 5.4],
-  shoulderY: 8.7,
+  torsoR: [5.8, 11.2, 5.4],
+  shoulderY: 8.8,
   shoulderZ: 11.6,
-  armR: 2.35,
+  armR: 2.4,
   headC: [0.2, 0, 15.2],
   hipY: 4.2,
   footR: [2.9, 1.6, 1.2],
   pal: {
-    torso: { ramp: H('#0e1440', '#1a2470', '#2a3aa8', '#4058d0', '#6a84ee'), spec: { color: hex('#c8d8ff'), power: 9, threshold: 0.8 }, pattern: (c) => (c.lx > 1.6 && Math.abs(c.ly) < 3.0 - (c.lx - 1.6) * 0.3 ? hex('#141418') : PLAID(c)) },
-    sleeve: { ramp: H('#0e1440', '#1a2470', '#2a3aa8', '#4058d0'), spec: { color: hex('#c8d8ff'), power: 9, threshold: 0.8 }, pattern: (c) => (c.t > 0.72 ? -1 : PLAID(c)) },
-    hand: leoSpots(LEO),
-    pants: { ramp: H('#0c0c12', '#16161e', '#22222c', '#32323e'), spec: { color: hex('#7a7a90'), power: 14, threshold: 0.86 } },
-    shoe: { ramp: H('#8a8478', '#bab4a6', '#e2dccc', '#fbf8ee') },
+    torso: {
+      ...BROWN_LEATHER,
+      pattern: (c) => {
+        if (c.lx > 1.4 && Math.abs(c.ly) < 3.0 - (c.lx - 1.4) * 0.3) return Math.floor((c.y + 40) * 2.2) % 2 ? hex('#141418') : hex('#1e1e24'); // ribbed turtleneck
+        if (Math.abs(((c.x * 0.7 - c.y * 0.3 + 40) % 2.8) - 1.4) < 0.07) return 0.7;
+        return null;
+      },
+    },
+    sleeve: { ...BROWN_LEATHER, pattern: (c) => (c.t > 0.84 ? SHEARLING.ramp[3]! : null) },
+    hand: { ramp: H('#060608', '#101014', '#1c1c22', '#2c2c34') },
+    pants: { ramp: H('#0c0c12', '#16161e', '#22222c', '#32323e') },
+    shoe: { ramp: H('#060608', '#0e0e12', '#1c1c22', '#2e2e36'), spec: { color: hex('#9aa2c0'), power: 18, threshold: 0.8 } },
   },
   torsoExtras(p, o) {
-    // headphones resting on the neck
-    p.push({ k: 'cap', a: [0.6 + o.dx, -4.8 + o.dy, 13.0 + o.dz], b: [0.6 + o.dx, 4.8 + o.dy, 13.0 + o.dz], r: 0.5, mat: { ramp: H('#0c0c10', '#1c1c24', '#30303c') }, group: 'phones' });
-    for (const s of [-1, 1]) p.push({ k: 'ell', c: [1.4 + o.dx, s * 5.0 + o.dy, 12.6 + o.dz], r: [1.4, 0.9, 1.4], mat: { ramp: H('#0c0c10', '#1c1c24', '#3a3a48') }, group: 'cup' + s });
+    // big shearling collar lying over the shoulders
+    for (const s of [-1, 1]) p.push({ k: 'ell', c: [0.2 + o.dx, s * 5.4 + o.dy, 12.9 + o.dz], r: [3.8, 2.2, 1.6], yaw: s * 0.45 + o.yaw, mat: SHEARLING, group: 'collar' + s });
+    p.push({ k: 'ell', c: [-2.6 + o.dx, o.dy, 13.0 + o.dz], r: [2.0, 5.6, 1.6], yaw: o.yaw, mat: SHEARLING, group: 'collarback' });
+    goldChain(p, o, 5.2, 5.5, 13.8, 1.2);
   },
   head(p, o) {
     const hc: V3 = [0.4 + o.dx, o.dy, 15.2 + o.dz];
@@ -520,13 +652,13 @@ const leopard: Rig = {
     }
     p.push({ k: 'ell', c: [hc[0] + 4.4, hc[1], hc[2] - 1.0], r: [2.6, 2.6, 2.0], mat: fur(H('#a89a80', '#d8ccb0', '#f2e8d0', '#fbf6e8')), group: 'muzzle' });
     p.push({ k: 'ell', c: [hc[0] + 6.6, hc[1], hc[2] - 0.2], r: [0.8, 1.0, 0.6], mat: { ramp: H('#6a2a2a', '#a04a4a', '#c87070') }, group: 'nose' });
-    // aviator sunglasses (mirror)
     for (const s of [-1, 1]) {
-      const z = surf(hc, hr, 3.0, s * 2.1, 0.3);
-      p.push({ k: 'ell', c: [hc[0] + 3.0, hc[1] + s * 2.1, z], r: [1.3, 1.5, 0.5], mat: { ramp: H('#101820', '#1e3040', '#3a6080', '#8ab8d8'), spec: { color: hex('#ffffff'), power: 10, threshold: 0.7 } }, group: 'shades' });
+      const z = surf(hc, hr, 3.0, s * 2.4, 0.2);
+      p.push({ k: 'ell', c: [hc[0] + 3.0, hc[1] + s * 2.4, z], r: [1.0, 0.75, 0.6], yaw: s * -0.3, mat: { ramp: H('#d8c040'), flat: true }, group: 'eye' });
+      p.push({ k: 'ell', c: [hc[0] + 3.25, hc[1] + s * 2.4, z + 0.25], r: [0.38, 0.26, 0.45], mat: MAT.eyeDark, group: 'eye' });
+      p.push({ k: 'cap', a: [hc[0] + 5.0, hc[1] + s * 1.8, hc[2] - 0.7], b: [hc[0] + 4.2, hc[1] + s * 6.0, hc[2] - 0.8], r: 0.2, mat: { ramp: H('#cfcac0', '#f2efe6'), flat: true }, group: 'whisker' });
     }
-    p.push({ k: 'cap', a: [hc[0] + 3.2, hc[1] - 1.0, surf(hc, hr, 3.2, 0, 0.25)], b: [hc[0] + 3.2, hc[1] + 1.0, surf(hc, hr, 3.2, 0, 0.25)], r: 0.22, mat: MAT.gold, group: 'shades' });
-    for (const s of [-1, 1]) p.push({ k: 'cap', a: [hc[0] + 5.0, hc[1] + s * 1.8, hc[2] - 0.7], b: [hc[0] + 4.2, hc[1] + s * 6.0, hc[2] - 0.8], r: 0.2, mat: { ramp: H('#cfcac0', '#f2efe6'), flat: true }, group: 'whisker' });
+    cigar(p, [hc[0] + 5.6, hc[1] - 1.8, hc[2] - 1.0], 1.0, -0.9, 3.0, 0.5, MAT.cigarette);
   },
   tail(p, o) {
     const m = leoSpots(LEO);
@@ -536,9 +668,9 @@ const leopard: Rig = {
   },
 };
 
-// ── Слон «Борис» — elephant, doorman's uniform with gold braid, white gloves ─
-const ELEPHANT = H('#3e3e46', '#5a5a64', '#7a7a86', '#9c9ca8', '#c0c0ca');
-const LIVERY = H('#2a0810', '#4a101c', '#6a1828', '#8c2436', '#ac3446');
+// ── Батя «Крыша» — elephant, red tracksuit, fur-trimmed vest, shades on the head, gold star chain
+const ELEPHANT = H('#34343a', '#4e4e56', '#6c6c76', '#8e8e98', '#b2b2bc');
+const SUEDE = H('#2a1608', '#44260e', '#623a18', '#7e5024', '#9a6832');
 const slon: Rig = {
   id: 'slon',
   torsoC: [-0.6, 0, 8.8],
@@ -551,43 +683,48 @@ const slon: Rig = {
   footR: [3.4, 2.2, 1.3],
   pal: {
     torso: {
-      ramp: LIVERY,
+      ramp: SUEDE,
+      dither: true,
       pattern: (c) => {
-        if (Math.abs(Math.abs(c.ly) - 3.0) < 0.35 && c.lx > -1) return hex('#e8c050'); // braid
-        for (const y of [-3.0, 3.0]) for (const x of [0, 1.8, 3.6]) if ((c.lx - x) ** 2 + (c.ly - y) ** 2 < 0.35) return hex('#ffe08a');
+        const ay = Math.abs(c.ly);
+        // open vest front: red tracksuit with a white zip
+        if (c.lx > 1.4 && ay < 3.6 - (c.lx - 1.4) * 0.3) return ay < 0.3 ? WHITE : hex(c.nz > 0.6 ? '#c4282c' : '#8a1820');
+        // fur trim along the vest edges and the arm holes
+        if ((c.lx > 1.2 && Math.abs(ay - 3.9) < 0.55) || ay > 10.4) return hex(c.nz > 0.5 ? '#e0cca6' : '#b29a72');
         return null;
       },
     },
-    sleeve: { ramp: LIVERY, pattern: (c) => (c.t > 0.8 && c.t < 0.88 ? hex('#e8c050') : null) },
-    hand: { ramp: H('#a8a294', '#d0cabc', '#efeadc', '#fbf8ee') },
-    pants: { ramp: H('#14141a', '#20202a', '#30303c', '#444452'), pattern: (c) => (Math.abs(c.s) > 1.0 && Math.abs(c.s) < 1.4 ? hex('#c89a30') : null) },
-    shoe: { ramp: H('#040405', '#0e0e12', '#1c1c22', '#33343c'), spec: { color: hex('#9aa2c0'), power: 18, threshold: 0.8 } },
+    sleeve: { ramp: TRACK_RED, pattern: sleeveStripes },
+    hand: { ramp: ELEPHANT, dither: true },
+    pants: { ramp: TRACK_RED, pattern: legStripe },
+    shoe: { ramp: H('#1e1208', '#352010', '#52341c', '#704c2a') },
+  },
+  hand(p, at, side, rig) {
+    p.push({ k: 'ell', c: at, r: [rig.armR * 0.85, rig.armR * 0.8, rig.armR * 0.75], mat: rig.pal.hand, group: 'hand' + side });
+    p.push({ k: 'ell', c: [at[0] - 1.8, at[1], at[2] + 0.3], r: [0.6, 1.9, 1.3], mat: MAT.gold, group: 'bracelet' });
   },
   torsoExtras(p, o) {
-    // epaulettes with fringe
-    for (const s of [-1, 1]) {
-      p.push({ k: 'ell', c: [-0.4 + o.dx, s * 10.0 + o.dy, 13.2 + o.dz], r: [2.6, 1.8, 0.8], mat: { ramp: H('#7a5a10', '#b8902a', '#e8c050', '#ffe08a') }, group: 'epau' + s });
-      for (let i = -2; i <= 2; i++) p.push({ k: 'cap', a: [-0.4 + i * 0.9 + o.dx, s * 11.3 + o.dy, 12.8 + o.dz], b: [-0.4 + i * 0.9 + o.dx, s * 12.6 + o.dy, 12.2 + o.dz], r: 0.25, mat: { ramp: H('#b8902a', '#e8c050') }, group: 'fringe' + s });
-    }
-    p.push({ k: 'ell', c: [-6.8 + o.dx, o.dy, 6.6 + o.dz * 0.5], r: [4.2, 12.4, 3.8], mat: { ramp: LIVERY }, group: 'skirt' });
+    p.push({ k: 'ell', c: [1.2 + o.dx, o.dy, 13.6 + o.dz], r: [5.6, 6.8, 1.9], yaw: o.yaw, mat: { ramp: TRACK_RED, pattern: (c) => (Math.sqrt((c.lx / 5.6) ** 2 + (c.ly / 6.8) ** 2) > 0.82 ? WHITE : null) }, group: 'collar' });
+    goldChain(p, o, 6.2, 6.8, 14.6, 1.6, 0.8);
+    backpack(p, o, slon, { ramp: SUEDE }, { ramp: H('#1e1208', '#352010', '#52341c') }, [2.6, 5.4, 3.2]);
   },
   head(p, o) {
-    const hc: V3 = [0.6 + o.dx, o.dy, 15.6 + o.dz];
+    const hc: V3 = [0.6 + o.dx, o.dy, 15.8 + o.dz];
     const hr: V3 = [5.6, 5.4, 4.8];
-    p.push({ k: 'ell', c: hc, r: hr, mat: fur(ELEPHANT), group: 'head' });
-    // big ears to the sides
-    for (const s of [-1, 1]) {
-      p.push({ k: 'ell', c: [hc[0] - 1.6, hc[1] + s * 8.2, hc[2] - 0.6], r: [4.4, 4.2, 1.0], yaw: s * -0.25, mat: { ...fur(ELEPHANT), pattern: (c) => (Math.abs(c.ly) < 2.6 && Math.abs(c.lx) < 3.0 ? hex('#a87a7a') : null) }, group: 'ear' + s });
-    }
-    // trunk curling forward and down, small tusks
+    const skin: Material = { ...fur(ELEPHANT), pattern: (c) => (Math.abs(((c.x * 1.3 + Math.sin(c.y * 1.7) * 0.6 + 40) % 1.6) - 0.8) < 0.08 ? -1 : null) };
+    p.push({ k: 'ell', c: hc, r: hr, mat: skin, group: 'head' });
+    for (const s of [-1, 1]) p.push({ k: 'ell', c: [hc[0] - 1.6, hc[1] + s * 8.2, hc[2] - 0.6], r: [4.6, 4.4, 1.0], yaw: s * -0.25, mat: { ...skin, pattern: (c) => (Math.abs(c.ly) < 2.6 && Math.abs(c.lx) < 3.0 ? hex('#8a6e6e') : null) }, group: 'ear' + s });
     const trunk: Material = { ramp: ELEPHANT, pattern: (c) => (Math.floor(c.t * 9) % 2 === 0 ? -1 : null) };
-    p.push({ k: 'cap', a: [hc[0] + 3.6, hc[1], hc[2] + 0.6], b: [hc[0] + 8.4, hc[1], hc[2] - 0.2], r: 2.1, r2: 1.6, mat: trunk, group: 'trunk' });
-    p.push({ k: 'cap', a: [hc[0] + 8.4, hc[1], hc[2] - 0.2], b: [hc[0] + 11.4, hc[1] + 0.8 + o.sway * 0.3, hc[2] - 1.4], r: 1.6, r2: 1.1, mat: trunk, group: 'trunk' });
-    for (const s of [-1, 1]) p.push({ k: 'cap', a: [hc[0] + 4.0, hc[1] + s * 2.4, hc[2] - 1.6], b: [hc[0] + 6.8, hc[1] + s * 3.0, hc[2] - 2.0], r: 0.6, r2: 0.3, mat: { ramp: H('#c8c0a8', '#efe8d4', '#fbf8ee') }, group: 'tusk' });
-    eyes(p, hc, hr, 3.2, 3.2, MAT.eyeDark, 0.55, false);
-    // doorman's cap: crown, gold band, visor
-    p.push({ k: 'ell', c: [hc[0] - 2.4, hc[1], hc[2] + 3.2], r: [3.8, 4.0, 1.9], mat: { ramp: LIVERY, pattern: (c) => (Math.sqrt((c.lx / 3.8) ** 2 + (c.ly / 4.0) ** 2) > 0.8 ? hex('#e8c050') : null) }, group: 'cap' });
-    p.push({ k: 'ell', c: [hc[0] + 1.2, hc[1], hc[2] + 2.8], r: [1.3, 3.2, 0.55], mat: { ramp: H('#040406', '#0e0e12', '#1e1e26'), spec: { color: hex('#9aa4c0'), power: 14, threshold: 0.8 } }, group: 'visor' });
+    p.push({ k: 'cap', a: [hc[0] + 3.6, hc[1], hc[2] + 0.6], b: [hc[0] + 8.4, hc[1], hc[2] - 0.2], r: 2.2, r2: 1.7, mat: trunk, group: 'trunk' });
+    p.push({ k: 'cap', a: [hc[0] + 8.4, hc[1], hc[2] - 0.2], b: [hc[0] + 11.4, hc[1] + 0.8 + o.sway * 0.3, hc[2] - 1.4], r: 1.7, r2: 1.2, mat: trunk, group: 'trunk' });
+    // long tusks
+    for (const s of [-1, 1]) p.push({ k: 'cap', a: [hc[0] + 4.0, hc[1] + s * 2.6, hc[2] - 1.8], b: [hc[0] + 9.0, hc[1] + s * 3.6, hc[2] - 1.2], r: 0.8, r2: 0.35, mat: { ramp: H('#a89c80', '#d8ccae', '#f2e8d0', '#fbf8ee') }, group: 'tusk' });
+    for (const s of [-1, 1]) {
+      const z = surf(hc, hr, 3.4, s * 3.2, 0.15);
+      p.push({ k: 'ell', c: [hc[0] + 3.4, hc[1] + s * 3.2, z], r: [0.55, 0.5, 0.45], mat: MAT.eyeDark, group: 'eye' });
+    }
+    shadesOnHead(p, hc, hr, -0.4, 2.2, 1.55);
+    cigar(p, [hc[0] + 6.2, hc[1] - 2.0, hc[2] - 2.2], 1.0, -1.0, 3.8, 0.8);
   },
   tail(p, o) {
     p.push({ k: 'cap', a: [-7.2, 0, 6.6], b: [-11.4, 0.6 + o.sway * 0.4, 5.4], r: 0.6, r2: 0.4, mat: { ramp: ELEPHANT }, group: 'tail' });
@@ -595,8 +732,9 @@ const slon: Rig = {
   },
 };
 
-// ── Лобстер «Омар Семёнович» — lobster, white shop coat, claws ───────────────
+// ── Славик «Барыга» — lobster, navy tracksuit with white stripes, black vest, shades, cigar ────
 const SHELL = H('#4a0806', '#7a120c', '#a82014', '#d43a22', '#f06a44');
+const TRACK_NAVY = H('#06081a', '#0c1230', '#16204e', '#22306e', '#32448e');
 const lobster: Rig = {
   id: 'lobster',
   torsoC: [-0.2, 0, 8.4],
@@ -609,17 +747,19 @@ const lobster: Rig = {
   footR: [2.8, 1.6, 1.2],
   pal: {
     torso: {
-      ramp: H('#8a8478', '#b4ae9e', '#d8d2c2', '#efeadc', '#fbf8ee'),
+      ramp: H('#08080a', '#121216', '#1c1c22', '#2a2a32', '#3a3a44'),
       pattern: (c) => {
-        if (c.lx > 2.4 && Math.abs(c.ly) < 1.8 - (c.lx - 2.4) * 0.4) return Math.abs(c.ly) < 0.45 ? hex('#1a2a5a') : hex('#c8d4e8'); // shirt + tie
-        if (Math.abs(c.lx - 1.4) < 1.2 && Math.abs(c.ly + 5.0) < 1.1) return Math.abs(c.ly + 4.4) < 0.18 && c.lx > 1.6 ? hex('#1a2a8a') : hex('#c8c2b4'); // pocket + pen
+        // black vest over the tracksuit; navy with white stripes at the shoulders
+        const ay = Math.abs(c.ly);
+        if (ay > 5.8) return shoulderStripes(c, 6.4) ?? (c.nz > 0.7 ? TRACK_NAVY[3]! : c.nz > 0.4 ? TRACK_NAVY[2]! : TRACK_NAVY[1]!);
+        if (c.lx > 1.4 && ay < 0.3) return hex('#4a4a54');
         return null;
       },
     },
-    sleeve: { ramp: H('#8a8478', '#b4ae9e', '#d8d2c2', '#efeadc'), pattern: (c) => (c.t > 0.86 ? hex(c.nz > 0.6 ? '#d43a22' : '#a82014') : null) },
+    sleeve: { ramp: TRACK_NAVY, pattern: sleeveStripes },
     hand: { ramp: SHELL },
-    pants: { ramp: H('#14182a', '#1e2440', '#2a3256', '#3a446e') },
-    shoe: { ramp: H('#0a0806', '#1a120c', '#2c2016', '#463422') },
+    pants: { ramp: TRACK_NAVY, pattern: legStripe },
+    shoe: { ramp: H('#1c1c20', '#2e2e34', '#ccc6b8', '#ece6da') },
   },
   hand(p, at, side) {
     // a big claw: palm + two pincers opening forward
@@ -629,25 +769,27 @@ const lobster: Rig = {
     p.push({ k: 'cap', a: [at[0] + 2.2, at[1] + side * 0.9, at[2]], b: [at[0] + 4.8, at[1] + side * 1.9, at[2] - 0.2], r: 1.0, r2: 0.35, mat: m, group: 'pincer' + side });
   },
   torsoExtras(p, o) {
-    p.push({ k: 'ell', c: [1.0 + o.dx, o.dy, 12.6 + o.dz], r: [5.2, 6.4, 1.6], mat: { ramp: H('#8a8478', '#b4ae9e', '#d8d2c2', '#efeadc') }, group: 'collar' });
+    p.push({ k: 'ell', c: [1.2 + o.dx, o.dy, 12.9 + o.dz], r: [4.8, 5.8, 1.6], yaw: o.yaw, mat: { ramp: TRACK_NAVY, pattern: (c) => (Math.sqrt((c.lx / 4.8) ** 2 + (c.ly / 5.8) ** 2) > 0.82 ? WHITE : null) }, group: 'collar' });
+    pouches(p, o, lobster, { ramp: H('#0a0a0c', '#16161a', '#24242a', '#34343c') }, [
+      [3.4, -4.6],
+      [3.4, 4.6],
+    ]);
+    goldChain(p, o, 5.3, 5.6, 13.7, 1.4);
+    backpack(p, o, lobster, { ramp: H('#0a0a0c', '#16161a', '#24242a', '#36363e') }, { ramp: H('#060608', '#121216', '#1e1e24') }, [2.2, 4.4, 2.6]);
   },
   head(p, o) {
     const hc: V3 = [0.8 + o.dx, o.dy, 14.6 + o.dz];
     const hr: V3 = [5.6, 4.2, 3.6];
     const shell: Material = { ramp: SHELL, spec: { color: hex('#ffd8c0'), power: 12, threshold: 0.84 }, pattern: (c) => (Math.abs(((c.x + 30) % 2.4) - 1.2) < 0.15 ? -1 : null) };
     p.push({ k: 'ell', c: hc, r: hr, mat: shell, group: 'head' });
-    // rostrum
     p.push({ k: 'cap', a: [hc[0] + 4.0, hc[1], hc[2] + 0.8], b: [hc[0] + 8.0, hc[1], hc[2] + 0.2], r: 1.2, r2: 0.25, mat: shell, group: 'rostrum' });
-    // eye stalks
-    for (const s of [-1, 1]) {
-      p.push({ k: 'cap', a: [hc[0] + 3.0, hc[1] + s * 1.6, hc[2] + 2.2], b: [hc[0] + 4.4, hc[1] + s * 2.6, hc[2] + 3.4], r: 0.45, mat: shell, group: 'stalk' });
-      p.push({ k: 'ell', c: [hc[0] + 4.6, hc[1] + s * 2.7, hc[2] + 3.6], r: [0.75, 0.7, 0.7], mat: { ramp: H('#0a0806', '#1a1210', '#2a2420') }, group: 'eye' });
-    }
+    shadesOnEyes(p, hc, hr, 3.0, 2.1, 1.4);
     // long antennae sweeping back over the shoulders
     for (const s of [-1, 1]) {
       p.push({ k: 'cap', a: [hc[0] + 5.0, hc[1] + s * 1.0, hc[2] + 0.6], b: [hc[0] + 9.0, hc[1] + s * 6.0, hc[2] + 1.6], r: 0.35, r2: 0.28, mat: { ramp: SHELL }, group: 'antenna' });
       p.push({ k: 'cap', a: [hc[0] + 9.0, hc[1] + s * 6.0, hc[2] + 1.6], b: [hc[0] + 4.0, hc[1] + s * 14.0 + o.sway * 0.4, hc[2] + 2.0], r: 0.28, r2: 0.15, mat: { ramp: SHELL }, group: 'antenna' });
     }
+    cigar(p, [hc[0] + 5.6, hc[1] + 1.6, hc[2] - 1.4], 1.0, 0.9, 3.6, 0.75);
   },
   tail(p, o) {
     const m: Material = { ramp: SHELL };
@@ -656,6 +798,6 @@ const lobster: Rig = {
   },
 };
 
-export const EXTRA_RIGS: Record<Exclude<CharacterId, 'petya' | 'valuta' | 'uchastkovy' | 'mihalych'>, Rig> = { vorona, zmeya, varan, popugay, piranya, akula, oryol, leopard, slon, lobster };
+export const EXTRA_RIGS: Record<Exclude<CharacterId, 'petya' | 'valuta' | 'uchastkovy' | 'mihalych'>, Rig> = { vorona, zmeya, varan, popugay, piranya, akula, leopard, slon, lobster };
 
 export type { PoseOffsets };
