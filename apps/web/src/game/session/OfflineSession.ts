@@ -1,10 +1,19 @@
 /** Offline practice: the shared World + bots running locally (no server). */
-import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS } from '@blatkom/shared';
-import type { CharacterId, InputFrame, MapId, Standing, BotDifficulty, PlayerState } from '@blatkom/shared';
+import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS, DEFAULT_LOADOUT, weaponAmmo } from '@blatkom/shared';
+import type { CharacterId, InputFrame, MapId, Standing, BotDifficulty, PlayerState, Loadout, WeaponId } from '@blatkom/shared';
 import type { GameSession, HudState, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
 import { toRenderPlayer, worldEventToSession, reloadProgress } from './convert.js';
 
 const BOT_NAMES = ['Борода', 'Гость_312', 'Кооператор', 'Петрович', 'Сантехник', 'Завхоз', 'Прапор', 'Колян'];
+
+/** Practice bots carry varied gear so the training ground shows what the arsenal holds. */
+const BOT_PRIMARIES: WeaponId[] = ['avtomat', 'obrez', 'ksyuha', 'uzi', 'toz', 'sayga', 'svd', 'pkm', 'val', 'tommy', 'mosinka'];
+const BOT_SIDEARMS: WeaponId[] = ['pistol', 'pistol', 'nagan', 'pb', 'stechkin'];
+const BOT_MELEE: WeaponId[] = ['montirovka', 'montirovka', 'bita', 'finka', 'lopata'];
+export function botLoadout(seed: number): Loadout {
+  const pick = <T,>(list: readonly T[], k: number) => list[Math.abs(Math.floor(seed * 7919 + k * 104729)) % list.length]!;
+  return { sidearm: pick(BOT_SIDEARMS, 1), melee: pick(BOT_MELEE, 2), primary: pick(BOT_PRIMARIES, 3), mods: {} };
+}
 
 export interface OfflineOptions {
   mapId: MapId;
@@ -16,6 +25,8 @@ export interface OfflineOptions {
   difficulty: BotDifficulty;
   durationMs?: number;
   scoreLimit?: number;
+  /** The local player's loadout (owned weapons and upgrades); the free default otherwise. */
+  loadout?: Loadout;
 }
 
 export class OfflineSession implements GameSession {
@@ -42,14 +53,14 @@ export class OfflineSession implements GameSession {
       seed: Math.floor(Math.random() * 1e9),
     });
     this.nav = new NavGrid(this.world.collision);
-    this.world.addPlayer(this.localId, opts.name, opts.character, false);
+    this.world.addPlayer(this.localId, opts.name, opts.character, false, opts.loadout ?? DEFAULT_LOADOUT);
     if (opts.level) this.levels.set(this.localId, opts.level);
     this.matchSeq = Math.floor(Math.random() * 1e6);
     const others = CHARACTER_IDS.filter((c) => c !== opts.character);
     const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
     for (let i = 0; i < opts.bots; i++) {
       const id = `bot${i}`;
-      this.world.addPlayer(id, names[i % names.length]!, others[i % others.length]!, true);
+      this.world.addPlayer(id, names[i % names.length]!, others[i % others.length]!, true, botLoadout(i + Math.floor(Math.random() * 1000)));
       this.levels.set(id, 2 + Math.floor(Math.random() * 14)); // practice bots wear plausible levels
       this.brains.push(new BotBrain(id, this.world, this.nav, opts.difficulty, 1000 + i * 77 + Math.floor(Math.random() * 1000)));
     }
@@ -107,7 +118,7 @@ export class OfflineSession implements GameSession {
   }
 
   pickups(): RenderPickup[] {
-    return this.world.pickups.map((p) => ({ id: p.id, weapon: p.weapon, x: p.x, y: p.y, active: p.active, dropped: p.dropped, supply: p.supply }));
+    return this.world.pickups.map((p) => ({ id: p.id, weapon: p.weapon, medkit: p.kind === 'medkit', x: p.x, y: p.y, active: p.active, dropped: p.dropped, supply: p.supply }));
   }
 
   drainEvents(): SessionEvent[] {
@@ -122,7 +133,7 @@ export class OfflineSession implements GameSession {
     let prompt: HudState['pickupPrompt'] = null;
     if (me.alive && me.heavy) {
       for (const pk of w.pickups) {
-        if (!pk.active || pk.weapon === me.heavy) continue;
+        if (!pk.active || !pk.weapon || pk.weapon === me.heavy) continue;
         if ((pk.x - me.x) ** 2 + (pk.y - me.y) ** 2 < PICKUP_RADIUS * PICKUP_RADIUS) prompt = pk.weapon;
       }
     }
@@ -131,9 +142,11 @@ export class OfflineSession implements GameSession {
       alive: me.alive,
       respawnInMs: me.alive ? 0 : Math.max(0, me.respawnAt - w.time),
       weapon: me.weapon,
+      sidearm: me.sidearm,
+      melee: me.melee,
       heavy: me.heavy,
-      mag: me.weapon === 'pistol' ? me.pistolMag : me.weapon === 'montirovka' ? 0 : me.heavyMag,
-      reserve: me.weapon === 'pistol' ? -1 : me.weapon === 'montirovka' ? 0 : me.heavyReserve,
+      mag: weaponAmmo(me, me.weapon).mag,
+      reserve: weaponAmmo(me, me.weapon).reserve,
       reloading: me.reloadWeapon !== null,
       reloadProgress: reloadProgress(me),
       phase: w.phase,
@@ -161,6 +174,11 @@ export class OfflineSession implements GameSession {
 
   viewTime(): number {
     return this.world.time;
+  }
+
+  /** Loadout of the local player from the next spawn on (changed in the arsenal between matches). */
+  setLocalLoadout(loadout: Loadout): void {
+    this.world.setLoadout(this.localId, loadout);
   }
 
   /** Nickname/level of the local player (the profile can change between matches). */

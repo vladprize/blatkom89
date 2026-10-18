@@ -43,7 +43,7 @@ test('codec: snapshot round-trip keeps state within quantization', () => {
   const np = s.players.find((p) => p.slot === p1.slot)!;
   assert.ok(Math.abs(np.x - p1.x) <= 0.125);
   assert.ok(Math.abs(np.y - p1.y) <= 0.125);
-  assert.equal(np.pistolMag, p1.pistolMag);
+  assert.equal(np.sideMag, p1.sideMag);
   assert.equal(s.shots.length, 1);
   assert.equal(s.phase, 'active');
   assert.throws(() => decodeSnapshot(new Uint8Array(buf).slice(0, 20)), ProtocolError);
@@ -80,6 +80,13 @@ for (const id of MAP_ORDER) {
       const k = nav.nearestWalkable(p.x, p.y, 2);
       assert.ok(k >= 0 && reach[k] === 1, `pickup ${p.x},${p.y} reachable`);
       assert.equal(c.overlapsCircle(p.x, p.y, 10), false, `pickup ${p.x},${p.y} not inside solids`);
+    }
+    assert.ok(m.medkits.length >= 3, 'first-aid kits on every map');
+    for (const p of m.medkits) {
+      assert.equal(c.overlapsCircle(p.x, p.y, 12), false, `medkit ${p.x},${p.y} not inside solids`);
+      assert.equal(reach[nav.index(p.x, p.y)], 1, `medkit ${p.x},${p.y} reachable`);
+      for (const q of m.pickups) assert.ok(Math.hypot(q.x - p.x, q.y - p.y) > 60, `medkit ${p.x},${p.y} not on a weapon pickup`);
+      for (const q of m.supplyPoints) assert.ok(Math.hypot(q.x - p.x, q.y - p.y) >= 48, `medkit ${p.x},${p.y} keeps supply point ${q.x},${q.y} free`);
     }
     assert.ok(m.supplyPoints.length >= 5, 'supply drop points');
     for (const p of m.supplyPoints) {

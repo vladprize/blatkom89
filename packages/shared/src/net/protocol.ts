@@ -5,12 +5,12 @@ import type { CharacterId } from '../game-rules/characters.js';
 import type { MatchConfig, MatchPhase } from '../game-rules/match.js';
 import { MAP_IDS } from '../maps/types.js';
 import type { MapId } from '../maps/types.js';
-import type { HeavyWeaponId, WeaponId } from '../game-rules/weapons.js';
+import type { WeaponId, WeaponMods } from '../game-rules/weapons.js';
 import type { Standing } from '../sim/world.js';
 import type { AchievementId } from '../game-rules/progression.js';
 
-/** v2: match points with assists, «дефицит» supply drops. */
-export const PROTOCOL_VERSION = 2;
+/** v2: match points with assists, «дефицит» supply drops. v3: loadouts (29 weapons), rockets, medkits. */
+export const PROTOCOL_VERSION = 3;
 
 const roomId = z.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 
@@ -29,6 +29,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('map'), mapId: z.enum(MAP_IDS) }),
   z.object({ type: z.literal('start') }),
   z.object({ type: z.literal('rematch') }),
+  /** The player changed their loadout over the API: the server re-reads it (applies from the next spawn). */
+  z.object({ type: z.literal('loadout') }),
   z.object({ type: z.literal('leave') }),
   z.object({ type: z.literal('ping'), t: z.number().finite() }),
 ]);
@@ -44,15 +46,20 @@ export interface RosterEntry {
   isHost: boolean;
   isBot: boolean;
   level: number;
+  /** Upgrade levels of the player's weapons (client-side prediction of their own weapons). */
+  mods?: Partial<Record<WeaponId, WeaponMods>>;
 }
 
 export type GameEvent =
   | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: WeaponId }
   | { t: 'kill'; killer: number; victim: number; weapon: WeaponId; assists: number[] }
   | { t: 'respawn'; slot: number; x: number; y: number }
-  | { t: 'pickup'; slot: number; weapon: HeavyWeaponId; ammoOnly: boolean }
-  | { t: 'drop'; slot: number; weapon: HeavyWeaponId }
-  | { t: 'supply'; x: number; y: number; weapon: HeavyWeaponId }
+  | { t: 'pickup'; slot: number; weapon: WeaponId; ammoOnly: boolean }
+  | { t: 'drop'; slot: number; weapon: WeaponId }
+  | { t: 'supply'; x: number; y: number; weapon: WeaponId }
+  | { t: 'heal'; slot: number; amount: number; x: number; y: number }
+  | { t: 'rocket'; id: number; shooter: number; weapon: WeaponId; x: number; y: number; angle: number; speed: number; range: number }
+  | { t: 'boom'; id: number; shooter: number; weapon: WeaponId; x: number; y: number; radius: number }
   | { t: 'reload'; slot: number; weapon: WeaponId }
   | { t: 'dry'; slot: number }
   | { t: 'phase'; phase: MatchPhase }
@@ -64,6 +71,9 @@ export interface PersonalResult {
   level: number;
   leveledUp: boolean;
   newAchievements: AchievementId[];
+  /** Tokens earned in this match (spent in the shop on weapons, characters and upgrades). */
+  tokensGained?: number;
+  totalTokens?: number;
 }
 
 export type ServerMessage =

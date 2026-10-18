@@ -128,37 +128,6 @@ function icon(w: number, h: number, draw: (img: Img, c: RGBA) => void, outline =
 }
 
 export const ICONS: Record<string, () => Img> = {
-  ico_pistol: () =>
-    icon(52, 34, (g, c) => {
-      g.fillPoly([[4, 6], [44, 6], [44, 14], [4, 14]], c);
-      g.fillPoly([[28, 13], [40, 13], [36, 30], [26, 30]], c);
-      g.fillRect(44, 7, 3, 4, c);
-      g.fillPoly([[20, 14], [28, 14], [27, 20], [21, 20]], c);
-      g.fillRect(22, 15, 4, 3, [0, 0, 0, 0]);
-    }),
-  ico_obrez: () =>
-    icon(86, 30, (g, c) => {
-      g.fillRect(28, 6, 54, 5, c);
-      g.fillRect(28, 12, 54, 5, c);
-      g.fillPoly([[16, 5], [30, 5], [30, 19], [16, 19]], c);
-      g.fillPoly([[4, 13], [18, 9], [20, 18], [10, 26], [3, 22]], c);
-    }),
-  ico_avtomat: () =>
-    icon(100, 40, (g, c) => {
-      g.fillPoly([[3, 9], [26, 12], [26, 20], [6, 24]], c);
-      g.fillRect(24, 9, 34, 11, c);
-      g.fillRect(56, 11, 18, 7, c);
-      g.fillRect(58, 6, 20, 4, c);
-      g.fillRect(72, 12, 24, 3, c);
-      g.fillRect(90, 7, 3, 6, c);
-      g.fillPoly([[42, 19], [52, 19], [56, 34], [47, 36]], c);
-      g.fillPoly([[30, 19], [36, 19], [34, 28], [29, 28]], c);
-    }),
-  ico_montirovka: () =>
-    icon(86, 30, (g, c) => {
-      g.fillPoly([[4, 15], [10, 12], [70, 12], [70, 17], [10, 17]], c);
-      g.fillPoly([[68, 12], [76, 6], [82, 8], [80, 12], [73, 16], [68, 17]], c);
-    }),
   ico_skull: () =>
     icon(28, 28, (g, c) => {
       g.fillEllipse(14, 11, 9, 8, c);

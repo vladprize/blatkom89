@@ -1,12 +1,14 @@
 /**
- * Visual for one player: shadow, legs (rotated to movement), torso+weapon (rotated to aim), name tag
- * and health bar. Animation states are driven by session state and events, not random frames.
+ * Visual for one player: shadow, legs (rotated to movement), torso (rotated to aim) with the weapon
+ * sprite attached at the torso frame's grip (paper doll, see rig.gen.ts), name tag and health bar.
+ * Animation states are driven by session state and events, not random frames.
  */
 import * as Phaser from 'phaser';
-import { angleDiff } from '@blatkom/shared';
+import { angleDiff, WEAPONS } from '@blatkom/shared';
 import type { CharacterId, WeaponId } from '@blatkom/shared';
 import type { RenderPlayer } from '../session/types.js';
 import { D } from './depth.js';
+import { GRIPS } from './rig.gen.js';
 
 const SCALE = 0.5;
 const LOCAL_TAG = '#f2e6c8';
@@ -17,6 +19,8 @@ export class CharacterView {
   private readonly shadow: Phaser.GameObjects.Image;
   private readonly legs: Phaser.GameObjects.Sprite;
   private readonly torso: Phaser.GameObjects.Sprite;
+  /** Weapon in hand (atlas «weapons», origin = grip). */
+  private readonly gun: Phaser.GameObjects.Image;
   private readonly label: Phaser.GameObjects.Text;
   /** Level badge left of the health bar (gold plate with the number). */
   private readonly levelTag: Phaser.GameObjects.Text;
@@ -31,6 +35,7 @@ export class CharacterView {
   private alive = true;
   private lastStepFrame = -1;
   private smokeAt = 0;
+  private kickUntil = 0;
   onFootstep: ((x: number, y: number) => void) | null = null;
   onSmoke: ((x: number, y: number) => void) | null = null;
 
@@ -43,7 +48,8 @@ export class CharacterView {
     this.weapon = p.weapon;
     this.shadow = scene.add.image(p.x, p.y, 'fx', 'shadow').setScale(0.6, 0.48).setAlpha(0.55).setDepth(D.CHAR_SHADOW);
     this.legs = scene.add.sprite(p.x, p.y, `char_${p.character}`, `${p.character}_legs_idle_0`).setScale(SCALE).setDepth(D.LEGS);
-    this.torso = scene.add.sprite(p.x, p.y, `char_${p.character}`, `${p.character}_${p.weapon}_idle_0`).setScale(SCALE).setDepth(D.TORSO + p.slot * 0.01);
+    this.torso = scene.add.sprite(p.x, p.y, `char_${p.character}`, `${p.character}_${WEAPONS[p.weapon].pose}_idle_0`).setScale(SCALE).setDepth(D.TORSO + p.slot * 0.01);
+    this.gun = scene.add.image(p.x, p.y, 'weapons', `w_${p.weapon}`).setScale(SCALE).setDepth(D.TORSO + p.slot * 0.01 - 0.004);
     this.label = scene.add
       .text(p.x, p.y - 25, p.name, { fontFamily: 'Oswald, sans-serif', fontSize: '8px', fontStyle: '500', color: p.isLocal ? LOCAL_TAG : ENEMY_TAG, stroke: '#0b0908', strokeThickness: 2.5, resolution: 4 })
       .setOrigin(0.5, 1)
@@ -61,7 +67,7 @@ export class CharacterView {
   }
 
   private key(anim: string) {
-    return `${this.character}_${this.weapon}_${anim}`;
+    return `${this.character}_${WEAPONS[this.weapon].pose}_${anim}`;
   }
 
   private playIdle() {
@@ -69,15 +75,17 @@ export class CharacterView {
     this.torso.play({ key: this.key('idle'), startFrame: Math.floor(Math.random() * 2) }, true);
   }
 
-  onShot(weapon: WeaponId): void {
+  onShot(weapon: WeaponId, now = 0): void {
     if (weapon !== this.weapon) this.setWeapon(weapon);
     if (this.reloading) return;
-    if (weapon === 'montirovka') {
+    if (WEAPONS[weapon].kind === 'melee') {
       this.torsoState = 'swing';
       this.torso.play(this.key('swing'), false);
     } else {
       this.torsoState = 'shoot';
       this.torso.play(this.key('shoot'), false);
+      // heavy hitters (shotguns, launchers, rifles) kick the weapon back a little further
+      this.kickUntil = now + 70;
     }
   }
 
@@ -93,6 +101,7 @@ export class CharacterView {
   private setWeapon(w: WeaponId) {
     this.weapon = w;
     this.reloading = false;
+    this.gun.setFrame(`w_${w}`);
     this.playIdle();
   }
 
@@ -100,7 +109,7 @@ export class CharacterView {
     if (c === this.character) return;
     this.character = c;
     this.legs.setTexture(`char_${c}`, `${c}_legs_idle_0`);
-    this.torso.setTexture(`char_${c}`, `${c}_${this.weapon}_idle_0`);
+    this.torso.setTexture(`char_${c}`, `${c}_${WEAPONS[this.weapon].pose}_idle_0`);
     this.playIdle();
   }
 
@@ -109,16 +118,17 @@ export class CharacterView {
     const visible = p.alive;
     if (visible !== this.alive) {
       this.alive = visible;
-      for (const o of [this.shadow, this.legs, this.torso, this.label, this.levelTag, this.bar]) o.setVisible(visible);
+      for (const o of [this.shadow, this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.setVisible(visible);
       if (visible) this.playIdle();
     }
     if (!visible) return;
     if (p.weapon !== this.weapon) this.setWeapon(p.weapon);
     // reload state
-    if (p.reloading && !this.reloading && p.weapon !== 'montirovka') {
+    if (p.reloading && !this.reloading && WEAPONS[p.weapon].kind !== 'melee') {
       this.reloading = true;
       this.torsoState = 'reload';
-      this.torso.play(this.key('reload'), false);
+      // the six reload frames span the weapon's reload time
+      this.torso.play({ key: this.key('reload'), frameRate: 6 / (WEAPONS[p.weapon].reloadMs / 1000) }, false);
     } else if (!p.reloading && this.reloading) {
       this.reloading = false;
       if (this.torsoState === 'reload') this.playIdle();
@@ -153,23 +163,36 @@ export class CharacterView {
     const py = Math.cos(p.aim) * bob * 0.7;
 
     this.legs.setPosition(p.x, p.y).setRotation(this.legAngle);
-    this.torso.setPosition(p.x + px, p.y + py).setRotation(p.aim + bob * 0.035);
+    const rot = p.aim + bob * 0.035;
+    this.torso.setPosition(p.x + px, p.y + py).setRotation(rot);
     this.shadow.setPosition(p.x + 2.5, p.y + 3.5).setRotation(p.aim);
+    // weapon at the grip of the current torso frame
+    const frameName = String(this.torso.frame.name);
+    const grip = GRIPS[frameName.slice(this.character.length + 1)] ?? GRIPS[`${WEAPONS[this.weapon].pose}_idle_0`]!;
+    const kick = now < this.kickUntil ? Math.max(0, WEAPONS[this.weapon].shake - 0.22) * 5 : 0;
+    const cr = Math.cos(rot);
+    const sr = Math.sin(rot);
+    const gx = grip[0] - kick;
+    this.gun.setPosition(p.x + px + cr * gx - sr * grip[1], p.y + py + sr * gx + cr * grip[1]).setRotation(rot + grip[2]);
 
     // hit flash / spawn-protection blink
     if (now < this.flashUntil) {
       this.torso.setTintFill(0xffffff);
       this.legs.setTintFill(0xffffff);
+      this.gun.setTintFill(0xffffff);
     } else if (now < this.redUntil) {
       this.torso.setTint(0xff8a80);
       this.legs.setTint(0xff8a80);
+      this.gun.setTint(0xff8a80);
     } else {
       this.torso.clearTint();
       this.legs.clearTint();
+      this.gun.clearTint();
     }
     const blink = p.invulnerable ? (Math.floor(now / 90) % 2 ? 0.45 : 0.9) : 1;
     this.torso.setAlpha(blink);
     this.legs.setAlpha(blink);
+    this.gun.setAlpha(blink);
 
     // name + level badge + hp (the roster/nickname can change after the view was created)
     if (this.label.text !== p.name) this.label.setText(p.name);
@@ -200,7 +223,7 @@ export class CharacterView {
   }
 
   destroy(): void {
-    for (const o of [this.shadow, this.legs, this.torso, this.label, this.levelTag, this.bar]) o.destroy();
+    for (const o of [this.shadow, this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.destroy();
   }
 }
 

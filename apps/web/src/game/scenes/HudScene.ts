@@ -64,6 +64,13 @@ function fitText(t: Phaser.GameObjects.Text, s: string, maxW: number): Phaser.Ga
   return t;
 }
 
+/** Sets a weapon icon (atlas «weapons») scaled to fit a box, never upscaled past `maxScale`. */
+function fitIcon(img: Phaser.GameObjects.Image, frame: string, maxW: number, maxH: number, maxScale = 1.1): Phaser.GameObjects.Image {
+  if (img.frame.name !== frame) img.setFrame(frame);
+  const f = img.frame;
+  return img.setScale(Math.min(maxScale, maxW / f.realWidth, maxH / f.realHeight));
+}
+
 function fmtTime(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -267,12 +274,12 @@ export class HudScene extends Phaser.Scene {
 
   private buildWeapon() {
     this.weaponBg = this.add.graphics();
-    this.weaponIcon = this.add.image(0, 0, 'fx', 'ico_pistol').setOrigin(0.5);
+    this.weaponIcon = this.add.image(0, 0, 'weapons', 'ico_pistol').setOrigin(0.5);
     this.ammoText = txt(this, 0, 0, '8/∞', this.touch ? 16 : 22, BEIGE, '600').setOrigin(0.5, 0);
     this.weaponName = txt(this, 0, 0, '', 10, '#b8a888', '500').setOrigin(0.5, 0);
     this.slotGfx = this.add.graphics();
     for (let i = 0; i < 3; i++) {
-      this.slotIcons.push(this.add.image(0, 0, 'fx', 'ico_pistol').setOrigin(0.5));
+      this.slotIcons.push(this.add.image(0, 0, 'weapons', 'ico_pistol').setOrigin(0.5));
       this.slotNums.push(txt(this, 0, 0, String(i + 1), 10, '#1a1410', '700').setStroke('#000', 0).setOrigin(0.5));
     }
   }
@@ -291,7 +298,7 @@ export class HudScene extends Phaser.Scene {
     this.tutorialState = null;
     if (storageGet(TUTORIAL_KEY)) return;
     const lines = this.touch
-      ? ['Левый стик — движение', 'Правый стик — прицел и огонь', '⟳ — перезарядка · ⇄ — смена оружия', 'Подходи к оружию на полу, чтобы взять']
+      ? ['Левый стик — движение', 'Правый стик — прицел и огонь', '⟳ — перезарядка · ⇄ — смена оружия', 'Оружие и аптечки подбираются на ходу']
       : ['WASD — движение · Shift — шагом', 'Мышь — прицел · ЛКМ — огонь', 'R — перезарядка · 1/2/3, Q — оружие', 'E — взять оружие · Tab — счёт · Esc — пауза'];
     const title = txt(this, 0, 0, 'КАК ВЕСТИ ДЕЛА', 13, '#1a1410', '700').setStroke('#000', 0).setOrigin(0.5, 0);
     const body = txt(this, 0, 0, lines.join('\n'), this.touch ? 12 : 14, BEIGE, '500').setOrigin(0.5, 0).setAlign('center').setLineSpacing(4);
@@ -575,7 +582,7 @@ export class HudScene extends Phaser.Scene {
     // assisters ride along after the killer: «Петя + Валюта [обрез] Михалыч»
     const a = e.assists.length ? txt(this, right + 5, 3, `+ ${e.assists.join(', ')}`, 11, e.assistLocal ? '#ff8a7a' : '#9fbfdf', '500') : null;
     if (a) right = a.x + a.width;
-    const icon = this.add.image(right + 8, k.height / 2, 'fx', `ico_${e.weapon}`).setOrigin(0, 0.5).setScale(0.55);
+    const icon = fitIcon(this.add.image(right + 8, k.height / 2, 'weapons', `ico_${e.weapon}`).setOrigin(0, 0.5), `ico_${e.weapon}`, 46, 15, 0.8);
     const v = txt(this, icon.x + icon.displayWidth + 8, 0, e.victim, 14, e.victimLocal ? RED : BLUE, '600');
     const bgW = v.x + v.width + 10;
     const bg = this.add.graphics();
@@ -603,7 +610,8 @@ export class HudScene extends Phaser.Scene {
 
   private onPoints(e: PointsEntry) {
     const big = e.points >= SCORING.killPoints;
-    const t = txt(this, 0, 0, `+${e.points} ${e.label}`, this.touch ? 15 : 19, big ? '#ffd36a' : BEIGE, '700').setOrigin(0.5).setDepth(22).setAlpha(0);
+    const color = e.heal ? '#7cff8a' : big ? '#ffd36a' : BEIGE;
+    const t = txt(this, 0, 0, `+${e.points} ${e.label}`, this.touch ? 15 : 19, color, '700').setOrigin(0.5).setDepth(22).setAlpha(0);
     this.popups.push({ text: t, born: this.time.now });
     while (this.popups.length > 3) this.popups.shift()!.text.destroy();
   }
@@ -767,12 +775,12 @@ export class HudScene extends Phaser.Scene {
       this.hpBar.lineStyle(1, 0x0b0908, 1).strokeRect(x - 0.5, y - 0.5, 151, 11);
     }
     // weapon
-    this.weaponIcon.setFrame(`ico_${hud.weapon}`).setScale(this.touch ? 0.6 : 0.85);
+    fitIcon(this.weaponIcon, `ico_${hud.weapon}`, this.touch ? 64 : 120, this.touch ? 24 : 34);
     const def = WEAPONS[hud.weapon];
     this.ammoText.setText(def.kind === 'melee' ? '—' : `${hud.mag}/${hud.reserve < 0 ? '∞' : hud.reserve}`);
     this.ammoText.setColor(def.kind !== 'melee' && hud.mag === 0 ? '#ff6a5a' : BEIGE);
     this.weaponName.setText(hud.reloading ? 'ПЕРЕЗАРЯДКА…' : def.name.toUpperCase());
-    if (!this.touch) this.drawSlots(hud.weapon, hud.heavy);
+    if (!this.touch) this.drawSlots(hud.weapon, [hud.sidearm, hud.melee, hud.heavy]);
     if (hud.reloading) {
       const x = this.ammoText.x - 40;
       const y = this.ammoText.y + (this.touch ? 22 : 28);
@@ -798,6 +806,9 @@ export class HudScene extends Phaser.Scene {
         const blink = Math.floor(time / 250) % 2 === 0;
         this.mmDots.fillStyle(0x0b0908, 1).fillRect(ox + pk.x * s - 3, oy + pk.y * s - 3, 6, 6);
         this.mmDots.fillStyle(blink ? 0xff7a3a : 0xffd36a, 1).fillRect(ox + pk.x * s - 2, oy + pk.y * s - 2, 4, 4);
+      } else if (pk.medkit) {
+        // first-aid kits: a small green cross
+        this.mmDots.fillStyle(0x6aff7a, 0.95).fillRect(ox + pk.x * s - 2, oy + pk.y * s - 0.5, 4, 1).fillRect(ox + pk.x * s - 0.5, oy + pk.y * s - 2, 1, 4);
       } else this.mmDots.fillStyle(0xffd36a, 0.9).fillRect(ox + pk.x * s - 1, oy + pk.y * s - 1, 2, 2);
     }
     for (const p of this.supplyPings) {
@@ -844,10 +855,9 @@ export class HudScene extends Phaser.Scene {
     this.lastShotAt.set(slot, now);
   }
 
-  private drawSlots(weapon: WeaponId, heavy: string | null) {
+  private drawSlots(weapon: WeaponId, items: Array<WeaponId | null>) {
     const g = this.slotGfx;
     g.clear();
-    const items: Array<WeaponId | null> = ['pistol', 'montirovka', (heavy as WeaponId) ?? null];
     items.forEach((w, i) => {
       const icon = this.slotIcons[i]!;
       const x = icon.x - 20;
@@ -856,7 +866,7 @@ export class HudScene extends Phaser.Scene {
       g.fillStyle(PANEL, active ? 0.9 : 0.65).fillRect(x, y, 40, 40);
       g.lineStyle(active ? 2 : 1, active ? 0xd8392e : 0x3a3128, 1).strokeRect(x + 0.5, y + 0.5, 39, 39);
       g.fillStyle(0xd9c7a3, 1).fillRect(icon.x - 7, icon.y + 29, 14, 14);
-      if (w) icon.setFrame(`ico_${w}`).setScale(w === 'pistol' ? 0.55 : 0.36).setAlpha(active ? 1 : 0.55).setVisible(true);
+      if (w) fitIcon(icon, `ico_${w}`, 36, 26, 0.8).setAlpha(active ? 1 : 0.55).setVisible(true);
       else icon.setVisible(false);
     });
   }

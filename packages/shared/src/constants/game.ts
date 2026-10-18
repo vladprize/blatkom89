@@ -18,6 +18,8 @@ export const HISTORY_MS = 600;
 
 export const PICKUP_RADIUS = 18;
 export const DROPPED_WEAPON_TTL_MS = 20_000;
+/** HP restored by a first-aid kit (capped at MAX_HP). */
+export const MEDKIT_HEAL = 50;
 
 export const SPAWN_PROTECTION_MS = 1500;
 export const RESPAWN_DELAY_MS = 2500;

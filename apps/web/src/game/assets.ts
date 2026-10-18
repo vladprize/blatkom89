@@ -1,8 +1,9 @@
 /** Asset keys and animation registration (frame names follow tools/art/build-characters.ts). */
 import * as Phaser from 'phaser';
-import { CHARACTER_IDS, WEAPONS } from '@blatkom/shared';
-import type { CharacterId, WeaponId } from '@blatkom/shared';
+import { CHARACTER_IDS } from '@blatkom/shared';
+import type { CharacterId, WeaponPose } from '@blatkom/shared';
 import { inlineAsset } from '../app/inline.js';
+import { POSE_ANIMS } from './render/rig.gen.js';
 
 export const FLOOR_KEYS = [
   'concrete_slab',
@@ -21,12 +22,8 @@ export const FLOOR_KEYS = [
 ] as const;
 export const WALL_KEYS = ['brick', 'concrete', 'panel', 'corrugated', 'fence_concrete', 'roof_flat', 'fence_chain'] as const;
 
-export const TORSO_ANIMS: Record<WeaponId, Array<[string, number]>> = {
-  pistol: [['idle', 2], ['shoot', 3], ['reload', 6], ['hit', 2]],
-  obrez: [['idle', 2], ['shoot', 3], ['reload', 6], ['hit', 2]],
-  avtomat: [['idle', 2], ['shoot', 3], ['reload', 6], ['hit', 2]],
-  montirovka: [['idle', 2], ['swing', 5], ['hit', 2]],
-};
+/** Torso animations per pose class (paper doll: the weapon is a separate sprite, see CharacterView). */
+export const TORSO_ANIMS: Record<WeaponPose, ReadonlyArray<readonly [string, number]>> = POSE_ANIMS;
 
 export function preloadAssets(scene: Phaser.Scene, base = 'assets/'): void {
   const l = scene.load;
@@ -44,6 +41,7 @@ export function preloadAssets(scene: Phaser.Scene, base = 'assets/'): void {
   for (const c of CHARACTER_IDS) l.atlas(`char_${c}`, v(`sprites/char_${c}.png`), j(`sprites/char_${c}.json`));
   l.atlas('props', v('sprites/props.png'), j('sprites/props.json'));
   l.atlas('fx', v('sprites/fx.png'), j('sprites/fx.json'));
+  l.atlas('weapons', v('sprites/weapons.png'), j('sprites/weapons.json'));
   for (const f of FLOOR_KEYS) l.image(`floor_${f}`, v(`tiles/floor_${f}.png`));
   for (const w of WALL_KEYS) l.image(`wall_${w}`, v(`tiles/wall_${w}.png`));
   l.image('pipe', v('tiles/pipe.png'));
@@ -66,10 +64,11 @@ export function registerAnimations(scene: Phaser.Scene): void {
     anims.create({ key: `${c}_legs_idle`, frames: frames(c, 'legs_idle', 1), frameRate: 1, repeat: -1 });
     anims.create({ key: `${c}_legs_walk`, frames: frames(c, 'legs_walk', 8), frameRate: 12, repeat: -1 });
     anims.create({ key: `${c}_legs_run`, frames: frames(c, 'legs_run', 8), frameRate: 18, repeat: -1 });
-    for (const [w, list] of Object.entries(TORSO_ANIMS) as Array<[WeaponId, Array<[string, number]>]>) {
+    for (const [pose, list] of Object.entries(TORSO_ANIMS) as Array<[WeaponPose, ReadonlyArray<readonly [string, number]>]>) {
       for (const [a, n] of list) {
-        const rate = a === 'idle' ? 2 : a === 'shoot' ? 30 : a === 'hit' ? 14 : a === 'swing' ? 22 : n / (WEAPONS[w].reloadMs / 1000);
-        anims.create({ key: `${c}_${w}_${a}`, frames: frames(c, `${w}_${a}`, n), frameRate: rate, repeat: a === 'idle' ? -1 : 0 });
+        // reload speed is set per weapon when played (CharacterView)
+        const rate = a === 'idle' ? 2 : a === 'shoot' ? 30 : a === 'hit' ? 14 : a === 'swing' ? 22 : n / 1.6;
+        anims.create({ key: `${c}_${pose}_${a}`, frames: frames(c, `${pose}_${a}`, n), frameRate: rate, repeat: a === 'idle' ? -1 : 0 });
       }
     }
     anims.create({ key: `${c}_death`, frames: frames(c, 'death', 6), frameRate: 12, repeat: 0 });

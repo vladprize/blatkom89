@@ -150,6 +150,8 @@ export function buildGaragesMap(): MapDef {
     .pickup('obrez', 1256, 360, 16_000)
     .pickup('avtomat', 52, 632, 20_000);
   b.supply(248, 528).supply(624, 800).supply(824, 192).supply(1144, 192).supply(960, 680).supply(688, 320);
+  // first-aid kits in the lanes between the garage blocks
+  b.medkit(330, 760).medkit(860, 310).medkit(1266, 644);
 
   return b.build();
 }

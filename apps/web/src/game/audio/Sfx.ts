@@ -2,7 +2,12 @@
  * Procedural sound effects synthesised with WebAudio at startup (no audio files, no licensing).
  * Positional: volume falls off with distance from the listener, stereo pan by horizontal offset.
  */
-type SfxName = 'pistol' | 'avtomat' | 'obrez' | 'swing' | 'hit' | 'ricochet' | 'reload' | 'dry' | 'pickup' | 'death' | 'kill' | 'assist' | 'supply' | 'beep' | 'beepHigh' | 'click' | 'step' | 'end' | 'hurt' | 'respawn';
+import type { WeaponSound } from '@blatkom/shared';
+
+type SfxName = WeaponSound | 'hit' | 'ricochet' | 'reload' | 'dry' | 'pickup' | 'death' | 'kill' | 'assist' | 'supply' | 'beep' | 'beepHigh' | 'click' | 'step' | 'end' | 'hurt' | 'respawn' | 'boom' | 'heal' | 'buy';
+
+/** Rapid-fire sounds are rate-limited per listener so automatic fire does not turn into noise. */
+const MIN_GAP: Partial<Record<SfxName, number>> = { avtomat: 30, smg: 28, lmg: 34, nail: 40, flame: 90, step: 60 };
 
 class SfxEngine {
   private ctx: AudioContext | null = null;
@@ -76,10 +81,64 @@ class SfxEngine {
     this.buffers.set('pistol', shot(0.32, 140, 0.35, 0.05, 1.2));
     this.buffers.set('avtomat', shot(0.26, 110, 0.45, 0.038, 1.4));
     this.buffers.set('obrez', shot(0.7, 70, 0.18, 0.13, 1.6));
+    this.buffers.set('revolver', shot(0.45, 118, 0.3, 0.07, 1.5));
+    this.buffers.set('smg', shot(0.18, 160, 0.52, 0.024, 1.1));
+    this.buffers.set('lmg', shot(0.32, 92, 0.4, 0.048, 1.6));
+    {
+      // rifle: hard crack and a long rolling tail
+      const crack = shot(0.95, 78, 0.3, 0.12, 2.2);
+      const d = crack.getChannelData(0);
+      const sr = crack.sampleRate;
+      const f = lp(0.03);
+      for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        d[i] = d[i]! + f(rnd() * 2) * 0.5 * (t > 0.05 ? Math.exp(-(t - 0.05) / 0.35) : 0);
+      }
+      this.buffers.set('rifle', crack);
+    }
+    {
+      // pump shotgun: the blast, then the pump clack
+      const clk = (t: number, at: number, hz: number) => (t > at ? Math.sin(2 * Math.PI * hz * (t - at)) * Math.exp(-(t - at) / 0.014) : 0);
+      const f = lp(0.2);
+      this.buffers.set('shotgun', this.buf(0.72, (t) => (f(rnd() * 2) * 1.5 * env(t, 0.001, 0.1) + Math.sin(2 * Math.PI * 72 * t * (1 - t)) * env(t, 0.002, 0.07)) * 0.9 + clk(t, 0.42, 900) * 0.45 + clk(t, 0.52, 650) * 0.5));
+    }
+    {
+      // suppressed: a dull «пфф» and the slide cycling
+      const f = lp(0.07);
+      this.buffers.set('silenced', this.buf(0.16, (t) => f(rnd() * 2) * env(t, 0.001, 0.02) * 2.2 + (t > 0.02 ? Math.sin(2 * Math.PI * 2100 * (t - 0.02)) * Math.exp(-(t - 0.02) / 0.008) * 0.25 : 0)));
+    }
+    {
+      const f = lp(0.06);
+      const g = lp(0.3);
+      this.buffers.set('rocket', this.buf(0.9, (t) => f(rnd() * 2) * 2.2 * env(t, 0.01, 0.12) + g(rnd() * 2) * 0.7 * Math.sin(Math.PI * Math.min(1, t / 0.9)) * (0.6 + 0.4 * Math.sin(t * 60))));
+    }
+    {
+      const f = lp(0.12);
+      this.buffers.set('flame', this.buf(0.2, (t) => f(rnd() * 2) * 1.6 * Math.sin(Math.PI * Math.min(1, t / 0.2)) * (0.7 + 0.3 * Math.sin(t * 190))));
+    }
+    this.buffers.set('bow', this.buf(0.32, (t) => Math.sin(2 * Math.PI * (230 - 60 * t) * t) * env(t, 0.002, 0.09) * 0.7 + rnd() * env(t, 0.0005, 0.01) * 0.6));
+    {
+      const f = lp(0.3);
+      this.buffers.set('nail', this.buf(0.12, (t) => f(rnd() * 2) * env(t, 0.001, 0.018) * 1.6 + Math.sin(2 * Math.PI * 1700 * t) * env(t, 0.0005, 0.006) * 0.5));
+    }
     {
       const f = lp(0.08);
       this.buffers.set('swing', this.buf(0.22, (t) => f(rnd() * 2) * Math.sin(Math.PI * Math.min(1, t / 0.22)) * 2.2));
+      const h = lp(0.045);
+      this.buffers.set('heavySwing', this.buf(0.34, (t) => h(rnd() * 2) * Math.sin(Math.PI * Math.min(1, t / 0.34)) * 2.8));
     }
+    {
+      // explosion: thump + roar + crackle
+      const f = lp(0.05);
+      const g = lp(0.4);
+      this.buffers.set('boom', this.buf(1.6, (t) => Math.sin(2 * Math.PI * (58 - 20 * t) * t) * env(t, 0.004, 0.25) * 1.2 + f(rnd() * 2) * 2.6 * env(t, 0.006, 0.35) + (rnd() > 0.47 ? g(rnd() * 2) * 0.5 * env(t, 0.05, 0.4) : 0)));
+    }
+    this.buffers.set('heal', this.buf(0.45, (t) => (Math.sin(2 * Math.PI * (t < 0.15 ? 660 : 990) * t) * 0.35) * env(t < 0.15 ? t : t - 0.15, 0.004, 0.14)));
+    this.buffers.set('buy', this.buf(0.5, (t) => {
+      const notes = [784, 988, 1318];
+      const i = Math.min(2, Math.floor(t / 0.09));
+      return Math.sin(2 * Math.PI * notes[i]! * t) * 0.3 * env(t - i * 0.09, 0.003, 0.12);
+    }));
     {
       const f = lp(0.05);
       this.buffers.set('hit', this.buf(0.16, (t) => f(rnd() * 2) * env(t, 0.002, 0.04) * 3 + Math.sin(2 * Math.PI * 90 * t) * env(t, 0.001, 0.03)));
@@ -124,7 +183,7 @@ class SfxEngine {
     const b = this.buffers.get(name);
     if (!ctx || !b || !this.master || ctx.state !== 'running') return;
     const now = performance.now();
-    const minGap = name === 'avtomat' ? 30 : name === 'step' ? 60 : 15;
+    const minGap = MIN_GAP[name] ?? 15;
     if (now - (this.lastPlay.get(name) ?? 0) < minGap && (opts.x === undefined || name === 'step')) return;
     this.lastPlay.set(name, now);
     let vol = opts.volume ?? 1;

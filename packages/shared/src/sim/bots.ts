@@ -3,6 +3,7 @@
  * exactly like human clients, so they obey every movement/weapon rule of the simulation.
  */
 import { WEAPONS } from '../game-rules/weapons.js';
+import type { WeaponId } from '../game-rules/weapons.js';
 import { quantizeAngle, wrapAngle, angleDiff } from './math.js';
 import { mulberry32 } from './rng.js';
 import type { NavGrid } from './nav.js';
@@ -18,7 +19,15 @@ const DIFFICULTY: Record<BotDifficulty, { reaction: number; aimError: number; tu
   hard: { reaction: 230, aimError: 0.055, turnRate: 10, tolerance: 0.11, vision: 620 },
 };
 
-const PREFERRED_RANGE: Record<string, number> = { pistol: 200, montirovka: 0, obrez: 80, avtomat: 260 };
+/** Distance a bot tries to keep with the weapon in hand. */
+function preferredRange(w: WeaponId): number {
+  const d = WEAPONS[w];
+  if (d.kind === 'melee') return 0;
+  if (d.kind === 'projectile') return Math.max(170, (d.projectile?.radius ?? 60) * 2.6);
+  if (d.pellets > 1) return Math.min(110, d.range * 0.35);
+  if (d.range >= 900) return 380;
+  return Math.min(260, d.range * 0.45);
+}
 
 export class BotBrain {
   private seq = 0;
@@ -73,13 +82,18 @@ export class BotBrain {
       }
       desiredAim = Math.atan2(dy, dx) + this.aimNoise;
       // weapon choice
-      if (me.heavy && me.weapon !== me.heavy) frame.slot = 3;
-      else if (!me.heavy && dist < 34 && me.weapon !== 'montirovka') frame.slot = 2;
-      else if (!me.heavy && dist > 60 && me.weapon === 'montirovka') frame.slot = 1;
-      const pref = PREFERRED_RANGE[me.weapon] ?? 180;
+      const meleeInHand = me.weapon === me.melee;
+      const heavyDef = me.heavy ? WEAPONS[me.heavy] : null;
+      // launchers are useless point-blank: switch to the sidearm when the target is inside the blast
+      const tooCloseForLauncher = !!heavyDef?.projectile && dist < heavyDef.projectile.radius * 1.4;
+      if (me.heavy && me.weapon !== me.heavy && !tooCloseForLauncher) frame.slot = 3;
+      else if (tooCloseForLauncher && me.weapon === me.heavy) frame.slot = 1;
+      else if (!me.heavy && dist < 34 && !meleeInHand) frame.slot = 2;
+      else if (!me.heavy && dist > 60 && meleeInHand) frame.slot = 1;
+      const pref = preferredRange(me.weapon);
       let fwd = 0;
       if (dist > pref + 40) fwd = 1;
-      else if (dist < pref - 40 && me.weapon !== 'montirovka') fwd = -0.6;
+      else if (dist < pref - 40 && !meleeInHand) fwd = -0.6;
       if (now > this.strafeUntil) {
         this.strafeDir = this.rng() < 0.5 ? -1 : 1;
         this.strafeUntil = now + 500 + this.rng() * 900;
@@ -108,7 +122,7 @@ export class BotBrain {
         moveY = dy / d;
         desiredAim = Math.atan2(moveY, moveX);
       }
-      const ammo = me.weapon === 'pistol' ? me.pistolMag : me.heavyMag;
+      const ammo = me.weapon === me.sidearm ? me.sideMag : me.heavyMag;
       const mag = WEAPONS[me.weapon].magazine;
       if (mag > 0 && ammo < mag * 0.5) frame.buttons |= BTN.RELOAD;
       if (me.heavy && me.weapon !== me.heavy) frame.slot = 3;
@@ -169,7 +183,7 @@ export class BotBrain {
       let best: { x: number; y: number } | null = null;
       let bestD = 900;
       for (const pk of this.world.pickups) {
-        if (!pk.active) continue;
+        if (!pk.active || (pk.kind === 'medkit' && me.hp > 60)) continue;
         const d = Math.abs(pk.x - me.x) + Math.abs(pk.y - me.y);
         if (d < bestD) {
           bestD = d;

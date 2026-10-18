@@ -1,4 +1,4 @@
-import type { HeavyWeaponId } from '../game-rules/weapons.js';
+import type { WeaponId } from '../game-rules/weapons.js';
 import type { PropType } from './props.js';
 
 export const MAP_IDS = ['factory', 'garages', 'yard'] as const;
@@ -110,7 +110,14 @@ export interface SpawnPoint {
 export interface PickupSpawn {
   x: number;
   y: number;
-  weapon: HeavyWeaponId;
+  /** A primary (slot 3) weapon. */
+  weapon: WeaponId;
+  respawnMs: number;
+}
+
+export interface MedkitSpawn {
+  x: number;
+  y: number;
   respawnMs: number;
 }
 
@@ -132,6 +139,8 @@ export interface MapDef {
   pickups: PickupSpawn[];
   /** Open spots where «дефицит» supply crates may be dropped during a match. */
   supplyPoints: Array<{ x: number; y: number }>;
+  /** First-aid kits (restore health, respawn after a while). */
+  medkits: MedkitSpawn[];
   /** Ambient light colour multiplier for the night lightmap (0xRRGGBB) and strength 0..1. */
   ambient: { color: number; level: number };
   /** Minimap palette hint. */

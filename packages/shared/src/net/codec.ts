@@ -6,7 +6,7 @@ import { MAX_INPUTS_PER_MESSAGE, POS_SCALE, VEL_SCALE } from '../constants/game.
 import { MATCH_PHASES } from '../game-rules/match.js';
 import type { MatchPhase } from '../game-rules/match.js';
 import { WEAPONS, WEAPON_BY_INDEX } from '../game-rules/weapons.js';
-import type { HeavyWeaponId, WeaponId } from '../game-rules/weapons.js';
+import type { WeaponId } from '../game-rules/weapons.js';
 import type { InputFrame, PelletResult, PickupState, PlayerState, WorldEvent } from '../sim/world.js';
 import { clamp, dequantizeAngle, quantizeAngle } from '../sim/math.js';
 
@@ -86,8 +86,11 @@ export interface NetPlayer {
   aim: number;
   hp: number;
   weapon: WeaponId;
-  pistolMag: number;
-  heavy: HeavyWeaponId | null;
+  /** Loadout slots 1 and 2. */
+  sidearm: WeaponId;
+  melee: WeaponId;
+  sideMag: number;
+  heavy: WeaponId | null;
   heavyMag: number;
   heavyReserve: number;
   kills: number;
@@ -104,11 +107,13 @@ export interface NetPlayer {
 
 export interface NetPickup {
   id: number;
-  weapon: HeavyWeaponId;
+  /** Slot-3 weapon; null for a first-aid kit. */
+  weapon: WeaponId | null;
   active: boolean;
   dropped: boolean;
   /** «Дефицит» supply crate. */
   supply: boolean;
+  medkit: boolean;
   x: number;
   y: number;
 }
@@ -150,7 +155,7 @@ export interface SnapshotSource {
   now: number;
 }
 
-const PLAYER_BYTES = 40;
+const PLAYER_BYTES = 42;
 
 const u16 = (x: number) => clamp(Math.round(x), 0, 65535);
 const i16 = (x: number) => clamp(Math.round(x), -32768, 32767);
@@ -191,7 +196,7 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
     v.setUint16(o + 10, quantizeAngle(p.aim), true);
     v.setUint8(o + 12, u8c(p.hp));
     v.setUint8(o + 13, WEAPONS[p.weapon].index);
-    v.setUint8(o + 14, u8c(p.pistolMag));
+    v.setUint8(o + 14, u8c(p.sideMag));
     v.setUint8(o + 15, p.heavy ? WEAPONS[p.heavy].index : 255);
     v.setUint8(o + 16, u8c(p.heavyMag));
     v.setUint8(o + 17, u8c(p.heavyReserve));
@@ -205,14 +210,16 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
     v.setUint16(o + 34, p.shotCounter & 0xffff, true);
     v.setUint16(o + 36, u16(p.alive ? 0 : Math.max(0, p.respawnAt - src.time)), true);
     v.setUint16(o + 38, u16(p.assists), true);
+    v.setUint8(o + 40, WEAPONS[p.sidearm].index);
+    v.setUint8(o + 41, WEAPONS[p.melee].index);
     o += PLAYER_BYTES;
   }
   v.setUint8(o, pickups.length);
   o += 1;
   for (const pk of pickups) {
     v.setUint16(o, pk.id & 0xffff, true);
-    v.setUint8(o + 2, WEAPONS[pk.weapon].index);
-    v.setUint8(o + 3, (pk.active ? 1 : 0) | (pk.dropped ? 2 : 0) | (pk.supply ? 4 : 0));
+    v.setUint8(o + 2, pk.weapon ? WEAPONS[pk.weapon].index : 255);
+    v.setUint8(o + 3, (pk.active ? 1 : 0) | (pk.dropped ? 2 : 0) | (pk.supply ? 4 : 0) | (pk.kind === 'medkit' ? 8 : 0));
     v.setUint16(o + 4, u16(pk.x * POS_SCALE), true);
     v.setUint16(o + 6, u16(pk.y * POS_SCALE), true);
     o += 8;
@@ -295,8 +302,10 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
       aim: dequantizeAngle(v.getUint16(o + 10, true)),
       hp: v.getUint8(o + 12),
       weapon: weaponAt(v.getUint8(o + 13)),
-      pistolMag: v.getUint8(o + 14),
-      heavy: heavyIdx === 255 ? null : (weaponAt(heavyIdx) as HeavyWeaponId),
+      sidearm: weaponAt(v.getUint8(o + 40)),
+      melee: weaponAt(v.getUint8(o + 41)),
+      sideMag: v.getUint8(o + 14),
+      heavy: heavyIdx === 255 ? null : weaponAt(heavyIdx),
       heavyMag: v.getUint8(o + 16),
       heavyReserve: v.getUint8(o + 17),
       kills: v.getUint16(o + 18, true),
@@ -318,12 +327,15 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
   for (let i = 0; i < nk; i++) {
     need(8);
     const flags = v.getUint8(o + 3);
+    const wi = v.getUint8(o + 2);
+    const medkit = (flags & 8) !== 0;
     snap.pickups.push({
       id: v.getUint16(o, true),
-      weapon: weaponAt(v.getUint8(o + 2)) as HeavyWeaponId,
+      weapon: medkit || wi === 255 ? null : weaponAt(wi),
       active: (flags & 1) !== 0,
       dropped: (flags & 2) !== 0,
       supply: (flags & 4) !== 0,
+      medkit,
       x: v.getUint16(o + 4, true) / POS_SCALE,
       y: v.getUint16(o + 6, true) / POS_SCALE,
     });

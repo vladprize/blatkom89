@@ -11,10 +11,11 @@ import {
   getCollision,
   getMap,
   TICK_MS,
-  WEAPONS,
   PICKUP_RADIUS,
   lerpAngle,
   dequantizeAngle,
+  weaponAmmo,
+  weaponFor,
 } from '@blatkom/shared';
 import type { CollisionWorld, GameEvent, InputFrame, MapId, MatchConfig, PlayerState, RosterEntry, Snapshot, NetPlayer, Standing, PersonalResult, PelletResult, MatchPhase } from '@blatkom/shared';
 import type { GameSession, HudState, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
@@ -105,7 +106,8 @@ export class OnlineSession implements GameSession {
       const involvesMe =
         (e.t === 'damage' && (e.victim === this.slot || e.attacker === this.slot)) ||
         (e.t === 'kill' && (e.victim === this.slot || e.killer === this.slot)) ||
-        ((e.t === 'respawn' || e.t === 'pickup' || e.t === 'drop') && e.slot === this.slot) ||
+        ((e.t === 'respawn' || e.t === 'pickup' || e.t === 'drop' || e.t === 'heal') && e.slot === this.slot) ||
+        ((e.t === 'rocket' || e.t === 'boom') && e.shooter === this.slot) ||
         e.t === 'phase' ||
         e.t === 'supply' ||
         e.t === 'matchEnd' ||
@@ -116,8 +118,11 @@ export class OnlineSession implements GameSession {
         this.killedBy = null;
         this.renderOffX = this.renderOffY = 0;
       }
-      if (involvesMe) this.events.push(e as SessionEvent);
-      else this.delayed.push({ at, e: e as SessionEvent });
+      if (involvesMe) {
+        // own rockets are shown on the live timeline: start them where they already are
+        if (e.t === 'rocket') this.events.push({ ...e, age: Math.max(0, Math.min(400, this.renderTime + INTERP_DELAY - at)) });
+        else this.events.push(e as SessionEvent);
+      } else this.delayed.push({ at, e: e as SessionEvent });
     }
   }
 
@@ -154,7 +159,10 @@ export class OnlineSession implements GameSession {
     me.hp = np.hp;
     me.alive = np.alive;
     me.weapon = np.weapon;
-    me.pistolMag = np.pistolMag;
+    me.sidearm = np.sidearm;
+    me.melee = np.melee;
+    me.sideMag = np.sideMag;
+    if (r?.mods) me.mods = r.mods;
     me.heavy = np.heavy;
     me.heavyMag = np.heavyMag;
     me.heavyReserve = np.heavyReserve;
@@ -208,7 +216,8 @@ export class OnlineSession implements GameSession {
       visual
         ? {
             shot: (p, w, spread) => {
-              const pellets: PelletResult[] = pelletAngles(p, w, spread).map((a) => {
+              // rockets are drawn when the server launches them; prediction shows flash and sound only
+              const pellets: PelletResult[] = w.kind === 'projectile' ? [] : pelletAngles(p, w, spread).map((a) => {
                 const hit = this.collision.raycast(p.x, p.y, Math.cos(a), Math.sin(a), w.range, 'shot');
                 return { angle: a, dist: hit ? hit.t : w.range, hit: -1, kind: hit ? 1 : 0 };
               });
@@ -362,23 +371,26 @@ export class OnlineSession implements GameSession {
     let prompt: HudState['pickupPrompt'] = null;
     if (me && me.alive && me.heavy && s) {
       for (const pk of s.pickups) {
-        if (!pk.active || pk.weapon === me.heavy) continue;
+        if (!pk.active || !pk.weapon || pk.weapon === me.heavy) continue;
         if ((pk.x - me.x) ** 2 + (pk.y - me.y) ** 2 < PICKUP_RADIUS * PICKUP_RADIUS) prompt = pk.weapon;
       }
     }
     const elapsed = s ? Math.max(0, this.renderTime + INTERP_DELAY - s.serverTime) : 0;
     const remaining = s ? Math.max(0, s.phaseRemaining - elapsed) : 0;
     const weapon = me?.weapon ?? 'pistol';
+    const ammo = me ? weaponAmmo(me, weapon) : { mag: 0, reserve: 0 };
     return {
       hp: me?.hp ?? 100,
       alive: me?.alive ?? true,
       respawnInMs: me && !me.alive ? Math.max(0, me.respawnAt - elapsed) : 0,
       weapon,
+      sidearm: me?.sidearm ?? 'pistol',
+      melee: me?.melee ?? 'montirovka',
       heavy: me?.heavy ?? null,
-      mag: !me ? 0 : weapon === 'pistol' ? me.pistolMag : weapon === 'montirovka' ? 0 : me.heavyMag,
-      reserve: !me ? 0 : weapon === 'pistol' ? -1 : weapon === 'montirovka' ? 0 : me.heavyReserve,
+      mag: ammo.mag,
+      reserve: ammo.reserve,
       reloading: !!me?.reloadWeapon,
-      reloadProgress: me?.reloadWeapon ? Math.max(0, Math.min(1, 1 - (me.reloadUntil - me.clock) / WEAPONS[me.reloadWeapon].reloadMs)) : 0,
+      reloadProgress: me?.reloadWeapon ? Math.max(0, Math.min(1, 1 - (me.reloadUntil - me.clock) / weaponFor(me, me.reloadWeapon).reloadMs)) : 0,
       phase,
       phaseRemainingMs: phase === 'active' ? 0 : remaining,
       timeLeftMs: phase === 'active' ? remaining : this.config.durationMs,

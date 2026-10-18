@@ -346,7 +346,8 @@ export class MatchRoom {
     const roster = [...this.world.players.values()];
     this.mapId = mapId;
     this.world = this.createWorld();
-    for (const p of roster) this.world.addPlayer(p.id, p.name, p.character, p.isBot).connected = p.connected;
+    // loadouts (owned weapons and upgrades) carry over to the new map
+    for (const p of roster) this.world.addPlayer(p.id, p.name, p.character, p.isBot, { sidearm: p.sidearm, melee: p.melee, primary: p.primary, mods: p.mods }).connected = p.connected;
     this.broadcastRoster();
   }
 

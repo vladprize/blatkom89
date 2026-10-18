@@ -7,6 +7,7 @@ import {
   DROPPED_WEAPON_TTL_MS,
   HISTORY_MS,
   MAX_HP,
+  MEDKIT_HEAL,
   MAX_REWIND_MS,
   PICKUP_RADIUS,
   PLAYER_RADIUS,
@@ -22,8 +23,10 @@ import type { CharacterId } from '../game-rules/characters.js';
 import type { MatchConfig, MatchPhase } from '../game-rules/match.js';
 import { DEFAULT_MATCH_CONFIG, SCORING } from '../game-rules/match.js';
 import { rankPlaces } from '../game-rules/progression.js';
-import type { HeavyWeaponId, WeaponDef, WeaponId } from '../game-rules/weapons.js';
-import { WEAPONS, damageFalloff, isHeavy } from '../game-rules/weapons.js';
+import type { WeaponDef, WeaponId, WeaponMods } from '../game-rules/weapons.js';
+import { WEAPONS, applyMods, damageFalloff, isHeavy } from '../game-rules/weapons.js';
+import type { Loadout } from '../game-rules/loadout.js';
+import { DEFAULT_LOADOUT, sanitizeLoadout } from '../game-rules/loadout.js';
 import type { CollisionWorld } from '../maps/collision.js';
 import { rayCircle } from '../maps/collision.js';
 import type { MapDef } from '../maps/types.js';
@@ -75,9 +78,17 @@ export interface PlayerState {
   respawnAt: number;
   invulnUntil: number;
 
+  /** Weapon in hand. */
   weapon: WeaponId;
-  pistolMag: number;
-  heavy: HeavyWeaponId | null;
+  /** Loadout (slot 1 sidearm, slot 2 melee, spawn primary) and upgrade levels. */
+  sidearm: WeaponId;
+  melee: WeaponId;
+  primary: WeaponId | null;
+  mods: Partial<Record<WeaponId, WeaponMods>>;
+  /** Sidearm magazine (its reserve is infinite). */
+  sideMag: number;
+  /** Slot-3 weapon currently carried (loadout primary or a map pickup). */
+  heavy: WeaponId | null;
   heavyMag: number;
   heavyReserve: number;
 
@@ -112,7 +123,9 @@ export interface PlayerState {
 
 export interface PickupState {
   id: number;
-  weapon: HeavyWeaponId;
+  kind: 'weapon' | 'medkit';
+  /** Slot-3 weapon (kind 'weapon'); null for first-aid kits. */
+  weapon: WeaponId | null;
   x: number;
   y: number;
   active: boolean;
@@ -141,9 +154,12 @@ export type WorldEvent =
   | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: WeaponId }
   | { t: 'kill'; killer: number; victim: number; weapon: WeaponId; assists: number[] }
   | { t: 'respawn'; slot: number; x: number; y: number }
-  | { t: 'pickup'; slot: number; weapon: HeavyWeaponId; ammoOnly: boolean }
-  | { t: 'drop'; slot: number; weapon: HeavyWeaponId }
-  | { t: 'supply'; x: number; y: number; weapon: HeavyWeaponId }
+  | { t: 'pickup'; slot: number; weapon: WeaponId; ammoOnly: boolean }
+  | { t: 'drop'; slot: number; weapon: WeaponId }
+  | { t: 'supply'; x: number; y: number; weapon: WeaponId }
+  | { t: 'heal'; slot: number; amount: number; x: number; y: number }
+  | { t: 'rocket'; id: number; shooter: number; weapon: WeaponId; x: number; y: number; angle: number; speed: number; range: number }
+  | { t: 'boom'; id: number; shooter: number; weapon: WeaponId; x: number; y: number; radius: number }
   | { t: 'reload'; slot: number; weapon: WeaponId }
   | { t: 'dry'; slot: number }
   | { t: 'phase'; phase: MatchPhase }
@@ -171,12 +187,34 @@ export interface WorldOptions {
   seed?: number;
 }
 
+/** A rocket / grenade in flight (server-authoritative; clients draw it from 'rocket'/'boom' events). */
+export interface ProjectileState {
+  id: number;
+  ownerId: string;
+  ownerSlot: number;
+  weapon: WeaponId;
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  speed: number;
+  traveled: number;
+  maxRange: number;
+  radius: number;
+  splash: number;
+  direct: number;
+  selfFactor: number;
+}
+
 interface HistoryFrame {
   time: number;
   data: Float32Array; // per slot: x, y, alive
 }
 
 const MAX_SLOTS = 8;
+
+/** Weapons a «дефицит» supply crate can contain. */
+export const SUPPLY_POOL: readonly WeaponId[] = ['avtomat', 'obrez', 'ksyuha', 'toz', 'svd', 'pkm', 'rpg', 'val', 'sayga'];
 
 export function createPlayerState(id: string, slot: number, name: string, character: CharacterId, isBot: boolean, now: number, seed: number): PlayerState {
   return {
@@ -199,7 +237,11 @@ export function createPlayerState(id: string, slot: number, name: string, charac
     respawnAt: 0,
     invulnUntil: 0,
     weapon: 'pistol',
-    pistolMag: WEAPONS.pistol.magazine,
+    sidearm: 'pistol',
+    melee: 'montirovka',
+    primary: null,
+    mods: {},
+    sideMag: WEAPONS.pistol.magazine,
     heavy: null,
     heavyMag: 0,
     heavyReserve: 0,
@@ -239,7 +281,7 @@ export function stepMovement(p: PlayerState, input: InputFrame, collision: Colli
     mag = 1;
   }
   const walking = (input.buttons & BTN.WALK) !== 0;
-  const maxSpeed = walking ? WALK_SPEED : RUN_SPEED;
+  const maxSpeed = (walking ? WALK_SPEED : RUN_SPEED) * WEAPONS[p.weapon].moveSpeed;
   const tx = mx * maxSpeed;
   const ty = my * maxSpeed;
   let dvx = tx - p.vx;
@@ -272,15 +314,34 @@ export function stepMovement(p: PlayerState, input: InputFrame, collision: Colli
   p.walking = walking || (mag > 0.01 && mag < 0.6);
 }
 
+const modCache = new WeakMap<WeaponMods, Map<WeaponId, WeaponDef>>();
+
+/** Effective stats of `w` for this player (upgrades applied). */
+export function weaponFor(p: Pick<PlayerState, 'mods'>, w: WeaponId): WeaponDef {
+  const mods = p.mods[w];
+  if (!mods) return WEAPONS[w];
+  let per = modCache.get(mods);
+  if (!per) {
+    per = new Map();
+    modCache.set(mods, per);
+  }
+  let def = per.get(w);
+  if (!def) {
+    def = applyMods(WEAPONS[w], mods);
+    per.set(w, def);
+  }
+  return def;
+}
+
 export function weaponAmmo(p: PlayerState, w: WeaponId): { mag: number; reserve: number } {
-  if (w === 'pistol') return { mag: p.pistolMag, reserve: -1 };
-  if (w === 'montirovka') return { mag: 0, reserve: 0 };
+  if (w === p.sidearm) return { mag: p.sideMag, reserve: -1 };
+  if (w === p.melee) return { mag: 0, reserve: 0 };
   if (p.heavy === w) return { mag: p.heavyMag, reserve: p.heavyReserve };
   return { mag: 0, reserve: 0 };
 }
 
 export function availableWeapons(p: PlayerState): WeaponId[] {
-  const out: WeaponId[] = ['pistol', 'montirovka'];
+  const out: WeaponId[] = [p.sidearm, p.melee];
   if (p.heavy) out.push(p.heavy);
   return out;
 }
@@ -307,7 +368,7 @@ export function setWeapon(p: PlayerState, w: WeaponId): void {
 }
 
 export function switchToSlot(p: PlayerState, slot: number): void {
-  const target: WeaponId | null = slot === 1 ? 'pistol' : slot === 2 ? 'montirovka' : p.heavy;
+  const target: WeaponId | null = slot === 1 ? p.sidearm : slot === 2 ? p.melee : p.heavy;
   if (!target || target === p.weapon) return;
   setWeapon(p, target);
 }
@@ -319,8 +380,8 @@ export function cycleWeapon(p: PlayerState): void {
 }
 
 export function startReload(p: PlayerState, emit?: (e: WorldEvent) => void): boolean {
-  const w = WEAPONS[p.weapon];
-  if (w.kind !== 'hitscan' || p.reloadWeapon) return false;
+  const w = weaponFor(p, p.weapon);
+  if (w.kind === 'melee' || p.reloadWeapon) return false;
   const ammo = weaponAmmo(p, p.weapon);
   if (ammo.mag >= w.magazine) return false;
   if (ammo.reserve === 0) return false;
@@ -332,8 +393,8 @@ export function startReload(p: PlayerState, emit?: (e: WorldEvent) => void): boo
 
 export function finishReload(p: PlayerState): void {
   if (!p.reloadWeapon) return;
-  const w = WEAPONS[p.reloadWeapon];
-  if (p.reloadWeapon === 'pistol') p.pistolMag = w.magazine;
+  const w = weaponFor(p, p.reloadWeapon);
+  if (p.reloadWeapon === p.sidearm) p.sideMag = w.magazine;
   else if (p.heavy === p.reloadWeapon) {
     const take = Math.min(w.magazine - p.heavyMag, p.heavyReserve);
     p.heavyMag += take;
@@ -348,7 +409,7 @@ export function finishReload(p: PlayerState): void {
  * Shared by the authoritative World and client-side prediction; effects are delegated to hooks.
  */
 export function stepWeapons(p: PlayerState, input: InputFrame, pressed: number, hooks: WeaponHooks): void {
-  const w = WEAPONS[p.weapon];
+  const w = weaponFor(p, p.weapon);
   if (w.spreadRecovery > 0 && p.clock - p.lastShotAt > w.fireIntervalMs * 1.5) {
     p.spreadHeat = Math.max(0, p.spreadHeat - w.spreadRecovery * TICK_DT);
   }
@@ -358,16 +419,19 @@ export function stepWeapons(p: PlayerState, input: InputFrame, pressed: number, 
   if (pressed & BTN.RELOAD) startReload(p, hooks.event);
 
   if ((input.buttons & BTN.FIRE) === 0) return;
-  const cur = WEAPONS[p.weapon];
+  const cur = weaponFor(p, p.weapon);
   if (p.reloadWeapon) return;
   if (p.clock + 1e-6 < p.nextFireAt) return;
   if (!cur.automatic && (pressed & BTN.FIRE) === 0) return;
 
+  // Firing on the first tick at/after the scheduled time carries the sub-tick remainder over, so
+  // the average fire rate matches fireIntervalMs exactly (upgrades are not eaten by 60 Hz rounding).
+  const fireBase = p.clock - p.nextFireAt < TICK_MS - 1e-6 ? p.nextFireAt : p.clock;
   if (cur.kind === 'melee') {
     p.shotCounter++;
     p.lastShotAt = p.clock;
     hooks.melee(p, cur);
-    p.nextFireAt = p.clock + cur.fireIntervalMs;
+    p.nextFireAt = fireBase + cur.fireIntervalMs;
     return;
   }
   const ammo = weaponAmmo(p, p.weapon);
@@ -375,14 +439,14 @@ export function stepWeapons(p: PlayerState, input: InputFrame, pressed: number, 
     if (!startReload(p, hooks.event) && pressed & BTN.FIRE) hooks.event({ t: 'dry', slot: p.slot });
     return;
   }
-  if (p.weapon === 'pistol') p.pistolMag--;
+  if (p.weapon === p.sidearm) p.sideMag--;
   else p.heavyMag--;
   p.shotCounter++;
   p.lastShotAt = p.clock;
   const spread = cur.spread + p.spreadHeat;
   p.spreadHeat = Math.min(cur.spreadMax, p.spreadHeat + cur.spreadPerShot);
   hooks.shot(p, cur, spread);
-  p.nextFireAt = p.clock + cur.fireIntervalMs;
+  p.nextFireAt = fireBase + cur.fireIntervalMs;
   if (weaponAmmo(p, p.weapon).mag <= 0) startReload(p, hooks.event);
 }
 
@@ -400,8 +464,10 @@ export class World {
   endReason: 'time' | 'score' | 'aborted' | null = null;
   readonly players = new Map<string, PlayerState>();
   readonly pickups: PickupState[] = [];
+  readonly projectiles: ProjectileState[] = [];
   events: WorldEvent[] = [];
   private nextPickupId = 1;
+  private nextProjectileId = 1;
   /** World time of the next «дефицит» supply drop (active phase only). */
   nextSupplyAt = 0;
   private readonly history: HistoryFrame[] = [];
@@ -417,6 +483,7 @@ export class World {
     map.pickups.forEach((ps, i) => {
       this.pickups.push({
         id: this.nextPickupId++,
+        kind: 'weapon',
         weapon: ps.weapon,
         x: ps.x,
         y: ps.y,
@@ -430,6 +497,9 @@ export class World {
         supply: false,
       });
     });
+    map.medkits.forEach((m, i) => {
+      this.pickups.push({ id: this.nextPickupId++, kind: 'medkit', weapon: null, x: m.x, y: m.y, active: true, dropped: false, mag: 0, reserve: 0, respawnAt: 0, expiresAt: 0, spawnIndex: i, supply: false });
+    });
   }
 
   // ── Roster ──────────────────────────────────────────────────────────────
@@ -439,15 +509,34 @@ export class World {
     return -1;
   }
 
-  addPlayer(id: string, name: string, character: CharacterId, isBot = false): PlayerState {
+  addPlayer(id: string, name: string, character: CharacterId, isBot = false, loadout: Loadout = DEFAULT_LOADOUT): PlayerState {
     const existing = this.players.get(id);
     if (existing) return existing;
     const slot = this.freeSlot();
     if (slot < 0) throw new Error('room full');
     const p = createPlayerState(id, slot, name, character, isBot, this.time, hash32(slot + 1, Math.floor(this.rng() * 0xffffffff)));
+    this.applyLoadout(p, loadout);
     this.players.set(id, p);
     if (this.phase === 'countdown' || this.phase === 'active') this.spawnPlayer(p, this.phase === 'countdown');
     return p;
+  }
+
+  /** Loadout used from the next spawn on (the weapon in hand is not swapped mid-life). */
+  setLoadout(id: string, loadout: Loadout): void {
+    const p = this.players.get(id);
+    if (p) this.applyLoadout(p, loadout);
+  }
+
+  private applyLoadout(p: PlayerState, raw: Loadout) {
+    const l = sanitizeLoadout(raw);
+    p.sidearm = l.sidearm;
+    p.melee = l.melee;
+    p.primary = l.primary;
+    p.mods = l.mods;
+    if (!p.alive) {
+      p.weapon = l.primary ?? l.sidearm;
+      p.sideMag = weaponFor(p, l.sidearm).magazine;
+    }
   }
 
   removePlayer(id: string): void {
@@ -517,6 +606,7 @@ export class World {
       p.heavy = null;
     }
     this.pickups.splice(0, this.pickups.length, ...this.pickups.filter((pk) => !pk.dropped));
+    this.projectiles.length = 0;
     this.resetPickups();
   }
 
@@ -541,9 +631,12 @@ export class World {
     for (let i = this.pickups.length - 1; i >= 0; i--) if (this.pickups[i]!.dropped) this.pickups.splice(i, 1);
     for (const pk of this.pickups) {
       pk.active = true;
-      pk.mag = WEAPONS[pk.weapon].magazine;
-      pk.reserve = WEAPONS[pk.weapon].reserveOnPickup;
+      if (pk.weapon) {
+        pk.mag = WEAPONS[pk.weapon].magazine;
+        pk.reserve = WEAPONS[pk.weapon].reserveOnPickup;
+      }
     }
+    this.projectiles.length = 0;
   }
 
   get matchTimeLeftMs(): number {
@@ -597,11 +690,20 @@ export class World {
     p.alive = true;
     p.spawned = true;
     p.invulnUntil = this.time + (frozen ? this.config.countdownMs + this.config.spawnProtectionMs : this.config.spawnProtectionMs);
-    p.weapon = 'pistol';
-    p.pistolMag = WEAPONS.pistol.magazine;
-    p.heavy = null;
-    p.heavyMag = 0;
-    p.heavyReserve = 0;
+    p.sideMag = weaponFor(p, p.sidearm).magazine;
+    if (p.primary) {
+      // the loadout primary comes with a full magazine and one spare; map pickups top it up
+      const def = weaponFor(p, p.primary);
+      p.heavy = p.primary;
+      p.heavyMag = def.magazine;
+      p.heavyReserve = Math.min(WEAPONS[p.primary].reserveMax, def.magazine);
+      p.weapon = p.primary;
+    } else {
+      p.heavy = null;
+      p.heavyMag = 0;
+      p.heavyReserve = 0;
+      p.weapon = p.sidearm;
+    }
     p.reloadUntil = 0;
     p.reloadWeapon = null;
     p.nextFireAt = p.clock;
@@ -659,6 +761,7 @@ export class World {
 
   private doShot(p: PlayerState, w: WeaponDef, spread: number, viewTime: number) {
     p.invulnUntil = Math.min(p.invulnUntil, this.time);
+    if (w.kind === 'projectile' && w.projectile) return this.launch(p, w, spread);
     const targets = this.targetsAt(viewTime, p);
     const pellets: PelletResult[] = [];
     const dmgByVictim = new Map<PlayerState, number>();
@@ -685,6 +788,78 @@ export class World {
     }
     this.events.push({ t: 'shot', shooter: p.slot, weapon: w.id, shotId: p.shotCounter, ox: p.x, oy: p.y, pellets });
     for (const [victim, dmg] of dmgByVictim) this.applyDamage(victim, p, Math.round(dmg), w.id);
+  }
+
+  /** Rockets and grenades: fly in a straight line, explode on walls, players or at max range. */
+  private launch(p: PlayerState, w: WeaponDef, spread: number) {
+    const pr = w.projectile!;
+    const angle = pelletAngles(p, w, spread)[0]!;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    // start just in front of the shooter, but never inside a wall
+    const start = Math.min(14, this.collision.raycast(p.x, p.y, dx, dy, 14, 'shot')?.t ?? 14);
+    const proj: ProjectileState = {
+      id: this.nextProjectileId++,
+      ownerId: p.id,
+      ownerSlot: p.slot,
+      weapon: w.id,
+      x: p.x + dx * start,
+      y: p.y + dy * start,
+      dx,
+      dy,
+      speed: pr.speed,
+      traveled: start,
+      maxRange: w.range,
+      radius: pr.radius,
+      splash: pr.splash,
+      direct: w.damage,
+      selfFactor: pr.selfFactor,
+    };
+    this.projectiles.push(proj);
+    this.events.push({ t: 'rocket', id: proj.id, shooter: p.slot, weapon: w.id, x: proj.x, y: proj.y, angle, speed: pr.speed, range: w.range });
+  }
+
+  private stepProjectiles() {
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const pr = this.projectiles[i]!;
+      const step = Math.min(pr.speed * (TICK_MS / 1000), pr.maxRange - pr.traveled);
+      const wall = this.collision.raycast(pr.x, pr.y, pr.dx, pr.dy, step, 'shot');
+      let t = wall ? wall.t : step;
+      let direct: PlayerState | null = null;
+      for (const q of this.players.values()) {
+        if (!q.alive || (q.id === pr.ownerId && pr.traveled < 40)) continue;
+        const ht = rayCircle(pr.x, pr.y, pr.dx, pr.dy, q.x, q.y, PLAYER_RADIUS);
+        if (ht !== null && ht <= t) {
+          t = ht;
+          direct = q;
+        }
+      }
+      pr.x += pr.dx * t;
+      pr.y += pr.dy * t;
+      pr.traveled += t;
+      if (wall || direct || pr.traveled >= pr.maxRange - 0.01) {
+        // explode slightly off the wall so line-of-sight checks see the room the rocket hit from
+        const bx = pr.x - pr.dx * (wall && !direct ? 2 : 0);
+        const by = pr.y - pr.dy * (wall && !direct ? 2 : 0);
+        this.projectiles.splice(i, 1);
+        this.explode(pr, bx, by, direct);
+      }
+    }
+  }
+
+  private explode(pr: ProjectileState, x: number, y: number, direct: PlayerState | null) {
+    this.events.push({ t: 'boom', id: pr.id, shooter: pr.ownerSlot, weapon: pr.weapon, x, y, radius: pr.radius });
+    const owner = this.players.get(pr.ownerId) ?? null;
+    for (const q of [...this.players.values()]) {
+      if (!q.alive) continue;
+      const d = Math.hypot(q.x - x, q.y - y);
+      if (d > pr.radius + PLAYER_RADIUS) continue;
+      if (q !== direct && !this.collision.lineOfSight(x, y, q.x, q.y)) continue;
+      const k = Math.max(0, Math.min(1, (d - PLAYER_RADIUS * 0.5) / pr.radius));
+      let dmg = pr.splash * (1 - 0.7 * k) + (q === direct ? pr.direct : 0);
+      if (q.id === pr.ownerId) dmg *= pr.selfFactor;
+      this.applyDamage(q, owner, Math.round(dmg), pr.weapon);
+    }
   }
 
   private doMelee(p: PlayerState, w: WeaponDef, viewTime: number) {
@@ -717,8 +892,8 @@ export class World {
     victim.lastHitAt = this.time;
     if (attacker) {
       victim.lastDamagedBy = attacker.id;
-      attacker.damageDealt += amount;
       if (attacker !== victim) {
+        attacker.damageDealt += amount;
         const rec = victim.recentDamage.find((r) => r.id === attacker.id);
         if (rec) {
           rec.amount += amount;
@@ -773,6 +948,7 @@ export class World {
     if (total > 0) {
       this.pickups.push({
         id: this.nextPickupId++,
+        kind: 'weapon',
         weapon: p.heavy,
         x: p.x,
         y: p.y,
@@ -790,7 +966,7 @@ export class World {
     p.heavy = null;
     p.heavyMag = 0;
     p.heavyReserve = 0;
-    if (isHeavy(p.weapon)) p.weapon = 'pistol';
+    if (isHeavy(p.weapon)) p.weapon = p.sidearm;
   }
 
   private checkPickups(p: PlayerState, interact: boolean) {
@@ -799,6 +975,14 @@ export class World {
       const dx = pk.x - p.x;
       const dy = pk.y - p.y;
       if (dx * dx + dy * dy > PICKUP_RADIUS * PICKUP_RADIUS) continue;
+      if (pk.kind === 'medkit' || !pk.weapon) {
+        if (p.hp >= MAX_HP) continue;
+        const amount = Math.min(MEDKIT_HEAL, MAX_HP - p.hp);
+        p.hp += amount;
+        this.consumePickup(pk);
+        this.events.push({ t: 'heal', slot: p.slot, amount, x: pk.x, y: pk.y });
+        return;
+      }
       const def = WEAPONS[pk.weapon];
       if (!p.heavy) {
         p.heavy = pk.weapon;
@@ -824,6 +1008,7 @@ export class World {
         this.consumePickup(pk);
         this.pickups.push({
           id: this.nextPickupId++,
+          kind: 'weapon',
           weapon: old.weapon,
           x: p.x,
           y: p.y,
@@ -845,7 +1030,7 @@ export class World {
   private consumePickup(pk: PickupState) {
     pk.active = false;
     if (!pk.dropped) {
-      const spec = this.map.pickups[pk.spawnIndex];
+      const spec = pk.kind === 'medkit' ? this.map.medkits[pk.spawnIndex] : this.map.pickups[pk.spawnIndex];
       pk.respawnAt = this.time + (spec ? spec.respawnMs : 20_000);
     }
   }
@@ -878,10 +1063,13 @@ export class World {
           if (!pk.active || this.time >= pk.expiresAt) this.pickups.splice(i, 1);
         } else if (!pk.active && this.time >= pk.respawnAt) {
           pk.active = true;
-          pk.mag = WEAPONS[pk.weapon].magazine;
-          pk.reserve = WEAPONS[pk.weapon].reserveOnPickup;
+          if (pk.weapon) {
+            pk.mag = WEAPONS[pk.weapon].magazine;
+            pk.reserve = WEAPONS[pk.weapon].reserveOnPickup;
+          }
         }
       }
+      this.stepProjectiles();
       if (this.nextSupplyAt > 0 && this.time >= this.nextSupplyAt) {
         this.nextSupplyAt = this.time + this.config.supplyIntervalMs;
         this.dropSupply();
@@ -904,10 +1092,12 @@ export class World {
     });
     if (free.length === 0) return null;
     const pt = free[Math.floor(this.rng() * free.length)]!;
-    const weapon: HeavyWeaponId = this.rng() < 0.5 ? 'obrez' : 'avtomat';
+    // «дефицит»: mostly strong shop weapons — a free taste of what the shop sells
+    const weapon = SUPPLY_POOL[Math.floor(this.rng() * SUPPLY_POOL.length)]!;
     const def = WEAPONS[weapon];
     const crate: PickupState = {
       id: this.nextPickupId++,
+      kind: 'weapon',
       weapon,
       x: pt.x,
       y: pt.y,

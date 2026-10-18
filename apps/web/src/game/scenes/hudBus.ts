@@ -18,11 +18,13 @@ export interface KillFeedEntry {
 export interface PointsEntry {
   points: number;
   label: string;
+  /** Health restored by a first-aid kit (green popup, not match points). */
+  heal?: boolean;
 }
 
 /** A «дефицит» supply crate appeared. */
 export interface SupplyEntry {
   x: number;
   y: number;
-  weapon: import('@blatkom/shared').HeavyWeaponId;
+  weapon: import('@blatkom/shared').WeaponId;
 }

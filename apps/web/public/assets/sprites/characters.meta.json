@@ -20,7 +20,7 @@
     2
    ]
   ],
-  "obrez": [
+  "long": [
    [
     "idle",
     2
@@ -38,25 +38,7 @@
     2
    ]
   ],
-  "avtomat": [
-   [
-    "idle",
-    2
-   ],
-   [
-    "shoot",
-    3
-   ],
-   [
-    "reload",
-    6
-   ],
-   [
-    "hit",
-    2
-   ]
-  ],
-  "montirovka": [
+  "melee": [
    [
     "idle",
     2
@@ -85,23 +67,5 @@
    8
   ]
  ],
- "deathFrames": 6,
- "muzzle": {
-  "pistol": {
-   "forward": 21,
-   "side": 0.8
-  },
-  "obrez": {
-   "forward": 23,
-   "side": 2.3
-  },
-  "avtomat": {
-   "forward": 28.5,
-   "side": 1.9
-  },
-  "montirovka": {
-   "forward": 24,
-   "side": 9
-  }
- }
+ "deathFrames": 6
 }

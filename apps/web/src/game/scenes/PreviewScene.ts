@@ -22,7 +22,8 @@ interface Actor {
   nextShot: number;
 }
 
-const WEAPON_OF: Record<CharacterId, WeaponId> = { petya: 'avtomat', valuta: 'pistol', uchastkovy: 'obrez', mihalych: 'avtomat' };
+/** Gear of the four backdrop actors (a sampler of the arsenal). */
+const GEAR: WeaponId[] = ['avtomat', 'uzi', 'obrez', 'pkm'];
 
 export class PreviewScene extends Phaser.Scene {
   private actors: Actor[] = [];
@@ -54,7 +55,7 @@ export class PreviewScene extends Phaser.Scene {
       [[560, 420], [620, 300], [480, 330]],
       [[720, 690], [760, 600], [900, 640]],
     ];
-    this.actors = CHARACTER_IDS.map((c, i) => {
+    this.actors = CHARACTER_IDS.slice(0, paths.length).map((c, i) => {
       const path = paths[i]!.map(([x, y]) => ({ x, y }));
       const p: RenderPlayer = {
         slot: i,
@@ -70,7 +71,7 @@ export class PreviewScene extends Phaser.Scene {
         aim: 0,
         hp: 100,
         alive: true,
-        weapon: WEAPON_OF[c],
+        weapon: GEAR[i % GEAR.length]!,
         reloading: false,
         invulnerable: false,
         walking: i % 2 === 1,
@@ -92,6 +93,8 @@ export class PreviewScene extends Phaser.Scene {
 
   setFocus(c: CharacterId | null): void {
     this.focus = c;
+    // characters beyond the four backdrop actors borrow the first actor's body
+    if (c && !this.actors.some((a) => a.p.character === c) && this.actors[0]) this.actors[0].p.character = c;
   }
 
   override update(time: number, delta: number): void {

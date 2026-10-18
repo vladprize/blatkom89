@@ -11,7 +11,7 @@ import { packAtlas } from './lib/pack.js';
 import type { PackInput } from './lib/pack.js';
 import { buildCharacters } from './build-characters.js';
 import { propPrims, PROP_VARIANTS } from './props.js';
-import { weaponPrims } from './characters.js';
+import { buildWeapons } from './build-weapons.js';
 import { floorTexture, wallTexture, treeCanopy, bush, pipeTexture, roofDetail } from './textures.js';
 import type { FloorKey, WallKey } from './textures.js';
 import { glow, softCircle, muzzleFlash, bloodSplat, tracer, ring, ICONS } from './fx.js';
@@ -31,16 +31,6 @@ function buildProps() {
       frames.push({ name: `prop_${type}_${v}`, img: render(propPrims(type, def.w, def.h, v), W, Hh) });
     }
   }
-  // weapon pickups lying on the floor
-  const zero = { dx: 0, dy: 0, dz: -9, yaw: 0, breathe: 0, sway: 0 };
-  for (const w of ['obrez', 'avtomat'] as const) {
-    const wp = weaponPrims(w, zero, 0, 0, 0);
-    // recentre: weapons are modelled in body space
-    const cx = w === 'avtomat' ? 13 : 13;
-    const cy = w === 'avtomat' ? 4 : 3.4;
-    const prims = wp.prims.map((p) => shiftPrim(p, -cx, -cy));
-    frames.push({ name: `pickup_${w}`, img: render(prims, 80, 40) });
-  }
   // overhead foliage & roof details
   [56, 72, 88].forEach((s, i) => frames.push({ name: `tree_${i}`, img: treeCanopy(s, 11 + i * 7) }));
   frames.push({ name: 'bush_0', img: bush(70, 28, 3) });
@@ -48,18 +38,6 @@ function buildProps() {
   for (const k of ['vent', 'hatch', 'antenna', 'machine'] as const) frames.push({ name: `roof_${k}`, img: roofDetail(k) });
   frames.push({ name: 'roof_puddle', img: roofDetail('puddle', 4) });
   return packAtlas(frames, join(OUT, 'sprites/props.png'));
-}
-
-function shiftPrim(p: ReturnType<typeof weaponPrims>['prims'][number], dx: number, dy: number) {
-  switch (p.k) {
-    case 'cap':
-      return { ...p, a: [p.a[0] + dx, p.a[1] + dy, p.a[2]] as [number, number, number], b: [p.b[0] + dx, p.b[1] + dy, p.b[2]] as [number, number, number] };
-    case 'box':
-    case 'ell':
-      return { ...p, c: [p.c[0] + dx, p.c[1] + dy, p.c[2]] as [number, number, number] };
-    default:
-      return p;
-  }
 }
 
 function buildFx() {
@@ -115,6 +93,7 @@ mkdirSync(join(OUT, 'tiles'), { recursive: true });
 console.time('assets');
 buildCharacters(join(OUT, 'sprites'));
 console.log('props', buildProps());
+console.log('weapons', buildWeapons(join(OUT, 'sprites'), join(OUT, 'ui'), join(ROOT, 'apps/web/src/game/render/rig.gen.ts')).atlas);
 console.log('fx', buildFx());
 console.log('tiles', buildTiles());
 console.log('manifest entries', writeManifest());

@@ -276,6 +276,8 @@ export function buildFactoryMap(): MapDef {
     .pickup('avtomat', 384, 496, 20_000) // courtyard, near the crates
     .pickup('obrez', 952, 568, 16_000); // vehicle gate
   b.supply(784, 288).supply(544, 744).supply(792, 752).supply(544, 272).supply(920, 112).supply(128, 96);
+  // first-aid kits: one per quarter, away from the weapon pickups
+  b.medkit(544, 160).medkit(1180, 576).medkit(240, 680).medkit(824, 880);
 
   return b.build();
 }

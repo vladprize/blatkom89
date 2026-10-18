@@ -431,8 +431,10 @@ test('rematch: after results everyone votes, a new match starts with a new id, p
   // regression: the new match's game scene restarts the input sequence at 1 — the player must still move
   const before = fresh().at(-1)!.players.find((p) => p.slot === slotA)!;
   ca.seq = 0;
+  // walk towards the middle of the map (a spawn can be right at the east or west wall)
+  const dir = before.x > roomObj.world.map.width / 2 ? -127 : 127;
   for (let i = 0; i < 40; i++) {
-    ca.input({ moveX: 127, moveY: 0, viewTime: ca.lastSnap?.serverTime ?? 0 });
+    ca.input({ moveX: dir, moveY: 0, viewTime: ca.lastSnap?.serverTime ?? 0 });
     await sleep(16);
   }
   await ca.until(() => fresh().some((s) => s.players.some((p) => p.slot === slotA && Math.abs(p.x - before.x) > 25)), 4000, 'movement after the rematch');

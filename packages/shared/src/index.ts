@@ -1,6 +1,7 @@
 export * from './constants/game.js';
 export * from './game-rules/characters.js';
 export * from './game-rules/weapons.js';
+export * from './game-rules/loadout.js';
 export * from './game-rules/match.js';
 export * from './game-rules/progression.js';
 export * from './maps/index.js';

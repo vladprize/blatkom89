@@ -4,6 +4,10 @@ import { MapBuilder } from '../maps/builder.js';
 import { CollisionWorld } from '../maps/collision.js';
 import { quantizeAngle } from '../sim/math.js';
 import type { MapDef } from '../maps/types.js';
+import type { Loadout } from '../game-rules/loadout.js';
+
+/** The pre-shop loadout (pistol + crowbar, primary only from map pickups) used by most rule tests. */
+export const PISTOL_ONLY: Loadout = { sidearm: 'pistol', melee: 'montirovka', primary: null, mods: {} };
 
 /** Small open test arena: 400x300 with one wall block in the middle. */
 export function testMap(): MapDef {
@@ -14,6 +18,7 @@ export function testMap(): MapDef {
     .spawn(50, 40, 0)
     .spawn(350, 260, 180)
     .pickup('avtomat', 100, 260)
+    .medkit(300, 260)
     .supply(300, 50)
     .supply(120, 70)
     .build();
@@ -38,9 +43,9 @@ export function input(partial: Partial<InputFrame> & { aimRad?: number } = {}): 
 }
 
 /** Starts a match immediately and returns two players placed at given positions. */
-export function startDuel(world: World, a = { x: 60, y: 150 }, b = { x: 160, y: 150 }) {
-  const p1 = world.addPlayer('a', 'Петя', 'petya');
-  const p2 = world.addPlayer('b', 'Валюта', 'valuta');
+export function startDuel(world: World, a = { x: 60, y: 150 }, b = { x: 160, y: 150 }, loadouts: [Loadout, Loadout] = [PISTOL_ONLY, PISTOL_ONLY]) {
+  const p1 = world.addPlayer('a', 'Петя', 'petya', false, loadouts[0]);
+  const p2 = world.addPlayer('b', 'Валюта', 'valuta', false, loadouts[1]);
   world.beginMatch(true);
   // countdown 0ms -> active on next update
   world.update();

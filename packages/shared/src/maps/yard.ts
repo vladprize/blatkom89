@@ -158,6 +158,8 @@ export function buildYardMap(): MapDef {
     .pickup('obrez', 552, 280, 16_000)
     .pickup('avtomat', 52, 728, 20_000);
   b.supply(848, 752).supply(888, 320).supply(1328, 256).supply(1312, 840).supply(88, 248).supply(728, 232);
+  // first-aid kits: west and east of the courtyard centre, and behind the southern block
+  b.medkit(560, 560).medkit(1000, 680).medkit(820, 1040);
 
   return b.build();
 }

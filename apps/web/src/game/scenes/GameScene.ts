@@ -276,13 +276,14 @@ export class GameScene extends Phaser.Scene {
         // «дефицит» crates: an army crate with a red pulsing ring and an emissive glow, readable from afar
         const crate = pk.supply ? this.add.image(pk.x, pk.y + 3, 'props', 'prop_crate_green_0').setScale(0.55).setDepth(D.PICKUP - 0.05) : null;
         const glow = pk.supply ? this.add.image(pk.x, pk.y, 'fx', 'glow').setScale(0.9).setTint(0xff7a3a).setBlendMode(Phaser.BlendModes.ADD).setDepth(D.LIGHT + 0.4) : null;
-        const ring = this.add.image(pk.x, pk.y, 'fx', 'ring').setScale(pk.supply ? 0.8 : 0.55).setTint(pk.supply ? 0xff5a3a : 0xffd36a).setDepth(D.PICKUP).setBlendMode(Phaser.BlendModes.ADD);
-        const img = this.add.image(pk.x, pk.y, 'props', `pickup_${pk.weapon}`).setScale(0.5).setDepth(D.PICKUP + 0.1);
+        const ring = this.add.image(pk.x, pk.y, 'fx', 'ring').setScale(pk.supply ? 0.8 : 0.55).setTint(pk.supply ? 0xff5a3a : pk.medkit ? 0x6aff7a : 0xffd36a).setDepth(D.PICKUP).setBlendMode(Phaser.BlendModes.ADD);
+        const img = this.add.image(pk.x, pk.y, 'weapons', pk.weapon ? `pickup_${pk.weapon}` : 'pickup_medkit').setScale(0.5).setDepth(D.PICKUP + 0.1);
         const marker = pk.dropped ? null : this.add.image(pk.x, pk.y, 'fx', 'ring').setScale(0.4).setTint(0xd9c7a3).setAlpha(0.18).setDepth(D.DECAL);
         s = { img, ring, marker, crate, glow };
         this.pickupSprites.set(pk.id, s);
       }
-      s.img.setVisible(pk.active).setPosition(pk.x, pk.y - (pk.supply ? 2 : 0)).setRotation(Math.sin(time / 600 + pk.id) * 0.25 + (pk.dropped && !pk.supply ? 0.6 : 0));
+      s.img.setVisible(pk.active).setPosition(pk.x, pk.y - (pk.supply ? 2 : 0)).setRotation(pk.medkit ? 0 : Math.sin(time / 600 + pk.id) * 0.25 + (pk.dropped && !pk.supply ? 0.6 : 0));
+      if (pk.medkit) s.img.setScale(0.5 + Math.sin(time / 300 + pk.id) * 0.03);
       s.ring.setVisible(pk.active).setPosition(pk.x, pk.y).setAlpha((pk.supply ? 0.55 : 0.35) + Math.sin(time / (pk.supply ? 160 : 260) + pk.id) * 0.2);
       s.crate?.setVisible(pk.active);
       s.glow?.setVisible(pk.active).setAlpha(0.35 + Math.sin(time / 160) * 0.15);
@@ -315,8 +316,10 @@ export class GameScene extends Phaser.Scene {
         const aim = shooter && shooter.alive ? shooter.aim : e.aim;
         const ox = shooter ? shooter.x : e.ox;
         const oy = shooter ? shooter.y : e.oy;
-        this.views.get(e.shooter)?.onShot(e.weapon);
-        hudBus.emit('radar', e.shooter);
+        const def = WEAPONS[e.weapon];
+        this.views.get(e.shooter)?.onShot(e.weapon, time);
+        // suppressed weapons do not give the shooter away on the minimap radar
+        if (!def.silenced) hudBus.emit('radar', e.shooter);
         this.fx.muzzleFlash(ox, oy, aim, e.weapon);
         const m = muzzlePoint(ox, oy, aim, e.weapon);
         for (const pl of e.pellets) {
@@ -325,18 +328,55 @@ export class GameScene extends Phaser.Scene {
           this.fx.tracer(m.x, m.y, ex, ey, e.weapon);
         }
         if (!(isLocal && e.predicted && this.session.mode === 'online')) this.impacts(e);
-        this.lighting.flash(m.x, m.y, e.weapon === 'obrez' ? 150 : 110, 0xffb050, 0.9, 60, time);
-        sfx.play(WEAPONS[e.weapon].sound === 'swing' ? 'swing' : (WEAPONS[e.weapon].sound as 'pistol' | 'avtomat' | 'obrez'), { x: ox, y: oy, volume: isLocal ? 0.9 : 1 });
-        if (isLocal) this.fx.shake(cam, WEAPONS[e.weapon].shake);
+        if (!def.silenced) this.lighting.flash(m.x, m.y, def.flash === 'obrez' || def.sound === 'flame' ? 150 : 110, def.sound === 'flame' ? 0xff8a30 : 0xffb050, 0.9, def.sound === 'flame' ? 120 : 60, time);
+        sfx.play(def.sound, { x: ox, y: oy, volume: isLocal ? 0.9 : def.silenced ? 0.6 : 1 });
+        if (isLocal) this.fx.shake(cam, def.shake);
         break;
       }
       case 'melee': {
         const shooter = bySlot(e.shooter);
         if (shooter?.isLocal && !e.predicted && this.session.mode === 'online') return;
-        this.views.get(e.shooter)?.onShot('montirovka');
         if (shooter) {
+          this.views.get(e.shooter)?.onShot(shooter.weapon, time);
           this.fx.meleeSwing(shooter.x, shooter.y, e.angle);
-          sfx.play('swing', { x: shooter.x, y: shooter.y });
+          sfx.play(WEAPONS[shooter.weapon].sound === 'heavySwing' ? 'heavySwing' : 'swing', { x: shooter.x, y: shooter.y });
+        }
+        break;
+      }
+      case 'rocket': {
+        const shooter = bySlot(e.shooter);
+        this.fx.launch(e.id, e.weapon, e.x, e.y, e.angle, e.speed, e.range, e.age ?? 0);
+        // the local player's launch was already shown by prediction (online)
+        if (shooter?.isLocal && this.session.mode === 'online') break;
+        const ox = shooter ? shooter.x : e.x;
+        const oy = shooter ? shooter.y : e.y;
+        const aim = shooter?.alive ? shooter.aim : e.angle;
+        this.views.get(e.shooter)?.onShot(e.weapon, time);
+        this.fx.muzzleFlash(ox, oy, aim, e.weapon);
+        hudBus.emit('radar', e.shooter);
+        sfx.play('rocket', { x: ox, y: oy, volume: 0.9 });
+        if (shooter?.isLocal) this.fx.shake(cam, WEAPONS[e.weapon].shake);
+        break;
+      }
+      case 'boom': {
+        this.fx.endFlight(e.id);
+        this.fx.explosion(e.x, e.y, e.radius);
+        this.lighting.flash(e.x, e.y, e.radius * 3, 0xff9a40, 1, 380, time);
+        sfx.play('boom', { x: e.x, y: e.y });
+        if (local) {
+          const d = Math.hypot(local.x - e.x, local.y - e.y);
+          if (d < 360) this.fx.shake(cam, Math.max(0.2, 1 - d / 360));
+          if (d < 160) haptic('impact-heavy');
+        }
+        break;
+      }
+      case 'heal': {
+        this.fx.heal(e.x, e.y);
+        const p = bySlot(e.slot);
+        sfx.play('heal', { x: e.x, y: e.y, volume: p?.isLocal ? 1 : 0.6 });
+        if (p?.isLocal) {
+          haptic('notify-success');
+          hudBus.emit('points', { points: e.amount, label: 'ЗДОРОВЬЯ', heal: true });
         }
         break;
       }

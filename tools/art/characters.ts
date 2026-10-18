@@ -5,27 +5,14 @@
 import { hex } from './lib/raster.js';
 import type { RGBA } from './lib/raster.js';
 import type { Material, Prim, V3, PatternCtx } from './lib/model.js';
+import { poseGrip } from './weapons.js';
+import { MAT } from './materials.js';
+export { MAT };
+import type { PoseClass } from './weapons.js';
 
 export type CharId = 'petya' | 'valuta' | 'uchastkovy' | 'mihalych';
-export type WeaponKey = 'pistol' | 'obrez' | 'avtomat' | 'montirovka';
 
 const H = (...c: string[]): RGBA[] => c.map((x) => hex(x));
-
-// ── Shared materials ─────────────────────────────────────────────────────────
-export const MAT = {
-  gunmetal: { ramp: H('#0e0f12', '#1b1d22', '#2b2e35', '#444852', '#666c78'), spec: { color: hex('#a9b2c4'), power: 22, threshold: 0.82 } } as Material,
-  wood: { ramp: H('#3a1a0a', '#5e2c12', '#86441e', '#a85c2c', '#c87a40') } as Material,
-  steel: { ramp: H('#24272d', '#3f444d', '#626874', '#8b929e', '#b4bac4'), spec: { color: hex('#e6ecf4'), power: 18, threshold: 0.8 } } as Material,
-  redPaint: { ramp: H('#4a0a0c', '#86120f', '#c0201a', '#e8452e') } as Material,
-  gold: { ramp: H('#5e400c', '#9a6c18', '#d4a232', '#f6d470'), spec: { color: hex('#fff7d0'), power: 12, threshold: 0.7 } } as Material,
-  cigarette: { ramp: H('#9a958a', '#c9c4b8', '#efebe2') } as Material,
-  ember: { ramp: H('#ff8a24'), flat: true } as Material,
-  black: { ramp: H('#060608', '#101014', '#1c1c22') } as Material,
-  eyeDark: { ramp: H('#0a0806'), flat: true } as Material,
-  eyeYellow: { ramp: H('#ffd23c'), flat: true } as Material,
-  eyeAmber: { ramp: H('#f0b030'), flat: true } as Material,
-  glint: { ramp: H('#fff8e8'), flat: true } as Material,
-};
 
 interface Palette {
   torso: Material;
@@ -352,7 +339,7 @@ export const RIGS: Record<CharId, Rig> = { petya, valuta, uchastkovy, mihalych }
 export type TorsoAnim = 'idle' | 'shoot' | 'reload' | 'hit' | 'swing';
 
 export interface TorsoPose {
-  weapon: WeaponKey;
+  pose: PoseClass;
   anim: TorsoAnim;
   frame: number;
   frames: number;
@@ -385,106 +372,22 @@ function arm(p: Prim[], rig: Rig, side: -1 | 1, hand: V3, o: PoseOffsets, sleeve
   p.push({ k: 'ell', c: hand, r: [rig.armR * 0.85, rig.armR * 0.8, rig.armR * 0.75], mat: rig.pal.hand, group: 'hand' + side });
 }
 
-interface WeaponPlacement {
-  prims: Prim[];
-  right: V3;
-  left: V3 | null;
-}
-
-/** Weapon geometry in body space for the given offsets. `tilt` rotates the weapon around its grip. */
-export function weaponPrims(w: WeaponKey, o: PoseOffsets, recoil: number, tilt: number, lower: number, swingAngle = 0): WeaponPlacement {
-  const prims: Prim[] = [];
-  const z = 11.2 + o.dz - lower;
-  const tf = (x: number, y: number, gx: number, gy: number): [number, number] => {
-    const [rx, ry] = rot(x - gx, y - gy, tilt);
-    return [rx + gx - recoil + o.dx, ry + gy + o.dy];
-  };
-  if (w === 'pistol') {
-    const g: [number, number] = [11.5, 0.8];
-    const [x0, y0] = tf(12.5, 0.8, ...g);
-    const [x1, y1] = tf(20.5, 0.8, ...g);
-    const a = Math.atan2(y1 - y0, x1 - x0);
-    prims.push({ k: 'box', c: [(x0 + x1) / 2, (y0 + y1) / 2, z + 0.4], h: [4.2, 1.05, 0.9], yaw: a, mat: MAT.gunmetal, group: 'gun', bevel: 0.5 });
-    prims.push({ k: 'box', c: [x0 + 0.6, y0 + 0.1, z + 1.2], h: [1.2, 0.7, 0.4], yaw: a, mat: MAT.gunmetal, group: 'gun' });
-    const [rx, ry] = tf(11.6, 1.7, ...g);
-    const [lx, ly] = tf(11.2, -0.6, ...g);
-    return { prims, right: [rx, ry, z], left: [lx, ly, z - 0.2] };
-  }
-  if (w === 'avtomat') {
-    const g: [number, number] = [9, 5];
-    const P = (x: number, y: number) => tf(x, y, ...g);
-    const [sx0, sy0] = P(-1.5, 6.6);
-    const [sx1, sy1] = P(5.5, 5.4);
-    const [rx0, ry0] = P(5.5, 5.4);
-    const [rx1, ry1] = P(14, 3.9);
-    const [hx1, hy1] = P(20, 2.9);
-    const [bx1, by1] = P(28, 1.9);
-    prims.push({ k: 'cap', a: [sx0, sy0, z - 0.2], b: [sx1, sy1, z + 0.2], r: 1.25, r2: 1.05, mat: MAT.wood, group: 'gun' });
-    const ang = Math.atan2(ry1 - ry0, rx1 - rx0);
-    prims.push({ k: 'box', c: [(rx0 + rx1) / 2, (ry0 + ry1) / 2, z + 0.3], h: [4.4, 1.25, 1.0], yaw: ang, mat: MAT.gunmetal, group: 'gun', bevel: 0.5 });
-    prims.push({ k: 'cap', a: [rx1, ry1, z + 0.4], b: [hx1, hy1, z + 0.4], r: 1.15, mat: MAT.wood, group: 'gun' });
-    prims.push({ k: 'cap', a: [hx1, hy1, z + 0.7], b: [bx1, by1, z + 0.7], r: 0.55, mat: MAT.gunmetal, group: 'gun' });
-    // curved magazine sticking out to the side
-    const [mx, my] = P(11.5, 5.8);
-    prims.push({ k: 'cap', a: [mx, my, z - 0.4], b: [mx + 1.6, my + 2.6, z - 0.8], r: 0.9, mat: MAT.gunmetal, group: 'gun' });
-    const [rhx, rhy] = P(9, 5.2);
-    const [lhx, lhy] = P(17.2, 2.2);
-    return { prims, right: [rhx, rhy, z], left: [lhx, lhy, z] };
-  }
-  if (w === 'obrez') {
-    const g: [number, number] = [7.5, 4.4];
-    const P = (x: number, y: number) => tf(x, y, ...g);
-    const [gx0, gy0] = P(3.0, 5.4);
-    const [gx1, gy1] = P(8.5, 3.9);
-    prims.push({ k: 'cap', a: [gx0, gy0, z], b: [gx1, gy1, z + 0.2], r: 1.35, r2: 1.15, mat: MAT.wood, group: 'gun' });
-    for (const s of [-0.85, 0.85]) {
-      const [ax, ay] = P(8.5, 3.6 + s);
-      const [bx, by] = P(22.5, 2.3 + s);
-      prims.push({ k: 'cap', a: [ax, ay, z + 0.5], b: [bx, by, z + 0.5], r: 0.92, mat: MAT.gunmetal, group: 'gun' });
-    }
-    const [fx0, fy0] = P(11, 3.4);
-    const [fx1, fy1] = P(16, 2.9);
-    prims.push({ k: 'cap', a: [fx0, fy0, z - 0.3], b: [fx1, fy1, z - 0.3], r: 1.05, mat: MAT.wood, group: 'gun' });
-    const [rhx, rhy] = P(7.6, 4.6);
-    const [lhx, lhy] = P(14, 2.6);
-    return { prims, right: [rhx, rhy, z], left: [lhx, lhy, z] };
-  }
-  // montirovka (crowbar): held in the right hand, swung in an arc around the right shoulder
-  const base = swingAngle;
-  const shx = -0.2 + o.dx;
-  const shy = 8.6 + o.dy;
-  const [hx, hy] = rot(8.5, 1.5, base);
-  const handX = shx + hx;
-  const handY = shy + hy;
-  const [tx, ty] = rot(22, 3.5, base);
-  const tipX = shx + tx;
-  const tipY = shy + ty;
-  const [kx, ky] = rot(23.4, 0.8, base);
-  prims.push({ k: 'cap', a: [handX - (tipX - handX) * 0.12, handY - (tipY - handY) * 0.12, z + 0.3], b: [tipX, tipY, z + 0.5], r: 0.85, mat: MAT.steel, group: 'gun' });
-  prims.push({ k: 'cap', a: [tipX, tipY, z + 0.5], b: [shx + kx, shy + ky, z + 0.5], r: 0.85, r2: 0.6, mat: MAT.redPaint, group: 'gun' });
-  const [mx, my] = rot(19.5, 3.1, base);
-  prims.push({ k: 'cap', a: [shx + mx, shy + my, z + 0.5], b: [tipX, tipY, z + 0.5], r: 0.9, mat: MAT.redPaint, group: 'gun' });
-  return { prims, right: [handX, handY, z], left: null };
-}
-
 const ease = (t: number) => t * t * (3 - 2 * t);
 
-export function torsoPrims(id: CharId, pose: TorsoPose): Prim[] {
-  const rig = RIGS[id];
+function poseParams(pose: TorsoPose) {
   const t = pose.frames > 1 ? pose.frame / (pose.frames - 1) : 0;
   const o: PoseOffsets = { dx: 0, dy: 0, dz: 0, yaw: 0, breathe: 0, sway: 0 };
   let recoil = 0;
   let tilt = 0;
   let lower = 0;
   let swing = 0;
-  let leftOverride: V3 | null = null;
   switch (pose.anim) {
     case 'idle':
       o.breathe = pose.frame % 2 ? 0.35 : 0;
       o.sway = pose.frame % 2 ? 0.8 : -0.4;
       break;
     case 'shoot': {
-      const k = pose.weapon === 'obrez' ? 3.4 : pose.weapon === 'avtomat' ? 1.9 : 1.6;
+      const k = pose.pose === 'long' ? 2.0 : 1.6;
       recoil = [k, k * 0.45, 0][pose.frame] ?? 0;
       o.dx = -recoil * 0.25;
       o.sway = 0.3;
@@ -492,7 +395,7 @@ export function torsoPrims(id: CharId, pose: TorsoPose): Prim[] {
     }
     case 'reload': {
       const b = Math.sin(Math.PI * t);
-      tilt = (pose.weapon === 'obrez' ? 0.75 : 0.5) * b;
+      tilt = (pose.pose === 'long' ? 0.55 : 0.5) * b;
       lower = 1.4 * b;
       o.sway = b;
       break;
@@ -512,8 +415,14 @@ export function torsoPrims(id: CharId, pose: TorsoPose): Prim[] {
       break;
     }
   }
-  if (pose.weapon === 'montirovka' && pose.anim !== 'swing') swing = pose.anim === 'hit' ? 0.6 : 0.35;
+  if (pose.pose === 'melee' && pose.anim !== 'swing') swing = pose.anim === 'hit' ? 0.6 : 0.35;
+  return { t, o, recoil, tilt, lower, swing };
+}
 
+export function torsoPrims(id: CharId, pose: TorsoPose): Prim[] {
+  const rig = RIGS[id];
+  const { t, o, recoil, tilt, lower, swing } = poseParams(pose);
+  let leftOverride: V3 | null = null;
   const p: Prim[] = [];
   const tr = rig.torsoR;
   p.push({
@@ -528,10 +437,10 @@ export function torsoPrims(id: CharId, pose: TorsoPose): Prim[] {
   rig.tail?.(p, o);
   rig.head(p, o);
 
-  const wp = weaponPrims(pose.weapon, o, recoil, tilt, lower, swing);
-  p.push(...wp.prims);
-  arm(p, rig, 1, wp.right, o, rig.pal.sleeve);
-  let left = wp.left;
+  // paper doll: the weapon is a separate sprite attached at the grip (see weapons.ts / gripFor)
+  const g = poseGrip(pose.pose, o, recoil, tilt, lower, swing);
+  arm(p, rig, 1, g.right, o, rig.pal.sleeve);
+  let left = g.left;
   if (pose.anim === 'reload') {
     const pouch: V3 = [4.5 + o.dx, -6.8 + o.dy, 9.4];
     const b = ease(Math.sin(Math.PI * t));
@@ -540,6 +449,12 @@ export function torsoPrims(id: CharId, pose: TorsoPose): Prim[] {
   if (!left) leftOverride = [5.5 + o.dx, -9.2 + o.dy, 9.4];
   arm(p, rig, -1, left ?? leftOverride!, o, rig.pal.sleeve);
   return p;
+}
+
+/** Grip transform of a torso frame (character-independent): where the weapon sprite attaches. */
+export function gripFor(pose: TorsoPose) {
+  const { o, recoil, tilt, lower, swing } = poseParams(pose);
+  return poseGrip(pose.pose, o, recoil, tilt, lower, swing);
 }
 
 export type LegAnim = 'idle' | 'walk' | 'run';
@@ -571,7 +486,7 @@ export function legsPrims(id: CharId, anim: LegAnim, frame: number, frames: numb
 }
 
 /** Falling backwards: f = 0 standing … 1 lying flat. */
-export function deathPrims(id: CharId, f: number, weapon: WeaponKey): Prim[] {
+export function deathPrims(id: CharId, f: number): Prim[] {
   const rig = RIGS[id];
   const e = ease(Math.min(1, f));
   const p: Prim[] = [];
@@ -594,16 +509,5 @@ export function deathPrims(id: CharId, f: number, weapon: WeaponKey): Prim[] {
     const hand: V3 = [2 - 9 * e, side * (rig.shoulderY + 3 + 7 * e), 10.5 - 8 * e];
     arm(p, rig, side, hand, { ...o, dz: o.dz * 0.9 }, rig.pal.sleeve);
   }
-  if (f < 0.5) {
-    const wp = weaponPrims(weapon, o, 2 * e, 0.8 * e, 3 * e, 0.4);
-    p.push(...wp.prims);
-  }
   return p;
 }
-
-export const MUZZLE_OFFSETS: Record<WeaponKey, { forward: number; side: number }> = {
-  pistol: { forward: 21, side: 0.8 },
-  obrez: { forward: 23, side: 2.3 },
-  avtomat: { forward: 28.5, side: 1.9 },
-  montirovka: { forward: 24, side: 9 },
-};

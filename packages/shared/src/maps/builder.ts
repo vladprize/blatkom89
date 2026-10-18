@@ -14,7 +14,7 @@ import type {
   WallStyle,
 } from './types.js';
 import type { PropType } from './props.js';
-import type { HeavyWeaponId } from '../game-rules/weapons.js';
+import type { WeaponId } from '../game-rules/weapons.js';
 
 export type Side = 'n' | 's' | 'e' | 'w';
 export interface Door {
@@ -46,6 +46,7 @@ export class MapBuilder {
       spawns: [],
       pickups: [],
       supplyPoints: [],
+      medkits: [],
       ambient: { color: 0x2a3550, level: 0.55 },
       minimapFloor: '#3a3632',
     };
@@ -135,8 +136,14 @@ export class MapBuilder {
     return this;
   }
 
-  pickup(weapon: HeavyWeaponId, x: number, y: number, respawnMs = 18_000): this {
+  pickup(weapon: WeaponId, x: number, y: number, respawnMs = 18_000): this {
     this.def.pickups.push({ weapon, x, y, respawnMs } satisfies PickupSpawn);
+    return this;
+  }
+
+  /** A first-aid kit (heals MEDKIT_HEAL, respawns after `respawnMs`). */
+  medkit(x: number, y: number, respawnMs = 22_000): this {
+    this.def.medkits.push({ x, y, respawnMs });
     return this;
   }
 

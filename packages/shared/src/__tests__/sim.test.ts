@@ -75,27 +75,27 @@ test('weapons: fire interval is enforced and ammo is consumed', () => {
   }
   // 1s of holding: pistol 290ms interval => 4 shots (t=0, 290, 580, 870)
   assert.equal(shots, 4);
-  assert.equal(p1.pistolMag, WEAPONS.pistol.magazine - 4);
+  assert.equal(p1.sideMag, WEAPONS.pistol.magazine - 4);
 });
 
 test('weapons: reload refills magazine after reloadMs; pistol reserve is infinite', () => {
   const w = makeWorld();
   const { p1 } = startDuel(w, { x: 60, y: 50 }, { x: 350, y: 260 });
-  p1.pistolMag = 0;
+  p1.sideMag = 0;
   w.applyInput('a', input({ buttons: BTN.RELOAD }));
   assert.equal(p1.reloadWeapon, 'pistol');
   const ticks = Math.ceil(WEAPONS.pistol.reloadMs / TICK_MS);
   for (let i = 0; i < ticks; i++) w.applyInput('a', input({}));
   assert.equal(p1.reloadWeapon, null);
-  assert.equal(p1.pistolMag, WEAPONS.pistol.magazine);
+  assert.equal(p1.sideMag, WEAPONS.pistol.magazine);
 });
 
 test('weapons: empty magazine triggers reload; firing during reload is blocked', () => {
   const w = makeWorld();
   const { p1 } = startDuel(w, { x: 60, y: 50 }, { x: 350, y: 260 });
-  p1.pistolMag = 1;
+  p1.sideMag = 1;
   w.applyInput('a', input({ buttons: BTN.FIRE }));
-  assert.equal(p1.pistolMag, 0);
+  assert.equal(p1.sideMag, 0);
   assert.equal(p1.reloadWeapon, 'pistol');
   w.drainEvents();
   for (let i = 0; i < 20; i++) w.applyInput('a', input({ buttons: BTN.FIRE }));
@@ -263,13 +263,13 @@ test('supply drops: a full crate appears at a free supply point away from player
   assert.deepEqual([ev.x, ev.y], [120, 70], 'the point next to a player is skipped');
   const crate = w.pickups.find((pk) => pk.supply)!;
   assert.ok(crate.active);
-  assert.equal(crate.reserve, WEAPONS[crate.weapon].reserveMax, 'full ammunition');
+  assert.equal(crate.reserve, WEAPONS[crate.weapon!].reserveMax, 'full ammunition');
   // walking onto it picks it up with full ammo
   p1.x = crate.x;
   p1.y = crate.y;
   w.applyInput('a', input({}));
   assert.equal(p1.heavy, crate.weapon);
-  assert.equal(p1.heavyReserve, WEAPONS[crate.weapon].reserveMax);
+  assert.equal(p1.heavyReserve, WEAPONS[crate.weapon!].reserveMax);
   assert.equal(crate.active, false, 'claimed crate is used up');
   w.update();
   assert.equal(w.pickups.includes(crate), false, 'and removed on the next tick');

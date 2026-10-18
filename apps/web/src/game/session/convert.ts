@@ -1,5 +1,5 @@
 import type { WorldEvent, PlayerState } from '@blatkom/shared';
-import { WEAPONS, availableWeapons } from '@blatkom/shared';
+import { availableWeapons, weaponFor } from '@blatkom/shared';
 import type { RenderPlayer, SessionEvent } from './types.js';
 
 export function worldEventToSession(e: WorldEvent, players: Map<number, PlayerState> | null, predicted = false): SessionEvent | null {
@@ -46,7 +46,7 @@ export function toRenderPlayer(p: PlayerState, isLocal: boolean, now: number): R
 
 export function reloadProgress(p: PlayerState): number {
   if (!p.reloadWeapon) return 0;
-  const total = WEAPONS[p.reloadWeapon].reloadMs;
+  const total = weaponFor(p, p.reloadWeapon).reloadMs;
   return Math.max(0, Math.min(1, 1 - (p.reloadUntil - p.clock) / total));
 }
 

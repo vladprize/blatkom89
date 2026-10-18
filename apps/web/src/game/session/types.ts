@@ -1,4 +1,4 @@
-import type { CharacterId, HeavyWeaponId, MapId, MatchPhase, PelletResult, PersonalResult, Standing, WeaponId } from '@blatkom/shared';
+import type { CharacterId, MapId, MatchPhase, PelletResult, PersonalResult, Standing, WeaponId } from '@blatkom/shared';
 
 export interface RenderPlayer {
   slot: number;
@@ -29,7 +29,9 @@ export interface RenderPlayer {
 
 export interface RenderPickup {
   id: number;
-  weapon: HeavyWeaponId;
+  /** Slot-3 weapon; null for a first-aid kit. */
+  weapon: WeaponId | null;
+  medkit: boolean;
   x: number;
   y: number;
   active: boolean;
@@ -44,9 +46,13 @@ export type SessionEvent =
   | { t: 'damage'; victim: number; attacker: number; amount: number; hp: number; weapon: WeaponId }
   | { t: 'kill'; killer: number; victim: number; weapon: WeaponId; assists: number[] }
   | { t: 'respawn'; slot: number; x: number; y: number }
-  | { t: 'pickup'; slot: number; weapon: HeavyWeaponId; ammoOnly: boolean }
-  | { t: 'drop'; slot: number; weapon: HeavyWeaponId }
-  | { t: 'supply'; x: number; y: number; weapon: HeavyWeaponId }
+  | { t: 'pickup'; slot: number; weapon: WeaponId; ammoOnly: boolean }
+  | { t: 'drop'; slot: number; weapon: WeaponId }
+  | { t: 'supply'; x: number; y: number; weapon: WeaponId }
+  | { t: 'heal'; slot: number; amount: number; x: number; y: number }
+  /** A rocket / grenade launched; `age` = ms it has already flown when the client learns about it. */
+  | { t: 'rocket'; id: number; shooter: number; weapon: WeaponId; x: number; y: number; angle: number; speed: number; range: number; age?: number }
+  | { t: 'boom'; id: number; shooter: number; weapon: WeaponId; x: number; y: number; radius: number }
   | { t: 'reload'; slot: number; weapon: WeaponId }
   | { t: 'dry'; slot: number }
   | { t: 'phase'; phase: MatchPhase }
@@ -57,7 +63,10 @@ export interface HudState {
   alive: boolean;
   respawnInMs: number;
   weapon: WeaponId;
-  heavy: HeavyWeaponId | null;
+  /** Loadout slots 1 and 2, and the slot-3 weapon carried (if any). */
+  sidearm: WeaponId;
+  melee: WeaponId;
+  heavy: WeaponId | null;
   mag: number;
   /** -1 = infinite */
   reserve: number;
@@ -69,7 +78,7 @@ export interface HudState {
   scoreLimit: number;
   ping: number | null;
   connection: 'offline' | 'online' | 'reconnecting' | 'lost';
-  pickupPrompt: HeavyWeaponId | null;
+  pickupPrompt: WeaponId | null;
   killedBy: string | null;
 }
 
