@@ -61,6 +61,7 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     TELEGRAM_MINIAPP_SHORT_NAME: 'play',
     TELEGRAM_AUTH_MAX_AGE_SEC: 86400,
     DEV_AUTH_ENABLED: true,
+    GUEST_AUTH_ENABLED: false,
     CORS_ORIGINS: '',
     TRUST_PROXY: false,
     ADMIN_SESSION_TTL_HOURS: 12,

@@ -8,11 +8,15 @@
 //   6. demo: the single-file offline demo — nickname dialog, assists/points, supply drop, local XP
 //      and level, profile screen, persistence after reload (tests/e2e/demo.mjs)
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
+// E2E_PROD=1 runs the prebuilt deploy/ bundle exactly as a host would (NODE_ENV=production, guest login,
+// RENDER_EXTERNAL_URL, TRUST_PROXY) instead of the development server.
 import { spawn, spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const port = Number(process.env.E2E_PORT ?? 8099);
+const prod = process.env.E2E_PROD === '1' || process.argv.includes('--prod');
 const out = process.env.E2E_OUT ?? join('test-results', 'e2e');
 mkdirSync(out, { recursive: true });
 if (!process.env.DATABASE_URL) {
@@ -25,16 +29,38 @@ const run = (args, opts = {}) => {
   if (r.status !== 0) process.exit(r.status ?? 1);
 };
 if (!process.env.E2E_SKIP_BUILD) {
-  run(['apps/web/build.mjs', '--mode=production']);
-  run(['apps/server/build.mjs']);
+  if (prod) run(['tools/build-deploy.mjs']);
+  else {
+    run(['apps/web/build.mjs', '--mode=production']);
+    run(['apps/server/build.mjs']);
+  }
   run(['apps/web/build.mjs', '--mode=demo', '--single']);
 }
-if (!existsSync('apps/server/dist/server.js')) {
-  console.error('[e2e] apps/server/dist/server.js missing — build first');
+const serverJs = prod ? 'deploy/server.js' : 'apps/server/dist/server.js';
+if (!existsSync(serverJs)) {
+  console.error(`[e2e] ${serverJs} missing — build first`);
   process.exit(2);
 }
 
-const env = {
+const base = `http://localhost:${port}`;
+const prodEnv = {
+  ...process.env,
+  NODE_ENV: 'production',
+  PORT: String(port),
+  RENDER_EXTERNAL_URL: base,
+  GUEST_AUTH_ENABLED: 'true',
+  DEV_AUTH_ENABLED: 'false',
+  TRUST_PROXY: 'true',
+  STATIC_DIR: 'public',
+  TELEGRAM_BOT_TOKEN: '',
+  MATCH_DURATION_SEC: process.env.MATCH_DURATION_SEC ?? '40',
+  SESSION_SECRET: randomBytes(32).toString('base64'),
+  LOG_LEVEL: 'warn',
+  ...(process.env.E2E_ADMIN_USER ? { ADMIN_BOOTSTRAP_USERNAME: process.env.E2E_ADMIN_USER, ADMIN_BOOTSTRAP_PASSWORD: process.env.E2E_ADMIN_PASS ?? '' } : {}),
+};
+delete prodEnv.PUBLIC_URL;
+delete prodEnv.TELEGRAM_BOT_TOKEN;
+const env = prod ? prodEnv : {
   ...process.env,
   NODE_ENV: 'development',
   PORT: String(port),
@@ -46,8 +72,10 @@ const env = {
   LOG_LEVEL: 'warn',
   ...(process.env.E2E_ADMIN_USER ? { ADMIN_BOOTSTRAP_USERNAME: process.env.E2E_ADMIN_USER, ADMIN_BOOTSTRAP_PASSWORD: process.env.E2E_ADMIN_PASS ?? '' } : {}),
 };
-const server = spawn(process.execPath, ['apps/server/dist/server.js'], { env, stdio: ['ignore', 'inherit', 'inherit'] });
-const base = `http://localhost:${port}`;
+const server = prod
+  ? spawn(process.execPath, ['server.js'], { env, cwd: 'deploy', stdio: ['ignore', 'inherit', 'inherit'] })
+  : spawn(process.execPath, ['apps/server/dist/server.js'], { env, stdio: ['ignore', 'inherit', 'inherit'] });
+if (prod) console.log('[e2e] production mode: deploy/server.js with guest login');
 let failed = false;
 try {
   for (let i = 0; ; i++) {

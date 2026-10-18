@@ -75,6 +75,51 @@ test('auth: missing bot token → 503; dev auth refused in production config', a
   }
 });
 
+test('auth: guest login for the public website (production): nickname kept, only an HMAC stored, sign-up flood limited', async () => {
+  const prod = await startTestApp({ NODE_ENV: 'production', DEV_AUTH_ENABLED: false, GUEST_AUTH_ENABLED: true, TELEGRAM_BOT_TOKEN: undefined });
+  try {
+    const deviceId = 'guest-device-0123456789abcdef';
+    const r1 = await api(prod.base, '/api/auth/guest', { method: 'POST', body: { name: 'Гость_123', deviceId, platform: 'browser_mobile' } });
+    assert.equal(r1.status, 200, r1.text);
+    assert.equal(r1.body.isNew, true);
+    assert.equal(r1.body.profile.displayName, 'Гость_123');
+    // the player picks a nickname, loses the token and signs in again from the same browser
+    const ren = await api(prod.base, '/api/me', { method: 'PATCH', token: r1.body.token, body: { displayName: 'Тихий Завхоз' } });
+    assert.equal(ren.status, 200, ren.text);
+    const r2 = await api(prod.base, '/api/auth/guest', { method: 'POST', body: { name: 'Гость_999', deviceId } });
+    assert.equal(r2.status, 200, r2.text);
+    assert.equal(r2.body.isNew, false);
+    assert.equal(r2.body.profile.id, r1.body.profile.id);
+    assert.equal(r2.body.profile.displayName, 'Тихий Завхоз');
+    // the raw device secret is never stored
+    const [u] = await prod.db.sql<Array<{ dev_device_id: string }>>`SELECT dev_device_id FROM users WHERE id = ${r1.body.profile.id}`;
+    assert.ok(u!.dev_device_id.startsWith('g1:'));
+    assert.ok(!u!.dev_device_id.includes(deviceId));
+    const [sess] = await prod.db.sql<Array<{ method: string }>>`SELECT method FROM sessions WHERE user_id = ${r1.body.profile.id} LIMIT 1`;
+    assert.equal(sess!.method, 'guest');
+    // weak device ids are refused; the dev login stays off in production
+    assert.equal((await api(prod.base, '/api/auth/guest', { method: 'POST', body: { name: 'Кто-то', deviceId: 'short' } })).status, 400);
+    assert.equal((await api(prod.base, '/api/auth/dev', { method: 'POST', body: { name: 'Кто-то' } })).status, 403);
+    // a sign-up flood from one address is cut after 10 new players; existing players still get in
+    const codes: number[] = [];
+    for (let i = 0; i < 11; i++) codes.push((await api(prod.base, '/api/auth/guest', { method: 'POST', body: { name: `Игрок ${i}`, deviceId: `flood-device-${i}-0123456789` } })).status);
+    assert.deepEqual(codes.slice(0, 9), Array(9).fill(200));
+    assert.deepEqual(codes.slice(9), [429, 429]);
+    assert.equal((await api(prod.base, '/api/auth/guest', { method: 'POST', body: { name: 'Гость_123', deviceId } })).status, 200);
+  } finally {
+    await prod.close();
+  }
+  // without GUEST_AUTH_ENABLED a production server refuses guests
+  const tgOnly = await startTestApp({ NODE_ENV: 'production', DEV_AUTH_ENABLED: false, GUEST_AUTH_ENABLED: false });
+  try {
+    const r = await api(tgOnly.base, '/api/auth/guest', { method: 'POST', body: { name: 'Гость', deviceId: 'guest-device-0123456789abcdef' } });
+    assert.equal(r.status, 403);
+    assert.equal(r.body.error.code, 'guest_auth_disabled');
+  } finally {
+    await tgOnly.close();
+  }
+});
+
 test('auth: dev login keyed by deviceId; profile update validation', async () => {
   const a = await devLogin(app.base, 'Валюта', 'device-abc-123');
   const b = await devLogin(app.base, 'Валюта Новый', 'device-abc-123');

@@ -52,8 +52,9 @@ export class Api {
   authTelegram(initData: string) {
     return this.req<AuthResponse>('POST', '/api/auth/telegram', { initData, platform: platform(), clientVersion: VERSION });
   }
-  authDev(name: string, deviceId: string) {
-    return this.req<AuthResponse>('POST', '/api/auth/dev', { name, deviceId, platform: platform(), clientVersion: VERSION });
+  /** Public website: device-bound guest account (the server stores only an HMAC of `deviceId`). */
+  authGuest(name: string, deviceId: string) {
+    return this.req<AuthResponse>('POST', '/api/auth/guest', { name, deviceId, platform: platform(), clientVersion: VERSION });
   }
   logout() {
     return this.req<void>('POST', '/api/auth/logout', {});

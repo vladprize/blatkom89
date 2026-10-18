@@ -26,6 +26,18 @@ export const DevAuthRequest = z
     clientVersion: z.string().max(32).optional(),
   })
   .strict();
+/**
+ * Guest login for the public website (no Telegram). `deviceId` is a random secret generated and kept
+ * by the browser (≥ 20 chars); the server stores only an HMAC of it. `name` is used for new players only.
+ */
+export const GuestAuthRequest = z
+  .object({
+    name: displayNameSchema,
+    deviceId: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/),
+    platform: PlatformSchema.optional(),
+    clientVersion: z.string().max(32).optional(),
+  })
+  .strict();
 export const UpdateProfileRequest = z
   .object({ displayName: displayNameSchema.optional(), preferredCharacter: z.enum(CHARACTER_IDS).optional() })
   .strict();

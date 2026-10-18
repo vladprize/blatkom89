@@ -1,7 +1,7 @@
-/** Player authentication: Telegram Mini App initData, dev-only browser login, logout. */
-import { DevAuthRequest, TelegramAuthRequest } from '@blatkom/shared';
+/** Player authentication: Telegram Mini App initData, guest login (public website), dev-only login, logout. */
+import { DevAuthRequest, GuestAuthRequest, TelegramAuthRequest } from '@blatkom/shared';
 import type { AuthResponse } from '@blatkom/shared';
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import type { RouteModule } from '../app.js';
 import { HttpError } from '../http/router.js';
 import { bearerToken, requireUser, currentUser } from '../http/auth.js';
@@ -21,6 +21,10 @@ const REASONS: Record<string, string> = {
 export const registerAuthRoutes: RouteModule = (router, deps) => {
   const { env, services } = deps;
   const limiter = new RateLimiter(20, 20 / 60);
+  // new guest accounts: per address (a whole party behind one Wi-Fi still fits) and a global backstop
+  const newGuestPerIp = new RateLimiter(10, 10 / 3600);
+  const newGuestGlobal = new RateLimiter(200, 200 / 3600);
+  const guestEnabled = env.GUEST_AUTH_ENABLED || (env.DEV_AUTH_ENABLED && env.NODE_ENV !== 'production');
   const unavailable = () => {
     throw new HttpError(503, 'persistence_unavailable', 'Сервис временно недоступен');
   };
@@ -41,6 +45,30 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform };
     services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'telegram' }, evCtx);
     if (up.isNew) services.analytics.server('profile_created', { method: 'telegram' }, evCtx);
+    const profile = await pg.profiles.get(up.userId);
+    if (!profile) throw new HttpError(500, 'internal', 'Профиль не найден');
+    const res: AuthResponse = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew };
+    ctx.json(200, res);
+  });
+
+  router.post('/api/auth/guest', rateLimit(limiter), async (ctx) => {
+    if (!guestEnabled) throw new HttpError(403, 'guest_auth_disabled', 'Вход без Telegram отключён на этом сервере');
+    if (!deps.sql) return unavailable();
+    const body = await ctx.body(GuestAuthRequest, 4 * 1024);
+    const pg = pgContext(deps.sql, env, deps.log);
+    // only an HMAC of the browser's secret is stored, so a database leak does not reveal sign-in keys
+    const deviceKey = 'g1:' + createHmac('sha256', env.SESSION_SECRET).update(body.deviceId).digest('base64url');
+    const existing = await pg.users.findGuest(deviceKey);
+    if (!existing && (!newGuestPerIp.take(ctx.ip) || !newGuestGlobal.take('all'))) {
+      deps.log.warn('guest sign-up rate limited', { ip: ctx.ip });
+      throw new HttpError(429, 'rate_limited', 'Слишком много новых игроков подряд — попробуйте через несколько минут', { 'retry-after': '60' });
+    }
+    const platform = body.platform ?? null;
+    const up = await pg.users.upsertGuest(deviceKey, body.name, platform);
+    const s = await pg.sessions.issue(up.userId, 'guest', platform, body.clientVersion ?? null);
+    const evCtx = { userId: up.userId, sessionId: s.sessionId, platform };
+    services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'guest' }, evCtx);
+    if (up.isNew) services.analytics.server('profile_created', { method: 'guest' }, evCtx);
     const profile = await pg.profiles.get(up.userId);
     if (!profile) throw new HttpError(500, 'internal', 'Профиль не найден');
     const res: AuthResponse = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew };

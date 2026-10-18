@@ -275,11 +275,31 @@ export class App {
     const p = this.online.profile;
     if (!p || p.matchesPlayed > 0 || storageGet(NICK_CONFIRMED_KEY) === p.id) return;
     this.nickClose = openNicknameDialog(this.root, {
-      initial: p.displayName,
+      initial: /^Гость_/.test(p.displayName) ? randomNickname() : p.displayName,
       onSave: (name) => this.saveNickname(name),
       onCancel: () => storageSet(NICK_CONFIRMED_KEY, p.id),
       cancelLabel: 'Оставить как есть',
       onClose: () => (this.nickClose = null),
+    });
+  }
+
+  /** A new player who opens an invite link picks a nickname before entering the room. */
+  private async ensureNicknameBeforeJoin(): Promise<void> {
+    if (!this.online || this.nickClose) return;
+    const p = await this.online.ensureAuth();
+    if (p.matchesPlayed > 0 || storageGet(NICK_CONFIRMED_KEY) === p.id) return;
+    await new Promise<void>((resolve) => {
+      this.nickClose = openNicknameDialog(this.root, {
+        initial: /^Гость_/.test(p.displayName) ? randomNickname() : p.displayName,
+        note: 'Тебя позвали в комнату. Кличку увидят остальные игроки — над персонажем, в таблице и в итогах.',
+        onSave: (name) => this.saveNickname(name),
+        onCancel: () => storageSet(NICK_CONFIRMED_KEY, p.id),
+        cancelLabel: 'Оставить как есть',
+        onClose: () => {
+          this.nickClose = null;
+          resolve();
+        },
+      });
     });
   }
 
@@ -623,6 +643,7 @@ export class App {
       .then(async (info) => {
         analytics.track('invite_opened', { code, result: info.status });
         if (info.status === 'joinable' || info.status === 'in_progress') {
+          await this.ensureNicknameBeforeJoin();
           this.render(this.loading(`Входим в комнату${info.hostName ? ` (${info.hostName})` : ''}…`));
           await this.online!.joinRoom(info.roomId!, this.character);
           return;

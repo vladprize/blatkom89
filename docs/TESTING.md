@@ -6,6 +6,7 @@
 npm run typecheck                                   # tsc --strict for shared, server, web, tools
 DATABASE_URL_TEST=postgres://…/blatkom_test npm test # unit + integration (each DB test file gets its own schema)
 DATABASE_URL=postgres://…/disposable npm run test:e2e # browsers: practice, touch, two-player online, admin
+DATABASE_URL=postgres://…/disposable npm run test:e2e:prod # the same against deploy/ in production mode (guest login)
 npm run lint && npm run format:check                 # ESLint + Prettier (see §4)
 ```
 `npm run test:e2e` builds the web client, the server bundle and the single-file demo, starts the server
@@ -28,6 +29,7 @@ map), `ui-tour.mjs` (click through menus), `shot.mjs` (any URL, optional phone e
 | Progression | XP, levels, achievements; shared `applyMatchProgress` (wins, draws, leavers, streaks, rewards); recorder awards XP exactly once under repeated and concurrent completion, stores assists; demo profile (`apps/web/src/profile/localProfile.test.ts`): nickname validation, XP/achievements once per match, sanitising stored data, history cap |
 | Multiplayer (`apps/server/src/rooms/realtime.test.ts`) | real HTTP + WS server with independent clients: authoritative combat with identical results and identical per-tick state on both clients; kill events before results; results/XP sent once; speed-hack flood; invalid handshakes/commands and kick after repeated violations; capacity (7th player refused); disconnect → resume same slot → second tab replaces first; grace-period expiry and empty-room cleanup; rematch with separately recorded matches |
 | Telegram auth | official HMAC algorithm against an independent implementation; tampered data, wrong bot token, missing/duplicate fields, stale and future `auth_date`; expired/revoked sessions; dev login refused in production; account deletion |
+| Guest login (public website) | production server with `GUEST_AUTH_ENABLED`: same browser → same account and chosen nickname, only an HMAC of the device secret stored, weak device ids refused, 11th new guest from one address → 429 while existing guests still sign in, refused when disabled; env rules (`PUBLIC_URL`/`RENDER_EXTERNAL_URL` required in production, Telegram or guest login required, placeholders refused) |
 | Analytics | auth required; dedupe by event id across requests and inside a batch; strict props; timestamp clamping; error sanitisation and fingerprints; buffered writer never throws |
 | Metrics | DAU/WAU/MAU, D1/D7 cohorts (null until matured), durations, date filters, empty datasets never fabricate values |
 | Admin | unauthenticated refused, bootstrap login, audited failures, foreign origins refused, CSRF on state changes, roles, exports escaped/audited/admin-only, player search/sort/pagination/detail |

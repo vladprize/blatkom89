@@ -41,6 +41,18 @@ const phaseOf = (p) => p.page.evaluate(() => window.__blatkom?.game?.scene.getSc
 
 const A = await player('A', 'petya');
 const B = await player('B', 'valuta');
+// any failure: screenshots + what each browser was showing, then exit 1
+process.on('uncaughtException', async (e) => {
+  console.error('[online] failed:', e.message);
+  for (const p of [A, B]) {
+    await p.page.screenshot({ path: `${outDir}/fail_${p.name}.png` }).catch(() => {});
+    const text = await p.page.evaluate(() => document.querySelector('#ui')?.innerText?.slice(0, 400) ?? '').catch(() => '');
+    console.error(`[online] ${p.name} screen:`, text.replace(/\s+/g, ' '));
+  }
+  console.error(problems.join('\n'));
+  await browser.close().catch(() => {});
+  process.exit(1);
+});
 
 // ── nickname (first launch) ───────────────────────────────────────────────
 const NICK_A = 'Комендант Двора';
@@ -60,6 +72,13 @@ await A.page.getByRole('button', { name: 'Создать комнату' }).clic
 const code = (await A.page.locator('.code').textContent({ timeout: 20000 })).trim();
 step(`A created a private room, invite code ${code}`);
 await B.page.goto(`${base}/?invite=${encodeURIComponent(code)}`);
+// a new player who opens an invite link picks a nickname before entering the room
+const NICK_B = 'Ночной Сыч';
+const nickInputB = B.page.getByRole('textbox', { name: 'Кличка' });
+await nickInputB.waitFor({ timeout: 60000 });
+await nickInputB.fill(NICK_B);
+await B.page.getByRole('button', { name: 'Готово' }).click();
+step(`B opened the invite link and chose the nickname «${NICK_B}» before joining`);
 try {
   await A.page.getByText(/Игроки 2\//).waitFor({ timeout: 90000 });
   await B.page.getByText(/Игроки 2\//).waitFor({ timeout: 90000 });
@@ -71,7 +90,8 @@ try {
 }
 step('B joined through the invite link; both lobbies show 2 players');
 report.nickInLobbyB = (await B.page.getByText(NICK_A).count()) > 0;
-step(`B's lobby shows A's nickname: ${report.nickInLobbyB}`);
+report.nickInLobbyA = (await A.page.getByText(NICK_B).count()) > 0;
+step(`lobbies show the nicknames: A's on B ${report.nickInLobbyB}, B's on A ${report.nickInLobbyA}`);
 await A.page.screenshot({ path: `${outDir}/online_lobby_A.png` });
 await B.page.getByRole('button', { name: /^Готов$/ }).click();
 await A.page.getByRole('button', { name: /Начать/ }).click();
@@ -161,12 +181,18 @@ step(`position sync A(own) vs A(on B): median ${report.sync.medianPx}px, p90 ${r
 
 // ── results ───────────────────────────────────────────────────────────────
 await Promise.all([A, B].map((p) => p.page.getByText('Итоги матча').waitFor({ timeout: 60000 })));
-await A.page.waitForTimeout(1500);
-const tableOf = (p) => p.page.locator('table.table tbody').innerText();
-const [ta, tb] = await Promise.all([tableOf(A), tableOf(B)]);
-report.resultsIdentical = ta === tb;
+// read head and body at once: the room returns to its lobby 15 s after the match (finishedMs)
+const tableOf = (p) =>
+  p.page.evaluate(() => {
+    const t = document.querySelector('table.table');
+    return { head: t?.tHead?.innerText ?? '', body: t?.tBodies[0]?.innerText ?? '' };
+  });
+const [ra, rb] = await Promise.all([tableOf(A), tableOf(B)]);
+const ta = ra.body;
+const tb = rb.body;
+report.resultsIdentical = ta.length > 0 && ta === tb;
 report.nickInResults = ta.includes(NICK_A);
-report.assistsColumn = /Пом\./i.test(await A.page.locator('table.table thead').innerText());
+report.assistsColumn = /Пом\./i.test(ra.head);
 report.resultsTable = ta.split('\n').map((l) => l.trim());
 step(`both clients show the results screen; tables identical: ${ta === tb}`);
 await A.page.getByText(/опыта/).waitFor({ timeout: 15000 }).catch(() => problems.push('XP panel did not appear for A'));
@@ -208,7 +234,9 @@ const ok =
   report.resultsIdentical &&
   report.profiles.every((p) => p.matchesPlayed >= 1 && typeof p.assists === 'number') &&
   report.profiles[0].name === NICK_A &&
+  report.profiles[1].name === NICK_B &&
   report.nickInLobbyB &&
+  report.nickInLobbyA &&
   report.nickInResults &&
   report.assistsColumn &&
   deviations.length > 0;

@@ -70,8 +70,8 @@ export const CLIENT_EVENT_PROPS = {
 } satisfies Record<ClientEventName, z.ZodTypeAny>;
 
 export const SERVER_EVENT_PROPS = {
-  session_started: z.object({ platform, method: z.enum(['telegram', 'dev']) }),
-  profile_created: z.object({ method: z.enum(['telegram', 'dev']) }),
+  session_started: z.object({ platform, method: z.enum(['telegram', 'dev', 'guest']) }),
+  profile_created: z.object({ method: z.enum(['telegram', 'dev', 'guest']) }),
   lobby_created: z.object({ roomId: z.string(), mapId: z.enum(MAP_IDS), isPrivate: z.boolean() }),
   lobby_joined: z.object({ roomId: z.string(), viaInvite: z.boolean() }),
   lobby_left: z.object({ roomId: z.string(), phase: z.string() }),

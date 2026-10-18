@@ -1,0 +1,107 @@
+{
+ "frameSize": 128,
+ "texelsPerWorldPx": 2,
+ "torsoAnims": {
+  "pistol": [
+   [
+    "idle",
+    2
+   ],
+   [
+    "shoot",
+    3
+   ],
+   [
+    "reload",
+    6
+   ],
+   [
+    "hit",
+    2
+   ]
+  ],
+  "obrez": [
+   [
+    "idle",
+    2
+   ],
+   [
+    "shoot",
+    3
+   ],
+   [
+    "reload",
+    6
+   ],
+   [
+    "hit",
+    2
+   ]
+  ],
+  "avtomat": [
+   [
+    "idle",
+    2
+   ],
+   [
+    "shoot",
+    3
+   ],
+   [
+    "reload",
+    6
+   ],
+   [
+    "hit",
+    2
+   ]
+  ],
+  "montirovka": [
+   [
+    "idle",
+    2
+   ],
+   [
+    "swing",
+    5
+   ],
+   [
+    "hit",
+    2
+   ]
+  ]
+ },
+ "legAnims": [
+  [
+   "idle",
+   1
+  ],
+  [
+   "walk",
+   8
+  ],
+  [
+   "run",
+   8
+  ]
+ ],
+ "deathFrames": 6,
+ "muzzle": {
+  "pistol": {
+   "forward": 21,
+   "side": 0.8
+  },
+  "obrez": {
+   "forward": 23,
+   "side": 2.3
+  },
+  "avtomat": {
+   "forward": 28.5,
+   "side": 1.9
+  },
+  "montirovka": {
+   "forward": 24,
+   "side": 9
+  }
+ }
+}

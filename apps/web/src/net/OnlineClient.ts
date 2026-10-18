@@ -36,6 +36,8 @@ export interface OnlineCallbacks {
 
 const TOKEN_KEY = 'blatkom89.token';
 const DEVICE_KEY = 'blatkom89.device';
+/** Free hosting (e.g. Render) sleeps after ~15 min without HTTP traffic — ping while in a room. */
+const KEEPALIVE_MS = 4 * 60_000;
 
 export class OnlineClient {
   readonly api = new Api();
@@ -51,6 +53,7 @@ export class OnlineClient {
   private lobby: LobbyState | null = null;
   private inviteUrl: string | null = null;
   private authPromise: Promise<PublicProfile> | null = null;
+  private keepAlive: ReturnType<typeof setInterval> | null = null;
   lastResults: ResultsData | null = null;
 
   constructor(private readonly cb: OnlineCallbacks) {}
@@ -80,20 +83,21 @@ export class OnlineClient {
         this.api.token = null;
       }
     }
+    // guest account bound to this browser: a random device secret (the server keeps only its HMAC)
     let device = storageGet(DEVICE_KEY);
-    if (!device) {
-      device = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+    if (!device || !/^[A-Za-z0-9_-]{20,64}$/.test(device)) {
+      device = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
       storageSet(DEVICE_KEY, device);
     }
     const name = telegramUserName() ?? `Гость_${device.slice(0, 3).toUpperCase()}`;
     try {
-      const res = await this.api.authDev(name, device);
+      const res = await this.api.authGuest(name, device);
       this.setToken(res.token);
       storageSet(TOKEN_KEY, res.token);
       this.profile = res.profile;
       return res.profile;
     } catch (e) {
-      if (e instanceof ApiError && (e.status === 403 || e.status === 404)) throw new Error('Онлайн-режим доступен только через Telegram. Откройте игру из бота.');
+      if (e instanceof ApiError && (e.status === 403 || e.status === 404)) throw new Error('На этом сервере вход возможен только через Telegram. Откройте игру из бота.');
       throw e;
     }
   }
@@ -174,6 +178,20 @@ export class OnlineClient {
     );
     this.conn = conn;
     conn.connect();
+    this.startKeepAlive();
+  }
+
+  private startKeepAlive() {
+    if (this.keepAlive) return;
+    this.keepAlive = setInterval(() => {
+      if (!this.conn) return this.stopKeepAlive();
+      void fetch('api/health', { cache: 'no-store' }).catch(() => {});
+    }, KEEPALIVE_MS);
+  }
+
+  private stopKeepAlive() {
+    if (this.keepAlive) clearInterval(this.keepAlive);
+    this.keepAlive = null;
   }
 
   private onMessage(m: ServerMessage) {
@@ -263,6 +281,7 @@ export class OnlineClient {
   private closeConn() {
     if (this.conn) this.conn.close();
     this.conn = null;
+    this.stopKeepAlive();
   }
 
   private cleanup() {

@@ -21,6 +21,8 @@ const EnvSchema = z.object({
   /** Maximum age of Telegram initData (seconds). */
   TELEGRAM_AUTH_MAX_AGE_SEC: z.coerce.number().int().min(60).max(7 * 86400).default(86400),
   DEV_AUTH_ENABLED: bool.default('false'),
+  /** Public website without Telegram: players sign in as guests with a nickname (device-bound). */
+  GUEST_AUTH_ENABLED: bool.default('false'),
   CORS_ORIGINS: z.string().default(''),
   TRUST_PROXY: bool.default('false'),
   ADMIN_BOOTSTRAP_USERNAME: z.string().optional(),
@@ -40,6 +42,9 @@ const EnvSchema = z.object({
 export type Env = z.infer<typeof EnvSchema>;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  // Render (and similar hosts) publish the service URL as RENDER_EXTERNAL_URL
+  const publicUrlSet = !!source.PUBLIC_URL || !!source.RENDER_EXTERNAL_URL;
+  if (!source.PUBLIC_URL && source.RENDER_EXTERNAL_URL) source = { ...source, PUBLIC_URL: source.RENDER_EXTERNAL_URL };
   const parsed = EnvSchema.safeParse(source);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
@@ -49,7 +54,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (env.MATCH_MIN_PLAYERS > env.MATCH_MAX_PLAYERS) throw new Error('MATCH_MIN_PLAYERS must not exceed MATCH_MAX_PLAYERS');
   if (env.NODE_ENV === 'production') {
     if (env.DEV_AUTH_ENABLED) throw new Error('DEV_AUTH_ENABLED must be false in production');
-    if (!env.TELEGRAM_BOT_TOKEN) throw new Error('TELEGRAM_BOT_TOKEN is required in production');
+    if (!env.TELEGRAM_BOT_TOKEN && !env.GUEST_AUTH_ENABLED) throw new Error('TELEGRAM_BOT_TOKEN is required in production (or GUEST_AUTH_ENABLED=true for a public website)');
+    // invite links and the WebSocket origin check are built from PUBLIC_URL
+    if (!publicUrlSet) throw new Error('PUBLIC_URL is required in production (the https address players open)');
     if (/change-me|example|secret/i.test(env.SESSION_SECRET)) throw new Error('SESSION_SECRET looks like a placeholder');
   }
   return env;
