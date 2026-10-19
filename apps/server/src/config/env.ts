@@ -23,6 +23,8 @@ const EnvSchema = z.object({
   DEV_AUTH_ENABLED: bool.default('false'),
   /** Public website without Telegram: players sign in as guests with a nickname (device-bound). */
   GUEST_AUTH_ENABLED: bool.default('false'),
+  /** New guest accounts per address per hour (friends behind one Wi-Fi share an address). */
+  GUEST_SIGNUPS_PER_IP_HOUR: z.coerce.number().int().min(1).max(10_000).default(10),
   CORS_ORIGINS: z.string().default(''),
   TRUST_PROXY: bool.default('false'),
   ADMIN_BOOTSTRAP_USERNAME: z.string().optional(),

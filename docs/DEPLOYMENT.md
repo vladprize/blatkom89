@@ -60,6 +60,7 @@ Copy `.env.example` to `.env` and set at least:
 | `NOWPAYMENTS_API_KEY` + `NOWPAYMENTS_IPN_SECRET` | optional: diamonds by crypto (NOWPayments invoices; `NOWPAYMENTS_SANDBOX=true` for the sandbox) |
 | `RESEND_API_KEY` + `MAIL_FROM` | optional: password-reset letters (Resend; the sender domain must be verified there). Without them admins issue one-time reset links in `/admin` |
 | `CASES_ENABLED` | `true` (default) / `false` — paid rare-weapon cases |
+| `GUEST_SIGNUPS_PER_IP_HOUR` | new guest accounts per address per hour (default 10; raise it for events where many new players share one Wi-Fi) |
 | `LOG_LEVEL`, `MAX_ROOMS`, `SESSION_TTL_HOURS`, `TELEGRAM_AUTH_MAX_AGE_SEC` | optional |
 
 The server validates the environment at start and refuses to run in production with

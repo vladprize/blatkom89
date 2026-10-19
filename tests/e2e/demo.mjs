@@ -53,7 +53,14 @@ try {
     const scr = document.querySelector('.screen');
     const c = document.querySelector('.menu-center').getBoundingClientRect();
     const nick = document.querySelector('[data-testid=menu-nick]');
-    return { above: Math.round(c.top), below: Math.round(scr.clientHeight - c.bottom), nickFits: nick.scrollWidth <= nick.clientWidth + 1 };
+    // the alias is whole: no clipping box, the text inside the tile and above the XP bar
+    const range = document.createRange();
+    range.selectNodeContents(nick);
+    const text = range.getBoundingClientRect();
+    const tile = nick.closest('.tile').getBoundingClientRect();
+    const bar = nick.parentElement.querySelector('.xpbar').getBoundingClientRect();
+    const whole = getComputedStyle(nick).overflow === 'visible' && text.left >= tile.left && text.right <= tile.right && text.bottom <= bar.top + 1;
+    return { above: Math.round(c.top), below: Math.round(scr.clientHeight - c.bottom), nickFits: whole };
   });
   check(Math.abs(layout.above - layout.below) <= 4 && layout.above > 60, `1440×900: the menu block is centred (${layout.above}px above, ${layout.below}px below)`);
   check(layout.nickFits, 'the alias in the Dossier tile is fully visible');

@@ -53,6 +53,8 @@ const prodEnv = {
   PORT: String(port),
   RENDER_EXTERNAL_URL: base,
   GUEST_AUTH_ENABLED: 'true',
+  // every browser of the suite is a new guest from 127.0.0.1 (about a dozen per run)
+  GUEST_SIGNUPS_PER_IP_HOUR: '200',
   DEV_AUTH_ENABLED: 'false',
   TRUST_PROXY: 'true',
   STATIC_DIR: 'public',

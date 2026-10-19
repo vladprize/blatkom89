@@ -35,7 +35,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
   const { env, services } = deps;
   const limiter = new RateLimiter(20, 20 / 60);
   // new guest accounts: per address (a whole party behind one Wi-Fi still fits) and a global backstop
-  const newGuestPerIp = new RateLimiter(10, 10 / 3600);
+  const newGuestPerIp = new RateLimiter(env.GUEST_SIGNUPS_PER_IP_HOUR, env.GUEST_SIGNUPS_PER_IP_HOUR / 3600);
   const newGuestGlobal = new RateLimiter(200, 200 / 3600);
   const guestEnabled = env.GUEST_AUTH_ENABLED || (env.DEV_AUTH_ENABLED && env.NODE_ENV !== 'production');
   // email sign-in: per network address and per account (password guessing), per player for account

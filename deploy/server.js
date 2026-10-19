@@ -7774,6 +7774,8 @@ var EnvSchema = external_exports.object({
   DEV_AUTH_ENABLED: bool.default("false"),
   /** Public website without Telegram: players sign in as guests with a nickname (device-bound). */
   GUEST_AUTH_ENABLED: bool.default("false"),
+  /** New guest accounts per address per hour (friends behind one Wi-Fi share an address). */
+  GUEST_SIGNUPS_PER_IP_HOUR: external_exports.coerce.number().int().min(1).max(1e4).default(10),
   CORS_ORIGINS: external_exports.string().default(""),
   TRUST_PROXY: bool.default("false"),
   ADMIN_BOOTSTRAP_USERNAME: external_exports.string().optional(),
@@ -16076,7 +16078,7 @@ var REASONS = {
 var registerAuthRoutes = (router, deps) => {
   const { env: env2, services: services2 } = deps;
   const limiter = new RateLimiter(20, 20 / 60);
-  const newGuestPerIp = new RateLimiter(10, 10 / 3600);
+  const newGuestPerIp = new RateLimiter(env2.GUEST_SIGNUPS_PER_IP_HOUR, env2.GUEST_SIGNUPS_PER_IP_HOUR / 3600);
   const newGuestGlobal = new RateLimiter(200, 200 / 3600);
   const guestEnabled = env2.GUEST_AUTH_ENABLED || env2.DEV_AUTH_ENABLED && env2.NODE_ENV !== "production";
   const emailLimiter = new RateLimiter(20, 20 / 300);
