@@ -8,15 +8,16 @@ import { MAP_IDS } from '../maps/types.js';
 import type { MapId } from '../maps/types.js';
 import type { ModId, WeaponId } from '../game-rules/weapons.js';
 import type { ArmsId, GadgetId } from '../game-rules/gadgets.js';
-import type { Standing } from '../sim/world.js';
+import type { FlagAction, Standing } from '../sim/world.js';
 import type { AchievementId } from '../game-rules/progression.js';
 
 /**
  * v2: match points with assists, «дефицит» supply drops. v3: loadouts, rockets, medkits.
  * v4: the owner's arsenal (32 weapons), modifications, equipment (grenades, mines, C4, turret).
  * v5: up to 10 players, team matches (red vs blue): team in roster and snapshots, team scores.
+ * v6: capture the flag and base capture: flags and bases in snapshots, objective events.
  */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 const roomId = z.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 
@@ -33,7 +34,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ready'), ready: z.boolean() }),
   z.object({ type: z.literal('character'), character: z.enum(CHARACTER_IDS) }),
   z.object({ type: z.literal('map'), mapId: z.enum(MAP_IDS) }),
-  /** Host: free-for-all or teams (lobby only). */
+  /** Host: the game mode (lobby only). */
   z.object({ type: z.literal('mode'), mode: z.enum(GAME_MODES) }),
   /** Team matches: move to the other team (lobby only, while the teams stay even). */
   z.object({ type: z.literal('team'), team: z.union([z.literal(0), z.literal(1)]) }),
@@ -81,7 +82,9 @@ export type GameEvent =
   | { t: 'reload'; slot: number; weapon: WeaponId }
   | { t: 'dry'; slot: number }
   | { t: 'phase'; phase: MatchPhase }
-  | { t: 'matchEnd'; reason: 'time' | 'score' | 'aborted' };
+  | { t: 'matchEnd'; reason: 'time' | 'score' | 'aborted' }
+  | { t: 'flag'; action: FlagAction; team: Team; slot: number }
+  | { t: 'base'; base: number; team: Team; from: Team | null; slots: number[] };
 
 export interface PersonalResult {
   xpGained: number;

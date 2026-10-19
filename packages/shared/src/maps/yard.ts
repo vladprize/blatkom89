@@ -163,5 +163,8 @@ export function buildYardMap(): MapDef {
 
   // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
   b.spawn(692, 1044, -90).spawn(708, 44, 90).spawn(692, 604, -90).spawn(1364, 556, 180).spawn(44, 548, 0).spawn(820, 324, 135);
+  // capture the flag: a stand deep in each team's half; base capture: A (red side), B (middle), C (blue side)
+  b.flagStand(0, 72, 544).flagStand(1, 1336, 544);
+  b.base(392, 576).base(704, 544).base(1056, 544);
   return b.build();
 }

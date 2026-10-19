@@ -306,5 +306,8 @@ export function buildDkMap(): MapDef {
 
   // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
   b.spawn(668, 708, -90).spawn(524, 364, 45).spawn(468, 932, -45).spawn(1036, 468, 180).spawn(388, 652, -45).spawn(860, 956, -90);
+  // capture the flag: a stand deep in each team's half; base capture: A (red side), B (middle), C (blue side)
+  b.flagStand(0, 120, 496).flagStand(1, 1416, 544);
+  b.base(400, 656).base(760, 576).base(1040, 560);
   return b.build();
 }

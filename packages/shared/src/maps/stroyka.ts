@@ -310,5 +310,8 @@ export function buildStroykaMap(): MapDef {
 
   // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
   b.spawn(340, 36, 45).spawn(572, 420, 0).spawn(964, 620, -135).spawn(372, 644, -45).spawn(1044, 252, 135).spawn(68, 196, 0).spawn(1076, 852, -135);
+  // capture the flag: a stand deep in each team's half; base capture: A (red side), B (middle), C (blue side)
+  b.flagStand(0, 72, 440).flagStand(1, 1368, 456);
+  b.base(264, 448).base(664, 448).base(1000, 496);
   return b.build();
 }

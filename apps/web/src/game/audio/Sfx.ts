@@ -4,7 +4,7 @@
  */
 import type { WeaponSound } from '@blatkom/shared';
 
-type SfxName = WeaponSound | 'hit' | 'ricochet' | 'reload' | 'dry' | 'pickup' | 'death' | 'kill' | 'assist' | 'supply' | 'beep' | 'beepHigh' | 'click' | 'step' | 'end' | 'hurt' | 'respawn' | 'boom' | 'heal' | 'buy' | 'throw' | 'place' | 'deploy' | 'flashbang' | 'tinnitus' | 'ignite' | 'hiss' | 'mineBeep' | 'turret' | 'crash';
+type SfxName = WeaponSound | 'hit' | 'ricochet' | 'reload' | 'dry' | 'pickup' | 'death' | 'kill' | 'assist' | 'supply' | 'beep' | 'beepHigh' | 'click' | 'step' | 'end' | 'hurt' | 'respawn' | 'boom' | 'heal' | 'buy' | 'throw' | 'place' | 'deploy' | 'flashbang' | 'tinnitus' | 'ignite' | 'hiss' | 'mineBeep' | 'turret' | 'crash' | 'flagTaken' | 'flagCaptured' | 'flagReturned' | 'flagDropped' | 'baseCaptured' | 'baseLost';
 
 /** Rapid-fire sounds are rate-limited per listener so automatic fire does not turn into noise. */
 const MIN_GAP: Partial<Record<SfxName, number>> = { avtomat: 30, smg: 28, lmg: 34, nail: 40, flame: 90, step: 60, turret: 40 };
@@ -194,6 +194,37 @@ class SfxEngine {
       this.buffers.set('turret', shot(0.16, 180, 0.6, 0.02, 0.9));
       const k = lp(0.2);
       this.buffers.set('crash', this.buf(0.6, (t) => k(rnd() * 2) * 1.8 * env(t, 0.002, 0.12) + click(t, 0.05, 600) * 0.6 + click(t, 0.15, 400) * 0.5));
+    }
+    // ── capture the flag / base capture ──
+    {
+      // flag stolen: a factory klaxon, two short alternating blasts
+      this.buffers.set('flagTaken', this.buf(0.62, (t) => {
+        const hz = Math.floor(t / 0.15) % 2 === 0 ? 622 : 466;
+        const seg = t % 0.15;
+        return (Math.sign(Math.sin(2 * Math.PI * hz * t)) * 0.2 + Math.sin(2 * Math.PI * hz * 2 * t) * 0.08) * env(seg, 0.006, 0.09) * (t < 0.6 ? 1 : 0);
+      }));
+      // flag captured: a bugle call, brassy (odd harmonics), the last note held
+      const brass = (hz: number, t: number) => Math.sin(2 * Math.PI * hz * t) * 0.5 + Math.sin(2 * Math.PI * hz * 2 * t) * 0.22 + Math.sin(2 * Math.PI * hz * 3 * t) * 0.14 + Math.sin(2 * Math.PI * hz * 4 * t) * 0.06;
+      this.buffers.set('flagCaptured', this.buf(1.5, (t) => {
+        const notes: Array<[number, number, number]> = [
+          [392, 0, 0.14],
+          [523, 0.15, 0.14],
+          [659, 0.3, 0.14],
+          [784, 0.45, 0.95],
+        ];
+        let v = 0;
+        for (const [hz, at, len] of notes) if (t >= at && t < at + len + 0.05) v += brass(hz, t - at) * env(t - at, 0.012, len * 0.7) * 0.32;
+        return v;
+      }));
+      // flag back home: two soft falling notes
+      this.buffers.set('flagReturned', this.buf(0.5, (t) => (t < 0.2 ? Math.sin(2 * Math.PI * 880 * t) * env(t, 0.004, 0.09) : Math.sin(2 * Math.PI * 659 * t) * env(t - 0.2, 0.004, 0.14)) * 0.35));
+      // flag dropped: a dull thud and a low tone
+      const f = lp(0.05);
+      this.buffers.set('flagDropped', this.buf(0.4, (t) => f(rnd() * 2) * env(t, 0.002, 0.04) * 2 + Math.sin(2 * Math.PI * 196 * t) * env(t, 0.004, 0.12) * 0.35));
+      // base taken: a station chime, bright major third
+      this.buffers.set('baseCaptured', this.buf(0.8, (t) => (t < 0.18 ? Math.sin(2 * Math.PI * 1046 * t) * env(t, 0.003, 0.12) : Math.sin(2 * Math.PI * 1318 * t) * env(t - 0.18, 0.003, 0.3)) * 0.33));
+      // base lost: the same chime falling, minor
+      this.buffers.set('baseLost', this.buf(0.8, (t) => (t < 0.18 ? Math.sin(2 * Math.PI * 622 * t) * env(t, 0.003, 0.12) : Math.sin(2 * Math.PI * 523 * t) * env(t - 0.18, 0.003, 0.3)) * 0.33));
     }
     this.buffers.set('end', this.buf(1.2, (t) => {
       const notes = [523, 659, 784, 1046];

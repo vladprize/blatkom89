@@ -281,5 +281,8 @@ export function buildFactoryMap(): MapDef {
 
   // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
   b.spawn(884, 532, 180).spawn(380, 596, 0).spawn(1084, 44, 135).spawn(324, 116, 45).spawn(1020, 908, -135).spawn(604, 372, 45).spawn(1172, 636, 180);
+  // capture the flag: a stand deep in each team's half; base capture: A (red side), B (middle), C (blue side)
+  b.flagStand(0, 112, 488).flagStand(1, 1368, 496);
+  b.base(352, 488).base(696, 440).base(1104, 480);
   return b.build();
 }

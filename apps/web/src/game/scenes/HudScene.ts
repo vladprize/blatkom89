@@ -3,11 +3,11 @@
  * portrait, weapon & ammo with slots, centre messages, hit markers, scoreboard and touch controls.
  */
 import * as Phaser from 'phaser';
-import { getMap, PROP_DEFS, propFootprint, WEAPONS, SCORING } from '@blatkom/shared';
-import type { MapDef, WeaponId } from '@blatkom/shared';
-import type { GameSession, RenderPlayer } from '../session/types.js';
+import { getMap, PROP_DEFS, propFootprint, WEAPONS, SCORING, BASE_RULES, CTF_RULES, isTeamMode } from '@blatkom/shared';
+import type { MapDef, Team, WeaponId } from '@blatkom/shared';
+import type { GameSession, RenderBase, RenderFlag, RenderPlayer } from '../session/types.js';
 import { hudBus } from './hudBus.js';
-import type { KillFeedEntry, PointsEntry, SupplyEntry } from './hudBus.js';
+import type { KillFeedEntry, ObjectiveEntry, PointsEntry, SupplyEntry } from './hudBus.js';
 import { touchState, isTouchDevice } from '../input/TouchState.js';
 import { getSettings, storageGet, storageSet } from '../../app/settings.js';
 import { analytics } from '../../analytics/client.js';
@@ -19,6 +19,9 @@ const TUTORIAL_KEY = 'blatkom89.tutorial.v1';
 /** Team colours: names / text and fills (red 0, blue 1). */
 const TEAM_TEXT = ['#ff8a7a', '#8cc8f6'] as const;
 const TEAM_FILL = [0xd8392e, 0x4a9be0] as const;
+const BASE_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+/** Extra height of the score box in capture the flag / base capture (the objective strip). */
+const OBJ_STRIP = 22;
 
 const BEIGE = '#e8dcc0';
 const RED = '#d8392e';
@@ -91,6 +94,11 @@ export class HudScene extends Phaser.Scene {
   private teamMark!: Phaser.GameObjects.Graphics;
   private scoreCx = 0;
   private scorePad = 14;
+  /** Capture the flag / base capture: the strip under the timer (flag states or the bases). */
+  private objMode: 'ctf' | 'bases' | null = null;
+  private objGfx!: Phaser.GameObjects.Graphics;
+  private objTexts: Phaser.GameObjects.Text[] = [];
+  private extraTop = 0;
   // feed
   private feed: FeedLine[] = [];
   // minimap
@@ -111,8 +119,10 @@ export class HudScene extends Phaser.Scene {
   private popups: Array<{ text: Phaser.GameObjects.Text; born: number }> = [];
   private banner: Phaser.GameObjects.Container | null = null;
   private bannerUntil = 0;
+  private bannerMs = 3400;
   private supplyPings: Array<{ x: number; y: number; at: number }> = [];
   private edge!: Phaser.GameObjects.Graphics;
+  private edgeLabels: Phaser.GameObjects.Text[] = [];
   private modeSig = '';
   private sbSig = '';
   private feedY0 = 14;
@@ -179,6 +189,10 @@ export class HudScene extends Phaser.Scene {
     this.wasFlashed = false;
     this.gadgetBtn = null;
     this.gadgetBtnCount = null;
+    this.objMode = this.session.gameMode === 'ctf' ? 'ctf' : this.session.gameMode === 'bases' ? 'bases' : null;
+    this.edgeLabels = [];
+    this.extraTop = this.objMode ? OBJ_STRIP : 0;
+    this.objTexts = [];
   }
 
   create(): void {
@@ -206,6 +220,7 @@ export class HudScene extends Phaser.Scene {
     hudBus.on('radar', this.onRadar, this);
     hudBus.on('points', this.onPoints, this);
     hudBus.on('supply', this.onSupply, this);
+    hudBus.on('objective', this.onObjective, this);
     this.edge = this.add.graphics().setDepth(18);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, this.layout, this);
@@ -216,6 +231,7 @@ export class HudScene extends Phaser.Scene {
       hudBus.off('radar', this.onRadar, this);
       hudBus.off('points', this.onPoints, this);
       hudBus.off('supply', this.onSupply, this);
+      hudBus.off('objective', this.onObjective, this);
       touchState.moveX = touchState.moveY = 0;
       touchState.aimActive = false;
       touchState.fireHeld = false;
@@ -234,12 +250,12 @@ export class HudScene extends Phaser.Scene {
     }
   }
 
-  private tape(label: string, size = 11): Phaser.GameObjects.Container {
-    const t = txt(this, 0, 0, label, size, '#1a1410', '600').setStroke('#000', 0).setOrigin(0.5);
+  private tape(label: string, size = 11, fill = 0xd9c7a3, ink = '#1a1410'): Phaser.GameObjects.Container {
+    const t = txt(this, 0, 0, label, size, ink, '600').setStroke('#000', 0).setOrigin(0.5);
     const w = t.width + 16;
     const h = t.height + 4;
     const g = this.add.graphics();
-    g.fillStyle(0xd9c7a3, 0.95).fillRect(-w / 2, -h / 2, w, h);
+    g.fillStyle(fill, 0.95).fillRect(-w / 2, -h / 2, w, h);
     g.fillStyle(0x0d0b0a, 0.5);
     for (let i = -w / 2; i < w / 2; i += 4) g.fillRect(i, -h / 2, 2, 1).fillRect(i + 1, h / 2 - 1, 2, 1);
     return this.add.container(0, 0, [g, t]).setAngle(-2);
@@ -252,6 +268,9 @@ export class HudScene extends Phaser.Scene {
     this.timer = txt(this, 0, 0, '00:00', 24, BEIGE, '600').setOrigin(0.5, 0);
     this.mode = txt(this, 0, 0, '', 10, '#b8a888', '500').setOrigin(0.5, 0);
     this.teamMark = this.add.graphics();
+    this.objGfx = this.add.graphics();
+    if (this.objMode === 'ctf') for (let i = 0; i < 2; i++) this.objTexts.push(txt(this, 0, 0, '', 10, BEIGE, '600').setOrigin(0.5, 0.5));
+    else if (this.objMode === 'bases') for (let i = 0; i < Math.max(1, this.map.bases.length); i++) this.objTexts.push(txt(this, 0, 0, BASE_LETTERS[i] ?? '?', 11, BEIGE, '700').setOrigin(0.5, 0.5));
   }
 
   private buildMinimap() {
@@ -528,14 +547,14 @@ export class HudScene extends Phaser.Scene {
     const reserved = this.mmW + 4 + pad + 48;
     const cx = W - reserved < 330 ? Math.max(160, (W - reserved) / 2) : W / 2;
     // kill feed sits top-left; on narrow screens it moves below the centred score/health panels
-    this.feedY0 = W < 760 ? (this.touch ? pad + 100 : pad + 62) : 14;
+    this.feedY0 = W < 760 ? (this.touch ? pad + 100 : pad + 62) + this.extraTop : 14;
     // score box
     this.scoreBg.clear();
     this.scoreBg.fillStyle(0x8a1a16, 0.95).fillRect(cx - 118, pad, 50, 40);
     this.scoreBg.lineStyle(2, 0xd8392e, 1).strokeRect(cx - 117, pad + 1, 48, 38);
     this.scoreBg.fillStyle(0x14304e, 0.95).fillRect(cx + 68, pad, 50, 40);
     this.scoreBg.lineStyle(2, 0x4a9be0, 1).strokeRect(cx + 69, pad + 1, 48, 38);
-    this.panel(this.scoreBg, cx - 62, pad, 124, 46);
+    this.panel(this.scoreBg, cx - 62, pad, 124, 46 + this.extraTop);
     this.scoreCx = cx;
     this.scorePad = pad;
     this.myScore.setPosition(cx - 93, pad + 20);
@@ -551,7 +570,7 @@ export class HudScene extends Phaser.Scene {
     this.pauseBtn.setPosition(mmx - 26, pad + 18);
     // health + weapon panels
     if (this.touch) {
-      const y = pad + 54;
+      const y = pad + 54 + this.extraTop;
       this.healthBg.clear();
       this.panel(this.healthBg, cx - 150, y, 300, 36, 0.7);
       this.portrait.setPosition(cx - 147, y + 3).setDisplaySize(30, 30);
@@ -653,14 +672,46 @@ export class HudScene extends Phaser.Scene {
   }
 
   private onSupply(e: SupplyEntry) {
-    this.banner?.destroy();
     const name = weaponName(e.weapon);
-    const title = this.tape(this.touch ? t('DEFICIT GOODS: {name}', { name: name.toUpperCase() }) : t('DEFICIT GOODS DELIVERED!'), this.touch ? 13 : 17);
-    const parts: Phaser.GameObjects.GameObject[] = [title];
-    if (!this.touch) parts.push(txt(this, 0, 16, t('In the crate: {name} with a full load of ammo — look for the marker on the map', { name }), 13, BEIGE, '500').setOrigin(0.5, 0));
-    this.banner = this.add.container(0, 0, parts).setDepth(23).setAlpha(0);
-    this.bannerUntil = this.time.now + 3400;
+    this.showBanner(this.touch ? t('DEFICIT GOODS: {name}', { name: name.toUpperCase() }) : t('DEFICIT GOODS DELIVERED!'), this.touch ? null : t('In the crate: {name} with a full load of ammo — look for the marker on the map', { name }), null);
     this.supplyPings.push({ x: e.x, y: e.y, at: this.time.now });
+  }
+
+  /** A tape banner under the score box: beige news, red alarm (`good` false), gold for good news. */
+  private showBanner(title: string, sub: string | null, good: boolean | null, ms = 3400) {
+    this.banner?.destroy();
+    const fill = good === false ? 0xc8312a : good === true ? 0xe8c060 : 0xd9c7a3;
+    const ink = good === false ? '#fff4e4' : '#1a1410';
+    const parts: Phaser.GameObjects.GameObject[] = [this.tape(title, this.touch ? 13 : 17, fill, ink)];
+    if (sub) parts.push(txt(this, 0, 16, sub, this.touch ? 11 : 13, BEIGE, '500').setOrigin(0.5, 0));
+    this.banner = this.add.container(0, 0, parts).setDepth(23).setAlpha(0);
+    this.bannerUntil = this.time.now + ms;
+    this.bannerMs = ms;
+  }
+
+  /** Flags and bases: a line in the kill feed, and a banner when it concerns the local player's team. */
+  private onObjective(e: ObjectiveEntry) {
+    const actorColor = e.actorTeam === 0 || e.actorTeam === 1 ? TEAM_TEXT[e.actorTeam] : BEIGE;
+    const mark = this.add.graphics();
+    // a small flag in the colour of the team the line is about
+    mark.lineStyle(1.5, 0x1a1612, 1).lineBetween(1, 2, 1, 16);
+    mark.fillStyle(TEAM_FILL[e.team], 1).fillTriangle(2, 3, 13, 6.5, 2, 10);
+    let x = 18;
+    const parts: Phaser.GameObjects.GameObject[] = [mark];
+    if (e.actor) {
+      const a = txt(this, x, 0, e.actor, 14, actorColor, e.actorLocal ? '700' : '600');
+      parts.push(a);
+      x += a.width + 5;
+    }
+    const rest = txt(this, x, 1, e.text, 13, '#e8dcc0', '500');
+    parts.push(rest);
+    const bg = this.add.graphics();
+    bg.fillStyle(PANEL, 0.55).fillRect(-6, -1, rest.x + rest.width + 10, rest.height + 3);
+    if (e.actorLocal) bg.fillStyle(0xd9c7a3, 0.85).fillRect(-6, -1, 2, rest.height + 3);
+    const c = this.add.container(14, 0, [bg, ...parts]);
+    this.feed.unshift({ container: c, born: this.time.now });
+    while (this.feed.length > 5) this.feed.pop()!.container.destroy();
+    if (e.banner) this.showBanner(e.banner.title, e.banner.sub ?? null, e.banner.good, 3000);
   }
 
   /** Popups, the supply banner and minimap pings, advanced every frame. */
@@ -688,18 +739,36 @@ export class HudScene extends Phaser.Scene {
       } else {
         // below the first-match controls card if it is still up, otherwise under the score box
         const tut = this.tutorial?.visible ? this.tutorial.getBounds().bottom + 24 : 0;
-        const y = Math.max(tut, this.touch ? 138 : Math.max(H * 0.2, 96));
-        this.banner.setPosition(W / 2, y).setAlpha(left < 400 ? left / 400 : Math.min(1, (3400 - left) / 150));
+        const y = Math.max(tut, this.touch ? 138 + this.extraTop : Math.max(H * 0.2, 96 + this.extraTop));
+        this.banner.setPosition(W / 2, y).setAlpha(left < 400 ? left / 400 : Math.min(1, (this.bannerMs - left) / 150));
       }
     }
     this.supplyPings = this.supplyPings.filter((p) => time - p.at < 2400);
   }
 
-  /** Arrows on the screen edge pointing at «deficit goods» crates that are out of view. */
-  private drawSupplyArrows(time: number) {
+  /**
+   * Markers on the screen edge for things out of view: «deficit goods» crates (orange arrows),
+   * flags (their team's colour) and bases that need the local player's team (lettered).
+   */
+  private drawSupplyArrows(time: number, myTeam: Team | null, mySlot: number) {
     this.edge.clear();
-    const crates = this.session.pickups().filter((pk) => pk.supply && pk.active);
-    if (!crates.length) return;
+    const marks: Array<{ x: number; y: number; color: number; ring: number; label: string | null; urgent: boolean }> = [];
+    for (const pk of this.session.pickups()) if (pk.supply && pk.active) marks.push({ x: pk.x, y: pk.y, color: 0xff7a3a, ring: 0xffd36a, label: null, urgent: false });
+    if (myTeam !== null) {
+      for (const f of this.session.flags()) {
+        if (f.carrier === mySlot) continue;
+        // their flag always; ours only when it has left its stand
+        if (f.team === myTeam && f.status === 'home') continue;
+        const c = f.status === 'carried' ? this.session.players().find((p) => p.slot === f.carrier) : undefined;
+        marks.push({ x: c ? c.x : f.x, y: c ? c.y : f.y, color: TEAM_FILL[f.team], ring: f.team === myTeam ? 0xffffff : 0xf2e6c8, label: null, urgent: f.team === myTeam });
+      }
+      for (const b of this.session.bases()) {
+        if (b.owner === myTeam && !b.contested && b.capturer === null) continue;
+        marks.push({ x: b.x, y: b.y, color: b.owner === null ? 0x6a6458 : TEAM_FILL[b.owner], ring: b.contested ? 0xffffff : 0xf2e6c8, label: BASE_LETTERS[b.index] ?? '?', urgent: b.owner === myTeam });
+      }
+    }
+    for (let i = 0; i < this.edgeLabels.length; i++) this.edgeLabels[i]!.setVisible(false);
+    if (!marks.length) return;
     const game = this.scene.get('game');
     const cam = game?.cameras?.main;
     if (!cam) return;
@@ -714,7 +783,8 @@ export class HudScene extends Phaser.Scene {
     const top = this.touch ? 112 : 78;
     const bottom = H - (this.touch ? 40 : 104);
     const pulse = 0.65 + Math.sin(time / 140) * 0.35;
-    for (const pk of crates) {
+    let li = 0;
+    for (const pk of marks) {
       const sx = (pk.x - wv.x) * cam.zoom + cam.x;
       const sy = (pk.y - wv.y) * cam.zoom + cam.y;
       if (sx > 24 && sx < W - 24 && sy > 24 && sy < H - 24) continue;
@@ -733,10 +803,24 @@ export class HudScene extends Phaser.Scene {
         ex = Math.min(ex, right);
         ey = mmBottom;
       }
+      const k = pk.urgent ? 0.55 + Math.sin(time / 90) * 0.45 : pulse;
       this.edge.fillStyle(0x0b0908, 0.7).fillCircle(ex, ey, 13);
-      this.edge.fillStyle(0xff7a3a, pulse);
-      this.edge.fillTriangle(ex + Math.cos(a) * 11, ey + Math.sin(a) * 11, ex + Math.cos(a + 2.4) * 9, ey + Math.sin(a + 2.4) * 9, ex + Math.cos(a - 2.4) * 9, ey + Math.sin(a - 2.4) * 9);
-      this.edge.lineStyle(1.5, 0xffd36a, pulse).strokeCircle(ex, ey, 13);
+      if (pk.label) {
+        // a base: a lettered disc in the owner's colour with a pointer
+        this.edge.fillStyle(pk.color, 0.95).fillCircle(ex, ey, 10);
+        this.edge.fillStyle(pk.ring, k).fillTriangle(ex + Math.cos(a) * 16, ey + Math.sin(a) * 16, ex + Math.cos(a + 0.5) * 11, ey + Math.sin(a + 0.5) * 11, ex + Math.cos(a - 0.5) * 11, ey + Math.sin(a - 0.5) * 11);
+        let lt = this.edgeLabels[li];
+        if (!lt) {
+          lt = txt(this, 0, 0, '', 12, '#f2e6c8', '700').setOrigin(0.5).setDepth(18.5);
+          this.edgeLabels.push(lt);
+        }
+        lt.setText(pk.label).setPosition(ex, ey).setVisible(true);
+        li++;
+      } else {
+        this.edge.fillStyle(pk.color, k);
+        this.edge.fillTriangle(ex + Math.cos(a) * 11, ey + Math.sin(a) * 11, ex + Math.cos(a + 2.4) * 9, ey + Math.sin(a + 2.4) * 9, ex + Math.cos(a - 2.4) * 9, ey + Math.sin(a - 2.4) * 9);
+      }
+      this.edge.lineStyle(1.5, pk.ring, k).strokeCircle(ex, ey, 13);
     }
   }
 
@@ -752,7 +836,7 @@ export class HudScene extends Phaser.Scene {
     const me = players.find((p) => p.isLocal);
     const sorted = players.slice().sort((a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths);
     const leader = sorted.find((p) => !p.isLocal);
-    const teams = hud.gameMode === 'teams';
+    const teams = isTeamMode(hud.gameMode);
     // score / timer: free-for-all — mine vs the best opponent; teams — red vs blue
     this.myScore.setText(String(teams ? hud.teamScore[0] : (me?.score ?? 0)));
     this.leadScore.setText(String(teams ? hud.teamScore[1] : (leader?.score ?? 0)));
@@ -762,7 +846,15 @@ export class HudScene extends Phaser.Scene {
     const modeSig = `${hud.gameMode}|${hud.scoreLimit}|${hud.teamScoreLimit}|${getLang()}`;
     if (this.modeSig !== modeSig) {
       this.modeSig = modeSig;
-      this.mode.setText(teams ? t('RED VS BLUE · TO {n}', { n: hud.teamScoreLimit }) : t('DEATHMATCH · TO {n} {points}', { n: hud.scoreLimit, points: plural(hud.scoreLimit, 'point').toUpperCase() }));
+      this.mode.setText(
+        hud.gameMode === 'ctf'
+          ? t('FLAGS · TO {n}', { n: hud.teamScoreLimit })
+          : hud.gameMode === 'bases'
+            ? t('BASES · TO {n}', { n: hud.teamScoreLimit })
+            : teams
+              ? t('RED VS BLUE · TO {n}', { n: hud.teamScoreLimit })
+              : t('DEATHMATCH · TO {n} {points}', { n: hud.scoreLimit, points: plural(hud.scoreLimit, 'point').toUpperCase() }),
+      );
     }
     this.teamMark.clear();
     if (teams && hud.myTeam !== null) {
@@ -804,7 +896,8 @@ export class HudScene extends Phaser.Scene {
       this.levelText.setPosition(this.nameText.x + this.nameText.width + 6, this.nameText.y + (this.touch ? 1.5 : 3));
     }
     this.updateTransient(time);
-    this.drawSupplyArrows(time);
+    this.drawSupplyArrows(time, teams ? hud.myTeam : null, me?.slot ?? -1);
+    this.drawObjectiveStrip(time, hud.myTeam);
     this.updateTutorial(me, hud.mag, hud.weapon, hud.phase, time);
     // health
     const hp = Math.max(0, hud.hp);
@@ -872,6 +965,20 @@ export class HudScene extends Phaser.Scene {
       const r = 3 + (k % 1) * 12;
       this.mmDots.lineStyle(1, 0xff7a3a, Math.max(0, 1 - (k % 1))).strokeCircle(ox + p.x * s, oy + p.y * s, r);
     }
+    // bases: a disc in the owner's colour; flags: a little pennant (on its carrier when carried)
+    for (const b of this.session.bases()) {
+      const r = Math.max(3.5, BASE_RULES.radius * s);
+      this.mmDots.fillStyle(b.owner === null ? 0xd9c7a3 : TEAM_FILL[b.owner], b.owner === null ? 0.35 : 0.75).fillCircle(ox + b.x * s, oy + b.y * s, r);
+      if (b.contested && Math.floor(time / 220) % 2 === 0) this.mmDots.lineStyle(1, 0xffffff, 1).strokeCircle(ox + b.x * s, oy + b.y * s, r + 1);
+    }
+    for (const f of this.session.flags()) {
+      const c = f.status === 'carried' ? players.find((p) => p.slot === f.carrier) : undefined;
+      const x = ox + (c ? c.x : f.x) * s;
+      const y = oy + (c ? c.y : f.y) * s;
+      if (f.status !== 'home' && Math.floor(time / 200) % 2 === 0) continue;
+      this.mmDots.lineStyle(1, 0x0b0908, 1).lineBetween(x, y + 2, x, y - 6);
+      this.mmDots.fillStyle(TEAM_FILL[f.team], 1).fillTriangle(x, y - 6, x + 6, y - 4, x, y - 2);
+    }
     // centre messages
     this.centre(hud, me, time);
     // hit marker at the crosshair position
@@ -901,9 +1008,59 @@ export class HudScene extends Phaser.Scene {
       this.interactBtn.ring.setVisible(v);
       this.interactBtn.icon.setVisible(v);
     }
-    if (this.scoreboardVisible) this.drawScoreboard(sorted, teams ? hud.teamScore : null);
+    if (this.scoreboardVisible) this.drawScoreboard(sorted, teams ? hud.teamScore : null, hud.gameMode);
     if (this.fpsText) this.fpsText.setText(`${Math.round(this.game.loop.actualFps)} fps`);
     void delta;
+  }
+
+  /** The strip under the timer: both flags' state (capture the flag) or the bases A, B, C (base capture). */
+  private drawObjectiveStrip(time: number, myTeam: Team | null) {
+    const g = this.objGfx;
+    g.clear();
+    if (!this.objMode) return;
+    const cx = this.scoreCx;
+    const y = this.scorePad + 46 + OBJ_STRIP / 2;
+    const blink = Math.floor(time / 250) % 2 === 0;
+    if (this.objMode === 'ctf') {
+      const flags = this.session.flags();
+      ([0, 1] as const).forEach((team) => {
+        const f: RenderFlag | undefined = flags.find((x) => x.team === team);
+        const x0 = cx + (team === 0 ? -56 : 6);
+        const status = f?.status ?? 'home';
+        // the pennant: upright at home, tilted when carried, lying when dropped
+        const fx = x0 + 6;
+        if (status === 'home') {
+          g.lineStyle(1.5, 0xd9c7a3, 1).lineBetween(fx, y - 7, fx, y + 7);
+          g.fillStyle(TEAM_FILL[team], 1).fillTriangle(fx + 1, y - 7, fx + 11, y - 4, fx + 1, y - 1);
+        } else if (status === 'carried') {
+          g.lineStyle(1.5, 0xd9c7a3, 1).lineBetween(fx - 2, y + 6, fx + 4, y - 7);
+          g.fillStyle(TEAM_FILL[team], blink ? 1 : 0.45).fillTriangle(fx + 4, y - 7, fx + 13, y - 2, fx + 2, y - 1);
+        } else {
+          g.lineStyle(1.5, 0xd9c7a3, 1).lineBetween(fx - 3, y + 5, fx + 9, y + 1);
+          g.fillStyle(TEAM_FILL[team], 0.9).fillTriangle(fx + 1, y + 4, fx + 7, y + 2, fx + 5, y + 7);
+        }
+        const label = status === 'home' ? t('HOME') : status === 'carried' ? t('TAKEN') : t('DOWN {s}', { s: Math.ceil((f?.returnInMs ?? 0) / 1000) });
+        const tx = this.objTexts[team]!;
+        tx.setText(label).setPosition(x0 + 34, y).setColor(status === 'home' ? '#b8a888' : team === myTeam ? '#ff6a5a' : '#ffd36a');
+      });
+      return;
+    }
+    const bases = this.session.bases();
+    const n = bases.length;
+    bases.forEach((b: RenderBase, i) => {
+      const bx = cx + (i - (n - 1) / 2) * 34;
+      const r = 8.5;
+      g.fillStyle(b.owner === null ? 0x3a352e : TEAM_FILL[b.owner], 1).fillCircle(bx, y, r);
+      g.lineStyle(1, b.contested && blink ? 0xffffff : 0x0b0908, 1).strokeCircle(bx, y, r);
+      if (b.capturer !== null && b.progress > 0.01) {
+        g.lineStyle(2.5, TEAM_FILL[b.capturer], 1);
+        g.beginPath();
+        g.arc(bx, y, r + 2.5, -Math.PI / 2, -Math.PI / 2 + b.progress * Math.PI * 2, false);
+        g.strokePath();
+      }
+      const tx = this.objTexts[i];
+      tx?.setPosition(bx, y).setColor(b.owner === myTeam && myTeam !== null ? '#fff4e4' : '#e8dcc0');
+    });
   }
 
   /** Remember recent shooters for the minimap radar. */
@@ -970,7 +1127,7 @@ export class HudScene extends Phaser.Scene {
     let big = '';
     let sub = '';
     let color = BEIGE;
-    const teams = hud.gameMode === 'teams';
+    const teams = isTeamMode(hud.gameMode);
     const teamName = (team: 0 | 1) => (team === 0 ? t('RED') : t('BLUE'));
     if (hud.phase === 'ready') big = t('GET READY');
     else if (hud.phase === 'countdown') {
@@ -1002,6 +1159,19 @@ export class HudScene extends Phaser.Scene {
     if (hud.alive && hud.pickupPrompt) prompt = this.touch ? t('Take: {name}', { name: weaponName(hud.pickupPrompt) }) : t('[E] — pick up the {name}', { name: weaponName(hud.pickupPrompt) });
     // a placed C4 waits for the second press
     else if (hud.alive && hud.c4Armed) prompt = this.touch ? t('Equipment button — detonate the C4') : t('[G] — detonate the C4');
+    else if (me?.alive && hud.phase === 'active' && this.objMode === 'ctf') {
+      const flags = this.session.flags();
+      if (flags.some((f) => f.carrier === me.slot && f.status === 'carried')) {
+        const own = flags.find((f) => f.team === hud.myTeam);
+        prompt = own && own.status !== 'home' ? t('You have the flag! Your own flag must be home to score — hold on') : t('You have the flag! Carry it to your stand');
+      }
+    } else if (me?.alive && hud.phase === 'active' && this.objMode === 'bases') {
+      const b = this.session.bases().find((x) => Math.hypot(x.x - me.x, x.y - me.y) <= BASE_RULES.radius);
+      if (b) {
+        const letter = BASE_LETTERS[b.index] ?? '?';
+        prompt = b.contested ? t('Base {l}: the enemy is inside — clear them out', { l: letter }) : b.owner === hud.myTeam && b.capturer === null ? t('Base {l} is ours', { l: letter }) : t('Taking base {l}… {p}%', { l: letter, p: Math.floor((b.capturer === hud.myTeam ? b.progress : 0) * 100) });
+      }
+    }
     this.promptText.setText(prompt);
   }
 
@@ -1009,10 +1179,10 @@ export class HudScene extends Phaser.Scene {
    * Tab table: rebuilt only when its content or the screen width changes. Team matches: a red and a
    * blue section with the team's eliminations in the header.
    */
-  private drawScoreboard(sorted: RenderPlayer[], teamScore: [number, number] | null) {
+  private drawScoreboard(sorted: RenderPlayer[], teamScore: [number, number] | null, mode: import('@blatkom/shared').GameMode) {
     const W = this.scale.width;
     const H = this.scale.height;
-    const sig = `${W}|${H}|${getLang()}|${teamScore?.join(':') ?? ''}|${sorted.map((p) => `${p.slot}:${p.name}:${p.level}:${p.kills}:${p.assists}:${p.deaths}:${p.score}:${p.isBot}:${p.team}`).join('|')}`;
+    const sig = `${W}|${H}|${getLang()}|${mode}|${teamScore?.join(':') ?? ''}|${sorted.map((p) => `${p.slot}:${p.name}:${p.level}:${p.kills}:${p.assists}:${p.deaths}:${p.score}:${p.isBot}:${p.team}:${p.objectives}`).join('|')}`;
     if (sig === this.sbSig) return;
     this.sbSig = sig;
     this.scoreboard.removeAll(true);
@@ -1037,6 +1207,7 @@ export class HudScene extends Phaser.Scene {
     this.scoreboard.add(g);
     const cols: Array<[string, (p: RenderPlayer) => string]> = [
       [t('LVL'), (p) => (p.level === null ? '—' : String(p.level))],
+      ...(mode === 'ctf' ? [[t('FLAGS'), (p: RenderPlayer) => String(p.objectives)] as [string, (p: RenderPlayer) => string]] : mode === 'bases' ? [[t('BASES'), (p: RenderPlayer) => String(p.objectives)] as [string, (p: RenderPlayer) => string]] : []),
       [t('ELIM'), (p) => String(p.kills)],
       [t('AST'), (p) => String(p.assists)],
       [t('DTH'), (p) => String(p.deaths)],
@@ -1053,7 +1224,7 @@ export class HudScene extends Phaser.Scene {
         g.fillStyle(TEAM_FILL[row.team], 1).fillRect(x + 8, ry - 3, 3, rowH);
         this.scoreboard.add(txt(this, x + 18, ry + 1, row.team === 0 ? t('RED TEAM') : t('BLUE TEAM'), font, TEAM_TEXT[row.team], '700'));
         this.scoreboard.add(txt(this, colX(cols.length - 1), ry + 1, String(row.score), font, TEAM_TEXT[row.team], '700').setOrigin(0.5, 0));
-        this.scoreboard.add(txt(this, colX(cols.length - 2) + step / 2, ry + 3, t('eliminations'), 10, '#b8a888', '500').setOrigin(1, 0));
+        this.scoreboard.add(txt(this, colX(cols.length - 2) + step / 2, ry + 3, mode === 'ctf' ? t('flags captured') : mode === 'bases' ? t('base points') : t('eliminations'), 10, '#b8a888', '500').setOrigin(1, 0));
         return;
       }
       const p = row.p;
@@ -1069,7 +1240,12 @@ export class HudScene extends Phaser.Scene {
         this.scoreboard.add(txt(this, colX(c), ry + 1, get(p), font, color, last ? '700' : '500').setOrigin(0.5, 0));
       });
     });
-    const rule = t('Elimination +{k} · assist +{a} ({d}+ damage within {s} s before the elimination)', { k: SCORING.killPoints, a: SCORING.assistPoints, d: SCORING.assistMinDamage, s: SCORING.assistWindowMs / 1000 });
+    const rule =
+      mode === 'ctf'
+        ? t('Capture +{c} · return +{r} · steal +{s} · stopping a carrier +{k}', { c: CTF_RULES.capturePoints, r: CTF_RULES.returnPoints, s: CTF_RULES.takePoints, k: CTF_RULES.carrierKillPoints })
+        : mode === 'bases'
+          ? t('Base taken +{b} for everyone inside · a team point every second per base held', { b: BASE_RULES.capturePoints })
+          : t('Elimination +{k} · assist +{a} ({d}+ damage within {s} s before the elimination)', { k: SCORING.killPoints, a: SCORING.assistPoints, d: SCORING.assistMinDamage, s: SCORING.assistWindowMs / 1000 });
     this.scoreboard.add(fitText(txt(this, W / 2, y + h - 20, '', 11, '#9a9080', '400').setOrigin(0.5, 0), rule, w - 24));
   }
 }

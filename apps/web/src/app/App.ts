@@ -2,10 +2,10 @@
  * App shell: screen navigation (HTML/CSS over the canvas), offline practice flow, online flow
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
-import { CHARACTERS, CHARACTER_IDS, FREE_CHARACTERS, GADGETS, MODS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, isCharacterId, isMapId, levelForXp } from '@blatkom/shared';
+import { CHARACTERS, CHARACTER_IDS, FREE_CHARACTERS, GADGETS, MODS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, isCharacterId, isGameMode, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
 import type { CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
-import { OfflineSession, MAX_PRACTICE_BOTS } from '../game/session/OfflineSession.js';
+import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
 import { hudBus } from '../game/scenes/hudBus.js';
 import { h, toast, portrait, asset, fmtDuration } from '../ui/dom.js';
@@ -25,6 +25,7 @@ import { openNicknameDialog, randomNickname } from '../profile/nickname.js';
 import { renderResults } from '../ui/screens/results.js';
 import { renderLobby, modeSwitch } from '../ui/screens/lobby.js';
 import { mapPicker } from '../ui/maps.js';
+import { MODE_ORDER, modeIcon, modeName, modeRules, modeSub } from '../ui/modes.js';
 import { renderArsenal, characterPriceNote, amount } from '../ui/screens/shop.js';
 import type { ArsenalTab, TryOn } from '../ui/screens/shop.js';
 import { renderAccountPanel, openEmailLogin, openPasswordReset } from '../ui/screens/account.js';
@@ -257,6 +258,12 @@ export class App {
   }
 
   /** The character to bring into an online room (a locked one falls back to the free default). */
+  /** The mode last picked for a quick match or a new room (free-for-all at first). */
+  private savedMode(): GameMode {
+    const v = storageGet(QUICK_MODE_KEY);
+    return isGameMode(v) ? v : 'ffa';
+  }
+
   private onlineCharacter(): CharacterId {
     return this.ownsCharacter(this.character) ? this.character : 'petya';
   }
@@ -647,9 +654,11 @@ export class App {
       return el;
     };
     const teamNote = h('div', { class: 'muted' });
+    const rules = h('div', { class: 'muted', style: 'font-size:14px' });
     const note = () => {
       const red = Math.ceil((bots + 1) / 2);
-      teamNote.textContent = gameMode === 'teams' ? t('You play for red. Red {r} — blue {b}: the bots are dealt to both teams.', { r: red, b: bots + 1 - red }) : t('Everyone against everyone: {n} bots.', { n: bots });
+      teamNote.textContent = isTeamMode(gameMode) ? t('You play for red. Red {r} — blue {b}: the bots are dealt to both teams.', { r: red, b: bots + 1 - red }) : t('Everyone against everyone: {n} bots.', { n: bots });
+      rules.textContent = modeRules(gameMode, { teamScoreLimit: PRACTICE_TEAM_LIMIT });
     };
     note();
     const content = h(
@@ -663,6 +672,7 @@ export class App {
         h('span', { class: 'tag' }, t('Mode')),
         modeSwitch({ mode: gameMode, onMode: (m) => ((gameMode = m), note()) }),
         teamNote,
+        rules,
       ),
       h(
         'div',
@@ -808,7 +818,7 @@ export class App {
     // demo build: a finished practice match counts towards the browser-only profile (once per match)
     const local = offline && !this.online && this.session instanceof OfflineSession;
     if (local && this.localProfile) {
-      const rec = recordLocalMatch(this.localProfile, { matchId: r.matchId, reason: r.reason, durationMs: r.durationMs, mapId: r.mapId, standings: r.standings, localId: 'local' });
+      const rec = recordLocalMatch(this.localProfile, { matchId: r.matchId, reason: r.reason, durationMs: r.durationMs, mapId: r.mapId, standings: r.standings, localId: 'local', ...(r.teams ? { teams: r.teams } : {}) });
       if (rec) {
         this.localProfile = rec.profile;
         saveLocalProfile(rec.profile);
@@ -841,10 +851,10 @@ export class App {
   }
 
   // ── online ──────────────────────────────────────────────────────────────
-  /** Quick match: pick free-for-all or teams (remembered), then find a public room of that mode. */
+  /** Quick match: pick a mode (remembered), then find a public room of that mode. */
   private quickMatch() {
     if (!this.online) return;
-    const saved = storageGet(QUICK_MODE_KEY);
+    const saved = this.savedMode();
     const ov = h('div', { class: 'overlay overlay--top' });
     const close = () => ov.remove();
     const go = (mode: GameMode) => {
@@ -858,8 +868,11 @@ export class App {
         { class: 'panel modal col', 'data-testid': 'quick-modes' },
         h('span', { class: 'tag' }, t('Quick Match')),
         h('div', { class: 'muted', style: 'margin-top:6px' }, t('Up to {n} players on one map. Which way do we settle it?', { n: MAX_ROOM_PLAYERS })),
-        h('button', { class: `btn ${saved !== 'teams' ? 'btn--red' : ''}`, 'data-mode': 'ffa', onclick: () => go('ffa') }, t('Every man for himself'), h('span', { class: 'sub' }, t('each for himself'))),
-        h('button', { class: `btn ${saved === 'teams' ? 'btn--red' : ''}`, 'data-mode': 'teams', onclick: () => go('teams') }, t('Red vs Blue'), h('span', { class: 'sub' }, t('two teams, no friendly fire'))),
+        h(
+          'div',
+          { class: 'quickmodes' },
+          ...MODE_ORDER.map((m) => h('button', { class: `btn quickmode ${saved === m ? 'btn--red' : ''}`, 'data-mode': m, onclick: () => go(m) }, modeIcon(m), h('span', { class: 'quickmode__txt' }, modeName(m), h('span', { class: 'sub' }, modeSub(m))))),
+        ),
         h('button', { class: 'btn btn--ghost btn--small', onclick: close }, t('Cancel')),
       ),
     );
@@ -881,7 +894,7 @@ export class App {
     if (!this.online) return;
     this.go('friends', push);
     let mapId: MapId = 'factory';
-    let gameMode: GameMode = storageGet(QUICK_MODE_KEY) === 'teams' ? 'teams' : 'ffa';
+    let gameMode: GameMode = this.savedMode();
     const code = h('input', { class: 'input', placeholder: t('Invite code'), maxlength: '16', autocapitalize: 'off', autocomplete: 'off', inputmode: 'text', 'aria-label': t('Invite code') });
     const content = h(
       'div',
@@ -901,6 +914,7 @@ export class App {
             onclick: async () => {
               this.go('loading');
               this.render(this.loading(t('Creating the room…')));
+              storageSet(QUICK_MODE_KEY, gameMode);
               try {
                 await this.online!.createRoom(mapId, this.onlineCharacter(), gameMode);
               } catch (e) {

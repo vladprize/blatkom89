@@ -1,14 +1,16 @@
 /** Offline practice: the shared World + bots running locally (no server). */
-import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS, DEFAULT_LOADOUT, MAX_PLAYERS, weaponAmmo } from '@blatkom/shared';
+import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS, DEFAULT_LOADOUT, MAX_PLAYERS, weaponAmmo, isTeamMode, teamScoreLimitFor } from '@blatkom/shared';
 import type { CharacterId, GadgetId, GameMode, InputFrame, MapId, Standing, BotDifficulty, PlayerState, Loadout, Team, WeaponId } from '@blatkom/shared';
 import { getLang } from '../../i18n/index.js';
-import type { GameSession, HudState, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
+import type { GameSession, HudState, RenderBase, RenderFlag, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
 import { toRenderGadget, toRenderPlayer, worldEventToSession, reloadProgress } from './convert.js';
 
 const BOT_NAMES_EN = ['Beardy', 'Comrade_312', 'The Cooperator', 'Petrovich', 'Plumber', 'Quartermaster', 'Praporshchik', 'Kolyan', 'Mechanic', 'Shurik', 'Valerka', 'The Docent'];
 const BOT_NAMES_RU = ['Бородач', 'Товарищ_312', 'Кооператор', 'Петрович', 'Сантехник', 'Завхоз', 'Прапорщик', 'Колян', 'Механик', 'Шурик', 'Валерка', 'Доцент'];
 /** Practice: up to nine bots (ten players, like an online room). */
 export const MAX_PRACTICE_BOTS = MAX_PLAYERS - 1;
+/** Practice team deathmatch ends a little sooner than online. */
+export const PRACTICE_TEAM_LIMIT = 30;
 
 /** Practice bots carry varied gear so the training ground shows what the arsenal holds. */
 const BOT_PRIMARIES: WeaponId[] = ['avtomat', 'obrez', 'ksyuha', 'uzi', 'ppsh', 'mp5', 's12', 'm4', 'g36', 'svd', 'm24', 'm249', 'tommy'];
@@ -32,8 +34,9 @@ export interface OfflineOptions {
   scoreLimit?: number;
   /** The local player's loadout (owned weapons, modifications, equipment); the free default otherwise. */
   loadout?: Loadout;
-  /** Free-for-all (default) or teams: the player plays for red with bots on both sides. */
+  /** Free-for-all (default) or a team mode: the player plays for red with bots on both sides. */
   gameMode?: GameMode;
+  /** Team deathmatch limit (capture the flag and base capture use the default limits). */
   teamScoreLimit?: number;
 }
 
@@ -59,12 +62,12 @@ export class OfflineSession implements GameSession {
     this.gameMode = opts.gameMode ?? 'ffa';
     this.world = new World(getMap(opts.mapId), getCollision(opts.mapId), {
       lagCompensation: false,
-      config: { mode: this.gameMode, readyMs: 0, countdownMs: 3000, durationMs: opts.durationMs ?? 4 * 60_000, scoreLimit: opts.scoreLimit ?? 40, teamScoreLimit: opts.teamScoreLimit ?? 30, maxPlayers: MAX_PLAYERS },
+      config: { mode: this.gameMode, readyMs: 0, countdownMs: 3000, durationMs: opts.durationMs ?? 4 * 60_000, scoreLimit: opts.scoreLimit ?? 40, teamScoreLimit: opts.teamScoreLimit ?? PRACTICE_TEAM_LIMIT, maxPlayers: MAX_PLAYERS },
       seed: Math.floor(Math.random() * 1e9),
     });
     this.nav = new NavGrid(this.world.collision);
     // team practice: the player is red; bots fill both sides alternately (World.smallerTeam)
-    this.world.addPlayer(this.localId, opts.name, opts.character, false, opts.loadout ?? DEFAULT_LOADOUT, this.gameMode === 'teams' ? (0 as Team) : undefined);
+    this.world.addPlayer(this.localId, opts.name, opts.character, false, opts.loadout ?? DEFAULT_LOADOUT, isTeamMode(this.gameMode) ? (0 as Team) : undefined);
     if (opts.level) this.levels.set(this.localId, opts.level);
     this.matchSeq = Math.floor(Math.random() * 1e6);
     const others = CHARACTER_IDS.filter((c) => c !== opts.character);
@@ -104,7 +107,7 @@ export class OfflineSession implements GameSession {
           mapId: this.mapId,
           personal: null,
           gameMode: this.gameMode,
-          ...(this.gameMode === 'teams' ? { teams: this.world.teamResult() } : {}),
+          ...(isTeamMode(this.gameMode) ? { teams: this.world.teamResult() } : {}),
         };
       }
     }
@@ -136,6 +139,15 @@ export class OfflineSession implements GameSession {
 
   gadgets(): RenderGadget[] {
     return this.world.gadgets.map((g) => toRenderGadget(g, this.world.time));
+  }
+
+  flags(): RenderFlag[] {
+    const now = this.world.time;
+    return this.world.flags.map((f) => ({ team: f.team, status: f.status, carrier: f.carrierSlot, x: f.x, y: f.y, standX: f.standX, standY: f.standY, returnInMs: f.status === 'dropped' ? Math.max(0, f.returnAt - now) : 0 }));
+  }
+
+  bases(): RenderBase[] {
+    return this.world.bases.map((b) => ({ index: b.index, x: b.x, y: b.y, owner: b.owner, capturer: b.capturer, progress: b.progress, contested: b.contested, inside: [b.inside[0], b.inside[1]] }));
   }
 
   drainEvents(): SessionEvent[] {
@@ -180,7 +192,7 @@ export class OfflineSession implements GameSession {
       flashedMs: Math.max(0, me.flashedUntil - w.time),
       gameMode: this.gameMode,
       teamScore: [w.teamScore[0], w.teamScore[1]],
-      teamScoreLimit: w.config.teamScoreLimit,
+      teamScoreLimit: teamScoreLimitFor(w.config),
       myTeam: me.team,
     };
   }

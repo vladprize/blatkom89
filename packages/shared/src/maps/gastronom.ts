@@ -285,5 +285,8 @@ export function buildGastronomMap(): MapDef {
 
   // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
   b.spawn(284, 36, 45).spawn(548, 516, 0).spawn(964, 612, -135).spawn(412, 828, -45).spawn(1076, 956, -135).spawn(36, 260, 0).spawn(1156, 276, 135);
+  // capture the flag: a stand deep in each team's half; base capture: A (red side), B (middle), C (blue side)
+  b.flagStand(0, 96, 520).flagStand(1, 1390, 600);
+  b.base(344, 512).base(824, 568).base(1088, 472);
   return b.build();
 }

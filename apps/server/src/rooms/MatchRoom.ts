@@ -25,6 +25,7 @@ import {
   DEFAULT_LOADOUT,
   FREE_CHARACTERS,
   isMapId,
+  isTeamMode,
   rankPlaces,
 } from '@blatkom/shared';
 import type {
@@ -351,7 +352,7 @@ export class MatchRoom {
         this.changeMode(msg.mode);
         return;
       case 'team': {
-        if (this.config.mode !== 'teams') return;
+        if (!isTeamMode(this.config.mode)) return;
         if (this.world.phase !== 'waiting') return this.error(c, 'match_running', 'Teams are fixed once the match is on');
         const p = this.world.players.get(c.user.userId);
         if (!p || p.team === msg.team) return;
@@ -407,11 +408,15 @@ export class MatchRoom {
     this.rebuildWorld(true);
   }
 
-  /** Free-for-all ↔ teams: the roster stays, teams are dealt anew (alternating by arrival). */
+  /**
+   * A new game mode: the roster stays; teams carry over between team modes and are dealt anew
+   * (alternating by arrival) when coming from free-for-all.
+   */
   private changeMode(mode: GameMode) {
     if (mode === this.config.mode) return;
+    const keepTeams = isTeamMode(this.config.mode) && isTeamMode(mode);
     this.config = { ...this.config, mode };
-    this.rebuildWorld(false);
+    this.rebuildWorld(keepTeams);
     this.services.analytics.server('lobby_created', { roomId: this.id, mapId: this.mapId, isPrivate: this.isPrivate, mode }, { userId: this.hostId });
   }
 
@@ -420,7 +425,7 @@ export class MatchRoom {
     this.world = this.createWorld();
     // loadouts (owned weapons, modifications and equipment) carry over
     for (const p of roster) {
-      const team = keepTeams && this.config.mode === 'teams' && p.team !== null ? p.team : undefined;
+      const team = keepTeams && isTeamMode(this.config.mode) && p.team !== null ? p.team : undefined;
       this.world.addPlayer(p.id, p.name, p.character, p.isBot, { sidearm: p.sidearm, melee: p.melee, primary: p.primary, gadget: p.gadget, mods: p.mods }, team).connected = p.connected;
     }
     this.broadcastRoster();
@@ -472,7 +477,7 @@ export class MatchRoom {
     this.resultsSent = true;
     const standings: Standing[] = this.world.standings();
     const durationMs = Math.max(0, this.world.time - this.world.matchStartedAt);
-    const teams = this.config.mode === 'teams' ? this.world.teamResult() : undefined;
+    const teams = isTeamMode(this.config.mode) ? this.world.teamResult() : undefined;
     // deliver the deciding shot/kill events before the results screen
     this.flush();
     this.broadcast({ type: 'results', matchId: this.matchId, reason, durationMs, standings, mapId: this.mapId, mode: this.config.mode, ...(teams ? { teams } : {}) });
@@ -497,6 +502,7 @@ export class MatchRoom {
           deaths: s.deaths,
           score: s.score,
           damageDealt: s.damageDealt,
+          objectives: s.objectives ?? 0,
           completed: c.connected,
           viaInvite: c.viaInvite,
           playtimeMs: Math.round(c.matchTimeMs),
@@ -609,6 +615,8 @@ export class MatchRoom {
       players: w.players.values(),
       pickups: w.pickups,
       gadgets: w.gadgets,
+      flags: w.flags,
+      bases: w.bases,
       events: this.pendingShots,
       now: w.time,
     });

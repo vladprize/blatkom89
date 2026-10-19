@@ -1,5 +1,5 @@
 /**
- * Authoritative deathmatch simulation. The same code runs on the server (one World per room) and in
+ * Authoritative match simulation (free-for-all, team deathmatch, capture the flag, base capture). The same code runs on the server (one World per room) and in
  * the client for offline practice and for local-player prediction. Every random value is seeded so
  * that client prediction reproduces the server's spread pattern.
  */
@@ -21,7 +21,7 @@ import {
 } from '../constants/game.js';
 import type { CharacterId } from '../game-rules/characters.js';
 import type { MatchConfig, MatchPhase, Team } from '../game-rules/match.js';
-import { DEFAULT_MATCH_CONFIG, SCORING } from '../game-rules/match.js';
+import { BASE_RULES, CTF_RULES, DEFAULT_MATCH_CONFIG, SCORING, TEAMS, isTeamMode } from '../game-rules/match.js';
 import { rankPlaces } from '../game-rules/progression.js';
 import type { ModId, WeaponDef, WeaponId, WeaponMods } from '../game-rules/weapons.js';
 import { WEAPONS, applyMods, damageFalloff, isHeavy } from '../game-rules/weapons.js';
@@ -129,6 +129,8 @@ export interface PlayerState {
   lastDamagedBy: string | null;
   /** Eliminations of others this player contributed damage to (see SCORING). */
   assists: number;
+  /** Capture the flag: flags captured; base capture: bases captured. */
+  objectives: number;
   /** Damage taken since the last spawn, per attacker (assist detection). */
   recentDamage: Array<{ id: string; at: number; amount: number }>;
 }
@@ -182,7 +184,45 @@ export type WorldEvent =
   | { t: 'reload'; slot: number; weapon: WeaponId }
   | { t: 'dry'; slot: number }
   | { t: 'phase'; phase: MatchPhase }
-  | { t: 'matchEnd'; reason: 'time' | 'score' | 'aborted' };
+  | { t: 'matchEnd'; reason: 'time' | 'score' | 'aborted' }
+  /** Capture the flag: `team`'s flag was taken / dropped / sent home / captured by `slot` (-1: by itself). */
+  | { t: 'flag'; action: FlagAction; team: Team; slot: number }
+  /** Base capture: base `base` went to `team` (from `from`); `slots` captured it. */
+  | { t: 'base'; base: number; team: Team; from: Team | null; slots: number[] };
+
+export type FlagAction = 'taken' | 'dropped' | 'returned' | 'captured';
+export type FlagStatus = 'home' | 'carried' | 'dropped';
+
+/** Capture the flag: one flag per team. */
+export interface FlagState {
+  team: Team;
+  status: FlagStatus;
+  /** Where the flag is: on its stand, with the carrier or where it fell. */
+  x: number;
+  y: number;
+  standX: number;
+  standY: number;
+  carrierId: string | null;
+  carrierSlot: number;
+  /** Dropped: when it goes home by itself. */
+  returnAt: number;
+}
+
+/** Base capture: one per base (A, B, C). */
+export interface BaseState {
+  index: number;
+  x: number;
+  y: number;
+  owner: Team | null;
+  /** The team whose capture bar is filling (or being pushed back); null when the bar is empty. */
+  capturer: Team | null;
+  /** Capture bar of `capturer`, 0..1. */
+  progress: number;
+  /** Both teams inside: nothing moves. */
+  contested: boolean;
+  /** Living players inside: red, blue. */
+  inside: [number, number];
+}
 
 export interface Standing {
   id: string;
@@ -192,6 +232,8 @@ export interface Standing {
   isBot: boolean;
   /** Team matches only. */
   team?: Team | null;
+  /** Capture the flag: flags captured; base capture: bases captured (those modes only). */
+  objectives?: number;
   kills: number;
   assists: number;
   deaths: number;
@@ -202,7 +244,7 @@ export interface Standing {
   place: number;
 }
 
-/** Outcome of a team match: eliminations per team (red, blue) and the winner (null = draw). */
+/** Outcome of a team match: team scores (red, blue) and the winner (null = draw). */
 export interface TeamResult {
   scores: [number, number];
   winner: Team | null;
@@ -330,6 +372,7 @@ export function createPlayerState(id: string, slot: number, name: string, charac
     lastHitAt: -1e9,
     lastDamagedBy: null,
     assists: 0,
+    objectives: 0,
     recentDamage: [],
   };
 }
@@ -526,8 +569,16 @@ export class World {
   matchStartedAt = 0;
   matchEndsAt = 0;
   endReason: 'time' | 'score' | 'aborted' | null = null;
-  /** Team matches: eliminations by red (0) and blue (1). */
+  /**
+   * Team matches, red (0) and blue (1): eliminations (teams), flags captured (ctf) or points from
+   * the bases held (bases).
+   */
   readonly teamScore: [number, number] = [0, 0];
+  /** Capture the flag: the two flags (empty in other modes). */
+  readonly flags: FlagState[] = [];
+  /** Base capture: the bases (empty in other modes). */
+  readonly bases: BaseState[] = [];
+  private nextBaseTickAt = 0;
   readonly players = new Map<string, PlayerState>();
   readonly pickups: PickupState[] = [];
   readonly projectiles: ProjectileState[] = [];
@@ -568,6 +619,24 @@ export class World {
     map.medkits.forEach((m, i) => {
       this.pickups.push({ id: this.nextPickupId++, kind: 'medkit', weapon: null, x: m.x, y: m.y, active: true, dropped: false, mag: 0, reserve: 0, respawnAt: 0, expiresAt: 0, spawnIndex: i, supply: false });
     });
+    if (this.config.mode === 'ctf') {
+      for (const team of TEAMS) {
+        const s = map.flagStands[team] ?? this.fallbackStand(team);
+        this.flags.push({ team, status: 'home', x: s.x, y: s.y, standX: s.x, standY: s.y, carrierId: null, carrierSlot: -1, returnAt: 0 });
+      }
+    } else if (this.config.mode === 'bases') {
+      const pts = map.bases.length > 0 ? map.bases : [{ x: map.width / 2, y: map.height / 2 }];
+      pts.forEach((b, index) => this.bases.push({ index, x: b.x, y: b.y, owner: null, capturer: null, progress: 0, contested: false, inside: [0, 0] }));
+    }
+  }
+
+  /** A map without flag stands: the deepest spawn point of the team's half. */
+  private fallbackStand(team: Team): { x: number; y: number } {
+    const horizontal = this.map.width >= this.map.height;
+    const key = (i: number) => (horizontal ? this.map.spawns[i]!.x : this.map.spawns[i]!.y);
+    const side = this.teamSpawnIndicesStable(team);
+    const i = side.reduce((a, b) => ((team === 0 ? key(b) < key(a) : key(b) > key(a)) ? b : a));
+    return { x: this.map.spawns[i]!.x, y: this.map.spawns[i]!.y };
   }
 
   // ── Roster ──────────────────────────────────────────────────────────────
@@ -577,8 +646,9 @@ export class World {
     return -1;
   }
 
+  /** Two teams (every mode but free-for-all). */
   get teams(): boolean {
-    return this.config.mode === 'teams';
+    return isTeamMode(this.config.mode);
   }
 
   /** Can `a` hurt `b`? Anyone else in free-for-all, only the other team in team matches. */
@@ -662,6 +732,8 @@ export class World {
     const p = this.players.get(id);
     if (!p) return;
     if (p.alive && p.heavy) this.dropHeavy(p);
+    const flag = this.flags.find((f) => f.carrierId === id);
+    if (flag) this.dropFlag(flag, p);
     this.players.delete(id);
     // placed charges and turrets leave with their owner; fire and smoke burn out on their own
     for (let i = this.gadgets.length - 1; i >= 0; i--) {
@@ -694,6 +766,7 @@ export class World {
   private startCountdown() {
     this.setPhase('countdown', this.config.countdownMs);
     this.resetPickups();
+    this.resetObjectives();
     const order = [...this.players.values()].sort((a, b) => a.slot - b.slot);
     if (this.teams) {
       // each team starts on its own side of the map
@@ -712,6 +785,7 @@ export class World {
     this.matchStartedAt = this.time;
     this.matchEndsAt = this.time + this.config.durationMs;
     this.nextSupplyAt = this.time + this.config.supplyFirstMs;
+    this.nextBaseTickAt = this.time + BASE_RULES.tickMs;
     for (const p of this.players.values()) {
       if (!p.alive) this.spawnPlayer(p, false);
       p.invulnUntil = this.time + this.config.spawnProtectionMs;
@@ -742,6 +816,7 @@ export class World {
     this.projectiles.length = 0;
     this.gadgets.length = 0;
     this.resetPickups();
+    this.resetObjectives();
   }
 
   close(): void {
@@ -760,6 +835,7 @@ export class World {
       p.streak = 0;
       p.bestStreak = 0;
       p.lastKillAt = 0;
+      p.objectives = 0;
     }
   }
 
@@ -811,16 +887,19 @@ export class World {
 
   /**
    * Picks the spawn farthest from living opponents, penalizing spawns they can see. In team
-   * matches the home side and nearby teammates are preferred, so the teams keep their fronts.
+   * matches the home side and nearby teammates are preferred, so the teams keep their fronts; in
+   * capture the flag and base capture a team always comes back on its own half.
    */
   chooseSpawn(forId: string): number {
     const me = this.players.get(forId);
     const enemies = [...this.players.values()].filter((p) => p.alive && p.id !== forId && (!me || this.hostile(me, p)));
     const friends = me && this.teams ? [...this.players.values()].filter((p) => p.alive && p.id !== forId && p.team === me.team) : [];
     const home = me && this.teams && me.team !== null ? new Set(this.teamSpawnIndicesStable(me.team)) : null;
-    let best = 0;
+    const homeOnly = !!home && (this.config.mode === 'ctf' || this.config.mode === 'bases');
+    let best = home && homeOnly ? [...home][0]! : 0;
     let bestScore = -Infinity;
     this.map.spawns.forEach((s, i) => {
+      if (homeOnly && !home!.has(i)) return;
       if (this.collision.overlapsCircle(s.x, s.y, PLAYER_RADIUS)) return;
       let minD = 1200;
       let seen = false;
@@ -1134,6 +1213,8 @@ export class World {
     victim.vy = 0;
     victim.reloadWeapon = null;
     if (victim.heavy) this.dropHeavy(victim);
+    const carried = this.flags.find((f) => f.carrierId === victim.id);
+    if (carried) this.dropFlag(carried, victim);
     const scorers: PlayerState[] = [];
     if (killer && killer !== victim) {
       killer.kills++;
@@ -1142,7 +1223,9 @@ export class World {
       killer.bestStreak = Math.max(killer.bestStreak, killer.streak);
       killer.lastKillAt = this.time;
       scorers.push(killer);
-      if (this.teams && killer.team !== null) this.teamScore[killer.team]++;
+      if (this.config.mode === 'teams' && killer.team !== null) this.teamScore[killer.team]++;
+      // stopped the enemy carrier
+      if (carried && killer.team === carried.team) killer.score += CTF_RULES.carrierKillPoints;
     }
     // assists: recent, meaningful damage by anyone other than the killer
     const assists: number[] = [];
@@ -1158,9 +1241,167 @@ export class World {
     }
     victim.recentDamage = [];
     this.events.push({ t: 'kill', killer: killer ? killer.slot : -1, victim: victim.slot, weapon, assists });
-    if (this.teams) {
+    if (this.config.mode === 'teams') {
       if (this.teamScore[0] >= this.config.teamScoreLimit || this.teamScore[1] >= this.config.teamScoreLimit) this.finish('score');
-    } else if (scorers.some((p) => p.score >= this.config.scoreLimit)) this.finish('score');
+    } else if (this.config.mode === 'ffa' && scorers.some((p) => p.score >= this.config.scoreLimit)) this.finish('score');
+  }
+
+  // ── Objectives: capture the flag, base capture ──────────────────────────
+  private resetObjectives() {
+    for (const f of this.flags) this.flagHome(f);
+    for (const b of this.bases) {
+      b.owner = null;
+      b.capturer = null;
+      b.progress = 0;
+      b.contested = false;
+      b.inside = [0, 0];
+    }
+  }
+
+  private flagHome(f: FlagState) {
+    f.status = 'home';
+    f.x = f.standX;
+    f.y = f.standY;
+    f.carrierId = null;
+    f.carrierSlot = -1;
+    f.returnAt = 0;
+  }
+
+  private dropFlag(f: FlagState, carrier: PlayerState) {
+    f.status = 'dropped';
+    f.x = carrier.x;
+    f.y = carrier.y;
+    f.carrierId = null;
+    f.carrierSlot = -1;
+    f.returnAt = this.time + CTF_RULES.returnMs;
+    this.events.push({ t: 'flag', action: 'dropped', team: f.team, slot: carrier.slot });
+  }
+
+  /** The flag `p` carries, if any. */
+  flagCarriedBy(id: string): FlagState | undefined {
+    return this.flags.find((f) => f.carrierId === id);
+  }
+
+  private stepFlags() {
+    const r2 = CTF_RULES.touchRadius * CTF_RULES.touchRadius;
+    for (const f of this.flags) {
+      if (f.status === 'carried') {
+        const c = f.carrierId ? this.players.get(f.carrierId) : undefined;
+        // left, disconnected or otherwise gone: the flag falls where the carrier was
+        if (!c || !c.alive || !c.connected) {
+          f.status = 'dropped';
+          f.carrierId = null;
+          f.carrierSlot = -1;
+          f.returnAt = this.time + CTF_RULES.returnMs;
+          this.events.push({ t: 'flag', action: 'dropped', team: f.team, slot: c ? c.slot : -1 });
+          continue;
+        }
+        f.x = c.x;
+        f.y = c.y;
+      } else if (f.status === 'dropped' && this.time >= f.returnAt) {
+        this.flagHome(f);
+        this.events.push({ t: 'flag', action: 'returned', team: f.team, slot: -1 });
+      }
+    }
+    const order = [...this.players.values()].filter((p) => p.alive && p.team !== null).sort((a, b) => a.slot - b.slot);
+    for (const p of order) {
+      const team = p.team!;
+      for (const f of this.flags) {
+        if (f.status === 'carried' || (p.x - f.x) ** 2 + (p.y - f.y) ** 2 > r2) continue;
+        if (f.team !== team) {
+          // the enemy flag, on its stand or on the ground: take it (spawn protection ends)
+          f.status = 'carried';
+          f.carrierId = p.id;
+          f.carrierSlot = p.slot;
+          f.returnAt = 0;
+          f.x = p.x;
+          f.y = p.y;
+          p.score += CTF_RULES.takePoints;
+          p.invulnUntil = Math.min(p.invulnUntil, this.time);
+          this.events.push({ t: 'flag', action: 'taken', team: f.team, slot: p.slot });
+        } else if (f.status === 'dropped') {
+          // our own flag on the ground: back to its stand
+          this.flagHome(f);
+          p.score += CTF_RULES.returnPoints;
+          this.events.push({ t: 'flag', action: 'returned', team: f.team, slot: p.slot });
+        }
+      }
+      // a carrier at their own stand, with their own flag at home, scores
+      const carried = this.flagCarriedBy(p.id);
+      const own = this.flags.find((f) => f.team === team);
+      if (carried && own && own.status === 'home' && (p.x - own.standX) ** 2 + (p.y - own.standY) ** 2 <= r2) {
+        this.flagHome(carried);
+        p.score += CTF_RULES.capturePoints;
+        p.objectives++;
+        this.teamScore[team]++;
+        this.events.push({ t: 'flag', action: 'captured', team: carried.team, slot: p.slot });
+        if (this.teamScore[team] >= this.config.captureLimit) {
+          this.finish('score');
+          return;
+        }
+      }
+    }
+  }
+
+  private stepBases() {
+    const r2 = BASE_RULES.radius * BASE_RULES.radius;
+    const unit = TICK_MS / BASE_RULES.captureMs;
+    for (const b of this.bases) {
+      const inside: [number, number] = [0, 0];
+      for (const p of this.players.values()) {
+        if (p.alive && p.team !== null && (p.x - b.x) ** 2 + (p.y - b.y) ** 2 <= r2) inside[p.team]++;
+      }
+      b.inside = inside;
+      b.contested = inside[0] > 0 && inside[1] > 0;
+      if (b.contested) continue;
+      const team: Team | null = inside[0] > 0 ? 0 : inside[1] > 0 ? 1 : null;
+      if (team === null) {
+        // nobody inside: an unfinished bar fades
+        if (b.capturer !== null) {
+          b.progress -= unit * BASE_RULES.decayRate;
+          if (b.progress <= 0) {
+            b.progress = 0;
+            b.capturer = null;
+          }
+        }
+        continue;
+      }
+      const rate = unit * Math.min(BASE_RULES.maxRate, 1 + (inside[team] - 1) * BASE_RULES.extraPlayerRate);
+      if (b.capturer !== null && b.capturer !== team) {
+        // the other team's unfinished bar is pushed back first
+        b.progress -= rate;
+        if (b.progress <= 0) {
+          b.progress = 0;
+          b.capturer = null;
+        }
+        continue;
+      }
+      if (b.owner === team) continue;
+      b.capturer = team;
+      b.progress += rate;
+      if (b.progress >= 1 - 1e-9) {
+        const from = b.owner;
+        b.owner = team;
+        b.capturer = null;
+        b.progress = 0;
+        const slots: number[] = [];
+        for (const p of this.players.values()) {
+          if (p.alive && p.team === team && (p.x - b.x) ** 2 + (p.y - b.y) ** 2 <= r2) {
+            p.score += BASE_RULES.capturePoints;
+            p.objectives++;
+            slots.push(p.slot);
+          }
+        }
+        slots.sort((x, y) => x - y);
+        this.events.push({ t: 'base', base: b.index, team, from, slots });
+      }
+    }
+    if (this.time >= this.nextBaseTickAt) {
+      this.nextBaseTickAt = Math.max(this.nextBaseTickAt + BASE_RULES.tickMs, this.time + 1);
+      for (const b of this.bases) if (b.owner !== null) this.teamScore[b.owner]++;
+      const limit = this.config.baseScoreLimit;
+      if (this.teamScore[0] >= limit || this.teamScore[1] >= limit) this.finish('score');
+    }
   }
 
   // ── Equipment (slot 4) ──────────────────────────────────────────────────
@@ -1585,6 +1826,8 @@ export class World {
       }
       this.stepProjectiles();
       this.stepGadgets();
+      if (this.phase === 'active' && this.flags.length > 0) this.stepFlags();
+      if (this.phase === 'active' && this.bases.length > 0) this.stepBases();
       if (this.nextSupplyAt > 0 && this.time >= this.nextSupplyAt) {
         this.nextSupplyAt = this.time + this.config.supplyIntervalMs;
         this.dropSupply();
@@ -1677,7 +1920,7 @@ export class World {
     return e;
   }
 
-  /** Team matches: eliminations per team and the winner (null on a draw). */
+  /** Team matches: team scores and the winner (null on a draw). */
   teamResult(): TeamResult {
     const [a, b] = this.teamScore;
     return { scores: [a, b], winner: a === b ? null : a > b ? 0 : 1 };
@@ -1697,6 +1940,7 @@ export class World {
       character: p.character,
       isBot: p.isBot,
       ...(this.teams ? { team: p.team } : {}),
+      ...(this.config.mode === 'ctf' || this.config.mode === 'bases' ? { objectives: p.objectives } : {}),
       kills: p.kills,
       assists: p.assists,
       deaths: p.deaths,

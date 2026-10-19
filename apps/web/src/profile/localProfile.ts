@@ -5,7 +5,7 @@
  * persistence is in localStore.ts. The online build never uses this — there the server owns progress.
  */
 import { ACHIEVEMENT_IDS, ACHIEVEMENTS, applyMatchProgress, displayNameSchema, isCharacterId, isMapId, levelForXp } from '@blatkom/shared';
-import type { AchievementId, AchievementStatus, CharacterId, MapId, MatchHistoryEntry, PersonalResult, PublicProfile, Standing } from '@blatkom/shared';
+import type { AchievementId, AchievementStatus, CharacterId, MapId, MatchHistoryEntry, PersonalResult, PublicProfile, Standing, TeamResultSummary } from '@blatkom/shared';
 
 export const LOCAL_HISTORY_MAX = 20;
 
@@ -139,6 +139,8 @@ export interface LocalMatchInput {
   standings: Standing[];
   /** Standing id of the local player. */
   localId: string;
+  /** Team modes: the team result (the outcome replaces the placement bonus, like online). */
+  teams?: TeamResultSummary;
 }
 
 /**
@@ -159,6 +161,8 @@ export function recordLocalMatch(p: LocalProfile, m: LocalMatchInput, now = new 
     completed,
     withFriends: false,
     sharedPlace: m.standings.some((s) => s.id !== me.id && s.place === me.place),
+    ...(m.teams && (me.team === 0 || me.team === 1) ? { teamOutcome: m.teams.winner === null ? ('draw' as const) : m.teams.winner === me.team ? ('win' as const) : ('loss' as const) } : {}),
+    objectives: me.objectives ?? 0,
   };
   const prev = { xp: p.xp, level: levelForXp(p.xp).level, matchesCompleted: p.matchesCompleted, wins: p.wins, currentWinStreak: p.currentWinStreak };
   const o = applyMatchProgress(prev, perf, new Set(Object.keys(p.achievements) as AchievementId[]));

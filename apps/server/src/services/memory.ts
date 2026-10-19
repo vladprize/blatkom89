@@ -30,7 +30,7 @@ export class MemoryRecorder implements MatchRecorder {
     const first = !this.completed.has(m.matchId);
     if (first) this.completed.set(m.matchId, m);
     for (const p of m.participants) {
-      const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends: p.viaInvite && m.playersAtEnd > 1, ...(p.teamOutcome ? { teamOutcome: p.teamOutcome } : {}) };
+      const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends: p.viaInvite && m.playersAtEnd > 1, ...(p.teamOutcome ? { teamOutcome: p.teamOutcome } : {}), objectives: p.objectives ?? 0 };
       const gained = first ? xpForMatch(perf) : 0;
       const total = (this.xp.get(p.userId) ?? 0) + gained;
       this.xp.set(p.userId, total);

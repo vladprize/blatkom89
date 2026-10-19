@@ -125,6 +125,8 @@ function ensureTextures(scene: Phaser.Scene): void {
 export class Lighting {
   private rt: Phaser.GameObjects.RenderTexture | null = null;
   private dyn: DynLight[] = [];
+  /** Steady light pools set every frame from game state (flags, bases). */
+  private steady: Array<{ x: number; y: number; radius: number; color: number; intensity: number }> = [];
   private readonly ambient: number;
   private readonly flickerSeeds: number[];
   private readonly blend: number | null;
@@ -199,6 +201,11 @@ export class Lighting {
     return this.rt;
   }
 
+  /** Light pools for this frame (replaces the previous set): objective markers glow in their team colour. */
+  setSteady(lights: Array<{ x: number; y: number; radius: number; color: number; intensity: number }>): void {
+    this.steady = lights;
+  }
+
   flash(x: number, y: number, radius: number, color: number, intensity: number, durationMs: number, now: number): void {
     this.dyn.push({ x, y, radius, color, intensity, until: now + durationMs, born: now });
   }
@@ -239,6 +246,7 @@ export class Lighting {
       if (!p.alive) continue;
       this.stamp(rt, p.x - ox, p.y - oy, p.isLocal ? 84 : 60, p.isLocal ? 0xf0e2c8 : 0xd8ccb8, p.isLocal ? 0.42 : 0.3, view, p.x, p.y);
     }
+    for (const l of this.steady) this.stamp(rt, l.x - ox, l.y - oy, l.radius, l.color, l.intensity, view, l.x, l.y);
     this.dyn = this.dyn.filter((d) => d.until > now);
     for (const d of this.dyn) {
       const k = 1 - (now - d.born) / Math.max(1, d.until - d.born);

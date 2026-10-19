@@ -297,5 +297,8 @@ export function buildHospitalMap(): MapDef {
 
   // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
   b.spawn(732, 668, -90).spawn(468, 340, 45).spawn(412, 644, -45).spawn(1076, 564, 180).spawn(36, 812, -45).spawn(1164, 164, 135);
+  // capture the flag: a stand deep in each team's half; base capture: A (red side), B (middle), C (blue side)
+  b.flagStand(0, 72, 496).flagStand(1, 1408, 520);
+  b.base(392, 520).base(728, 496).base(1152, 504);
   return b.build();
 }

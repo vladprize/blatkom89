@@ -428,6 +428,87 @@ test('team match: teams alternate on join, switching keeps them even, the host c
   for (const c of [ch, ...cs]) c.close();
 });
 
+test('capture the flag and base capture: flags and bases in snapshots, objective events, team results, XP for captures', async () => {
+  const host = user('Знаменосец');
+  const guest = user('Перехватчик');
+  const r = await api<{ roomId: string; mode: string }>('POST', '/api/rooms', host.token, { mapId: 'factory', isPrivate: true, mode: 'ctf' });
+  assert.equal(r.status, 201);
+  assert.equal(r.data.mode, 'ctf');
+  const ch = Client.join(host, r.data.roomId, 'petya');
+  assert.equal((await ch.msg('welcome')).mode, 'ctf');
+  const cg = Client.join(guest, r.data.roomId, 'valuta');
+  await cg.msg('welcome');
+  const r2 = await ch.msg('roster', (m) => m.players.length === 2 && m.players.every((p) => p.team !== null));
+  // switching between team modes keeps the teams
+  const before = r2.players.map((p) => [p.id, p.team]);
+  ch.send({ type: 'mode', mode: 'bases' });
+  const rb = await ch.msg('roster', (m) => m.mode === 'bases' && m.players.length === 2);
+  assert.deepEqual(rb.players.map((p) => [p.id, p.team]), before);
+  ch.send({ type: 'mode', mode: 'ctf' });
+  ch.send({ type: 'start' });
+  const s0 = await ch.snap((s) => s.phase === 'active', 5000);
+  assert.deepEqual(
+    s0.flags.map((f) => [f.team, f.status]),
+    [
+      [0, 'home'],
+      [1, 'home'],
+    ],
+  );
+  assert.equal(s0.bases.length, 0);
+  const room = rooms.get(r.data.roomId)!;
+  const hp = room.world.players.get(host.userId)!;
+  const enemyFlag = room.world.flags.find((f) => f.team !== hp.team)!;
+  const ownFlag = room.world.flags.find((f) => f.team === hp.team)!;
+  // teleport the host onto the enemy flag, then home: the server takes and scores it
+  Object.assign(hp, { x: enemyFlag.standX, y: enemyFlag.standY, vx: 0, vy: 0, invulnUntil: 0 });
+  const taken = await ch.msg('ev', (m) => m.events.some((e) => e.t === 'flag' && e.action === 'taken'));
+  assert.ok(taken.events.some((e) => e.t === 'flag' && e.action === 'taken' && e.slot === hp.slot));
+  const carried = await ch.snap((s) => s.flags.some((f) => f.status === 'carried' && f.carrier === hp.slot));
+  assert.ok(carried);
+  Object.assign(hp, { x: ownFlag.standX, y: ownFlag.standY, vx: 0, vy: 0 });
+  await ch.msg('ev', (m) => m.events.some((e) => e.t === 'flag' && e.action === 'captured'));
+  const scored = await ch.snap((s) => s.teamScore[hp.team!] === 1);
+  assert.equal(scored.players.find((p) => p.slot === hp.slot)!.objectives, 1);
+  room.world.finish('time');
+  const res = await ch.msg('results', () => true, 6000);
+  assert.equal(res.mode, 'ctf');
+  assert.equal(res.teams!.winner, hp.team);
+  assert.equal(res.standings.find((x) => x.id === host.userId)!.objectives, 1);
+  await sleep(200);
+  const recorded = [...services.recorder.completed.values()].find((m) => m.roomId === r.data.roomId)!;
+  assert.equal(recorded.mode, 'ctf');
+  assert.equal(recorded.participants.find((p) => p.userId === host.userId)!.objectives, 1);
+  for (const c of [ch, cg]) c.close();
+
+  // base capture via quick match: both players land in the same bases room
+  const a = user('Комендант базы');
+  const b = user('Захватчик');
+  const qa = await api<{ roomId: string; mode: string }>('POST', '/api/rooms/quick', a.token, { mode: 'bases' });
+  const qb = await api<{ roomId: string; mode: string }>('POST', '/api/rooms/quick', b.token, { mode: 'bases' });
+  assert.equal(qa.data.mode, 'bases');
+  assert.equal(qb.data.roomId, qa.data.roomId);
+  const qf = await api<{ roomId: string }>('POST', '/api/rooms/quick', user('Чужой').token, { mode: 'ctf' });
+  assert.notEqual(qf.data.roomId, qa.data.roomId);
+  const ca = Client.join(a, qa.data.roomId, 'petya');
+  const cb = Client.join(b, qa.data.roomId, 'valuta');
+  await ca.msg('welcome');
+  await cb.msg('welcome');
+  ca.send({ type: 'ready', ready: true });
+  cb.send({ type: 'ready', ready: true });
+  const sb = await ca.snap((s) => s.phase === 'active', 14000);
+  assert.equal(sb.bases.length, 3);
+  assert.ok(sb.bases.every((x) => x.owner === null));
+  const broom = rooms.get(qa.data.roomId)!;
+  const pa = broom.world.players.get(a.userId)!;
+  const B = broom.world.bases[1]!;
+  Object.assign(pa, { x: B.x, y: B.y, vx: 0, vy: 0 });
+  const cap = await ca.msg('ev', (m) => m.events.some((e) => e.t === 'base'), 9000);
+  assert.ok(cap.events.some((e) => e.t === 'base' && e.base === 1 && e.team === pa.team && e.slots.includes(pa.slot)));
+  const owned = await ca.snap((s) => s.bases[1]!.owner === pa.team && s.teamScore[pa.team!] >= 1, 3000);
+  assert.ok(owned);
+  for (const c of [ca, cb]) c.close();
+});
+
 test('quick match keeps free-for-all and team players apart', async () => {
   const a = user('Одиночка');
   const b = user('Командный');
@@ -507,13 +588,15 @@ test('rematch: after results everyone votes, a new match starts with a new id, p
   // regression: the new match's game scene restarts the input sequence at 1 — the player must still move
   const before = fresh().at(-1)!.players.find((p) => p.slot === slotA)!;
   ca.seq = 0;
-  // walk towards the middle of the map (a spawn can be right at the east or west wall)
-  const dir = before.x > roomObj.world.map.width / 2 ? -127 : 127;
+  // walk where there is room (a spawn can be right at a wall)
+  const world = rooms.get(room.roomId)!.world;
+  const open = (dx: number, dy: number) => [1, 2, 3, 4, 5, 6].every((k) => !world.collision.overlapsCircle(before.x + dx * k * 8, before.y + dy * k * 8, 11));
+  const [dx, dy] = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const).find(([x, y]) => open(x, y)) ?? [1, 0];
   for (let i = 0; i < 40; i++) {
-    ca.input({ moveX: dir, moveY: 0, viewTime: ca.lastSnap?.serverTime ?? 0 });
+    ca.input({ moveX: dx * 127, moveY: dy * 127, viewTime: ca.lastSnap?.serverTime ?? 0 });
     await sleep(16);
   }
-  await ca.until(() => fresh().some((s) => s.players.some((p) => p.slot === slotA && Math.abs(p.x - before.x) > 25)), 4000, 'movement after the rematch');
+  await ca.until(() => fresh().some((s) => s.players.some((p) => p.slot === slotA && Math.hypot(p.x - before.x, p.y - before.y) > 25)), 4000, 'movement after the rematch');
   rooms.get(room.roomId)!.world.finish('time');
   const r2 = await ca.msg('results', (m) => m.matchId !== r1.matchId);
   assert.notEqual(r2.matchId, r1.matchId);

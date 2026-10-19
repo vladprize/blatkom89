@@ -16,9 +16,10 @@ import {
   dequantizeAngle,
   weaponAmmo,
   weaponFor,
+  teamScoreLimitFor,
 } from '@blatkom/shared';
 import type { CollisionWorld, GameEvent, GameMode, InputFrame, MapId, MatchConfig, PlayerState, RosterEntry, Snapshot, NetPlayer, Standing, PersonalResult, PelletResult, MatchPhase, Team, TeamResultSummary } from '@blatkom/shared';
-import type { GameSession, HudState, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
+import type { GameSession, HudState, RenderBase, RenderFlag, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
 import type { GameConnection } from '../../net/GameConnection.js';
 
 const INTERP_DELAY = 100;
@@ -52,6 +53,12 @@ export class OnlineSession implements GameSession {
   private killedBy: string | null = null;
   private interpolated = new Map<number, RenderPlayer>();
   private interpGadgets: RenderGadget[] = [];
+  private interpFlags: RenderFlag[] = [];
+  private interpBases: RenderBase[] = [];
+  /** Flag stands and base centres come from the map (the snapshot carries only their state). */
+  private readonly stands: Array<{ x: number; y: number }>;
+  private readonly basePoints: Array<{ x: number; y: number }>;
+  private myObjectives = 0;
   /** Local player's flashbang blindness: remaining ms as of `flashedAt` (performance.now). */
   private flashedMs = 0;
   private flashedAt = 0;
@@ -71,7 +78,9 @@ export class OnlineSession implements GameSession {
     this.collision = getCollision(mapId);
     this.setRoster(roster);
     this.myTeam = roster.find((r) => r.id === playerId)?.team ?? null;
-    void getMap(mapId);
+    const map = getMap(mapId);
+    this.stands = map.flagStands;
+    this.basePoints = map.bases;
   }
 
   setRoster(entries: RosterEntry[]): void {
@@ -125,7 +134,9 @@ export class OnlineSession implements GameSession {
         e.t === 'phase' ||
         e.t === 'supply' ||
         e.t === 'matchEnd' ||
-        (e.t === 'kill' && e.assists.includes(this.slot));
+        (e.t === 'kill' && e.assists.includes(this.slot)) ||
+        (e.t === 'flag' && e.slot === this.slot) ||
+        (e.t === 'base' && e.slots.includes(this.slot));
       if ((e.t === 'reload' || e.t === 'dry') && e.slot === this.slot) continue; // predicted locally
       if (e.t === 'kill' && e.victim === this.slot) this.killedBy = this.roster.get(e.killer)?.name ?? null;
       if (e.t === 'respawn' && e.slot === this.slot) {
@@ -187,6 +198,7 @@ export class OnlineSession implements GameSession {
     me.assists = np.assists;
     me.deaths = np.deaths;
     me.score = np.score;
+    this.myObjectives = np.objectives;
     me.walking = np.walking;
     me.connected = np.connected;
     me.team = np.team;
@@ -333,8 +345,35 @@ export class OnlineSession implements GameSession {
         laser: src.laser,
         flashedMs: src.flashedRemaining,
         team: pb.team,
+        objectives: pb.objectives,
       });
     }
+    // flags: a carried flag rides on its carrier (drawn there); the local carrier is shown at once
+    const live = this.latest();
+    this.interpFlags = b.flags.map((fb) => {
+      const fa = a.flags.find((f) => f.team === fb.team) ?? fb;
+      const stand = this.stands[fb.team] ?? { x: fb.x, y: fb.y };
+      const mine = live?.flags.find((f) => f.team === fb.team && f.carrier === this.slot);
+      if (mine) return { team: fb.team, status: 'carried' as const, carrier: this.slot, x: mine.x, y: mine.y, standX: stand.x, standY: stand.y, returnInMs: 0 };
+      const age = Math.max(0, T - b.serverTime);
+      const lerp = fa.status === fb.status && fa.carrier === fb.carrier;
+      return {
+        team: fb.team,
+        status: fb.status,
+        carrier: fb.carrier,
+        x: lerp ? fa.x + (fb.x - fa.x) * t : fb.x,
+        y: lerp ? fa.y + (fb.y - fa.y) * t : fb.y,
+        standX: stand.x,
+        standY: stand.y,
+        returnInMs: Math.max(0, fb.returnIn - age),
+      };
+    });
+    this.interpBases = b.bases.map((bb, i) => {
+      const ba = a.bases[i] ?? bb;
+      const pt = this.basePoints[i] ?? { x: 0, y: 0 };
+      const progress = ba.capturer === bb.capturer && ba.owner === bb.owner ? ba.progress + (bb.progress - ba.progress) * t : bb.progress;
+      return { index: i, x: pt.x, y: pt.y, owner: bb.owner, capturer: bb.capturer, progress, contested: bb.contested, inside: [bb.inside[0], bb.inside[1]] };
+    });
     // equipment: thrown grenades glide between snapshots, the rest stands still
     this.interpGadgets = b.gadgets.map((gb) => {
       const ga = a.gadgets.find((g) => g.id === gb.id && g.kind === gb.kind) ?? gb;
@@ -356,6 +395,14 @@ export class OnlineSession implements GameSession {
 
   gadgets(): RenderGadget[] {
     return this.interpGadgets;
+  }
+
+  flags(): RenderFlag[] {
+    return this.interpFlags;
+  }
+
+  bases(): RenderBase[] {
+    return this.interpBases;
   }
 
   players(): RenderPlayer[] {
@@ -390,6 +437,7 @@ export class OnlineSession implements GameSession {
         laser: me.mods[me.weapon]?.includes('laser') ?? false,
         flashedMs: this.localFlashMs(),
         team: this.myTeam,
+        objectives: this.myObjectives,
       });
     }
     return out;
@@ -455,7 +503,7 @@ export class OnlineSession implements GameSession {
       flashedMs: this.localFlashMs(),
       gameMode: this.gameMode,
       teamScore: s ? [s.teamScore[0], s.teamScore[1]] : [0, 0],
-      teamScoreLimit: this.config.teamScoreLimit,
+      teamScoreLimit: teamScoreLimitFor(this.config),
       myTeam: this.myTeam,
     };
   }

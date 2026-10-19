@@ -1,23 +1,20 @@
 import { h, portrait, toast } from '../dom.js';
+import { isTeamMode } from '@blatkom/shared';
 import type { CharacterId, GameMode, MapId, RosterEntry, Team } from '@blatkom/shared';
 import type { LobbyState } from '../../net/OnlineClient.js';
 import { shareInvite } from '../../telegram/tg.js';
 import { t } from '../../i18n/index.js';
 import { charName } from '../../i18n/content.js';
 import { mapPicker } from '../maps.js';
+import { MODE_ORDER, modeIcon, modeName, modeRules, modeSub } from '../modes.js';
 
-/** «Every man for himself» / «Red vs Blue» segmented switch (disabled for room guests). */
+/** The game modes as a 2×2 switch (disabled for room guests). */
 export function modeSwitch(o: { mode: GameMode; onMode?: (m: GameMode) => void }): HTMLElement {
   let cur = o.mode;
   const box = h('div', { class: 'seg seg--modes', role: 'radiogroup', 'aria-label': t('Mode') });
   const draw = () =>
     box.replaceChildren(
-      ...(
-        [
-          ['ffa', t('Every man for himself'), t('up to 10 players')],
-          ['teams', t('Red vs Blue'), t('two teams, up to 5 v 5')],
-        ] as const
-      ).map(([m, label, sub]) =>
+      ...MODE_ORDER.map((m) =>
         h(
           'button',
           {
@@ -34,8 +31,8 @@ export function modeSwitch(o: { mode: GameMode; onMode?: (m: GameMode) => void }
               o.onMode(m);
             },
           },
-          h('b', null, label),
-          h('small', null, sub),
+          modeIcon(m),
+          h('span', { class: 'modebtn__txt' }, h('b', null, modeName(m)), h('small', null, modeSub(m))),
         ),
       ),
     );
@@ -73,7 +70,7 @@ export function renderLobby(o: {
   const connected = s.players.filter((p) => p.connected).length;
   const allReady = s.players.filter((p) => p.connected).every((p) => p.ready);
   const invite = s.inviteUrl;
-  const teams = s.mode === 'teams';
+  const teams = isTeamMode(s.mode);
   const copy = async () => {
     if (!invite) return;
     try {
@@ -128,7 +125,7 @@ export function renderLobby(o: {
         { class: 'panel col' },
         h('span', { class: 'tag' }, t('Mode')),
         modeSwitch({ mode: s.mode, ...(s.isHost ? { onMode: o.onMode } : {}) }),
-        teams ? h('div', { class: 'muted' }, t('No friendly fire: bullets, blasts and fire never hurt your own team. The team with more eliminations wins.')) : null,
+        h('div', { class: 'muted', 'data-testid': 'mode-rules' }, modeRules(s.mode, s.limits)),
       ),
       h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Players {n}/{max}', { n: connected, max: s.maxPlayers })), players),
       h(

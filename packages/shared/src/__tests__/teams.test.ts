@@ -290,8 +290,8 @@ test('bots never shoot their teammates', () => {
   assert.equal(ev.filter((e) => e.t === 'shot').length, 0, 'they do not even shoot');
 });
 
-test('codec v5: team per player and team scores survive a snapshot round-trip', () => {
-  assert.equal(PROTOCOL_VERSION, 5);
+test('codec: team per player and team scores survive a snapshot round-trip', () => {
+  assert.ok(PROTOCOL_VERSION >= 5);
   const w = teamWorld();
   const a = w.addPlayer('a', 'A', 'petya', false, PISTOL_ONLY, 0);
   const b = w.addPlayer('b', 'B', 'valuta', false, PISTOL_ONLY, 1);
@@ -311,9 +311,9 @@ test('codec v5: team per player and team scores survive a snapshot round-trip', 
   assert.deepEqual(s2.teamScore, [0, 0]);
 });
 
-test('protocol v5: mode and team messages are validated', () => {
+test('protocol: mode and team messages are validated', () => {
   assert.equal(ClientMessageSchema.safeParse({ type: 'mode', mode: 'teams' }).success, true);
-  assert.equal(ClientMessageSchema.safeParse({ type: 'mode', mode: 'ctf' }).success, false);
+  assert.equal(ClientMessageSchema.safeParse({ type: 'mode', mode: 'koth' }).success, false);
   assert.equal(ClientMessageSchema.safeParse({ type: 'team', team: 1 }).success, true);
   assert.equal(ClientMessageSchema.safeParse({ type: 'team', team: 2 }).success, false);
 });

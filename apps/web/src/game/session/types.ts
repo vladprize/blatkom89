@@ -1,4 +1,4 @@
-import type { ArmsId, CharacterId, GadgetId, GameMode, MapId, MatchPhase, PelletResult, PersonalResult, Standing, Team, TeamResultSummary, WeaponId } from '@blatkom/shared';
+import type { ArmsId, CharacterId, FlagAction, FlagStatus, GadgetId, GameMode, MapId, MatchPhase, PelletResult, PersonalResult, Standing, Team, TeamResultSummary, WeaponId } from '@blatkom/shared';
 
 export interface RenderPlayer {
   slot: number;
@@ -31,6 +31,36 @@ export interface RenderPlayer {
   flashedMs: number;
   /** Team matches: 0 red, 1 blue; null in free-for-all. */
   team: Team | null;
+  /** Capture the flag: flags captured; base capture: bases captured. */
+  objectives: number;
+}
+
+/** Capture the flag: one flag per team. */
+export interface RenderFlag {
+  team: Team;
+  status: FlagStatus;
+  /** Carrier's slot (-1: nobody); a carried flag is drawn on its carrier. */
+  carrier: number;
+  x: number;
+  y: number;
+  standX: number;
+  standY: number;
+  /** Dropped: ms until it goes home by itself. */
+  returnInMs: number;
+}
+
+/** Base capture: one per base (A, B, C). */
+export interface RenderBase {
+  index: number;
+  x: number;
+  y: number;
+  owner: Team | null;
+  /** The team whose capture bar is filling (null: empty bar). */
+  capturer: Team | null;
+  progress: number;
+  contested: boolean;
+  /** Living players inside: red, blue. */
+  inside: [number, number];
 }
 
 /** Equipment in the world (thrown grenades, fire, smoke, mines, C4, turrets). */
@@ -84,7 +114,9 @@ export type SessionEvent =
   | { t: 'reload'; slot: number; weapon: WeaponId }
   | { t: 'dry'; slot: number }
   | { t: 'phase'; phase: MatchPhase }
-  | { t: 'matchEnd'; reason: 'time' | 'score' | 'aborted' };
+  | { t: 'matchEnd'; reason: 'time' | 'score' | 'aborted' }
+  | { t: 'flag'; action: FlagAction; team: Team; slot: number }
+  | { t: 'base'; base: number; team: Team; from: Team | null; slots: number[] };
 
 export interface HudState {
   hp: number;
@@ -114,7 +146,7 @@ export interface HudState {
   c4Armed: boolean;
   /** Blinded by a flashbang for this many more ms (white screen). */
   flashedMs: number;
-  /** Free-for-all or teams; in team matches the eliminations of red and blue and the limit. */
+  /** The mode; in team modes the team scores of red and blue and the limit that ends the match. */
   gameMode: GameMode;
   teamScore: [number, number];
   teamScoreLimit: number;
@@ -137,7 +169,7 @@ export interface ResultsData {
 export interface GameSession {
   readonly mode: 'offline' | 'online';
   readonly mapId: MapId;
-  /** Free-for-all or red vs blue. */
+  /** Free-for-all, team deathmatch, capture the flag or base capture. */
   readonly gameMode: GameMode;
   localSlot(): number;
   /** One fixed 60 Hz step with the local input (null while the local player is not controlling). */
@@ -147,6 +179,10 @@ export interface GameSession {
   players(): RenderPlayer[];
   pickups(): RenderPickup[];
   gadgets(): RenderGadget[];
+  /** Capture the flag: the two flags (empty in other modes). */
+  flags(): RenderFlag[];
+  /** Base capture: the bases (empty in other modes). */
+  bases(): RenderBase[];
   drainEvents(): SessionEvent[];
   hud(): HudState;
   standings(): Standing[];

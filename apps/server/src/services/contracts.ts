@@ -45,6 +45,8 @@ export interface MatchParticipantResult {
   /** Team matches: the player's team and how it did. */
   team: Team | null;
   teamOutcome?: 'win' | 'loss' | 'draw';
+  /** Capture the flag / base capture: flags or bases captured (XP). */
+  objectives?: number;
   /** Time actually spent in the match. */
   playtimeMs: number;
 }

@@ -6,6 +6,8 @@ export const XP_RULES = Object.freeze({
   completion: 50,
   perKill: 10,
   perAssist: 5,
+  /** Capture the flag: a flag captured; base capture: a base captured. */
+  perObjective: 15,
   placement: [100, 50, 25] as readonly number[],
   /** Team matches: every player of the winning team (a draw gives both teams the smaller bonus). */
   teamWin: 75,
@@ -53,6 +55,8 @@ export interface MatchPerformance {
   sharedPlace?: boolean;
   /** Team matches: how the player's team did (placement does not apply then). */
   teamOutcome?: 'win' | 'loss' | 'draw';
+  /** Capture the flag / base capture: flags or bases captured. */
+  objectives?: number;
 }
 
 /**
@@ -76,7 +80,7 @@ export function rankPlaces<T extends { score: number; kills: number; deaths: num
 
 export function xpForMatch(p: MatchPerformance): number {
   if (!p.completed) return 0;
-  let xp = XP_RULES.completion + XP_RULES.perKill * p.kills + XP_RULES.perAssist * (p.assists ?? 0);
+  let xp = XP_RULES.completion + XP_RULES.perKill * p.kills + XP_RULES.perAssist * (p.assists ?? 0) + XP_RULES.perObjective * (p.objectives ?? 0);
   if (p.teamOutcome) {
     if (p.playersAtEnd >= 2) xp += p.teamOutcome === 'win' ? XP_RULES.teamWin : p.teamOutcome === 'draw' ? XP_RULES.teamDraw : 0;
   } else if (p.playersAtEnd >= 2) {

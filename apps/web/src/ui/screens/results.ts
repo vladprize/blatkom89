@@ -1,10 +1,11 @@
 import { h, portrait, fmtDuration } from '../dom.js';
 import { amount } from './shop.js';
-import { levelForXp, SCORING, TOKEN_REWARD, tokenBreakdown } from '@blatkom/shared';
+import { BASE_RULES, CTF_RULES, isTeamMode, levelForXp, SCORING, TOKEN_REWARD, tokenBreakdown } from '@blatkom/shared';
 import type { Standing, Team } from '@blatkom/shared';
 import type { ResultsData } from '../../game/session/types.js';
 import { t, plural, count } from '../../i18n/index.js';
 import { achievementText, mapName } from '../../i18n/content.js';
+import { modeName } from '../modes.js';
 
 const teamLabel = (team: Team) => (team === 0 ? t('RED TEAM') : t('BLUE TEAM'));
 
@@ -33,7 +34,9 @@ export function renderResults(o: {
   onMenu: () => void;
 }): HTMLElement {
   const r = o.results;
-  const teams = r.gameMode === 'teams' && r.teams ? r.teams : null;
+  const mode = r.gameMode ?? 'ffa';
+  const teams = isTeamMode(mode) && r.teams ? r.teams : null;
+  const objective = mode === 'ctf' || mode === 'bases';
   const top = r.standings[0];
   const draw = !teams && !!top && r.standings.length > 1 && r.standings[1]!.place === top.place;
   const winner = draw || teams ? undefined : top;
@@ -70,6 +73,7 @@ export function renderResults(o: {
       { class: `${s.id === o.myId ? 'me' : ''} ${s.team === 0 ? 'tr--red' : s.team === 1 ? 'tr--blue' : ''}` },
       h('td', null, String(rank)),
       h('td', null, s.isBot ? `${s.name} · ${t('bot')}` : s.name),
+      objective ? h('td', { class: 'num' }, String(s.objectives ?? 0)) : null,
       h('td', { class: 'num' }, String(s.kills)),
       h('td', { class: 'num' }, String(s.assists)),
       h('td', { class: 'num' }, String(s.deaths)),
@@ -78,7 +82,7 @@ export function renderResults(o: {
   const body: HTMLElement[] = [];
   if (teams) {
     for (const team of (teams.winner === 1 ? [1, 0] : [0, 1]) as Team[]) {
-      body.push(h('tr', { class: `teamrow teamrow--${team === 0 ? 'red' : 'blue'}` }, h('td', { colspan: '5' }, teamLabel(team), teams.winner === team ? ` · ${t('winners')}` : ''), h('td', { class: 'num' }, String(teams.scores[team]))));
+      body.push(h('tr', { class: `teamrow teamrow--${team === 0 ? 'red' : 'blue'}` }, h('td', { colspan: objective ? '6' : '5' }, teamLabel(team), teams.winner === team ? ` · ${t('winners')}` : ''), h('td', { class: 'num' }, String(teams.scores[team]))));
       r.standings.filter((s) => s.team === team).forEach((s, i) => body.push(row(s, i + 1)));
     }
   } else r.standings.forEach((s) => body.push(row(s, s.place)));
@@ -115,7 +119,7 @@ export function renderResults(o: {
     h(
       'div',
       { class: 'wrap' },
-      h('div', { class: 'row' }, h('span', { class: 'tag' }, t('Match report')), h('span', { class: 'muted' }, `${mapName(r.mapId)} · ${teams ? t('Red vs Blue') : t('Every man for himself')} · ${fmtDuration(r.durationMs)} · ${reason}`)),
+      h('div', { class: 'row' }, h('span', { class: 'tag' }, t('Match report')), h('span', { class: 'muted' }, `${mapName(r.mapId)} · ${modeName(mode)} · ${fmtDuration(r.durationMs)} · ${reason}`)),
       banner,
       h(
         'div',
@@ -123,7 +127,7 @@ export function renderResults(o: {
         h(
           'table',
           { class: 'table' },
-          h('thead', null, h('tr', null, h('th', null, '#'), h('th', null, t('Player')), h('th', { class: 'num' }, t('Elim')), h('th', { class: 'num' }, t('Ast')), h('th', { class: 'num' }, t('Deaths')), h('th', { class: 'num' }, t('Points')))),
+          h('thead', null, h('tr', null, h('th', null, '#'), h('th', null, t('Player')), objective ? h('th', { class: 'num' }, mode === 'ctf' ? t('Flags') : t('Bases')) : null, h('th', { class: 'num' }, t('Elim')), h('th', { class: 'num' }, t('Ast')), h('th', { class: 'num' }, t('Deaths')), h('th', { class: 'num' }, t('Points')))),
           h('tbody', null, ...body),
         ),
       ),
@@ -131,7 +135,13 @@ export function renderResults(o: {
         'div',
         { class: 'muted', style: 'font-size:14px' },
         t('Points: elimination +{k}, assist +{a} ({d}+ damage to the opponent within {s} s before they are eliminated).', { k: SCORING.killPoints, a: SCORING.assistPoints, d: SCORING.assistMinDamage, s: SCORING.assistWindowMs / 1000 }),
-        teams ? ` ${t('A team scores one for every elimination.')}` : '',
+        mode === 'teams'
+          ? ` ${t('A team scores one for every elimination.')}`
+          : mode === 'ctf'
+            ? ` ${t('A team scores one for every flag brought home. Player points: capture +{c}, return +{r}, steal +{s}.', { c: CTF_RULES.capturePoints, r: CTF_RULES.returnPoints, s: CTF_RULES.takePoints })}`
+            : mode === 'bases'
+              ? ` ${t('Every base held brings its team a point a second; taking a base gives +{b} to everyone inside.', { b: BASE_RULES.capturePoints })}`
+              : '',
       ),
       personal ? xpPanel() : o.offline ? h('div', { class: 'muted' }, o.offlineNote ?? t('Practice doesn’t count towards the online profile, XP or talons.')) : h('div', { class: 'muted' }, me ? t('Filing the results…') : ''),
       h('div', { class: 'row' }, h('button', { class: 'btn btn--red grow', onclick: o.onRematch }, o.offline ? t('Again') : t('Rematch')), h('button', { class: 'btn grow', onclick: o.onMenu }, t('To menu'))),

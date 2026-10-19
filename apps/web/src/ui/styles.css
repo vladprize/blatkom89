@@ -298,8 +298,11 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 
 /* game mode switch (free-for-all / red vs blue) and team columns in the lobby */
 .seg--modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-.seg--modes .modebtn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; min-height: 58px; }
-.seg--modes .modebtn b { font-family: Oswald, sans-serif; font-size: 17px; letter-spacing: .04em; }
+.seg--modes .modebtn { display: flex; flex-direction: row; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; min-height: 58px; }
+.seg--modes .modebtn .modeico { flex: none; color: var(--beige); }
+.seg--modes .modebtn__txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.seg--modes .modebtn b { font-family: Oswald, sans-serif; font-size: 17px; letter-spacing: .04em; line-height: 1.1; }
+@media (max-width: 420px) { .seg--modes .modebtn { padding: 8px 9px; gap: 7px; } .seg--modes .modebtn b { font-size: 15px; } .seg--modes .modebtn .modeico { width: 24px; height: 24px; } }
 .seg--modes .modebtn small { font-family: 'PT Sans Narrow', sans-serif; text-transform: none; letter-spacing: 0; font-size: 13px; opacity: .8; }
 .seg--modes .modebtn--teams[aria-pressed='true'] { background: linear-gradient(90deg, #a8261f 0 50%, #1f5a96 50% 100%); border-color: #c9b07a; }
 .seg--modes .modebtn[disabled] { cursor: default; }
@@ -357,3 +360,10 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .ccard__top { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 12px; margin-top: 6px; align-items: start; }
 .ccard__hero { width: 108px; height: 144px; object-fit: cover; border: 1px solid var(--tape); display: block; }
 .ccard__top img:not(.ccard__hero) { width: 40px; height: 40px; image-rendering: pixelated; border: 1px solid var(--line); }
+
+/* quick match: the four modes as a 2×2 grid of big buttons with pictograms */
+.quickmodes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 4px; }
+.quickmode { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; text-align: left; min-height: 64px; padding: 10px 12px; }
+.quickmode .modeico { flex: none; }
+.quickmode__txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; line-height: 1.1; }
+@media (max-width: 420px) { .quickmode { padding: 8px 9px; gap: 7px; font-size: 15px; } .quickmode .modeico { width: 24px; height: 24px; } }

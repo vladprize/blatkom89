@@ -3,7 +3,7 @@
  * runs the camera and lighting, and turns session events into feedback (visual, audio, haptics).
  */
 import * as Phaser from 'phaser';
-import { TICK_MS, getMap, getCollision, WEAPONS, SCORING, isWeaponId } from '@blatkom/shared';
+import { TICK_MS, getMap, getCollision, WEAPONS, SCORING, CTF_RULES, BASE_RULES, isWeaponId } from '@blatkom/shared';
 import type { CollisionWorld, MapDef } from '@blatkom/shared';
 import type { GameSession, RenderPlayer, SessionEvent, RenderPickup } from '../session/types.js';
 import { MapRenderer } from '../render/MapRenderer.js';
@@ -11,12 +11,14 @@ import { Lighting } from '../render/Lighting.js';
 import { Effects, muzzlePoint } from '../render/Effects.js';
 import { CharacterView, spawnCorpse } from '../render/CharacterView.js';
 import { GadgetView } from '../render/GadgetView.js';
+import { ObjectiveView, TEAM_CLOTH } from '../render/ObjectiveView.js';
 import { VhsPipeline, vhsIntensity } from '../render/VhsPipeline.js';
 import { InputManager } from '../input/InputManager.js';
 import { D } from '../render/depth.js';
 import { sfx } from '../audio/Sfx.js';
 import { getSettings, onSettings } from '../../app/settings.js';
 import { hudBus } from './hudBus.js';
+import type { ObjectiveEntry } from './hudBus.js';
 import { haptic } from '../../telegram/tg.js';
 import { toast } from '../../ui/dom.js';
 import { t } from '../../i18n/index.js';
@@ -36,6 +38,7 @@ export class GameScene extends Phaser.Scene {
   private lighting!: Lighting;
   private fx!: Effects;
   private gadgetView!: GadgetView;
+  private objectives: ObjectiveView | null = null;
   private collision!: CollisionWorld;
   private lasers!: Phaser.GameObjects.Graphics;
   private laserDots: Phaser.GameObjects.Image[] = [];
@@ -92,6 +95,7 @@ export class GameScene extends Phaser.Scene {
     this.lighting = new Lighting(this, this.map);
     this.fx = new Effects(this);
     this.gadgetView = new GadgetView(this, this.fx, this.lighting);
+    this.objectives = this.session.gameMode === 'ctf' || this.session.gameMode === 'bases' ? new ObjectiveView(this, this.lighting) : null;
     this.collision = getCollision(this.session.mapId);
     this.lasers = this.add.graphics().setDepth(D.FX_ADD - 0.5).setBlendMode(Phaser.BlendModes.ADD);
     this.inputs = new InputManager(this);
@@ -159,6 +163,8 @@ export class GameScene extends Phaser.Scene {
     this.unsubSettings?.();
     hudBus.off('pause-state', this.onPauseState, this);
     this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this);
+    this.objectives?.destroy();
+    this.objectives = null;
     this.lighting.destroy();
     this.gadgetView.destroy();
     for (const v of this.views.values()) v.destroy();
@@ -213,6 +219,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.renderPickups(this.session.pickups(), time);
+    this.objectives?.update(this.session.flags(), this.session.bases(), players, time);
     for (const e of this.session.drainEvents()) this.handleEvent(e, players, time);
 
     // camera with aim look-ahead
@@ -544,6 +551,12 @@ export class GameScene extends Phaser.Scene {
         hudBus.emit('supply', { x: e.x, y: e.y, weapon: e.weapon });
         break;
       }
+      case 'flag':
+        this.onFlagEvent(e, players, time);
+        break;
+      case 'base':
+        this.onBaseEvent(e, players, time);
+        break;
       case 'matchEnd':
         sfx.play('end', { volume: 0.7 });
         hudBus.emit('match-end', e.reason);
@@ -557,6 +570,88 @@ export class GameScene extends Phaser.Scene {
     void local;
   }
 
+
+  /** Capture the flag: sound, light, points popup, feed line and (for our team's business) a banner. */
+  private onFlagEvent(e: Extract<SessionEvent, { t: 'flag' }>, players: RenderPlayer[], time: number) {
+    const actor = e.slot >= 0 ? players.find((p) => p.slot === e.slot) : undefined;
+    const local = players.find((p) => p.isLocal);
+    const myTeam = local?.team ?? null;
+    const ours = myTeam !== null && e.team === myTeam;
+    const flag = e.team === 0 ? t('the red flag') : t('the blue flag');
+    const entry: ObjectiveEntry = { actor: actor?.name ?? '', actorTeam: actor?.team ?? null, actorLocal: !!actor?.isLocal, text: '', team: e.team };
+    const at = actor ? { x: actor.x, y: actor.y } : null;
+    switch (e.action) {
+      case 'taken':
+        entry.text = t('stole {flag}', { flag });
+        if (ours) entry.banner = { title: t('OUR FLAG IS STOLEN!'), sub: t('Stop the carrier — follow the marker'), good: false };
+        else if (actor?.isLocal) entry.banner = { title: t('THE FLAG IS YOURS!'), sub: t('Carry it to your stand'), good: true };
+        else entry.banner = { title: t('WE HAVE THEIR FLAG!'), sub: t('Cover {name}', { name: actor?.name ?? '' }), good: true };
+        sfx.play('flagTaken', { volume: ours ? 0.9 : 0.6 });
+        if (actor?.isLocal) {
+          hudBus.emit('points', { points: CTF_RULES.takePoints, label: t('FLAG') });
+          haptic('notify-success');
+        } else if (ours) haptic('notify-error');
+        break;
+      case 'dropped':
+        entry.text = t('dropped {flag}', { flag });
+        entry.banner = ours ? { title: t('OUR FLAG IS DOWN'), sub: t('Touch it to send it home'), good: null } : { title: t('THEIR FLAG IS DOWN'), sub: t('Pick it up!'), good: null };
+        sfx.play('flagDropped', { volume: 0.8 });
+        break;
+      case 'returned':
+        if (actor) entry.text = t('brought back {flag}', { flag });
+        else {
+          entry.actor = '';
+          entry.text = e.team === 0 ? t('The red flag went back to its stand') : t('The blue flag went back to its stand');
+        }
+        if (ours) entry.banner = { title: t('OUR FLAG IS HOME'), good: true };
+        sfx.play('flagReturned', { volume: 0.8 });
+        if (actor?.isLocal) hudBus.emit('points', { points: CTF_RULES.returnPoints, label: t('FLAG RETURNED') });
+        break;
+      case 'captured': {
+        entry.text = t('captured {flag}', { flag });
+        entry.banner = ours ? { title: t('THEY CAPTURED OUR FLAG'), good: false } : { title: t('FLAG CAPTURED!'), sub: actor?.isLocal ? t('Your capture') : t('{name} brought it home', { name: actor?.name ?? '' }), good: true };
+        sfx.play(ours ? 'baseLost' : 'flagCaptured', { volume: 0.9 });
+        if (at) {
+          const color = actor?.team === 0 || actor?.team === 1 ? TEAM_CLOTH[actor.team] : 0xffd36a;
+          this.lighting.flash(at.x, at.y, 220, color, 1.2, 600, time);
+          this.fx.pickupSparkle(at.x, at.y);
+        }
+        if (actor?.isLocal) {
+          hudBus.emit('points', { points: CTF_RULES.capturePoints, label: t('CAPTURE') });
+          haptic('notify-success');
+          this.fx.shake(this.cameras.main, 0.25);
+        }
+        break;
+      }
+    }
+    hudBus.emit('objective', entry);
+  }
+
+  /** Base capture: a base changed hands. */
+  private onBaseEvent(e: Extract<SessionEvent, { t: 'base' }>, players: RenderPlayer[], time: number) {
+    const local = players.find((p) => p.isLocal);
+    const myTeam = local?.team ?? null;
+    const letter = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'][e.base] ?? '?';
+    const takers = e.slots.map((slot) => players.find((p) => p.slot === slot)).filter((p): p is RenderPlayer => !!p);
+    const first = takers[0];
+    const mine = myTeam !== null && e.team === myTeam;
+    const entry: ObjectiveEntry = {
+      actor: first ? (takers.length > 1 ? `${first.name} +${takers.length - 1}` : first.name) : '',
+      actorTeam: e.team,
+      actorLocal: takers.some((p) => p.isLocal),
+      text: first ? t('took base {l}', { l: letter }) : e.team === 0 ? t('Red took base {l}', { l: letter }) : t('Blue took base {l}', { l: letter }),
+      team: e.team,
+      banner: mine ? { title: t('BASE {l} IS OURS', { l: letter }), good: true } : e.from !== null && e.from === myTeam ? { title: t('WE LOST BASE {l}', { l: letter }), sub: t('Take it back!'), good: false } : { title: t('THE ENEMY TOOK BASE {l}', { l: letter }), good: false },
+    };
+    sfx.play(mine ? 'baseCaptured' : 'baseLost', { volume: 0.85 });
+    const base = this.session.bases()[e.base];
+    if (base) this.lighting.flash(base.x, base.y, BASE_RULES.radius * 3, TEAM_CLOTH[e.team], 1, 500, time);
+    if (takers.some((p) => p.isLocal)) {
+      hudBus.emit('points', { points: BASE_RULES.capturePoints, label: t('BASE {l}', { l: letter }) });
+      haptic('notify-success');
+    }
+    hudBus.emit('objective', entry);
+  }
 
   private impacts(e: Extract<SessionEvent, { t: 'shot' }>) {
     for (const pl of e.pellets) {

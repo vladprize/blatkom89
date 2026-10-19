@@ -11,6 +11,18 @@ import type { NavGrid } from './nav.js';
 import type { InputFrame, PlayerState, World } from './world.js';
 import { BTN } from './world.js';
 import { TICK_DT } from '../constants/game.js';
+import { BASE_RULES } from '../game-rules/match.js';
+
+/**
+ * Where an objective-mode bot wants to be. `urgent`: keep heading there even while shooting (a flag
+ * carrier, a flag to return); `hold`: stay inside this radius around the point (capturing a base).
+ */
+interface Objective {
+  x: number;
+  y: number;
+  urgent: boolean;
+  hold: number;
+}
 
 export type BotDifficulty = 'easy' | 'normal' | 'hard';
 
@@ -46,6 +58,12 @@ export class BotBrain {
   private stuckCheck = { x: 0, y: 0, at: 0 };
   private roamGoal: { x: number; y: number } | null = null;
   private gadgetAt = 0;
+  /** Capture the flag: this bot guards its own flag instead of raiding (every third bot of a team). */
+  private defender = false;
+  private roleAt = -1e9;
+  /** Base capture: the base this bot is heading for (sticky), and a spot to stand on inside it. */
+  private baseGoal = -1;
+  private holdSpot: { x: number; y: number; until: number } | null = null;
   private readonly rng: () => number;
   private readonly d: (typeof DIFFICULTY)[BotDifficulty];
 
@@ -70,6 +88,7 @@ export class BotBrain {
       return frame;
     }
     const target = this.pickTarget(me, now);
+    const obj = this.world.teams && me.team !== null ? this.objective(me) : null;
     let moveX = 0;
     let moveY = 0;
     let desiredAim = this.aim;
@@ -109,6 +128,26 @@ export class BotBrain {
         moveX = nx * fwd + -ny * this.strafeDir * 0.7;
         moveY = ny * fwd + nx * this.strafeDir * 0.7;
       }
+      if (obj?.urgent) {
+        // carrying a flag (or saving our own): run for it and shoot on the way
+        const wp = this.followPath(me, obj, now);
+        if (wp) {
+          const ox = wp.x - me.x;
+          const oy = wp.y - me.y;
+          const od = Math.sqrt(ox * ox + oy * oy) || 1;
+          moveX = ox / od;
+          moveY = oy / od;
+        }
+      } else if (obj && obj.hold > 0) {
+        // capturing a base: fight from inside it
+        const ox = obj.x - me.x;
+        const oy = obj.y - me.y;
+        const od = Math.sqrt(ox * ox + oy * oy);
+        if (od > obj.hold * 0.55) {
+          moveX = ox / od;
+          moveY = oy / od;
+        }
+      }
       const aimed = Math.abs(angleDiff(this.aim, Math.atan2(dy, dx))) < this.d.tolerance + 8 / Math.max(dist, 8);
       const reacted = now - this.targetSeenAt > this.d.reaction;
       const w = WEAPONS[me.weapon];
@@ -133,7 +172,22 @@ export class BotBrain {
         }
       }
     } else {
-      const goal = this.chooseGoal(me, now);
+      let goal = obj ?? this.chooseGoal(me, now);
+      if (obj && obj.hold > 0 && Math.hypot(obj.x - me.x, obj.y - me.y) < obj.hold) {
+        // inside the base: shuffle about on the spot
+        if (!this.holdSpot || now > this.holdSpot.until || Math.hypot(this.holdSpot.x - obj.x, this.holdSpot.y - obj.y) > obj.hold) {
+          const a = this.rng() * Math.PI * 2;
+          const r = this.rng() * obj.hold * 0.5;
+          const x = obj.x + Math.cos(a) * r;
+          const y = obj.y + Math.sin(a) * r;
+          this.holdSpot = this.nav.isWalkable(x, y) ? { x, y, until: now + 900 + this.rng() * 900 } : { x: obj.x, y: obj.y, until: now + 600 };
+        }
+        goal = this.holdSpot;
+      } else if (obj && !obj.urgent && !me.heavy) {
+        // a weapon on the way is worth a short detour
+        const near = this.nearPickup(me, 220);
+        if (near) goal = near;
+      }
       const wp = this.followPath(me, goal, now);
       if (wp) {
         const dx = wp.x - me.x;
@@ -173,6 +227,72 @@ export class BotBrain {
     frame.moveY = Math.round(moveY * 127);
     frame.aim = quantizeAngle(this.aim);
     return frame;
+  }
+
+  private nearPickup(me: PlayerState, within: number): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null;
+    let bestD = within;
+    for (const pk of this.world.pickups) {
+      if (!pk.active || pk.kind !== 'weapon') continue;
+      const d = Math.abs(pk.x - me.x) + Math.abs(pk.y - me.y);
+      if (d < bestD) {
+        bestD = d;
+        best = { x: pk.x, y: pk.y };
+      }
+    }
+    return best;
+  }
+
+  /** Capture the flag and base capture: where to go (null: fight as usual). */
+  private objective(me: PlayerState): Objective | null {
+    const team = me.team!;
+    const w = this.world;
+    if (w.flags.length === 2) {
+      if (w.time - this.roleAt > 2000) {
+        this.roleAt = w.time;
+        const mates = [...w.players.values()].filter((p) => p.isBot && p.team === team).sort((a, b) => a.slot - b.slot);
+        this.defender = mates.findIndex((p) => p.id === me.id) % 3 === 2;
+      }
+      const own = w.flags.find((f) => f.team === team)!;
+      const enemy = w.flags.find((f) => f.team !== team)!;
+      const dist = (x: number, y: number) => Math.hypot(x - me.x, y - me.y);
+      // carrying the enemy flag: home to our stand
+      if (enemy.carrierId === me.id) return { x: own.standX, y: own.standY, urgent: true, hold: 0 };
+      // our flag on the ground: whoever is near (or guarding) brings it back
+      if (own.status === 'dropped' && (this.defender || dist(own.x, own.y) < 700)) return { x: own.x, y: own.y, urgent: true, hold: 0 };
+      // our flag stolen: guards and anyone close hunt the carrier
+      if (own.status === 'carried' && (this.defender || dist(own.x, own.y) < 600)) return { x: own.x, y: own.y, urgent: false, hold: 0 };
+      if (this.defender) {
+        if (dist(own.standX, own.standY) > 150) return { x: own.standX, y: own.standY, urgent: false, hold: 0 };
+        return { x: own.standX, y: own.standY, urgent: false, hold: 120 };
+      }
+      // a teammate has their flag: escort the carrier
+      if (enemy.status === 'carried') {
+        const carrier = enemy.carrierId ? w.players.get(enemy.carrierId) : undefined;
+        if (carrier) return { x: carrier.x, y: carrier.y, urgent: false, hold: 0 };
+      }
+      return { x: enemy.x, y: enemy.y, urgent: enemy.status === 'dropped' && dist(enemy.x, enemy.y) < 400, hold: 0 };
+    }
+    if (w.bases.length > 0) {
+      const enemyTeam = team === 0 ? 1 : 0;
+      const score = (i: number) => {
+        const b = w.bases[i]!;
+        const d = Math.hypot(b.x - me.x, b.y - me.y);
+        if (b.owner !== team) return d - (b.owner === enemyTeam ? 120 : 0) - (b.capturer === team ? 150 : 0);
+        if (b.contested || b.capturer === enemyTeam) return d - 180;
+        return d + 1100;
+      };
+      let best = 0;
+      for (let i = 1; i < w.bases.length; i++) if (score(i) < score(best)) best = i;
+      // sticky: switch only for a clearly better base
+      if (this.baseGoal >= 0 && this.baseGoal < w.bases.length && this.baseGoal !== best && score(this.baseGoal) < score(best) + 220) best = this.baseGoal;
+      this.baseGoal = best;
+      const b = w.bases[best]!;
+      // every base is ours and quiet: go and find someone to fight
+      if (b.owner === team && !b.contested && b.capturer !== enemyTeam) return null;
+      return { x: b.x, y: b.y, urgent: false, hold: BASE_RULES.radius };
+    }
+    return null;
   }
 
   private pickTarget(me: PlayerState, now: number): PlayerState | null {

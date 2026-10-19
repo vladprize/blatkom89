@@ -23,8 +23,10 @@ export interface LobbyState {
   inviteUrl: string | null;
   isPrivate: boolean;
   maxPlayers: number;
-  /** Free-for-all or teams (the host switches it). */
+  /** The game mode (the host switches it). */
   mode: GameMode;
+  /** The room's win limits (from the server's match rules). */
+  limits?: { teamScoreLimit: number; captureLimit: number; baseScoreLimit: number };
 }
 
 export interface OnlineCallbacks {
@@ -312,6 +314,7 @@ export class OnlineClient {
           isPrivate: m.isPrivate,
           maxPlayers: m.maxPlayers,
           mode: m.mode,
+          ...(this.config ? { limits: { teamScoreLimit: this.config.teamScoreLimit, captureLimit: this.config.captureLimit, baseScoreLimit: this.config.baseScoreLimit } } : {}),
         };
         if (this.session) this.session.setRoster(m.players);
         const inMatch = m.phase === 'ready' || m.phase === 'countdown' || m.phase === 'active';

@@ -9,7 +9,7 @@ import { WEAPONS, WEAPON_BY_INDEX } from '../game-rules/weapons.js';
 import type { WeaponId } from '../game-rules/weapons.js';
 import { GADGETS, GADGET_IDS, armsAt, armsIndex } from '../game-rules/gadgets.js';
 import type { ArmsId, GadgetId } from '../game-rules/gadgets.js';
-import type { GadgetState, InputFrame, PelletResult, PickupState, PlayerState, WorldEvent } from '../sim/world.js';
+import type { BaseState, FlagState, FlagStatus, GadgetState, InputFrame, PelletResult, PickupState, PlayerState, WorldEvent } from '../sim/world.js';
 import { clamp, dequantizeAngle, quantizeAngle } from '../sim/math.js';
 
 export const MSG_INPUT = 1;
@@ -114,6 +114,31 @@ export interface NetPlayer {
   laser: boolean;
   /** Team matches: 0 red, 1 blue; null in free-for-all. */
   team: Team | null;
+  /** Capture the flag: flags captured; base capture: bases captured. */
+  objectives: number;
+}
+
+/** Capture the flag: one per team. */
+export interface NetFlag {
+  team: Team;
+  status: FlagStatus;
+  /** Carrier's slot (-1: nobody). */
+  carrier: number;
+  x: number;
+  y: number;
+  /** Dropped: ms until it goes home by itself. */
+  returnIn: number;
+}
+
+/** Base capture: one per base, in order (A, B, C). */
+export interface NetBase {
+  owner: Team | null;
+  capturer: Team | null;
+  /** Capture bar of `capturer`, 0..1. */
+  progress: number;
+  contested: boolean;
+  /** Living players inside: red, blue (capped at 7). */
+  inside: [number, number];
 }
 
 export interface NetGadget {
@@ -178,6 +203,8 @@ export interface Snapshot {
   shots: NetShot[];
   melees: NetMelee[];
   gadgets: NetGadget[];
+  flags: NetFlag[];
+  bases: NetBase[];
 }
 
 export interface SnapshotSource {
@@ -189,12 +216,19 @@ export interface SnapshotSource {
   players: Iterable<PlayerState>;
   pickups: readonly PickupState[];
   gadgets: readonly GadgetState[];
+  /** Capture the flag / base capture state (empty or absent in other modes). */
+  flags?: readonly FlagState[];
+  bases?: readonly BaseState[];
   events: readonly WorldEvent[];
   now: number;
 }
 
 const HEADER_BYTES = 19;
-const PLAYER_BYTES = 47;
+const PLAYER_BYTES = 48;
+const FLAG_BYTES = 9;
+const BASE_BYTES = 4;
+const FLAG_STATUSES: readonly FlagStatus[] = ['home', 'carried', 'dropped'];
+const MAX_BASES = 8;
 const GADGET_BYTES = 15;
 const GADGET_PHASES = ['moving', 'armed', 'active'] as const;
 
@@ -208,9 +242,12 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
   const melees = src.events.filter((e): e is Extract<WorldEvent, { t: 'melee' }> => e.t === 'melee');
   const pickups = src.pickups.filter((p) => p.active || !p.dropped);
   const gadgets = src.gadgets.slice(0, 255);
+  const flags = (src.flags ?? []).slice(0, 2);
+  const bases = (src.bases ?? []).slice(0, MAX_BASES);
   let size = HEADER_BYTES + players.length * PLAYER_BYTES + 1 + pickups.length * 8 + 2 + 1 + 1;
   for (const s of shots) size += 10 + s.pellets.length * 6;
   size += melees.length * 4 + gadgets.length * GADGET_BYTES;
+  size += 1 + flags.length * FLAG_BYTES + 1 + bases.length * BASE_BYTES;
   const buf = new ArrayBuffer(size);
   const v = new DataView(buf);
   let o = 0;
@@ -261,6 +298,7 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
     v.setUint8(o + 43, u8c(p.gadgetCharges));
     v.setUint16(o + 44, u16(Math.max(0, p.flashedUntil - src.time)), true);
     v.setUint8(o + 46, p.team === null ? 255 : p.team);
+    v.setUint8(o + 47, u8c(p.objectives));
     o += PLAYER_BYTES;
   }
   v.setUint8(o, pickups.length);
@@ -316,6 +354,26 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
     v.setUint8(o + 14, 0);
     o += GADGET_BYTES;
   }
+  v.setUint8(o, flags.length);
+  o += 1;
+  for (const f of flags) {
+    v.setUint8(o, f.team);
+    v.setUint8(o + 1, FLAG_STATUSES.indexOf(f.status));
+    v.setUint8(o + 2, f.carrierSlot < 0 ? 255 : f.carrierSlot);
+    v.setUint16(o + 3, u16(f.x * POS_SCALE), true);
+    v.setUint16(o + 5, u16(f.y * POS_SCALE), true);
+    v.setUint16(o + 7, u16(f.status === 'dropped' ? Math.max(0, f.returnAt - src.time) / 10 : 0), true);
+    o += FLAG_BYTES;
+  }
+  v.setUint8(o, bases.length);
+  o += 1;
+  for (const b of bases) {
+    v.setUint8(o, b.owner === null ? 255 : b.owner);
+    v.setUint8(o + 1, b.capturer === null ? 255 : b.capturer);
+    v.setUint8(o + 2, u8c(b.progress * 255));
+    v.setUint8(o + 3, (b.contested ? 1 : 0) | (Math.min(7, b.inside[0]) << 1) | (Math.min(7, b.inside[1]) << 4));
+    o += BASE_BYTES;
+  }
   if (o !== size) throw new Error(`snapshot size mismatch ${o} != ${size}`);
   return buf;
 }
@@ -366,6 +424,8 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
     shots: [],
     melees: [],
     gadgets: [],
+    flags: [],
+    bases: [],
   };
   const np = v.getUint8(18);
   o = HEADER_BYTES;
@@ -408,6 +468,7 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
       flashedRemaining: v.getUint16(o + 44, true),
       laser: (flags & 64) !== 0,
       team: teamAt(v.getUint8(o + 46)),
+      objectives: v.getUint8(o + 47),
     });
     o += PLAYER_BYTES;
   }
@@ -492,6 +553,42 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
       leftMs: v.getUint16(o + 12, true) * 10,
     });
     o += GADGET_BYTES;
+  }
+  need(1);
+  const nf = v.getUint8(o);
+  o += 1;
+  if (nf > 2) throw new ProtocolError('bad flag count');
+  for (let i = 0; i < nf; i++) {
+    need(FLAG_BYTES);
+    const team = teamAt(v.getUint8(o));
+    const status = FLAG_STATUSES[v.getUint8(o + 1)];
+    if (team === null || !status) throw new ProtocolError('bad flag');
+    const carrier = v.getUint8(o + 2);
+    snap.flags.push({
+      team,
+      status,
+      carrier: carrier === 255 ? -1 : carrier,
+      x: v.getUint16(o + 3, true) / POS_SCALE,
+      y: v.getUint16(o + 5, true) / POS_SCALE,
+      returnIn: v.getUint16(o + 7, true) * 10,
+    });
+    o += FLAG_BYTES;
+  }
+  need(1);
+  const nb = v.getUint8(o);
+  o += 1;
+  if (nb > MAX_BASES) throw new ProtocolError('bad base count');
+  for (let i = 0; i < nb; i++) {
+    need(BASE_BYTES);
+    const bits = v.getUint8(o + 3);
+    snap.bases.push({
+      owner: teamAt(v.getUint8(o)),
+      capturer: teamAt(v.getUint8(o + 1)),
+      progress: v.getUint8(o + 2) / 255,
+      contested: (bits & 1) !== 0,
+      inside: [(bits >> 1) & 7, (bits >> 4) & 7],
+    });
+    o += BASE_BYTES;
   }
   return snap;
 }

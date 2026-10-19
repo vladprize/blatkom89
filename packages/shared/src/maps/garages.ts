@@ -155,5 +155,8 @@ export function buildGaragesMap(): MapDef {
 
   // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
   b.spawn(668, 836, -90).spawn(748, 156, 90).spawn(476, 356, 45).spawn(1068, 836, -135).spawn(396, 636, 0).spawn(1308, 532, 180).spawn(676, 564, -45).spawn(1092, 172, 135);
+  // capture the flag: a stand deep in each team's half; base capture: A (red side), B (middle), C (blue side)
+  b.flagStand(0, 100, 360).flagStand(1, 1400, 440);
+  b.base(256, 496).base(736, 256).base(1104, 672);
   return b.build();
 }
