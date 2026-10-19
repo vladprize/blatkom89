@@ -1,6 +1,7 @@
-// Square top-down thumbnails of every map for the map pickers, captured from the real renderer
-// (the single-file demo build): the whole map at 1 texel per world px with the night lighting on,
-// players hidden, fitted into a square with the free band at the bottom (the tile caption sits there).
+// Top-down thumbnails of every map for the map pickers, captured from the real renderer (the
+// single-file demo build): the whole map at 1 texel per world px with the night lighting on, players
+// hidden, scaled to `size` px wide at the map's own aspect ratio (no bands: the square tile centres the
+// picture above its caption band, see .maptile in apps/web/src/ui/styles.css).
 // Usage: npm run build:demo:single && node tools/map-thumbs.mjs [size=320] [--nolight] [--out dir] [mapId …]
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -58,19 +59,15 @@ for (const mapId of only.length ? only : maps) {
       await img.decode();
       const c = document.createElement('canvas');
       c.width = size;
-      c.height = size;
+      c.height = Math.round((size * h) / w);
       const ctx = c.getContext('2d');
       ctx.fillStyle = '#0d0b0a';
-      ctx.fillRect(0, 0, size, size);
-      const k = Math.min(size / w, size / h);
-      const dw = Math.round(w * k);
-      const dh = Math.round(h * k);
+      ctx.fillRect(0, 0, c.width, c.height);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       // the night palette reads dark at thumbnail size: lift it a little
       ctx.filter = 'brightness(1.18) contrast(1.06) saturate(1.05)';
-      // landscape maps sit at the top: the caption goes into the band below
-      ctx.drawImage(img, Math.round((size - dw) / 2), 0, dw, dh);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
       return c.toDataURL('image/jpeg', 0.84).split(',')[1];
     },
     { b64: png.toString('base64'), size, w: m.w, h: m.h },

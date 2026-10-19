@@ -1,5 +1,6 @@
 /** Profile screen («Dossier»): nickname, level and XP, statistics, achievements, recent matches. */
 import { h, fmtDuration } from '../dom.js';
+import { fitAlias, whenSized } from '../fit.js';
 import { isCharacterId } from '@blatkom/shared';
 import type { AchievementStatus, MatchHistoryEntry, PublicProfile } from '@blatkom/shared';
 import type { OnlineClient } from '../../net/OnlineClient.js';
@@ -25,6 +26,17 @@ export function renderProfileView(d: ProfileData, o: { local: boolean; onRename:
   const hours = Math.floor(p.playtimeSec / 3600);
   const mins = Math.floor((p.playtimeSec % 3600) / 60);
   const unlocked = d.achievements.filter((a) => a.unlockedAt).length;
+  const nick = h('div', { class: 'h1 grow nick-line', 'data-testid': 'profile-name' }, h('span', { class: 'fit-text' }, p.displayName));
+  const head = h(
+    'div',
+    { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' },
+    h('div', { class: 'lvlbadge lvlbadge--big', title: t('Level') }, h('small', null, t('LVL')), String(p.level)),
+    nick,
+    h('button', { class: 'btn btn--small', onclick: o.onRename, 'aria-label': t('Change alias') }, `✎ ${t('Alias')}`),
+  );
+  // the whole alias stays visible: the heading's size (as .h1: 26–40 px with the screen) shrinks for
+  // long ones, a very long one takes two lines
+  whenSized(head, () => fitAlias(nick, { max: () => Math.min(40, Math.max(26, window.innerWidth * 0.05)), min: 20, minTwoLines: 16 }));
   return h(
     'div',
     { class: 'col' },
@@ -32,13 +44,7 @@ export function renderProfileView(d: ProfileData, o: { local: boolean; onRename:
       'div',
       { class: 'panel col' },
       h('span', { class: 'tag' }, t('Dossier')),
-      h(
-        'div',
-        { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' },
-        h('div', { class: 'lvlbadge lvlbadge--big', title: t('Level') }, h('small', null, t('LVL')), String(p.level)),
-        h('div', { class: 'h1 grow nick-line', 'data-testid': 'profile-name' }, p.displayName),
-        h('button', { class: 'btn btn--small', onclick: o.onRename, 'aria-label': t('Change alias') }, `✎ ${t('Alias')}`),
-      ),
+      head,
       h('div', { class: 'xpbar', role: 'progressbar', 'aria-valuenow': String(pct), 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('i', { style: `width:${pct}%` })),
       h('div', { class: 'muted' }, p.xpForNextLevel > 0 ? t('{a} / {b} XP to level {n} · {total} in total', { a: p.xpIntoLevel, b: p.xpForNextLevel, n: p.level + 1, total: p.xp }) : t('Top level · {total} XP', { total: p.xp })),
       o.local ? h('div', { class: 'muted', style: 'font-size:14px' }, t('Local profile: kept only in this browser. XP comes from practice against bots.')) : null,

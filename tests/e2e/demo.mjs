@@ -46,10 +46,35 @@ try {
   check(/1$/.test(badge0), `menu profile tile shows the nickname and level 1 (${badge0})`);
   check((await page.getByTestId('arsenal-tile').count()) === 1, 'menu has the Arsenal tile');
   await page.screenshot({ path: `${outDir}/demo_menu.png` });
+  // the logo and the panels sit in the middle of a big screen; the alias is never clipped
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(400);
+  const layout = await page.evaluate(() => {
+    const scr = document.querySelector('.screen');
+    const c = document.querySelector('.menu-center').getBoundingClientRect();
+    const nick = document.querySelector('[data-testid=menu-nick]');
+    return { above: Math.round(c.top), below: Math.round(scr.clientHeight - c.bottom), nickFits: nick.scrollWidth <= nick.clientWidth + 1 };
+  });
+  check(Math.abs(layout.above - layout.below) <= 4 && layout.above > 60, `1440×900: the menu block is centred (${layout.above}px above, ${layout.below}px below)`);
+  check(layout.nickFits, 'the alias in the Dossier tile is fully visible');
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.waitForTimeout(300);
 
   // ── practice match ──────────────────────────────────────────────────────
   await page.evaluate(() => localStorage.setItem('blatkom89.tutorial.v1', '1')); // keep the controls card out of the screenshots
   await page.getByRole('button', { name: /Practice/ }).click();
+  await page.locator('.maptile').first().waitFor();
+  await page.waitForTimeout(500);
+  // map tiles: every caption in the same band, inside its tile, one font size for all
+  const caps = await page.evaluate(() =>
+    [...document.querySelectorAll('.maptile__name')].map((e) => {
+      const inner = e.firstElementChild.getBoundingClientRect();
+      const band = e.getBoundingClientRect();
+      const tile = e.parentElement.getBoundingClientRect();
+      return { name: e.textContent, size: getComputedStyle(e).fontSize, wide: e.scrollWidth > e.clientWidth + 1, inside: inner.top >= band.top - 1 && inner.bottom <= band.bottom + 1 && band.bottom <= tile.bottom + 1, offset: Math.round(tile.bottom - band.bottom) };
+    }),
+  );
+  check(caps.length === 7 && caps.every((c) => !c.wide && c.inside) && new Set(caps.map((c) => c.size)).size === 1 && new Set(caps.map((c) => c.offset)).size === 1, `map tiles: 7 captions inside the same band, one size (${caps[0]?.size})`);
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await page.waitForFunction(() => window.__blatkom?.game?.scene.getScene('game')?.session?.phase?.() === 'active', null, { timeout: 60000 });
   const me0 = await page.evaluate(() => window.__blatkom.game.scene.getScene('game').session.players().find((p) => p.isLocal));
@@ -199,6 +224,6 @@ try {
 }
 await browser.close();
 if (problems.length) console.log(problems.slice(0, 10).join('\n'));
-const ok = checks.length >= 12 && checks.every((c) => c.ok) && !problems.some((p) => p.startsWith('[pageerror]') || p.startsWith('[test]'));
+const ok = checks.length >= 24 && checks.every((c) => c.ok) && !problems.some((p) => p.startsWith('[pageerror]') || p.startsWith('[test]'));
 console.log(ok ? '[demo] passed' : '[demo] FAILED');
 process.exit(ok ? 0 : 1);

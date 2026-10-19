@@ -1,9 +1,11 @@
 /**
  * Menu soundtrack: one looping track streamed from assets/audio/theme.mp3 (never decoded whole —
  * a decoded three-minute track would take ~60 MB). It plays in menus and lobbies and fades out
- * when a match starts. Browsers (and Telegram on iOS) only allow audio after a user gesture, so
- * nothing plays before the first tap. The volume goes through WebAudio where available because
- * iOS ignores HTMLMediaElement.volume. The single-file offline demo ships without the track.
+ * when a match starts. At start-up the game tries to play it straight away (browsers that allow
+ * sound without a tap); where the browser refuses, the loading screen ends with a «Play» button
+ * whose tap starts the music together with the menu (main.ts). The volume goes through WebAudio
+ * once a tap has unlocked it, because iOS ignores HTMLMediaElement.volume. The single-file offline
+ * demo ships without the track.
  */
 import { asset } from '../../ui/dom.js';
 import { isSingleFile } from '../../app/inline.js';
@@ -31,10 +33,18 @@ class MusicPlayer {
     return !isSingleFile() && typeof Audio !== 'undefined' && !this.failed;
   }
 
-  /** Call from a user gesture (pointerdown / keydown). */
-  unlock(): void {
-    if (this.unlocked || !this.available()) return;
-    this.unlocked = true;
+  /** The track is playing (or fading in) right now. */
+  playing(): boolean {
+    return !!this.el && !this.el.paused && this.target > 0;
+  }
+
+  /** The player has music to play here: available, wanted (menus) and not muted. */
+  wantsSound(): boolean {
+    return this.available() && this.wanted && this.volume() > 0 && !this.hidden;
+  }
+
+  private element(): HTMLAudioElement {
+    if (this.el) return this.el;
     const el = new Audio();
     el.loop = true;
     el.preload = 'auto';
@@ -44,19 +54,52 @@ class MusicPlayer {
       this.stopRaf();
     });
     this.el = el;
+    return el;
+  }
+
+  /**
+   * Start-up: try to play without a tap. Resolves true when the music is playing (or nothing needs to
+   * play), false when the browser wants a tap first.
+   */
+  async tryAutoplay(): Promise<boolean> {
+    if (!this.wantsSound()) return true;
+    if (this.unlocked) return this.playing();
+    const el = this.element();
+    this.level = 0;
+    this.apply();
+    try {
+      await el.play();
+    } catch {
+      return false;
+    }
+    // allowed: plays straight to the speakers (el.volume) until a tap moves it onto WebAudio
+    this.unlocked = true;
+    if (this.wanted && !this.hidden) this.fadeTo(1, FADE_IN_MS);
+    else el.pause();
+    return true;
+  }
+
+  /** Call from a user gesture (pointerdown / keydown). */
+  unlock(): void {
+    if (!this.available()) return;
+    if (this.unlocked && (this.gain || !sfx.context())) return;
+    const el = this.element();
     const ctx = sfx.context();
-    if (ctx) {
+    if (ctx && !this.gain) {
       try {
         const src = ctx.createMediaElementSource(el);
         this.gain = ctx.createGain();
         this.gain.gain.value = 0;
         src.connect(this.gain).connect(ctx.destination);
+        el.volume = 1;
       } catch {
         this.gain = null;
       }
     }
+    const first = !this.unlocked;
+    this.unlocked = true;
     this.apply();
-    if (this.wanted) this.start();
+    if (first && this.wanted) this.start();
   }
 
   /** Menus want music, matches do not. */

@@ -85,6 +85,17 @@ instructions win; the original criteria are re-evaluated in §4.
 | 9. Menu soundtrack | «Hurt» (Infraction & Emerel Gray) in menus/lobby/results, fades in matches, volume and mute | 🟡 works; **the licence for use in a game must be confirmed by the operator** |
 | Capture the flag and base capture | `ctf` (flag stands on every map, steal/carry/drop/return/capture, 3 captures) and `bases` (A, B, C, capture bars, contested zones, a point per base per second, 250 points); objective bots; protocol v6; flags and bases in the world with team light, HUD strip, minimap, edge markers, banners, kill-feed lines, sounds; Tab/results columns; XP per capture; admin «Режимы» chart | ✅ `objectives.test.ts`, realtime test, `modes.mjs` and demo E2E |
 
+## 2d. Update 2026-10-19 (evening) — owner's polish list
+
+| Request (owner) | Implementation | Status |
+|---|---|---|
+| Centre the main menu (the logo and the panels) | on screens where the whole menu fits (≥ 761 × 720 px) two equal flexible rows around the block, the footer at the bottom; phones keep scrolling from the top | ✅ demo E2E measures 1440×900 (equal space above and below), screenshots 1280×720, 1920×1080, phone |
+| The whole alias visible in the Dossier tile | `ui/fit.ts`: one line shrunk from 19 px down to 13 px, a very long alias on two lines; the same for the profile header | ✅ checked with 14- and 24-character aliases; demo E2E |
+| Map names symmetric and inside the tiles | tiles rebuilt: the map picture (new thumbnails at the map's own aspect) centred above a caption band that is the same on every tile, one font size for all captions that fits the longest name; the selected map's band is red | ✅ demo E2E (7 captions inside one band, one size), screenshots EN/RU, desktop/phone |
+| The soundtrack should start right away | autoplay at start-up where allowed; otherwise «▶ Play» at the end of the loading screen starts the music with the menu (browsers do not allow sound before a tap) | ✅ `modes.mjs`: Play starts the music; with autoplay allowed there is no start screen and the music plays |
+| Profile avatars | the owner supplied 24 round pixel portraits | ⏳ next |
+| Ranks by level (like Tanki Online) | — | ⏸ on hold by the owner |
+
 ## 3. Open risks / next steps
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).

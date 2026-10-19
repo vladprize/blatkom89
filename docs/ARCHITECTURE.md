@@ -69,14 +69,14 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 |---|---|
 | `app/App.ts` | screens: menu (play column; character card, «Dossier» profile tile and the Arsenal tile; language and music switches), character select with the personal file, practice setup (map tiles, mode, 1–9 bots), Quick Match mode chooser, friends (create/join), lobby (team columns in team modes), game, results, profile, settings, credits, errors; first-launch nickname dialog |
 | `i18n/` | English (source strings) and Russian (`ru.ts`, `ru-content.ts` for characters, weapons, maps…): `t()`, Russian plurals, language detection (Telegram → browser → English), switching at run time |
-| `ui/` | DOM helpers, screens (Arsenal with the dressing room, lobby, results, settings, account, profile), map pickers with thumbnails, mode switch and pictograms, the in-game «doll» preview |
+| `ui/` | DOM helpers, screens (Arsenal with the dressing room, lobby, results, settings, account, profile), map pickers with thumbnails, mode switch and pictograms, the in-game «doll» preview, `fit.ts` (texts that shrink to fit: aliases, map captions) |
 | `profile/` | nickname dialog and suggestions; the demo build's browser-only profile (`localProfile.ts` pure rules + `localStore.ts` localStorage) — the online build always uses the server profile |
 | `net/` | REST client, `GameConnection` (WS, reconnect with backoff, ping), `OnlineClient` (auth, rooms, lobby state) |
 | `game/session/` | `OfflineSession` (local World + bots), `OnlineSession` (prediction, reconciliation, interpolation, delayed remote events) — both expose the same `GameSession` interface to the scenes |
 | `game/scenes/` | `BootScene` (loading), `GameScene` (fixed-step loop, camera, events → feedback), `HudScene` (HUD, touch controls, scoreboard), `PreviewScene` (animated map behind menus) |
 | `game/render/` | map renderer (tiles, decals, litter, props, walls, overhead layer, culling), lighting (light map, fixtures, objective light pools), effects, character views (team rings and name colours), equipment, flags and bases (`ObjectiveView`), VHS post-process |
 | `game/input/` | keyboard/mouse input and twin-stick touch controls (move stick, aim stick, fire/reload/swap buttons, left-handed mode) |
-| `game/audio/` | `Sfx.ts` — WebAudio-synthesised sound effects with distance attenuation; `Music.ts` — the menu soundtrack (streamed MP3 through the same audio context, fades out in matches) |
+| `game/audio/` | `Sfx.ts` — WebAudio-synthesised sound effects with distance attenuation; `Music.ts` — the menu soundtrack (streamed MP3, tries to start without a tap, moves onto the shared audio context after the first tap, fades out in matches; `main.ts` shows «▶ Play» when the browser wants a tap) |
 | `telegram/tg.ts` | Mini Apps SDK wrapper: init, safe areas, back button, haptics, sharing, confirm dialogs |
 | `analytics/client.ts` | batched client events with UUIDs, flushed with `keepalive` when the app is hidden |
 | `admin/` | the `/admin` dashboard (separate entry, never loaded by players) |

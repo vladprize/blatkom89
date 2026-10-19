@@ -58,6 +58,19 @@ const fail = async (e) => {
 };
 process.on('uncaughtException', fail);
 
+// The start screen: Chromium (like most browsers) refuses sound before the first tap, so the loading
+// screen ends with «▶ Play» when the menu music would play; a player arriving by an invite link (no
+// music yet) goes straight in. Waits for either and presses Play when it is there.
+async function pressPlay(page) {
+  await page.waitForFunction(() => {
+    const boot = document.getElementById('boot');
+    return !boot || boot.classList.contains('boot--hidden') || !!document.querySelector('[data-testid=boot-play]');
+  }, null, { timeout: 90000 });
+  const play = page.getByTestId('boot-play');
+  if (await play.count()) await play.click();
+  await page.waitForFunction(() => !document.getElementById('boot') || document.getElementById('boot').classList.contains('boot--hidden'), null, { timeout: 10000 });
+}
+
 async function nickname(p, nick) {
   const input = p.page.getByRole('textbox', { name: /Alias|Кличка/ });
   await input.waitFor({ timeout: 60000 });
@@ -68,6 +81,8 @@ async function nickname(p, nick) {
 try {
   // ── A: a capture-the-flag room ──────────────────────────────────────────
   await A.page.goto(base + '/');
+  await pressPlay(A.page);
+  check(await A.page.evaluate(() => window.__blatkom.music.playing()), 'A: «▶ Play» on the start screen starts the menu music');
   await nickname(A, 'Flag Bearer');
   await A.page.getByTestId('menu-nick').waitFor({ timeout: 20000 });
   await A.page.getByRole('button', { name: /Play with Friends/ }).click({ timeout: 30000 });
@@ -76,6 +91,7 @@ try {
   const code = (await A.page.locator('.code').textContent({ timeout: 20000 })).trim();
   check(/^[A-Za-z0-9]{6,16}$/.test(code), `A created a capture-the-flag room (invite ${code})`);
   await B.page.goto(`${base}/?invite=${encodeURIComponent(code)}`);
+  await pressPlay(B.page);
   await nickname(B, 'Перехватчик');
   await A.page.getByText(/Players 2\//).waitFor({ timeout: 90000 });
   await B.page.getByText(/Игроки 2\//).waitFor({ timeout: 90000 });
@@ -138,12 +154,22 @@ try {
   const qb = await B.page.evaluate(() => ({ room: window.__blatkom.app.lastLobby.roomId, mode: window.__blatkom.app.lastLobby.mode }));
   check(qa.room === qb.room && qa.mode === 'bases' && qb.mode === 'bases', `Quick Match «Base Capture» puts both into the same room (${qa.room})`);
   await B.page.screenshot({ path: `${outDir}/modes_quick_B.png` });
+
+  // ── a browser that allows sound without a tap: no start screen, the music plays with the menu ──
+  const free = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
+  const C = await (await free.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  C.on('pageerror', (e) => problems.push(`[C pageerror] ${e.message}`));
+  await C.goto(base + '/');
+  await C.waitForFunction(() => document.getElementById('boot')?.classList.contains('boot--hidden') ?? true, null, { timeout: 90000 });
+  const cState = await C.evaluate(() => ({ start: !!document.querySelector('[data-testid=boot-play]'), playing: window.__blatkom.music.playing() }));
+  check(!cState.start && cState.playing, `autoplay allowed: the menu opens without the start screen and the music is already playing (${JSON.stringify(cState)})`);
+  await free.close();
 } catch (e) {
   await fail(e);
 }
 await browser.close();
 const bad = problems.filter((p) => /pageerror/.test(p));
 if (problems.length) console.log(problems.slice(0, 10).join('\n'));
-const ok = checks.length >= 11 && checks.every((c) => c.ok) && bad.length === 0;
+const ok = checks.length >= 13 && checks.every((c) => c.ok) && bad.length === 0;
 console.log(ok ? '[modes] passed' : '[modes] FAILED');
 process.exit(ok ? 0 : 1);

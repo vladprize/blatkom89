@@ -164,6 +164,8 @@ export const RU: Record<string, string> = {
   'Take it back!': 'Отбей её!',
   'THE ENEMY TOOK BASE {l}': 'ПРОТИВНИК ВЗЯЛ БАЗУ {l}',
   'BASE {l}': 'БАЗА {l}',
+  'PLAY': 'ИГРАТЬ',
+  'The tape is rewound. Press play — the music starts with the menu.': 'Кассета перемотана. Жми «Играть» — музыка начнётся вместе с меню.',
   // ── HUD, connection, nickname, modes
   'Left stick — move': 'Левый стик — движение',
   'Right stick — aim and fire': 'Правый стик — прицел и огонь',

@@ -37,6 +37,19 @@ async function player(name, character) {
   return { name, ctx, page };
 }
 
+// The start screen: Chromium (like most browsers) refuses sound before the first tap, so the loading
+// screen ends with «▶ Play» when the menu music would play; a player arriving by an invite link (no
+// music yet) goes straight in. Waits for either and presses Play when it is there.
+async function pressPlay(page) {
+  await page.waitForFunction(() => {
+    const boot = document.getElementById('boot');
+    return !boot || boot.classList.contains('boot--hidden') || !!document.querySelector('[data-testid=boot-play]');
+  }, null, { timeout: 90000 });
+  const play = page.getByTestId('boot-play');
+  if (await play.count()) await play.click();
+  await page.waitForFunction(() => !document.getElementById('boot') || document.getElementById('boot').classList.contains('boot--hidden'), null, { timeout: 10000 });
+}
+
 const phaseOf = (p) => p.page.evaluate(() => window.__blatkom?.game?.scene.getScene('game')?.session?.phase?.() ?? null);
 
 const A = await player('A', 'petya');
@@ -57,6 +70,7 @@ process.on('uncaughtException', async (e) => {
 // ── nickname (first launch) ───────────────────────────────────────────────
 const NICK_A = 'Courtyard Commandant';
 await A.page.goto(base + '/');
+await pressPlay(A.page);
 const nickInput = A.page.getByRole('textbox', { name: 'Alias' });
 await nickInput.waitFor({ timeout: 60000 });
 await nickInput.fill(NICK_A);
@@ -72,6 +86,7 @@ await A.page.getByRole('button', { name: 'Create a room' }).click();
 const code = (await A.page.locator('.code').textContent({ timeout: 20000 })).trim();
 step(`A created a private room, invite code ${code}`);
 await B.page.goto(`${base}/?invite=${encodeURIComponent(code)}`);
+await pressPlay(B.page);
 // a new player who opens an invite link picks a nickname before entering the room
 const NICK_B = 'Night Owl';
 const nickInputB = B.page.getByRole('textbox', { name: 'Alias' });

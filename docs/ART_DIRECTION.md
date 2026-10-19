@@ -90,7 +90,7 @@ movement direction, the torso (with the weapon) with the aim direction.
 | Hero art `assets/heroes/<id>.jpg` (360×480) | `tools/extract-heroes.py`: head and torso cropped 3:4 from the owner's character sheets in `references/` (logo, titles and side panels left out) | Arsenal dressing room (the character «holding» the weapon being tried on), the «Personal File» on the character screen, character cards in the Arsenal — the characters look exactly as on the BLATKOM sheets |
 | Weapon / equipment / modification icons `ui/weapons/<id>.png` + `_s.png`, `ui/gadgets/…`, `ui/mods/…` | `tools/art/build-weapons.ts`, `renderInBox`: every icon is fitted into the same box (weapons and equipment 168×56 / 84×28, modifications 72×36 / 36×18) by its drawn bounds | Arsenal lists and slots, results — all icons the same size |
 | Arsenal tile pistol `ui/menu_arsenal.png` | TT pistol side view rendered by the weapon pipeline | the Arsenal tile in the main menu |
-| Map thumbnails `assets/maps/<id>.jpg` (320×320) | `tools/map-thumbs.mjs`: each map captured from the real renderer (night lighting on, players hidden), fitted into a square, lifted a little for small sizes | map pickers (practice, rooms, lobby) |
+| Map thumbnails `assets/maps/<id>.jpg` (320 px wide, the map's own aspect) | `tools/map-thumbs.mjs`: each map captured from the real renderer (night lighting on, players hidden), lifted a little for small sizes | map pickers (practice, rooms, lobby): a square tile — the picture centred above a caption band of the same height on every tile, all captions at one font size that fits the longest name (`ui/fit.ts`), the selected map's band red |
 | Logo `ui/logo.png` / `logo_ru.png` | `tools/make-logo.py`: Latin «BLATKOM» with the English tagline, Cyrillic «БЛАТКОМ» with «Районные дела — серьёзные дела» | main menu, by language |
 | Mode pictograms | inline SVG in `apps/web/src/ui/modes.ts` (crosshair, red/blue halves, a flag with a star, three zones) | mode buttons, Quick Match chooser |
 
@@ -123,6 +123,11 @@ state in a strip under the timer, on the minimap and as edge markers.
   as the game's soundtrack; `assets/audio/theme.mp3` (loudness-normalised, 96 kbps). It plays in the
   menus, the lobby and on the results screen, fades out when a match starts and pauses when the tab is
   hidden (`apps/web/src/game/audio/Music.ts`); volume in Settings, a mute button in the menu corner.
+  It starts together with the menu: at start-up the game tries to play it without a tap (browsers that
+  allow it); browsers refuse sound before the first tap on a new site (Chrome, Safari, Telegram on
+  iOS), so then the loading screen ends with a «▶ Play» button (`main.ts`) and that tap starts the
+  music with the menu. A player who arrives by an invite link goes straight to the room; the music
+  starts with their first tap.
   It is credited in the menu («Credits») and in `THIRD_PARTY_LICENSES.txt`. **The licence for use in
   a game could not be verified while building this release: the operator must confirm the terms and
   the required attribution with the rights holders before public launch** (or replace the file). The

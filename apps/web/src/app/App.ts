@@ -25,6 +25,7 @@ import { openNicknameDialog, randomNickname } from '../profile/nickname.js';
 import { renderResults } from '../ui/screens/results.js';
 import { renderLobby, modeSwitch } from '../ui/screens/lobby.js';
 import { mapPicker } from '../ui/maps.js';
+import { fitAlias, whenSized } from '../ui/fit.js';
 import { MODE_ORDER, modeIcon, modeName, modeRules, modeSub } from '../ui/modes.js';
 import { renderArsenal, characterPriceNote, amount, heroImg } from '../ui/screens/shop.js';
 import type { ArsenalTab, TryOn } from '../ui/screens/shop.js';
@@ -336,39 +337,42 @@ export class App {
         'div',
         { class: 'wrap wrap--menu' },
         this.cornerControls(),
-        h('img', { class: 'logo', src: asset(getLang() === 'ru' ? 'assets/ui/logo_ru.png' : 'assets/ui/logo.png'), alt: t('BLATKOM ’89 — district business is serious business') }),
         h(
           'div',
-          { class: 'menu' },
+          { class: 'menu-center' },
+          h('img', { class: 'logo', src: asset(getLang() === 'ru' ? 'assets/ui/logo_ru.png' : 'assets/ui/logo.png'), alt: t('BLATKOM ’89 — district business is serious business') }),
           h(
             'div',
-            { class: 'panel menu__play' },
-            h('span', { class: 'tag' }, t('District Business')),
-            h('button', { class: 'btn btn--red', onclick: () => this.quickMatch(), disabled: !ONLINE_AVAILABLE }, t('Quick Match'), h('span', { class: 'sub' }, t('online, up to {n} comrades', { n: MAX_ROOM_PLAYERS }))),
-            h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, t('Play with Friends'), h('span', { class: 'sub' }, t('a room by invitation'))),
-            h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, t('Practice'), h('span', { class: 'sub' }, t('against bots, no internet needed'))),
-            h('button', { class: 'btn', onclick: () => this.showSettings() }, t('Settings'), h('span', { class: 'sub' }, t('picture, sound, controls, language'))),
-            onlineNote,
-          ),
-          h(
-            'div',
-            { class: 'menu__side' },
+            { class: 'menu' },
             h(
               'div',
-              { class: 'panel col menu__char' },
-              h('span', { class: 'tag' }, t('Character')),
+              { class: 'panel menu__play' },
+              h('span', { class: 'tag' }, t('District Business')),
+              h('button', { class: 'btn btn--red', onclick: () => this.quickMatch(), disabled: !ONLINE_AVAILABLE }, t('Quick Match'), h('span', { class: 'sub' }, t('online, up to {n} comrades', { n: MAX_ROOM_PLAYERS }))),
+              h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, t('Play with Friends'), h('span', { class: 'sub' }, t('a room by invitation'))),
+              h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, t('Practice'), h('span', { class: 'sub' }, t('against bots, no internet needed'))),
+              h('button', { class: 'btn', onclick: () => this.showSettings() }, t('Settings'), h('span', { class: 'sub' }, t('picture, sound, controls, language'))),
+              onlineNote,
+            ),
+            h(
+              'div',
+              { class: 'menu__side' },
               h(
                 'div',
-                { class: 'charcard', role: 'button', tabindex: '0', onclick: () => this.showCharacters(), onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && this.showCharacters() },
-                portrait(this.character),
-                h('div', { class: 'col', style: 'gap:2px;min-width:0' }, h('div', { class: 'name' }, charText(this.character).name), h('div', { class: 'nick' }, `«${charText(this.character).nickname}»`), h('div', { class: 'hand' }, charText(this.character).quote)),
+                { class: 'panel col menu__char' },
+                h('span', { class: 'tag' }, t('Character')),
+                h(
+                  'div',
+                  { class: 'charcard', role: 'button', tabindex: '0', onclick: () => this.showCharacters(), onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && this.showCharacters() },
+                  portrait(this.character),
+                  h('div', { class: 'col', style: 'gap:2px;min-width:0' }, h('div', { class: 'name' }, charText(this.character).name), h('div', { class: 'nick' }, `«${charText(this.character).nickname}»`), h('div', { class: 'hand' }, charText(this.character).quote)),
+                ),
+                h('button', { class: 'btn btn--small', onclick: () => this.showCharacters() }, t('Change character')),
               ),
-              h('button', { class: 'btn btn--small', onclick: () => this.showCharacters() }, t('Change character')),
+              h('div', { class: 'tiles' }, this.stripEl, this.arsenalTile()),
             ),
-            h('div', { class: 'tiles' }, this.stripEl, this.arsenalTile()),
           ),
         ),
-        h('div', { class: 'grow' }),
         ONLINE_AVAILABLE
           ? h('div', { class: 'footer' }, t('BLATKOM ’89 · v{v} · Free to play, purchases optional', { v: VERSION }), ' · ', h('a', { href: asset(getLang() === 'ru' ? 'privacy-ru.html' : 'privacy.html'), target: '_blank', style: 'color:inherit' }, t('Privacy')), ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits')))
           : h('div', { class: 'footer' }, t('BLATKOM ’89 · v{v} · Demo: the game runs right in your browser; no data is collected or sent anywhere.', { v: VERSION }), ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits'))),
@@ -432,6 +436,9 @@ export class App {
     const pct = lvl.nextLevelCost > 0 ? Math.round((lvl.intoLevel / lvl.nextLevelCost) * 100) : 100;
     const level = this.playerLevel() ?? lvl.level;
     const inv = this.online?.inventory;
+    const nick = h('div', { class: 'nm', 'data-testid': 'menu-nick' }, h('span', { class: 'fit-text' }, name));
+    // the whole alias stays visible: a long one gets a smaller font, a very long one two lines
+    whenSized(tile, () => fitAlias(nick, { max: 19, min: 13, minTwoLines: 10 }));
     tile.append(
       h('span', { class: 'tag' }, t('Dossier')),
       h(
@@ -445,7 +452,7 @@ export class App {
           onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && this.showProfile(),
         },
         h('div', { class: 'tile__head' }, h('div', { class: 'lvlbadge' }, h('small', null, t('LVL')), String(level))),
-        h('div', { class: 'nm', 'data-testid': 'menu-nick' }, name),
+        nick,
         h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
         h('div', { class: 'xp' }, lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} XP` : t('max level')),
         inv ? h('div', { class: 'tile__wallet' }, amount(inv.tokens, 'tokens'), amount(inv.diamonds, 'diamonds')) : null,
