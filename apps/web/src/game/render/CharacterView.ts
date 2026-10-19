@@ -1,5 +1,5 @@
 /**
- * Visual for one player: shadow, legs (rotated to movement), torso (rotated to aim) with the weapon
+ * Visual for one player: legs (rotated to movement), torso (rotated to aim) with the weapon
  * sprite attached at the torso frame's grip (paper doll, see rig.gen.ts), name tag and health bar.
  * Animation states are driven by session state and events, not random frames.
  */
@@ -30,7 +30,6 @@ const TEAM_FILL = [0xd8392e, 0x4a9be0] as const;
 
 export class CharacterView {
   readonly slot: number;
-  private readonly shadow: Phaser.GameObjects.Image;
   /** Team matches: a coloured ring under the character. */
   private readonly ring: Phaser.GameObjects.Image;
   private ringTeam: number | null = -1;
@@ -63,7 +62,6 @@ export class CharacterView {
     this.slot = p.slot;
     this.character = p.character;
     this.weapon = p.weapon;
-    this.shadow = scene.add.image(p.x, p.y, 'fx', 'shadow').setScale(0.6, 0.48).setAlpha(0.55).setDepth(D.CHAR_SHADOW);
     this.ring = scene.add.image(p.x, p.y, 'fx', 'ring').setScale(0.42).setAlpha(0.8).setDepth(D.CHAR_SHADOW + 0.01).setVisible(false);
     this.legs = scene.add.sprite(p.x, p.y, `char_${p.character}`, `${p.character}_legs_idle_0`).setScale(SCALE).setDepth(D.LEGS);
     this.torso = scene.add.sprite(p.x, p.y, `char_${p.character}`, `${p.character}_${WEAPONS[p.weapon].pose}_idle_0`).setScale(SCALE).setDepth(D.TORSO + p.slot * 0.01);
@@ -137,7 +135,7 @@ export class CharacterView {
     const visible = p.alive;
     if (visible !== this.alive) {
       this.alive = visible;
-      for (const o of [this.shadow, this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.setVisible(visible);
+      for (const o of [this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.setVisible(visible);
       if (visible) this.playIdle();
     }
     if (p.team !== this.ringTeam) {
@@ -193,7 +191,6 @@ export class CharacterView {
     this.legs.setPosition(p.x, p.y).setRotation(this.legAngle);
     const rot = p.aim + bob * 0.035;
     this.torso.setPosition(p.x + px, p.y + py).setRotation(rot);
-    this.shadow.setPosition(p.x + 2.5, p.y + 3.5).setRotation(p.aim);
     // weapon at the grip of the current torso frame
     const frameName = String(this.torso.frame.name);
     const grip = GRIPS[frameName.slice(this.character.length + 1)] ?? GRIPS[`${WEAPONS[this.weapon].pose}_idle_0`]!;
@@ -255,7 +252,7 @@ export class CharacterView {
   }
 
   destroy(): void {
-    for (const o of [this.shadow, this.ring, this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.destroy();
+    for (const o of [this.ring, this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.destroy();
   }
 }
 

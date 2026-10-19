@@ -188,7 +188,7 @@ const DEFS: Record<WeaponId, Def> = {
   obrez: primary({
     name: 'Sawn-off',
     blurb: 'Two barrels point-blank settle any argument.',
-    tier: 'base',
+    tier: 'shop',
     damage: 14,
     pellets: 8,
     fireIntervalMs: 650,

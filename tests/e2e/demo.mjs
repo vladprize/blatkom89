@@ -2,7 +2,8 @@
 // scoring (an assist and a kill are staged through the real World API), a «deficit goods» supply drop,
 // the Tab table → results with XP from the browser-only profile → menu profile tile and profile screen →
 // capture the flag and base capture practice (flags, bases, HUD strip, objective events, team results) →
-// the Arsenal dressing room → Russian language → reload keeps the profile.
+// the Arsenal dressing room (the case banner and the top-up on the right, four kit columns that line up,
+// a shop tile tried on with its price) → Russian language → reload keeps the profile.
 //
 // Usage: node tests/e2e/demo.mjs <path-to-blatkom89-demo.html> <outDir>
 import { chromium } from 'playwright';
@@ -219,6 +220,21 @@ try {
   await page.getByTestId('dressing-room').waitFor({ timeout: 10000 });
   const heroOk = await page.locator('[data-testid="dressing-room"] img').first().evaluate((img) => img.complete && img.naturalWidth > 0);
   check(heroOk, 'the Arsenal dressing room shows the character art');
+  // v0.23 layout: the case banner (in the player's language) and the diamond top-up right of the
+  // dressing room; four slot columns of the same height with the same number of rows
+  const promo = await page.evaluate(() => {
+    const img = document.querySelector('[data-testid=promo-case] img');
+    const room = document.querySelector('.dressing__poster').getBoundingClientRect();
+    const box = document.querySelector('.dressing__promo').getBoundingClientRect();
+    return { loaded: !!img && img.complete && img.naturalWidth > 0, lang: img?.getAttribute('data-lang'), right: box.left > room.right, topup: !!document.querySelector('[data-testid=promo-topup-btn]') };
+  });
+  check(promo.loaded && promo.lang === 'en' && promo.right && promo.topup, `the case banner (English) and the diamond top-up stand right of the dressing room (${JSON.stringify(promo)})`);
+  const kit = await page.evaluate(() => [...document.querySelectorAll('.slotcard')].map((c) => ({ h: Math.round(c.getBoundingClientRect().height), rows: c.querySelectorAll('.slotpick > .wbtn').length, shop: c.querySelectorAll('.wbtn--shop').length })));
+  check(kit.length === 4 && new Set(kit.map((k) => k.h)).size === 1 && new Set(kit.map((k) => k.rows)).size === 1 && kit.every((k) => k.rows >= 3) && kit.some((k) => k.shop > 0), `the kit's four columns line up: same height, same rows, shop items fill the gaps (${JSON.stringify(kit)})`);
+  await page.locator('.wbtn--shop[data-shop="tt"]').click();
+  await page.waitForTimeout(400);
+  const tried = await page.evaluate(() => ({ name: document.querySelector('[data-testid=dressing-name]')?.textContent, buy: document.querySelector('.dressing__buy')?.textContent ?? '' }));
+  check(tried.name === 'TT' && /150/.test(tried.buy), `a shop tile puts the weapon on in the dressing room with its price to buy (${JSON.stringify(tried)})`);
   await page.screenshot({ path: `${outDir}/demo_arsenal.png` });
 
   // ── Russian ─────────────────────────────────────────────────────────────
@@ -247,6 +263,6 @@ try {
 }
 await browser.close();
 if (problems.length) console.log(problems.slice(0, 10).join('\n'));
-const ok = checks.length >= 25 && checks.every((c) => c.ok) && !problems.some((p) => p.startsWith('[pageerror]') || p.startsWith('[test]'));
+const ok = checks.length >= 28 && checks.every((c) => c.ok) && !problems.some((p) => p.startsWith('[pageerror]') || p.startsWith('[test]'));
 console.log(ok ? '[demo] passed' : '[demo] FAILED');
 process.exit(ok ? 0 : 1);

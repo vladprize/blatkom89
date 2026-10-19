@@ -27,9 +27,13 @@ by invitation; capped at 400.
 
 ## 2. What is free
 
-The four starting characters (Petya, Valuta, Uchastkovy, Mikhalych), the base weapons (Makarov,
-crowbar, sawn-off, AK-47) and the F-1 grenade. A new player spawns with a working loadout and can
-play every map and mode without spending anything.
+Two characters (Petya the rooster and Valuta the panther), a full kit of three weapons (Makarov,
+crowbar, AK-47) and the F-1 grenade. A new player spawns with a working loadout and can play every map
+and mode without spending anything.
+
+Until v0.23 the wolf (Uchastkovy), the bear (Mikhalych) and the sawn-off were free as well; they are
+now bought with talons, and every account made before that keeps them (migration 009 stores them as
+grants).
 
 ## 3. The Arsenal
 
@@ -37,16 +41,18 @@ Prices (`WEAPON_PRICES`, `CHARACTER_PRICES`, `GADGET_PRICES`, `MOD_PRICES`):
 
 | Item | Price |
 |---|---|
-| Knife / TT / Uzi | 120 / 150 / 200 talons |
+| Sawn-off / Knife / TT / Uzi | 100 / 120 / 150 / 200 talons |
 | P92 (lvl 3) / Bat (lvl 5) / AKS-74U (lvl 7) / PPSh-41 (lvl 10) / M24 (lvl 13) | 250 / 300 / 400 / 500 / 650 talons |
 | Deagle, Axe | 199 💎 |
 | MP5, S-12K | 299 💎 |
 | M4A1, G36, M249 | 399 💎 |
 | SVD, AWM, RPG-7 | 499 💎 |
-| Characters for level + talons: Karlych (lvl 2), Sonka (4), Tolyan (6), Gosha (8), Vityok (11) | 200 / 350 / 500 / 650 / 800 talons |
-| Characters for diamonds: Lyova, Slavik / Zhora, Garik «Pendos» / Batya | 299 / 399 / 499 💎 |
+| Characters for level + talons (six): Uchastkovy (lvl 1), Mikhalych (2), Karlych (3), Sonka (5), Tolyan (7), Gosha (9) | 150 / 200 / 300 / 400 / 550 / 700 talons |
+| Characters for diamonds (six): Vityok / Lyova, Slavik / Zhora, Garik «Pendos» / Batya | 199 / 299 / 399 / 499 💎 |
 | Equipment: smoke / flashbang (lvl 2) / Molotov (lvl 4) / mine (lvl 6) / C4 (lvl 8) / turret (lvl 12) | 100 / 150 / 250 / 300 / 350 / 450 talons |
 | Modifications, per weapon: red dot, laser / grip / silencer, extended mag / scope | 100 / 120 / 150 / 200 talons |
+
+Weapons for diamonds (10) slightly outnumber those for talons (9); characters are split evenly (6 / 6).
 
 Principles:
 

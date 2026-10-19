@@ -160,8 +160,7 @@ export class Doll {
     const cx = W / 2 + BODY_X * u * Math.cos(aim);
     const cy = W / 2 + 6 * u + BODY_X * u * Math.sin(aim);
     const k = u * SPRITE_SCALE;
-    // shadow, legs, weapon (under the arms), torso
-    this.blit('fx', 'shadow', cx + 2.5 * u, cy + 3.5 * u, aim, u * 0.6, 0.55);
+    // legs, weapon (under the arms), torso — no drop shadow (it read as a dark square behind the character)
     this.blit(`char_${ch}`, `${ch}_legs_idle_0`, cx, cy, aim, k);
     const grip = GRIPS[`${pose}_${anim}_${fi}`] ?? GRIPS[`${pose}_idle_0`]!;
     const kick = anim === 'shoot' && fi === 0 ? Math.max(0, def.shake - 0.22) * 5 : 0;

@@ -1,9 +1,11 @@
 /**
- * The Arsenal: the dressing room (the character's art with the item being tried on and the same
- * character as it looks in a match), the loadout (weapons, equipment, modifications), the weapon /
- * equipment / character shop, the rare-weapon case and diamond packs. Prices and rules are the
- * shared ones; every purchase is decided by the server. In the demo build (no server) the catalog is
- * read-only, but anything can be tried on — in the dressing room and in practice.
+ * The Arsenal: the dressing room (the character's art with the item being tried on, the same
+ * character as it looks in a match, and on the right the case banner and the diamond top-up), the
+ * loadout (four equal slot columns: what you own, then what the shop has for that slot; weapons,
+ * equipment, modifications), the weapon / equipment / character shop, the rare-weapon case and
+ * diamond packs. Prices and rules are the shared ones; every purchase is decided by the server. In
+ * the demo build (no server) the catalog is read-only, but anything can be tried on — in the dressing
+ * room and in practice.
  */
 import {
   CASE_PRICE,
@@ -39,7 +41,7 @@ import type { OnlineClient } from '../../net/OnlineClient.js';
 import { apiErrorText } from '../../net/errors.js';
 import { sfx } from '../../game/audio/Sfx.js';
 import { haptic } from '../../telegram/tg.js';
-import { t, plural, count, num } from '../../i18n/index.js';
+import { t, plural, count, num, getLang } from '../../i18n/index.js';
 import { charText, gadgetBlurb, gadgetName, modText, rarityLabel, refusalText, weaponBlurb, weaponName } from '../../i18n/content.js';
 import { Doll } from '../doll.js';
 
@@ -282,6 +284,14 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       : price
         ? h('span', { class: 'badge' }, priceLabel(price))
         : h('span', { class: 'badge' }, WEAPONS[w].tier === 'rare' ? t('Case only') : t('Free'));
+    // not yours yet: buy it right here (or go to the case for a rare one)
+    const getIt = isOwned
+      ? null
+      : price
+        ? h('div', { class: 'dressing__buy' }, buyButton(g ? 'gadget' : 'weapon', g ?? w, price, true))
+        : !g && WEAPONS[w].tier === 'rare'
+          ? h('div', { class: 'dressing__buy' }, h('button', { class: 'btn btn--small btn--red', onclick: () => ((tab = 'case'), draw()) }, t('To the case')))
+          : null;
     roomEl.replaceChildren(
       h('span', { class: 'tag' }, t('Dressing room')),
       h(
@@ -300,6 +310,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           h('div', { class: 'row', style: 'gap:8px' }, h('span', { class: 'chiplabel' }, tagText), status),
           h('div', { class: 'h2 dressing__name', 'data-testid': 'dressing-name' }, name),
           h('div', { class: 'muted' }, g ? gadgetBlurb(g) : weaponBlurb(w)),
+          getIt,
           !g && mods.length ? h('div', { class: 'modfit' }, t('With:'), ...mods.map((m) => h('span', { class: 'chip' }, modImg(m, 'small'), modText(m).name))) : null,
           h(
             'div',
@@ -314,8 +325,34 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
             ),
           ),
         ),
+        promoColumn(),
       ),
     );
+  };
+
+  /** Right of the dressing room: the case banner (in the player's language) and the diamond top-up. */
+  const promoColumn = (): HTMLElement => {
+    const lang = getLang() === 'ru' ? 'ru' : 'en';
+    const banner = h(
+      'button',
+      { class: 'promo-case', 'data-testid': 'promo-case', 'aria-label': t('Rare weapon case — {n} {diamonds}', { n: CASE_PRICE, diamonds: diamondWord(CASE_PRICE) }), onclick: () => ((tab = 'case'), sfx.play('click'), draw(), body.scrollIntoView({ behavior: 'smooth', block: 'start' })) },
+      h('img', { src: asset(`assets/ui/banners/case-weapons-${lang}.jpg`), width: 1200, height: 675, alt: '', draggable: 'false', 'data-lang': lang }),
+    );
+    const balance = inv ? inv.diamonds : null;
+    const topup = h(
+      'div',
+      { class: 'promo-topup', 'data-testid': 'promo-topup' },
+      h('div', { class: 'promo-topup__gems', 'aria-hidden': 'true' }, cur('diamonds'), cur('diamonds'), cur('diamonds')),
+      h(
+        'div',
+        { class: 'col promo-topup__text' },
+        h('b', null, t('Diamonds')),
+        h('span', { class: 'muted' }, online ? (balance === null ? '…' : t('On your account: {n}', { n: balance })) : t('Online version only')),
+        h('span', { class: 'muted promo-topup__rate' }, t('100 diamonds = $1 · characters, weapons, cases')),
+      ),
+      h('button', { class: 'btn btn--red promo-topup__btn', 'data-testid': 'promo-topup-btn', onclick: () => ((tab = 'diamonds'), sfx.play('click'), draw(), body.scrollIntoView({ behavior: 'smooth', block: 'start' })) }, t('Top up')),
+    );
+    return h('div', { class: 'dressing__promo' }, banner, topup);
   };
   /** «Примерить»: put it on in the dressing room and bring the dressing room into view. */
   const tryOn = (next: TryOn) => {
@@ -354,16 +391,27 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     tabsEl.replaceChildren(...tabs.map(([id, label]) => h('button', { role: 'tab', 'aria-pressed': String(tab === id), onclick: () => ((tab = id), sfx.play('click'), draw()) }, label)));
   };
 
-  // ── loadout: four slots + modifications of the focused weapon ─────────
+  // ── loadout: four equal slot columns + modifications of the focused weapon ─────────
+  // Every column has the same number of rows: what the player owns (and «none» where a slot may stay
+  // empty), then what the shop has for that slot — cheapest first, talons before diamonds — so the
+  // columns line up and there are no gaps. A shop tile puts the item on in the dressing room, where it
+  // can be bought.
   let focus: WeaponId | null = null;
+  const byPrice = (a: ShopPrice | undefined, b: ShopPrice | undefined) =>
+    (a?.currency === b?.currency ? 0 : a?.currency === 'tokens' ? -1 : 1) || (a?.level ?? 0) - (b?.level ?? 0) || (a?.amount ?? 0) - (b?.amount ?? 0);
+  const shopTile = (kind: 'weapon' | 'gadget', id: WeaponId | GadgetId, price: ShopPrice) => {
+    const lockedByLevel = !!inv && inv.level < price.level;
+    return h(
+      'button',
+      { class: 'wbtn wbtn--shop', 'data-shop': id, title: t('Try on — and buy it in the dressing room'), onclick: () => tryOn(kind === 'weapon' ? { weapon: id as WeaponId } : { gadget: id as GadgetId }) },
+      kind === 'weapon' ? weaponImg(id as WeaponId, 'small') : gadgetImg(id as GadgetId, 'small'),
+      h('span', null, kind === 'weapon' ? weaponName(id as WeaponId) : gadgetName(id as GadgetId)),
+      h('span', { class: `wbtn__price ${price.currency}` }, cur(price.currency), String(price.amount), lockedByLevel ? h('small', null, ` · ${t('LV {n}', { n: price.level })}`) : null),
+    );
+  };
   const loadoutTab = (): HTMLElement => {
     const l = loadout();
     focus ??= l.primary ?? l.sidearm;
-    const slots: Array<[1 | 2 | 3, WeaponId | null, readonly WeaponId[]]> = [
-      [1, l.sidearm, SIDEARMS],
-      [2, l.melee, MELEE_WEAPONS],
-      [3, l.primary, PRIMARY_WEAPONS],
-    ];
     const pick = (slot: 1 | 2 | 3, w: WeaponId | null) => {
       focus = w ?? focus;
       if (w) trying = { weapon: w, mods: [...(l.mods[w] ?? [])] };
@@ -374,36 +422,51 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       if (!online || !inv) return draw();
       save(next);
     };
-    const slotCards = slots.map(([slot, current, list]) => {
+    interface Column {
+      slot: 1 | 2 | 3 | 4;
+      mine: HTMLElement[];
+      shop: HTMLElement[];
+      more: number;
+      toTab: ArsenalTab;
+    }
+    const weaponColumn = (slot: 1 | 2 | 3, current: WeaponId | null, list: readonly WeaponId[]): Column => {
       const options = list.filter(owned);
-      return h(
-        'div',
-        { class: 'panel col slotcard' },
-        h('span', { class: 'tag' }, `${slot} · ${slotLabel(slot)}`),
-        h(
-          'div',
-          { class: 'slotpick' },
-          ...options.map((w) => h('button', { class: `wbtn ${w === current ? 'on' : ''} ${w === focus ? 'focus' : ''}`, 'aria-pressed': String(w === current), title: weaponName(w), onclick: () => (w === current ? ((focus = w), (trying = { weapon: w, mods: [...(l.mods[w] ?? [])] }), draw()) : pick(slot, w)) }, weaponImg(w, 'small'), h('span', null, weaponName(w)))),
-          slot === 3 ? h('button', { class: `wbtn ${current === null ? 'on' : ''}`, 'aria-pressed': String(current === null), onclick: () => pick(3, null) }, h('span', { class: 'none' }, '—'), h('span', null, t('Sidearm only'))) : null,
-        ),
-        options.length < list.length ? h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((tab = 'weapons'), draw()) }, t('{n} more in the shop →', { n: list.length - options.length })) : null,
+      const mine = options.map((w) =>
+        h('button', { class: `wbtn ${w === current ? 'on' : ''} ${w === focus ? 'focus' : ''}`, 'aria-pressed': String(w === current), title: weaponName(w), onclick: () => (w === current ? ((focus = w), (trying = { weapon: w, mods: [...(l.mods[w] ?? [])] }), draw()) : pick(slot, w)) }, weaponImg(w, 'small'), h('span', null, weaponName(w))),
       );
-    });
+      if (slot === 3) mine.push(h('button', { class: `wbtn ${current === null ? 'on' : ''}`, 'aria-pressed': String(current === null), onclick: () => pick(3, null) }, h('span', { class: 'none' }, '—'), h('span', null, t('Sidearm only'))));
+      const forSale = list.filter((w) => !owned(w) && WEAPON_PRICES[w]).sort((a, b) => byPrice(WEAPON_PRICES[a], WEAPON_PRICES[b]));
+      return { slot, mine, shop: forSale.map((w) => shopTile('weapon', w, WEAPON_PRICES[w]!)), more: list.filter((w) => !owned(w)).length, toTab: 'weapons' };
+    };
     const gadgetOptions = GADGET_IDS.filter(ownedGadget);
-    const gadgetCard = h(
-      'div',
-      { class: 'panel col slotcard' },
-      h('span', { class: 'tag' }, `4 · ${slotLabel(4)}`),
-      h(
-        'div',
-        { class: 'slotpick' },
+    const gadgetColumn: Column = {
+      slot: 4,
+      mine: [
         ...gadgetOptions.map((g) => h('button', { class: `wbtn ${g === l.gadget ? 'on' : ''}`, 'aria-pressed': String(g === l.gadget), title: gadgetName(g), onclick: () => g !== l.gadget && save({ ...l, gadget: g }) }, gadgetImg(g, 'small'), h('span', null, gadgetName(g)))),
         h('button', { class: `wbtn ${l.gadget === null ? 'on' : ''}`, 'aria-pressed': String(l.gadget === null), onclick: () => l.gadget !== null && save({ ...l, gadget: null }) }, h('span', { class: 'none' }, '—'), h('span', null, t('No equipment'))),
-      ),
-      gadgetOptions.length < GADGET_IDS.length ? h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((tab = 'gear'), draw()) }, t('{n} more in the shop →', { n: GADGET_IDS.length - gadgetOptions.length })) : null,
-    );
+      ],
+      shop: GADGET_IDS.filter((g) => !ownedGadget(g) && GADGET_PRICES[g])
+        .sort((a, b) => byPrice(GADGET_PRICES[a], GADGET_PRICES[b]))
+        .map((g) => shopTile('gadget', g, GADGET_PRICES[g]!)),
+      more: GADGET_IDS.length - gadgetOptions.length,
+      toTab: 'gear',
+    };
+    const columns: Column[] = [weaponColumn(1, l.sidearm, SIDEARMS), weaponColumn(2, l.melee, MELEE_WEAPONS), weaponColumn(3, l.primary, PRIMARY_WEAPONS), gadgetColumn];
+    // the same number of rows everywhere: at least three, as many as the fullest column owns (≤ 6)
+    const rows = Math.min(6, Math.max(3, ...columns.map((c) => c.mine.length)));
+    const slotCards = columns.map((c) => {
+      const shown = c.shop.slice(0, Math.max(0, rows - c.mine.length));
+      const left = c.more - shown.length;
+      return h(
+        'div',
+        { class: 'panel col slotcard', 'data-slot': String(c.slot) },
+        h('span', { class: 'tag' }, `${c.slot} · ${slotLabel(c.slot)}`),
+        h('div', { class: 'slotpick', style: `--rows:${Math.max(rows, c.mine.length)}` }, ...c.mine, ...shown),
+        h('button', { class: 'btn btn--small btn--ghost slotcard__more', onclick: () => ((tab = c.toTab), draw()) }, left > 0 ? t('{n} more in the shop →', { n: left }) : t('To the shop →')),
+      );
+    });
     const fw = focus && owned(focus) ? focus : (l.primary ?? l.sidearm);
-    return h('div', { class: 'col' }, h('div', { class: 'slots' }, ...slotCards, gadgetCard), modsPanel(fw, l), statBars(fw, l.mods[fw]));
+    return h('div', { class: 'col' }, h('div', { class: 'slots' }, ...slotCards), modsPanel(fw, l), statBars(fw, l.mods[fw]));
   };
 
   /** Modifications of one weapon: buy (talons), put on, take off, try on. */
@@ -454,11 +517,12 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
 
   // ── shop helpers ──────────────────────────────────────────────────────
   const itemName = (kind: ShopKind, id: string) => (kind === 'weapon' ? weaponName(id as WeaponId) : kind === 'character' ? charText(id as CharacterId).name : gadgetName(id as GadgetId));
-  const buyButton = (kind: ShopKind, id: WeaponId | CharacterId | GadgetId, price: ShopPrice): HTMLElement => {
-    if (!online || !inv) return h('button', { class: 'btn btn--small', disabled: true }, priceLabel(price));
+  const buyButton = (kind: ShopKind, id: WeaponId | CharacterId | GadgetId, price: ShopPrice, verb = false): HTMLElement => {
+    const priced = (): HTMLElement => (verb ? h('span', { class: 'amt buyfor' }, h('span', null, t('Buy for')), priceLabel(price)) : priceLabel(price));
+    if (!online || !inv) return h('button', { class: 'btn btn--small', disabled: true }, priced());
     const r = buyRefusal(inv, kind, id);
     if (r === 'owned') return h('span', { class: 'badge badge--ok' }, t('Owned'));
-    const label: HTMLElement | string = r === 'level' ? t('From level {n}', { n: price.level }) : priceLabel(price);
+    const label: HTMLElement | string = r === 'level' ? t('From level {n}', { n: price.level }) : priced();
     return h(
       'button',
       {

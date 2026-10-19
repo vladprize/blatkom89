@@ -10392,6 +10392,8 @@ var CHARACTERS = {
     accent: "#d8a637",
     tag: "Valuta"
   },
+  // ── unlocked by level + talons (the wolf and the bear were free until v0.23: accounts made before
+  //    then keep them, see migration 009) ─────────────────────────────────────────────────────────
   uchastkovy: {
     id: "uchastkovy",
     name: "Uchastkovy",
@@ -10404,7 +10406,7 @@ var CHARACTERS = {
     business: "Order, reports, district affairs",
     weaponsNote: "Pistol, rifle, baton, sawn-off.",
     lore: "Fifteen years on the beat, and he remembers everyone who ever crossed the street in the wrong place. His reports get read out at tenants\u2019 meetings like detective novels. The bosses keep promising him a transfer to the city centre, but he is in no hurry: here he knows who, where and for how much.",
-    tier: "base",
+    tier: "progress",
     accent: "#3d5a8c",
     tag: "Uchastkovy"
   },
@@ -10420,11 +10422,11 @@ var CHARACTERS = {
     business: "Security, muscle, settling disputes",
     weaponsNote: "Rifle, sawn-off, pistol, hand-to-hand.",
     lore: "Served his time, came home and went out for a loaf of bread. On the way he broke up two fights, made peace between the garage owners and somehow became head of security for the whole cooperative. They say he never did buy the bread. You don\u2019t need to talk Mikhalych into anything \u2014 just ask him like a human being.",
-    tier: "base",
+    tier: "progress",
     accent: "#6b7536",
     tag: "Mikhalych"
   },
-  // ── unlocked by level + talons (art: references/08…16, supplied by the product owner) ─────────
+  // (art of the next characters: references/08…16, supplied by the product owner)
   vorona: {
     id: "vorona",
     name: "Karlych",
@@ -10489,6 +10491,7 @@ var CHARACTERS = {
     accent: "#e0a020",
     tag: "Gosha"
   },
+  // ── premium (diamonds) ────────────────────────────────────────────────────
   piranya: {
     id: "piranya",
     name: "Vityok",
@@ -10501,11 +10504,10 @@ var CHARACTERS = {
     business: "Muscle, cargo protection",
     weaponsNote: "Uzi, shotguns, knives, mines",
     lore: "They found Vityok on a river barge, where he had single-handedly chased off a whole gang of dockers from the next district. Since then he gets called when the talking is over. He never has a plan \u2014 just a red bandana, a mouth full of teeth and the firm conviction that fish have a say too. His own people are a bit scared of him; strangers even more so.",
-    tier: "progress",
+    tier: "premium",
     accent: "#c24a3a",
     tag: "Vityok"
   },
-  // ── premium (diamonds) ────────────────────────────────────────────────────
   akula: {
     id: "akula",
     name: "Zhora",
@@ -10749,7 +10751,7 @@ var DEFS = {
   obrez: primary({
     name: "Sawn-off",
     blurb: "Two barrels point-blank settle any argument.",
-    tier: "base",
+    tier: "shop",
     damage: 14,
     pellets: 8,
     fireIntervalMs: 650,
@@ -11019,7 +11021,8 @@ function sanitizeLoadout(raw, own = {}) {
 // packages/shared/src/game-rules/economy.ts
 var FREE_WEAPONS = WEAPON_IDS.filter((w) => WEAPONS[w].tier === "base");
 var WEAPON_PRICES = {
-  // three for tokens (the first one after about four matches)
+  // four for tokens (the first one after about three matches)
+  obrez: { currency: "tokens", amount: 100, level: 1 },
   nozh: { currency: "tokens", amount: 120, level: 1 },
   tt: { currency: "tokens", amount: 150, level: 1 },
   uzi: { currency: "tokens", amount: 200, level: 1 },
@@ -11042,13 +11045,15 @@ var WEAPON_PRICES = {
   rpg: { currency: "diamonds", amount: 499, level: 1 }
 };
 var CHARACTER_PRICES = {
-  // five for experience (level) + tokens
-  vorona: { currency: "tokens", amount: 200, level: 2 },
-  zmeya: { currency: "tokens", amount: 350, level: 4 },
-  varan: { currency: "tokens", amount: 500, level: 6 },
-  popugay: { currency: "tokens", amount: 650, level: 8 },
-  piranya: { currency: "tokens", amount: 800, level: 11 },
-  // five for diamonds
+  // six for experience (level) + tokens
+  uchastkovy: { currency: "tokens", amount: 150, level: 1 },
+  mihalych: { currency: "tokens", amount: 200, level: 2 },
+  vorona: { currency: "tokens", amount: 300, level: 3 },
+  zmeya: { currency: "tokens", amount: 400, level: 5 },
+  varan: { currency: "tokens", amount: 550, level: 7 },
+  popugay: { currency: "tokens", amount: 700, level: 9 },
+  // six for diamonds
+  piranya: { currency: "diamonds", amount: 199, level: 1 },
   leopard: { currency: "diamonds", amount: 299, level: 1 },
   lobster: { currency: "diamonds", amount: 299, level: 1 },
   akula: { currency: "diamonds", amount: 399, level: 1 },

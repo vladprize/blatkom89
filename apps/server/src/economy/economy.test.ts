@@ -1,7 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { CASE_PRICE, CASE_TABLE, DEFAULT_LOADOUT, FREE_CHARACTERS, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, WEAPON_PRICES, tokensForMatch } from '@blatkom/shared';
+import { CASE_PRICE, CASE_TABLE, CHARACTER_PRICES, DEFAULT_LOADOUT, FREE_CHARACTERS, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, WEAPON_PRICES, tokensForMatch } from '@blatkom/shared';
 import { startTestApp, api, devLogin, TEST_BOT_TOKEN } from '../admin/testkit.js';
 import { signInitData } from '../auth/telegram.js';
 import type { TestApp } from '../admin/testkit.js';
@@ -112,7 +113,7 @@ test('economy: characters — level + tokens or diamonds; only owned characters 
   await ctx().economy.grant(a.userId, 'diamonds', 300, null, 'test');
   let r = await api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'character', id: 'vorona' } });
   assert.equal(r.body.error.code, 'level');
-  await setLevel(a.userId, 2);
+  await setLevel(a.userId, CHARACTER_PRICES.vorona!.level);
   r = await api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'character', id: 'vorona' } });
   assert.equal(r.status, 200, r.text);
   r = await api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'character', id: 'leopard' } });
@@ -377,4 +378,30 @@ test('funnel: anonymous visits are recorded and linked to the account created fr
   } finally {
     await guestOn.close();
   }
+});
+
+test('economy v0.23: two free characters, six for talons and six for diamonds; a free kit of three weapons; more weapons for diamonds than for talons', () => {
+  assert.deepEqual([...FREE_CHARACTERS].sort(), ['petya', 'valuta']);
+  const chars = Object.values(CHARACTER_PRICES);
+  assert.equal(chars.filter((p) => p!.currency === 'tokens').length, 6);
+  assert.equal(chars.filter((p) => p!.currency === 'diamonds').length, 6);
+  assert.deepEqual([...FREE_WEAPONS].sort(), ['avtomat', 'montirovka', 'pistol']);
+  const weapons = Object.values(WEAPON_PRICES);
+  const forTokens = weapons.filter((p) => p!.currency === 'tokens').length;
+  const forDiamonds = weapons.filter((p) => p!.currency === 'diamonds').length;
+  assert.ok(forDiamonds > forTokens && forDiamonds - forTokens <= 2, `${forDiamonds} for diamonds, ${forTokens} for talons`);
+  // the free kit is complete: a sidearm, a melee weapon and a primary
+  assert.ok(FREE_WEAPONS.includes(DEFAULT_LOADOUT.sidearm) && FREE_WEAPONS.includes(DEFAULT_LOADOUT.melee) && FREE_WEAPONS.includes(DEFAULT_LOADOUT.primary!));
+});
+
+test('economy v0.23: accounts made before the change keep the wolf, the bear and the sawn-off (migration 009)', async () => {
+  const a = await devLogin(app.base, 'Старожил');
+  // the migration's own SQL, run again now that this account exists (it is idempotent)
+  await app.db.sql.unsafe(readFileSync(new URL('../database/migrations/009_v023_unlocks.sql', import.meta.url), 'utf8'));
+  const r = await api(app.base, '/api/me/inventory', { token: a.token });
+  assert.equal(r.status, 200);
+  assert.ok(r.body.characters.includes('uchastkovy') && r.body.characters.includes('mihalych') && r.body.weapons.includes('obrez'));
+  const b = await devLogin(app.base, 'Новичок');
+  const rb = await api(app.base, '/api/me/inventory', { token: b.token });
+  assert.ok(!rb.body.characters.includes('uchastkovy') && !rb.body.weapons.includes('obrez'), 'a new account starts with the free ones only');
 });

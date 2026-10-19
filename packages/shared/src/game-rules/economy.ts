@@ -3,9 +3,14 @@
  *
  *  - Tokens (shown in the game as «talons») are earned by playing online matches and are never sold.
  *  - Diamonds are bought for real money (100 💎 = $1) or granted by an administrator.
- *  - The four starting characters, the base weapons and the F-1 grenade are free for everyone.
- *  - Shop weapons are sidegrades (see weapons.ts): 3 for tokens, 5 for tokens from a level, 10 for
- *    diamonds ($1.99–4.99). Rare weapons come only from cases ($2.99), never as duplicates.
+ *  - Free for everyone: two characters (the rooster and the panther), a full kit of three weapons
+ *    (Makarov, crowbar, AK-47) and the F-1 grenade.
+ *  - Characters: six for tokens from a level, six for diamonds ($1.99–4.99).
+ *  - Shop weapons are sidegrades (see weapons.ts): 4 for tokens, 5 for tokens from a level, 10 for
+ *    diamonds ($1.99–4.99) — a few more for diamonds than for tokens. Rare weapons come only from
+ *    cases ($2.99), never as duplicates.
+ *  - Until v0.23 the wolf, the bear and the sawn-off were free: accounts made before then keep them
+ *    (migration 009).
  *  - Modifications (silencer, sights, laser, grip, magazine) and equipment (grenades, mines, C4,
  *    turret) cost tokens only: nothing that changes a fight is sold for money.
  */
@@ -33,7 +38,8 @@ export const DIAMONDS_PER_USD = 100;
 export const FREE_WEAPONS: readonly WeaponId[] = WEAPON_IDS.filter((w) => WEAPONS[w].tier === 'base');
 
 export const WEAPON_PRICES: Readonly<Partial<Record<WeaponId, ShopPrice>>> = {
-  // three for tokens (the first one after about four matches)
+  // four for tokens (the first one after about three matches)
+  obrez: { currency: 'tokens', amount: 100, level: 1 },
   nozh: { currency: 'tokens', amount: 120, level: 1 },
   tt: { currency: 'tokens', amount: 150, level: 1 },
   uzi: { currency: 'tokens', amount: 200, level: 1 },
@@ -57,13 +63,15 @@ export const WEAPON_PRICES: Readonly<Partial<Record<WeaponId, ShopPrice>>> = {
 };
 
 export const CHARACTER_PRICES: Readonly<Partial<Record<CharacterId, ShopPrice>>> = {
-  // five for experience (level) + tokens
-  vorona: { currency: 'tokens', amount: 200, level: 2 },
-  zmeya: { currency: 'tokens', amount: 350, level: 4 },
-  varan: { currency: 'tokens', amount: 500, level: 6 },
-  popugay: { currency: 'tokens', amount: 650, level: 8 },
-  piranya: { currency: 'tokens', amount: 800, level: 11 },
-  // five for diamonds
+  // six for experience (level) + tokens
+  uchastkovy: { currency: 'tokens', amount: 150, level: 1 },
+  mihalych: { currency: 'tokens', amount: 200, level: 2 },
+  vorona: { currency: 'tokens', amount: 300, level: 3 },
+  zmeya: { currency: 'tokens', amount: 400, level: 5 },
+  varan: { currency: 'tokens', amount: 550, level: 7 },
+  popugay: { currency: 'tokens', amount: 700, level: 9 },
+  // six for diamonds
+  piranya: { currency: 'diamonds', amount: 199, level: 1 },
   leopard: { currency: 'diamonds', amount: 299, level: 1 },
   lobster: { currency: 'diamonds', amount: 299, level: 1 },
   akula: { currency: 'diamonds', amount: 399, level: 1 },

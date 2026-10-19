@@ -54,6 +54,7 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .screen--solid { background: rgba(11,9,8,.94); }
 .screen::after { content: ''; position: fixed; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px); mix-blend-mode: multiply; }
 .wrap { width: 100%; max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; flex: 1; }
+.wrap--wide { max-width: 1200px; }
 
 .logo { width: min(560px, 86vw); height: auto; display: block; margin: 4px auto 0; filter: drop-shadow(0 6px 0 rgba(0,0,0,.45)); }
 .tag { display: inline-block; background: var(--tape); color: #1a1410; font-family: Oswald, sans-serif; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; font-size: 14px; padding: 4px 12px 3px; transform: rotate(-1.5deg); clip-path: polygon(0 4%, 3% 0, 97% 2%, 100% 0, 99% 96%, 96% 100%, 4% 98%, 0 100%); box-shadow: 0 2px 0 rgba(0,0,0,.4); }
@@ -266,10 +267,30 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .coin b { font-weight: 700; margin-right: 6px; }
 .coin span { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .tabs { position: sticky; top: calc(-16px - var(--safe-top)); z-index: 2; background: rgba(13,11,10,.92); padding: 6px 0; }
-.slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 8px; }
+.slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 8px; align-items: stretch; }
 @media (max-width: 1100px) { .slots { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .slots { grid-template-columns: 1fr; } }
-.slotpick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+/* every slot column has the same rows (owned items, then the shop's), the «more» button at the bottom */
+.slotcard { gap: 8px; }
+.slotpick { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(var(--rows, 3), 86px); gap: 6px; margin-top: 8px; }
+.slotpick .wbtn { min-height: 0; overflow: hidden; }
+.slotpick .wbtn > span:not(.none) { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slotcard__more { margin-top: auto; width: 100%; }
+/* phones: one compact row per item — picture, name, price on the right */
+@media (max-width: 560px) {
+  .slotpick { grid-template-rows: none; grid-auto-rows: 54px; }
+  .slotpick .wbtn { flex-direction: row; justify-content: flex-start; gap: 12px; padding: 6px 12px; text-align: left; }
+  .slotpick .wbtn img { flex: none; }
+  .slotpick .wbtn .none { width: 84px; text-align: center; flex: none; }
+  .slotpick .wbtn .wbtn__price { margin-left: auto; flex: none; }
+}
+.wbtn.wbtn--shop { border-style: dashed; color: var(--muted); background: rgba(0,0,0,.18); position: relative; }
+.wbtn.wbtn--shop img { opacity: .5; filter: grayscale(.7); }
+.wbtn.wbtn--shop:hover, .wbtn.wbtn--shop:focus-visible { color: var(--beige); border-color: var(--tape); }
+.wbtn.wbtn--shop:hover img, .wbtn.wbtn--shop:focus-visible img { opacity: .95; filter: none; }
+.wbtn__price { font-size: 12px; letter-spacing: .04em; color: var(--tape); white-space: nowrap; }
+.wbtn__price.diamonds { color: #8fd8f0; }
+.wbtn__price small { font-size: 11px; color: var(--muted); }
 .wbtn { flex: 1 1 120px; display: flex; flex-direction: column; align-items: center; gap: 4px; background: var(--panel-2); border: 2px solid var(--line); color: var(--beige); padding: 6px; cursor: pointer; font-family: Oswald, sans-serif; font-size: 13px; text-transform: uppercase; letter-spacing: .03em; min-height: 64px; justify-content: center; }
 .wbtn.on { border-color: var(--red); box-shadow: 0 0 0 2px rgba(200,49,42,.3); }
 .wbtn .none { font-size: 22px; color: var(--muted); }
@@ -392,8 +413,29 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .dressing { padding-top: 20px; scroll-margin-top: 12px; }
 .dressing--flash { animation: dressflash .8s ease-out; }
 @keyframes dressflash { 0% { box-shadow: 0 0 0 2px rgba(255,211,106,.95), 0 0 26px rgba(255,180,80,.35), 0 4px 0 rgba(0,0,0,.35); } 100% { box-shadow: 0 4px 0 rgba(0,0,0,.35); } }
-.dressing__grid { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 18px; align-items: stretch; }
+.dressing__grid { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr) minmax(0, 380px); gap: 18px; align-items: stretch; }
+@media (max-width: 1100px) { .dressing__grid { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); } }
 @media (max-width: 640px) { .dressing__grid { grid-template-columns: minmax(0, 46%) minmax(0, 1fr); gap: 10px; } }
+/* right of the dressing room (sketch v0.23): the paid case banner on top, the diamond top-up below */
+.dressing__promo { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+@media (max-width: 1100px) { .dressing__promo { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); align-items: stretch; } }
+@media (max-width: 640px) { .dressing__promo { grid-template-columns: minmax(0, 1fr); gap: 10px; } }
+.promo-case { display: block; padding: 0; margin: 0; border: 2px solid #4a3d30; background: #0d0b0a; cursor: pointer; line-height: 0; box-shadow: 0 6px 0 rgba(0,0,0,.45); transition: transform .12s ease, border-color .12s ease; position: relative; overflow: hidden; }
+.promo-case img { width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
+.promo-case::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 35%, rgba(255,236,200,.16) 48%, transparent 61%); transform: translateX(-120%); transition: transform .7s ease; }
+.promo-case:hover, .promo-case:focus-visible { border-color: var(--red); transform: translateY(-2px); outline: none; }
+.promo-case:hover::after, .promo-case:focus-visible::after { transform: translateX(120%); }
+.promo-topup { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 14px; align-items: center; padding: 14px; border: 1px solid var(--line); background: radial-gradient(120% 140% at 0% 0%, rgba(80, 180, 230, .2), transparent 55%), var(--panel-2); box-shadow: 0 4px 0 rgba(0,0,0,.35); flex: 1; align-content: center; }
+.promo-topup__gems { display: flex; align-items: flex-end; padding-left: 8px; }
+.promo-topup__gems .cur { width: 30px; height: 30px; margin: 0 0 0 -9px; filter: drop-shadow(0 2px 0 rgba(0,0,0,.5)); }
+.promo-topup__gems .cur:nth-child(2) { width: 38px; height: 38px; position: relative; z-index: 1; }
+.promo-topup__text { gap: 2px; min-width: 0; }
+.promo-topup__text b { font-family: Oswald, sans-serif; font-size: 20px; text-transform: uppercase; letter-spacing: .06em; }
+.promo-topup__rate { font-size: 12px; }
+.promo-topup__btn { grid-column: 1 / -1; width: 100%; }
+.dressing__buy { display: flex; gap: 8px; flex-wrap: wrap; }
+.buyfor { display: inline-flex; align-items: center; gap: 8px; }
+.dressing__buy .btn { min-width: 150px; }
 .dressing__poster { position: relative; aspect-ratio: 3 / 4; overflow: hidden; border: 2px solid #4a3d30; background: #0d0b0a; cursor: pointer; box-shadow: 0 6px 0 rgba(0,0,0,.45); align-self: start; }
 .dressing__poster:focus-visible { outline: 2px solid var(--tape); outline-offset: 2px; }
 .dressing__hero { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }

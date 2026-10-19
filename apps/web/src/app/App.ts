@@ -674,7 +674,8 @@ export class App {
       onWallet: () => this.refreshStrip(),
       onCharacter: (c) => this.showCharacters(true, c),
     });
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar(t('Arsenal')), el)));
+    // wider than the other screens: the dressing room has three columns (sketch v0.23)
+    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap wrap--wide' }, this.topbar(t('Arsenal')), el)));
   }
 
   // ── practice ────────────────────────────────────────────────────────────

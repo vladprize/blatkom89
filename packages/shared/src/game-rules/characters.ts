@@ -2,8 +2,9 @@
  * Playable characters. Combat attributes are identical by design (see CHARACTER_BASE_STATS);
  * the differences are visual and narrative only (the abilities on the owner's sheets are deliberately
  * not implemented: half of the roster is sold for money, so no character may be stronger). The first
- * four are free; the rest are unlocked in the shop (see economy.ts): five for experience level +
- * talons (tokens), five for diamonds. Player-facing text is English with a Soviet flavour.
+ * two (the rooster and the panther) are free; the rest are unlocked in the shop (see economy.ts): six
+ * for experience level + talons (tokens), six for diamonds. Player-facing text is English with a
+ * Soviet flavour.
  */
 export const CHARACTER_IDS = ['petya', 'valuta', 'uchastkovy', 'mihalych', 'vorona', 'zmeya', 'varan', 'popugay', 'piranya', 'akula', 'oryol', 'leopard', 'slon', 'lobster'] as const;
 export type CharacterId = (typeof CHARACTER_IDS)[number];
@@ -67,6 +68,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     accent: '#d8a637',
     tag: 'Valuta',
   },
+  // ── unlocked by level + talons (the wolf and the bear were free until v0.23: accounts made before
+  //    then keep them, see migration 009) ─────────────────────────────────────────────────────────
   uchastkovy: {
     id: 'uchastkovy',
     name: 'Uchastkovy',
@@ -79,7 +82,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     business: 'Order, reports, district affairs',
     weaponsNote: 'Pistol, rifle, baton, sawn-off.',
     lore: 'Fifteen years on the beat, and he remembers everyone who ever crossed the street in the wrong place. His reports get read out at tenants’ meetings like detective novels. The bosses keep promising him a transfer to the city centre, but he is in no hurry: here he knows who, where and for how much.',
-    tier: 'base',
+    tier: 'progress',
     accent: '#3d5a8c',
     tag: 'Uchastkovy',
   },
@@ -95,11 +98,11 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     business: 'Security, muscle, settling disputes',
     weaponsNote: 'Rifle, sawn-off, pistol, hand-to-hand.',
     lore: 'Served his time, came home and went out for a loaf of bread. On the way he broke up two fights, made peace between the garage owners and somehow became head of security for the whole cooperative. They say he never did buy the bread. You don’t need to talk Mikhalych into anything — just ask him like a human being.',
-    tier: 'base',
+    tier: 'progress',
     accent: '#6b7536',
     tag: 'Mikhalych',
   },
-  // ── unlocked by level + talons (art: references/08…16, supplied by the product owner) ─────────
+  // (art of the next characters: references/08…16, supplied by the product owner)
   vorona: {
     id: 'vorona',
     name: 'Karlych',
@@ -164,6 +167,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     accent: '#e0a020',
     tag: 'Gosha',
   },
+  // ── premium (diamonds) ────────────────────────────────────────────────────
   piranya: {
     id: 'piranya',
     name: 'Vityok',
@@ -176,11 +180,10 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     business: 'Muscle, cargo protection',
     weaponsNote: 'Uzi, shotguns, knives, mines',
     lore: 'They found Vityok on a river barge, where he had single-handedly chased off a whole gang of dockers from the next district. Since then he gets called when the talking is over. He never has a plan — just a red bandana, a mouth full of teeth and the firm conviction that fish have a say too. His own people are a bit scared of him; strangers even more so.',
-    tier: 'progress',
+    tier: 'premium',
     accent: '#c24a3a',
     tag: 'Vityok',
   },
-  // ── premium (diamonds) ────────────────────────────────────────────────────
   akula: {
     id: 'akula',
     name: 'Zhora',
