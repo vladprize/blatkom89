@@ -2,6 +2,8 @@
 import { z } from 'zod';
 import { CHARACTER_IDS } from '../game-rules/characters.js';
 import type { CharacterId } from '../game-rules/characters.js';
+import { AVATAR_IDS } from '../game-rules/avatars.js';
+import type { AvatarId } from '../game-rules/avatars.js';
 import { WEAPON_IDS, MOD_IDS } from '../game-rules/weapons.js';
 import { GADGET_IDS } from '../game-rules/gadgets.js';
 import type { WeaponId } from '../game-rules/weapons.js';
@@ -125,7 +127,12 @@ export interface LedgerEntry {
 }
 
 export const UpdateProfileRequest = z
-  .object({ displayName: displayNameSchema.optional(), preferredCharacter: z.enum(CHARACTER_IDS).optional() })
+  .object({
+    displayName: displayNameSchema.optional(),
+    preferredCharacter: z.enum(CHARACTER_IDS).optional(),
+    /** A profile avatar (game-rules/avatars.ts); null removes it. */
+    avatar: z.enum(AVATAR_IDS).nullable().optional(),
+  })
   .strict();
 export const CreateRoomRequest = z.object({ mapId: z.enum(MAP_IDS), isPrivate: z.boolean().default(true), mode: z.enum(GAME_MODES).default('ffa') }).strict();
 export const QuickMatchRequest = z.object({ mapId: z.enum(MAP_IDS).optional(), mode: z.enum(GAME_MODES).default('ffa') }).strict();
@@ -150,6 +157,8 @@ export interface PublicProfile {
   currentWinStreak: number;
   bestWinStreak: number;
   preferredCharacter: CharacterId | null;
+  /** Profile avatar (null: the character's portrait is shown). */
+  avatar: AvatarId | null;
   tokens: number;
   diamonds: number;
   /** Email sign-in is set up (the account can be restored on another device). */

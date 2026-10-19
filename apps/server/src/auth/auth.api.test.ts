@@ -138,6 +138,28 @@ test('auth: dev login keyed by deviceId; profile update validation', async () =>
   assert.deepEqual((await api(app.base, '/api/me/history', { token: b.token })).body, { matches: [] });
 });
 
+test('profile avatar: set, kept, shown to the room through the session, removed; unknown ids refused', async () => {
+  const a = await devLogin(app.base, 'Шляпа', 'device-avatar-001');
+  assert.equal((await api(app.base, '/api/me', { token: a.token })).body.avatar, null, 'no avatar at first');
+  const set = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { avatar: 'militia' } });
+  assert.equal(set.status, 200);
+  assert.equal(set.body.avatar, 'militia');
+  assert.equal((await api(app.base, '/api/me', { token: a.token })).body.avatar, 'militia', 'kept');
+  // the room roster reads the avatar from the session (MatchRoom → RosterEntry.avatar)
+  assert.equal((await app.persistence.services.sessions.verify(a.token))?.avatar, 'militia');
+  for (const bad of ['nobody', 'MILITIA', '', 7]) {
+    const r = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { avatar: bad } });
+    assert.equal(r.status, 400, `refused: ${JSON.stringify(bad)}`);
+  }
+  // other fields leave the avatar alone; null removes it
+  assert.equal((await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { displayName: 'Шляпа Вторая' } })).body.avatar, 'militia');
+  const off = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { avatar: null } });
+  assert.equal(off.status, 200);
+  assert.equal(off.body.avatar, null);
+  // the database check keeps the column to short lowercase ids even past the API
+  await assert.rejects(app.db.sql`UPDATE profiles SET avatar = 'Robert"); DROP' WHERE user_id = ${a.userId}`);
+});
+
 test('auth: expired and revoked sessions are refused', async () => {
   const s = await devLogin(app.base, 'Участковый');
   assert.equal((await api(app.base, '/api/me', { token: s.token })).status, 200);

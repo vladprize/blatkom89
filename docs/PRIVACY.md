@@ -33,7 +33,7 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
 3. **Email sign-in (optional).** If you register an email, we keep the address and a hash of your
    password (scrypt; never the password itself). Password-reset letters with a one-time link (valid
    for an hour) are sent through our email provider, **[Resend, or the provider you configure]**.
-4. **Game data:** character, match participation (map, place, eliminations, assists, deaths, damage,
+4. **Game data:** character, profile avatar (one of the game's portraits, by id), match participation (map, place, eliminations, assists, deaths, damage,
    time), XP, level, achievements, streaks, time in game, match history; talon and diamond balances and
    every change to them, owned weapons, characters, equipment and modifications, loadout, case openings.
 5. **Purchases (optional):** pack, price, currency, payment provider, the provider’s payment reference,
@@ -56,7 +56,7 @@ in-game currency; to deliver what you bought; for the profile, statistics and ma
 and fix bugs and protect against abuse; and for aggregated statistics to make the game better.
 
 ### 4. Who sees the data
-Other players see your in-game name, character and results. Administrators work with the statistics
+Other players see your in-game name, avatar, character and results. Administrators work with the statistics
 panel; every sign-in, look at a player’s card, balance adjustment, password-reset link and export is
 audited. Data is shared only with the hosting provider, the payment provider you choose when you buy,
 and the email provider when you ask for a password reset. Telegram processes data under its own rules.
@@ -98,7 +98,7 @@ When this policy changes, we update the revision date.
 | `payments` | `user_id` (SET NULL on deletion), provider and its reference, pack, amount, status, times | accounting, crediting diamonds once | **[accounting retention period]** — not purged automatically |
 | `password_resets` | HMAC of the one-time token, user id, who created it (`email`/`admin`) | password reset | 7 days after expiry; immediately on account deletion |
 | `visitors`, `visitor_days` | random browser id, first/last visit, platform, referring domain, `user_id` (SET NULL on deletion) | visitor funnel | 400 days after the last visit |
-| `profiles` | counters, XP/level, streaks, preferred character | progression | until account deletion (cascade) |
+| `profiles` | counters, XP/level, streaks, preferred character, avatar id | progression | until account deletion (cascade) |
 | `sessions` | `token_hash` (HMAC of the token, never the token), `method`, `platform`, `client_version`, timestamps | authentication | 90 days after expiry/revocation; immediately on account deletion |
 | `user_daily_activity` | (user, UTC day) | DAU/WAU/MAU, retention | 400 days; immediately on account deletion |
 | `match_participants` | per-match stats of a player | history, profile, admin | until account deletion (cascade) |

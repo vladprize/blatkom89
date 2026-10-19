@@ -665,6 +665,7 @@ export class MatchRoom {
         isHost: c.user.userId === this.hostId,
         isBot: false,
         level: c.user.level,
+        avatar: c.user.avatar ?? null,
         team: p?.team ?? null,
         mods: c.gear.loadout.mods,
       };

@@ -1,6 +1,6 @@
 /** Player profile queries for /api/me (profile, history, achievements, deletion). */
-import { ACHIEVEMENTS, ACHIEVEMENT_IDS, levelForXp } from '@blatkom/shared';
-import type { AchievementId, AchievementStatus, CharacterId, MapId, MatchHistoryEntry, PublicProfile } from '@blatkom/shared';
+import { ACHIEVEMENTS, ACHIEVEMENT_IDS, isAvatarId, levelForXp } from '@blatkom/shared';
+import type { AchievementId, AchievementStatus, AvatarId, CharacterId, MapId, MatchHistoryEntry, PublicProfile } from '@blatkom/shared';
 import type { Sql } from '../database/db.js';
 
 interface ProfileRow {
@@ -21,6 +21,7 @@ interface ProfileRow {
   current_win_streak: number;
   best_win_streak: number;
   preferred_character: CharacterId | null;
+  avatar: string | null;
   tokens: number;
   diamonds: number;
   email: string | null;
@@ -48,6 +49,7 @@ export function toPublicProfile(r: ProfileRow): PublicProfile {
     currentWinStreak: r.current_win_streak,
     bestWinStreak: r.best_win_streak,
     preferredCharacter: r.preferred_character,
+    avatar: isAvatarId(r.avatar) ? r.avatar : null,
     tokens: r.tokens,
     diamonds: r.diamonds,
     email: r.email,
@@ -66,18 +68,22 @@ export class ProfileRepo {
              COALESCE(p.assists, 0) AS assists,
              COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
-             p.preferred_character, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email
+             p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
       WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
     return rows[0] ? toPublicProfile(rows[0]) : null;
   }
 
-  async update(userId: string, patch: { displayName?: string | undefined; preferredCharacter?: CharacterId | undefined }): Promise<void> {
+  async update(userId: string, patch: { displayName?: string | undefined; preferredCharacter?: CharacterId | undefined; avatar?: AvatarId | null | undefined }): Promise<void> {
     await this.sql.begin(async (tx) => {
       if (patch.displayName !== undefined) await tx`UPDATE users SET display_name = ${patch.displayName} WHERE id = ${userId}`;
       if (patch.preferredCharacter !== undefined) {
         await tx`INSERT INTO profiles (user_id, preferred_character) VALUES (${userId}, ${patch.preferredCharacter})
                  ON CONFLICT (user_id) DO UPDATE SET preferred_character = EXCLUDED.preferred_character, updated_at = now()`;
+      }
+      if (patch.avatar !== undefined) {
+        await tx`INSERT INTO profiles (user_id, avatar) VALUES (${userId}, ${patch.avatar})
+                 ON CONFLICT (user_id) DO UPDATE SET avatar = EXCLUDED.avatar, updated_at = now()`;
       }
     });
   }

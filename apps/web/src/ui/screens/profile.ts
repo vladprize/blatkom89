@@ -1,6 +1,7 @@
 /** Profile screen («Dossier»): nickname, level and XP, statistics, achievements, recent matches. */
 import { h, fmtDuration } from '../dom.js';
 import { fitAlias, whenSized } from '../fit.js';
+import { avatarButton } from '../avatars.js';
 import { isCharacterId } from '@blatkom/shared';
 import type { AchievementStatus, MatchHistoryEntry, PublicProfile } from '@blatkom/shared';
 import type { OnlineClient } from '../../net/OnlineClient.js';
@@ -18,7 +19,7 @@ export async function loadOnlineProfile(online: OnlineClient): Promise<ProfileDa
   return { profile, history: hist.matches, achievements: ach.achievements };
 }
 
-export function renderProfileView(d: ProfileData, o: { local: boolean; onRename: () => void }): HTMLElement {
+export function renderProfileView(d: ProfileData, o: { local: boolean; onRename: () => void; onAvatar: () => void }): HTMLElement {
   const p = d.profile;
   const kd = p.deaths > 0 ? num(p.kills / p.deaths, 2) : String(p.kills);
   const pct = p.xpForNextLevel > 0 ? Math.round((p.xpIntoLevel / p.xpForNextLevel) * 100) : 100;
@@ -30,6 +31,7 @@ export function renderProfileView(d: ProfileData, o: { local: boolean; onRename:
   const head = h(
     'div',
     { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' },
+    avatarButton(p.avatar, o.onAvatar, 'ava-btn--big'),
     h('div', { class: 'lvlbadge lvlbadge--big', title: t('Level') }, h('small', null, t('LVL')), String(p.level)),
     nick,
     h('button', { class: 'btn btn--small', onclick: o.onRename, 'aria-label': t('Change alias') }, `✎ ${t('Alias')}`),

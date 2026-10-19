@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { CHARACTER_IDS } from '../game-rules/characters.js';
 import type { CharacterId } from '../game-rules/characters.js';
+import type { AvatarId } from '../game-rules/avatars.js';
 import type { GameMode, MatchConfig, MatchPhase, Team, TeamResultSummary } from '../game-rules/match.js';
 import { GAME_MODES } from '../game-rules/match.js';
 import { MAP_IDS } from '../maps/types.js';
@@ -57,6 +58,8 @@ export interface RosterEntry {
   isHost: boolean;
   isBot: boolean;
   level: number;
+  /** Profile avatar (game-rules/avatars.ts); absent or null: the character's portrait is shown. */
+  avatar?: AvatarId | null;
   /** Team matches: 0 red, 1 blue. */
   team: Team | null;
   /** Equipped modifications of the player's weapons (client-side prediction of their own weapons). */

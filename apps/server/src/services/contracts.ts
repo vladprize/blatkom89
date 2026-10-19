@@ -2,7 +2,7 @@
  * Service contracts between the realtime game layer (rooms) and persistence/analytics.
  * Implementations: services/persistence.ts (PostgreSQL) and services/memory.ts (tests/offline).
  */
-import type { CharacterId, GameMode, Loadout, MapId, PersonalResult, Team } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, Loadout, MapId, PersonalResult, Team } from '@blatkom/shared';
 import type { Platform } from '@blatkom/shared';
 
 export interface AuthedUser {
@@ -10,6 +10,8 @@ export interface AuthedUser {
   sessionId: string;
   displayName: string;
   level: number;
+  /** Profile avatar shown to the other players in the lobby (null: the character's portrait). */
+  avatar?: AvatarId | null;
   platform: Platform | null;
   /** How the session was opened (verified server-side, unlike `platform`). */
   method?: 'telegram' | 'dev' | 'guest' | 'email';

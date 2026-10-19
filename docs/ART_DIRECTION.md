@@ -87,6 +87,7 @@ movement direction, the torso (with the weapon) with the aim direction.
 
 | Asset | How it is made | Where it is used |
 |---|---|---|
+| Profile avatars `assets/avatars/<id>.jpg` (192×192) | `tools/crop-avatars.py`: the 24 round pixel portraits cut from the owner's sheet `references/23-avatars.png` (ids in `packages/shared/src/game-rules/avatars.ts`) | drawn as circles (CSS) in the Dossier tile, the profile header, lobby rows and the picker (6 × 4 on desktop, 4 × 6 on phones); without an avatar the lobby shows the character's portrait |
 | Hero art `assets/heroes/<id>.jpg` (360×480) | `tools/extract-heroes.py`: head and torso cropped 3:4 from the owner's character sheets in `references/` (logo, titles and side panels left out) | Arsenal dressing room (the character «holding» the weapon being tried on), the «Personal File» on the character screen, character cards in the Arsenal — the characters look exactly as on the BLATKOM sheets |
 | Weapon / equipment / modification icons `ui/weapons/<id>.png` + `_s.png`, `ui/gadgets/…`, `ui/mods/…` | `tools/art/build-weapons.ts`, `renderInBox`: every icon is fitted into the same box (weapons and equipment 168×56 / 84×28, modifications 72×36 / 36×18) by its drawn bounds | Arsenal lists and slots, results — all icons the same size |
 | Arsenal tile pistol `ui/menu_arsenal.png` | TT pistol side view rendered by the weapon pipeline | the Arsenal tile in the main menu |

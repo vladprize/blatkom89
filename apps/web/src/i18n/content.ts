@@ -3,7 +3,7 @@
  * definitions (packages/shared), Russian from ru-content.ts — always read them through here.
  */
 import { ACHIEVEMENTS, CHARACTERS, GADGETS, MODS, REFUSAL_TEXT, WEAPONS, getMap, isGadgetId } from '@blatkom/shared';
-import type { AchievementId, ArmsId, BuyRefusal, CharacterId, GadgetId, MapId, ModId, WeaponId } from '@blatkom/shared';
+import type { AchievementId, ArmsId, AvatarId, BuyRefusal, CharacterId, GadgetId, MapId, ModId, WeaponId } from '@blatkom/shared';
 import { getLang, t } from './index.js';
 import { RU_ACHIEVEMENTS, RU_CHARACTERS, RU_GADGETS, RU_MAPS, RU_MODS, RU_REFUSALS, RU_WEAPONS } from './ru-content.js';
 import type { CharacterText } from './ru-content.js';
@@ -20,6 +20,38 @@ export function charText(id: CharacterId): CharacterText {
 
 export function charName(id: CharacterId): string {
   return ru() ? RU_CHARACTERS[id].name : CHARACTERS[id].name;
+}
+
+/** Profile avatars (game-rules/avatars.ts): [English, Russian] names for tooltips and screen readers. */
+const AVATAR_NAMES: Record<AvatarId, readonly [string, string]> = {
+  shades: ['Dark Glasses', 'Тёмные очки'],
+  tracksuit: ['Tracksuit', 'Спортивка'],
+  blonde: ['Blonde', 'Блондинка'],
+  ushanka: ['Ushanka', 'Ушанка'],
+  flatcap: ['Flat Cap', 'Кепка'],
+  balaclava: ['Balaclava', 'Балаклава'],
+  bob: ['Bob Cut', 'Каре'],
+  resort: ['Holidaymaker', 'Курортник'],
+  thinker: ['Thinker', 'Мыслитель'],
+  agent: ['Agent', 'Агент'],
+  smoker: ['Smoke Break', 'Перекур'],
+  dog: ['Shepherd', 'Овчарка'],
+  veteran: ['Old Hand', 'Бывалый'],
+  hood: ['Red Hood', 'Капюшон'],
+  brick: ['Brick Phone', 'Мобила'],
+  tattoo: ['Ink', 'Наколки'],
+  furcoat: ['Fur Coat', 'Шубка'],
+  panama: ['Bucket Hat', 'Панамка'],
+  militia: ['Militia', 'Милиция'],
+  disco: ['Disco', 'Дискотека'],
+  shotgun: ['Shotgun', 'Ружьё'],
+  babushka: ['Babushka', 'Бабуля'],
+  driver: ['Driver', 'Водила'],
+  tram: ['Last Tram', 'Последний трамвай'],
+};
+
+export function avatarName(id: AvatarId): string {
+  return AVATAR_NAMES[id][ru() ? 1 : 0];
 }
 
 export function weaponName(id: WeaponId): string {

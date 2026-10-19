@@ -3,7 +3,7 @@
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
 import { CHARACTER_IDS, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, isCharacterId, isGameMode, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
-import type { CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
@@ -18,7 +18,7 @@ import { analytics } from '../analytics/client.js';
 import { renderSettings } from '../ui/screens/settings.js';
 import { loadOnlineProfile, renderProfileView } from '../ui/screens/profile.js';
 import type { ProfileData } from '../ui/screens/profile.js';
-import { createLocalProfile, localProfileView, recordLocalMatch, renameLocalProfile } from '../profile/localProfile.js';
+import { createLocalProfile, localProfileView, recordLocalMatch, renameLocalProfile, setLocalAvatar } from '../profile/localProfile.js';
 import type { LocalProfile } from '../profile/localProfile.js';
 import { clearLocalProfile, loadLocalProfile, saveLocalProfile } from '../profile/localStore.js';
 import { openNicknameDialog, randomNickname } from '../profile/nickname.js';
@@ -26,6 +26,7 @@ import { renderResults } from '../ui/screens/results.js';
 import { renderLobby, modeSwitch } from '../ui/screens/lobby.js';
 import { mapPicker } from '../ui/maps.js';
 import { fitAlias, whenSized } from '../ui/fit.js';
+import { avatarButton, openAvatarPicker } from '../ui/avatars.js';
 import { MODE_ORDER, modeIcon, modeName, modeRules, modeSub } from '../ui/modes.js';
 import { renderArsenal, characterPriceNote, amount, heroImg } from '../ui/screens/shop.js';
 import type { ArsenalTab, TryOn } from '../ui/screens/shop.js';
@@ -414,6 +415,10 @@ export class App {
     return this.online ? (this.online.profile?.displayName ?? null) : (this.localProfile?.displayName ?? null);
   }
 
+  private playerAvatar(): AvatarId | null {
+    return this.online ? (this.online.profile?.avatar ?? null) : (this.localProfile?.avatar ?? null);
+  }
+
   private playerLevel(): number | null {
     if (this.online) return this.online.profile?.level ?? null;
     return this.localProfile ? levelForXp(this.localProfile.xp).level : null;
@@ -438,7 +443,7 @@ export class App {
     const inv = this.online?.inventory;
     const nick = h('div', { class: 'nm', 'data-testid': 'menu-nick' }, h('span', { class: 'fit-text' }, name));
     // the whole alias stays visible: a long one gets a smaller font, a very long one two lines
-    whenSized(tile, () => fitAlias(nick, { max: 19, min: 13, minTwoLines: 10 }));
+    whenSized(tile, () => fitAlias(nick, { max: 17, min: 12, minTwoLines: 10, margin: 8 }));
     tile.append(
       h('span', { class: 'tag' }, t('Dossier')),
       h(
@@ -451,7 +456,7 @@ export class App {
           onclick: () => this.showProfile(),
           onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && this.showProfile(),
         },
-        h('div', { class: 'tile__head' }, h('div', { class: 'lvlbadge' }, h('small', null, t('LVL')), String(level))),
+        h('div', { class: 'tile__head' }, avatarButton(this.playerAvatar(), () => this.editAvatar()), h('div', { class: 'lvlbadge' }, h('small', null, t('LVL')), String(level))),
         nick,
         h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
         h('div', { class: 'xp' }, lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} XP` : t('max level')),
@@ -535,6 +540,28 @@ export class App {
       },
       onCancel: () => {},
       onClose: () => (this.nickClose = null),
+    });
+  }
+
+  /** The avatar picker (Dossier tile, profile). */
+  private editAvatar(after?: () => void) {
+    if (!this.online && !this.localProfile) return this.editNickname(() => this.editAvatar(after));
+    openAvatarPicker(this.root, {
+      current: this.playerAvatar(),
+      onPick: async (id) => {
+        if (this.online) {
+          try {
+            await this.online.setAvatar(id);
+          } catch (e) {
+            throw new Error(apiErrorText(e as Error));
+          }
+        } else if (this.localProfile) {
+          this.localProfile = setLocalAvatar(this.localProfile, id);
+          saveLocalProfile(this.localProfile);
+        }
+        this.refreshStrip();
+        after?.();
+      },
     });
   }
 
@@ -1020,7 +1047,8 @@ export class App {
         if (this.screen !== 'profile') return;
         box.replaceChildren(this.topbar(t('Profile')));
         if (this.online) box.append(renderAccountPanel(this.online, { root: this.root, onChanged: () => (this.refreshStrip(), this.screen === 'profile' && this.showProfile(false)) }));
-        box.append(renderProfileView(d, { local: !this.online, onRename: () => this.editNickname(() => this.screen === 'profile' && this.showProfile(false)) }));
+        const reopen = () => this.screen === 'profile' && this.showProfile(false);
+        box.append(renderProfileView(d, { local: !this.online, onRename: () => this.editNickname(reopen), onAvatar: () => this.editAvatar(reopen) }));
       })
       .catch((e: Error) => box.replaceChildren(this.topbar(t('Profile')), h('div', { class: 'panel' }, t('Could not load the profile: {error}', { error: apiErrorText(e) }))));
   }

@@ -141,6 +141,21 @@ try {
   await page.getByTestId('profile-name').waitFor({ timeout: 10000 });
   const stats = await page.locator('.stats').innerText();
   check(/1\s*matches/i.test(stats.replace(/\n/g, ' ')) && /assists/i.test(stats), 'profile screen: 1 match played, assists stat present');
+  // avatar: the empty frame opens the picker (24 portraits), the pick shows in the profile and the menu
+  await page.getByTestId('avatar-button').click();
+  await page.locator('.avapick button').first().waitFor({ timeout: 10000 });
+  const offered = await page.locator('.avapick button').count();
+  await page.screenshot({ path: `${outDir}/demo_avatar_picker.png` });
+  await page.locator('.avapick button[data-avatar="militia"]').click();
+  await page.locator('.avapick').waitFor({ state: 'detached', timeout: 10000 });
+  await page.getByTestId('profile-name').waitFor({ timeout: 10000 });
+  const inProfile = await page.locator('[data-testid=avatar-button] img.ava').getAttribute('data-avatar');
+  await page.evaluate(() => window.__blatkom.app.goMenu());
+  const inMenu = await page.locator('[data-testid=profile-strip] [data-testid=avatar-button] img.ava').getAttribute('data-avatar');
+  check(offered === 24 && /militia/.test(inProfile ?? '') && /militia/.test(inMenu ?? ''), `avatar picked from ${offered}: shown in the profile and the Dossier tile (${inProfile} / ${inMenu})`);
+  await page.locator('[data-testid="profile-strip"] .tile__body').click();
+  await page.getByTestId('profile-name').waitFor({ timeout: 10000 });
+  await page.waitForTimeout(500);
   await page.screenshot({ path: `${outDir}/demo_profile.png`, fullPage: true });
 
   // ── capture the flag: practice with bots, a staged steal and capture ────
@@ -210,7 +225,8 @@ try {
   await page.reload();
   await page.getByTestId('menu-nick').filter({ hasText: NICK }).waitFor({ timeout: 60000 });
   const dialogAgain = await page.getByRole('textbox', { name: 'Alias' }).count();
-  check(dialogAgain === 0, 'after a reload the profile is kept and no nickname dialog appears');
+  const avatarAfter = await page.locator('[data-testid=profile-strip] [data-testid=avatar-button] img.ava').getAttribute('data-avatar').catch(() => null);
+  check(dialogAgain === 0 && /militia/.test(avatarAfter ?? ''), 'after a reload the profile and the avatar are kept and no nickname dialog appears');
   // settings → «Reset local profile» forgets it and the first-launch dialog comes back
   await page.getByRole('button', { name: 'Settings' }).click();
   page.once('dialog', (d) => void d.accept());
@@ -224,6 +240,6 @@ try {
 }
 await browser.close();
 if (problems.length) console.log(problems.slice(0, 10).join('\n'));
-const ok = checks.length >= 24 && checks.every((c) => c.ok) && !problems.some((p) => p.startsWith('[pageerror]') || p.startsWith('[test]'));
+const ok = checks.length >= 25 && checks.every((c) => c.ok) && !problems.some((p) => p.startsWith('[pageerror]') || p.startsWith('[test]'));
 console.log(ok ? '[demo] passed' : '[demo] FAILED');
 process.exit(ok ? 0 : 1);

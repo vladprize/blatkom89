@@ -90,10 +90,10 @@ instructions win; the original criteria are re-evaluated in §4.
 | Request (owner) | Implementation | Status |
 |---|---|---|
 | Centre the main menu (the logo and the panels) | on screens where the whole menu fits (≥ 761 × 720 px) two equal flexible rows around the block, the footer at the bottom; phones keep scrolling from the top | ✅ demo E2E measures 1440×900 (equal space above and below), screenshots 1280×720, 1920×1080, phone |
-| The whole alias visible in the Dossier tile | `ui/fit.ts`: one line shrunk from 19 px down to 13 px, a very long alias on two lines; the same for the profile header | ✅ checked with 14- and 24-character aliases; demo E2E |
+| The whole alias visible in the Dossier tile | `ui/fit.ts`: one line from 17 px down to 12 px measured exactly with 8 px to spare (the owner's screen showed the first version touching the edge: it fitted the text exactly, and heavier font rendering ran past it), a very long alias on two lines; the same for the profile header | ✅ checked with 14- and 24-character aliases; demo E2E |
 | Map names symmetric and inside the tiles | tiles rebuilt: the map picture (new thumbnails at the map's own aspect) centred above a caption band that is the same on every tile, one font size for all captions that fits the longest name; the selected map's band is red | ✅ demo E2E (7 captions inside one band, one size), screenshots EN/RU, desktop/phone |
 | The soundtrack should start right away | autoplay at start-up where allowed; otherwise «▶ Play» at the end of the loading screen starts the music with the menu (browsers do not allow sound before a tap) | ✅ `modes.mjs`: Play starts the music; with autoplay allowed there is no start screen and the music plays |
-| Profile avatars | the owner supplied 24 round pixel portraits | ⏳ next |
+| Profile avatars (PlayStation-style) | the owner's 24 round pixel portraits (`tools/crop-avatars.py`); the picker opens from the avatar in the Dossier tile or the profile; saved in `profiles.avatar` (migration 007, `PATCH /api/me {avatar}`, validated against `AVATAR_IDS`) or in the demo's local profile; other players see it in the lobby (roster), without one the character's portrait | ✅ API and realtime tests, web unit test (every id has a picture and EN/RU names), demo and online E2E |
 | Ranks by level (like Tanki Online) | — | ⏸ on hold by the owner |
 
 ## 3. Open risks / next steps
@@ -116,7 +116,7 @@ instructions win; the original criteria are re-evaluated in §4.
 |---|---|---|
 | The project builds successfully | ✅ | `npm run typecheck`; `node apps/web/build.mjs --mode=production`; `node apps/server/build.mjs` |
 | The server starts | ✅ | bundled `apps/server/dist/server.js` started against PostgreSQL; `/api/health`, `/api/ready` OK |
-| PostgreSQL works | ✅ | migrations 001–006 applied; DB-backed integration tests (incl. economy, payments, email, admin funnel/economy) on PostgreSQL 16 |
+| PostgreSQL works | ✅ | migrations 001–007 applied; DB-backed integration tests (incl. economy, payments, email, admin funnel/economy) on PostgreSQL 16 |
 | Strict top-down 2D camera; not isometric / first-person | ✅ | orthographic camera, top-down sprites; screenshots in all modes |
 | Flagship factory map fully playable | ✅ | offline E2E + online two-browser E2E on «Заводская проходная» |
 | Four characters playable | ✅ | now 14 (4 free + 10 from the Arsenal) with sprites, portraits and animations; locked ones are refused by the server unless owned |

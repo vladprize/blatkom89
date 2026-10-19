@@ -166,6 +166,11 @@ export const RU: Record<string, string> = {
   'BASE {l}': 'БАЗА {l}',
   'PLAY': 'ИГРАТЬ',
   'The tape is rewound. Press play — the music starts with the menu.': 'Кассета перемотана. Жми «Играть» — музыка начнётся вместе с меню.',
+  'Choose an avatar': 'Выбери аватарку',
+  'Change avatar': 'Сменить аватарку',
+  'Avatar saved': 'Аватарка сохранена',
+  'Could not save — try again.': 'Не сохранилось — попробуй ещё раз.',
+  'Others see it next to your alias in the rooms.': 'Её видят рядом с твоей кличкой в комнатах.',
   // ── HUD, connection, nickname, modes
   'Left stick — move': 'Левый стик — движение',
   'Right stick — aim and fire': 'Правый стик — прицел и огонь',

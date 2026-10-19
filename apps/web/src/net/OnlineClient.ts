@@ -2,7 +2,7 @@
  * Online flow controller: authentication (Telegram initData or dev login), room creation/quick
  * match/invites over HTTP, the game WebSocket, lobby state and the OnlineSession lifecycle.
  */
-import type { CharacterId, GameMode, InviteInfo, Inventory, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, WeaponId } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, WeaponId } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { GameConnection } from './GameConnection.js';
 import { OnlineSession } from '../game/session/OnlineSession.js';
@@ -230,6 +230,12 @@ export class OnlineClient {
   async rename(name: string): Promise<void> {
     await this.ensureAuth();
     this.profile = await this.api.updateMe({ displayName: name });
+  }
+
+  /** Profile avatar (null removes it); other players see it in rooms joined from now on. */
+  async setAvatar(avatar: AvatarId | null): Promise<void> {
+    await this.ensureAuth();
+    this.profile = await this.api.updateMe({ avatar });
   }
 
   async quickMatch(c: CharacterId, mode: GameMode = 'ffa'): Promise<void> {

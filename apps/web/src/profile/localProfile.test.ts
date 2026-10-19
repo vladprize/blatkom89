@@ -1,8 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ACHIEVEMENTS, levelForXp, XP_RULES } from '@blatkom/shared';
+import { ACHIEVEMENTS, AVATAR_IDS, levelForXp, XP_RULES } from '@blatkom/shared';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { Standing } from '@blatkom/shared';
-import { createLocalProfile, localProfileView, recordLocalMatch, renameLocalProfile, sanitizeLocalProfile, LOCAL_HISTORY_MAX } from './localProfile.js';
+import { createLocalProfile, localProfileView, recordLocalMatch, renameLocalProfile, sanitizeLocalProfile, setLocalAvatar, LOCAL_HISTORY_MAX } from './localProfile.js';
+import { avatarName } from '../i18n/content.js';
+import { _setLangForTests } from '../i18n/index.js';
 import { randomNickname } from './nickname-words.js';
 
 const st = (id: string, place: number, kills: number, assists: number, deaths: number, isBot = id !== 'local'): Standing => ({
@@ -72,4 +76,30 @@ test('demo profile: storage data is sanitised and the view matches the online sh
   assert.equal(v.profile.matchesPlayed, LOCAL_HISTORY_MAX + 5);
   assert.equal(v.achievements.length, Object.keys(ACHIEVEMENTS).length);
   assert.ok(v.achievements.find((a) => a.id === 'ten_matches')?.unlockedAt);
+});
+
+test('avatars: picked, kept through matches and storage, unknown ids dropped; every id has a picture and names', () => {
+  let p = setLocalAvatar(createLocalProfile('Сыч'), 'militia');
+  assert.equal(p.avatar, 'militia');
+  p = recordLocalMatch(p, { matchId: 'a1', reason: 'time', durationMs: 1000, mapId: 'yard', localId: 'local', standings: [st('local', 1, 1, 0, 0), st('bot0', 2, 0, 0, 1)] })!.profile;
+  assert.equal(p.avatar, 'militia', 'a match keeps the avatar');
+  assert.equal(sanitizeLocalProfile(JSON.parse(JSON.stringify(p)))?.avatar, 'militia', 'storage round-trip');
+  assert.equal(localProfileView(p, 'petya').profile.avatar, 'militia');
+  assert.equal(sanitizeLocalProfile({ ...p, avatar: 'nobody' })?.avatar, undefined, 'an unknown id is dropped');
+  assert.equal(setLocalAvatar(p, null).avatar, undefined, 'null removes it');
+  assert.equal(localProfileView(createLocalProfile('Сыч'), 'petya').profile.avatar, null);
+  assert.equal(new Set(AVATAR_IDS).size, 24);
+  const names = new Set<string>();
+  for (const id of AVATAR_IDS) {
+    assert.match(id, /^[a-z]{2,16}$/, 'fits the database check (profiles.avatar)');
+    assert.ok(existsSync(fileURLToPath(new URL(`../../public/assets/avatars/${id}.jpg`, import.meta.url))), `assets/avatars/${id}.jpg`);
+    _setLangForTests('en');
+    const en = avatarName(id);
+    _setLangForTests('ru');
+    const ru = avatarName(id);
+    assert.ok(en && ru && /[а-яё]/i.test(ru), `${id}: English and Russian names`);
+    names.add(en);
+  }
+  _setLangForTests('en');
+  assert.equal(names.size, AVATAR_IDS.length, 'names are distinct');
 });

@@ -10585,6 +10585,38 @@ function isCharacterId(v) {
 }
 var FREE_CHARACTERS = CHARACTER_IDS.filter((c) => CHARACTERS[c].tier === "base");
 
+// packages/shared/src/game-rules/avatars.ts
+var AVATAR_IDS = [
+  "shades",
+  "tracksuit",
+  "blonde",
+  "ushanka",
+  "flatcap",
+  "balaclava",
+  "bob",
+  "resort",
+  "thinker",
+  "agent",
+  "smoker",
+  "dog",
+  "veteran",
+  "hood",
+  "brick",
+  "tattoo",
+  "furcoat",
+  "panama",
+  "militia",
+  "disco",
+  "shotgun",
+  "babushka",
+  "driver",
+  "tram"
+];
+var AVATAR_SET = new Set(AVATAR_IDS);
+function isAvatarId(v) {
+  return typeof v === "string" && AVATAR_SET.has(v);
+}
+
 // packages/shared/src/game-rules/weapons.ts
 var WEAPON_IDS = [
   // base (free)
@@ -14444,7 +14476,12 @@ var LoadoutRequest = external_exports.object({
 }).strict();
 var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true) }).strict();
 var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card", "crypto"]) }).strict();
-var UpdateProfileRequest = external_exports.object({ displayName: displayNameSchema.optional(), preferredCharacter: external_exports.enum(CHARACTER_IDS).optional() }).strict();
+var UpdateProfileRequest = external_exports.object({
+  displayName: displayNameSchema.optional(),
+  preferredCharacter: external_exports.enum(CHARACTER_IDS).optional(),
+  /** A profile avatar (game-rules/avatars.ts); null removes it. */
+  avatar: external_exports.enum(AVATAR_IDS).nullable().optional()
+}).strict();
 var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true), mode: external_exports.enum(GAME_MODES).default("ffa") }).strict();
 var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional(), mode: external_exports.enum(GAME_MODES).default("ffa") }).strict();
 var AdminLoginRequest = external_exports.object({ username: external_exports.string().min(3).max(32), password: external_exports.string().min(1).max(256) }).strict();
@@ -14774,7 +14811,7 @@ var SessionStore = class {
   async verify(token) {
     if (!TOKEN_RE.test(token)) return null;
     const rows = await this.sql`
-      SELECT s.id AS session_id, s.user_id, s.platform, s.method, s.last_seen_at, u.display_name, p.level
+      SELECT s.id AS session_id, s.user_id, s.platform, s.method, s.last_seen_at, u.display_name, p.level, p.avatar
       FROM sessions s
       JOIN users u ON u.id = s.user_id
       LEFT JOIN profiles p ON p.user_id = u.id
@@ -14793,7 +14830,7 @@ var SessionStore = class {
       this.sql`UPDATE users SET last_seen_at = now() WHERE id = ${r.user_id}`.catch((e) => this.log.warn("user touch failed", { err: e }));
     }
     void this.activity.touch(r.user_id);
-    return { userId: r.user_id, sessionId: r.session_id, displayName: r.display_name, level: r.level ?? 1, platform: r.platform ?? null, method: r.method };
+    return { userId: r.user_id, sessionId: r.session_id, displayName: r.display_name, level: r.level ?? 1, avatar: isAvatarId(r.avatar) ? r.avatar : null, platform: r.platform ?? null, method: r.method };
   }
   async revoke(token) {
     if (!TOKEN_RE.test(token)) return false;
@@ -14828,6 +14865,7 @@ function toPublicProfile(r) {
     currentWinStreak: r.current_win_streak,
     bestWinStreak: r.best_win_streak,
     preferredCharacter: r.preferred_character,
+    avatar: isAvatarId(r.avatar) ? r.avatar : null,
     tokens: r.tokens,
     diamonds: r.diamonds,
     email: r.email
@@ -14847,7 +14885,7 @@ var ProfileRepo = class {
              COALESCE(p.assists, 0) AS assists,
              COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
-             p.preferred_character, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email
+             p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
       WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
     return rows[0] ? toPublicProfile(rows[0]) : null;
@@ -14858,6 +14896,10 @@ var ProfileRepo = class {
       if (patch.preferredCharacter !== void 0) {
         await tx`INSERT INTO profiles (user_id, preferred_character) VALUES (${userId}, ${patch.preferredCharacter})
                  ON CONFLICT (user_id) DO UPDATE SET preferred_character = EXCLUDED.preferred_character, updated_at = now()`;
+      }
+      if (patch.avatar !== void 0) {
+        await tx`INSERT INTO profiles (user_id, avatar) VALUES (${userId}, ${patch.avatar})
+                 ON CONFLICT (user_id) DO UPDATE SET avatar = EXCLUDED.avatar, updated_at = now()`;
       }
     });
   }
@@ -17695,6 +17737,7 @@ var MatchRoom = class {
         isHost: c.user.userId === this.hostId,
         isBot: false,
         level: c.user.level,
+        avatar: c.user.avatar ?? null,
         team: p?.team ?? null,
         mods: c.gear.loadout.mods
       };

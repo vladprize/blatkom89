@@ -26,7 +26,8 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
    The session token is verified exactly like the REST bearer token. Wrong protocol → `error
    version_mismatch` + close 1008; bad token → 4001; unknown room → 4004; full → 4005; finished → 4010.
 4. Server replies `welcome {playerId, slot, mode, config, serverTime, tick, resumed}` and broadcasts
-   `roster {players (with team), mode, mapId, hostId, …}`.
+   `roster {players (with team and avatar), mode, mapId, hostId, …}` — the avatar id comes from the
+   player's profile when the session is verified (`profiles.avatar`, null: the character's portrait).
 5. Lobby: `ready`, `character`, `loadout`, `team` (move to the other side while the teams stay even),
    host-only `map`/`mode`/`start`, `leave`. Rooms hold up to 10 players (`MATCH_MAX_PLAYERS`). Public
    rooms are per mode (Quick Match never mixes free-for-all and team players) and start 4 s after the

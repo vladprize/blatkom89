@@ -1,6 +1,7 @@
 /** HTTP API client (same origin). Never handles secrets other than the player's own session token. */
 import type {
   AuthResponse,
+  AvatarId,
   CreateRoomResponse,
   InviteInfo,
   MapId,
@@ -126,7 +127,7 @@ export class Api {
   me() {
     return this.req<PublicProfile>('GET', '/api/me');
   }
-  updateMe(patch: { displayName?: string; preferredCharacter?: CharacterId }) {
+  updateMe(patch: { displayName?: string; preferredCharacter?: CharacterId; avatar?: AvatarId | null }) {
     return this.req<PublicProfile>('PATCH', '/api/me', patch);
   }
   history() {

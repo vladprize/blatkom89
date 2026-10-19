@@ -1,4 +1,4 @@
-import { h, portrait, toast } from '../dom.js';
+import { h, toast } from '../dom.js';
 import { isTeamMode } from '@blatkom/shared';
 import type { CharacterId, GameMode, MapId, RosterEntry, Team } from '@blatkom/shared';
 import type { LobbyState } from '../../net/OnlineClient.js';
@@ -6,6 +6,7 @@ import { shareInvite } from '../../telegram/tg.js';
 import { t } from '../../i18n/index.js';
 import { charName } from '../../i18n/content.js';
 import { mapPicker } from '../maps.js';
+import { avatarImg } from '../avatars.js';
 import { MODE_ORDER, modeIcon, modeName, modeRules, modeSub } from '../modes.js';
 
 /** The game modes as a 2×2 switch (disabled for room guests). */
@@ -44,7 +45,7 @@ function playerRow(p: RosterEntry): HTMLElement {
   return h(
     'div',
     { class: `player ${p.team === 0 ? 'player--red' : p.team === 1 ? 'player--blue' : ''}` },
-    portrait(p.character, true),
+    avatarImg(p.avatar, p.character),
     h('div', { class: 'n' }, p.name, ' ', h('span', { class: 'muted', style: 'font-size:14px' }, `${charName(p.character)} · ${t('lvl')} ${p.level}`)),
     p.isHost ? h('span', { class: 'badge badge--host' }, t('host')) : null,
     !p.connected ? h('span', { class: 'badge badge--off' }, t('no signal')) : p.ready ? h('span', { class: 'badge badge--ok' }, t('ready')) : h('span', { class: 'badge' }, t('not ready')),

@@ -85,6 +85,10 @@ try {
   check(await A.page.evaluate(() => window.__blatkom.music.playing()), 'A: «▶ Play» on the start screen starts the menu music');
   await nickname(A, 'Flag Bearer');
   await A.page.getByTestId('menu-nick').waitFor({ timeout: 20000 });
+  // A picks an avatar in the menu (saved on the server): B will see it in the lobby
+  await A.page.locator('[data-testid=profile-strip] [data-testid=avatar-button]').click();
+  await A.page.locator('.avapick button[data-avatar="dog"]').click();
+  await A.page.locator('[data-testid=profile-strip] img.ava[data-avatar="dog"]').waitFor({ timeout: 20000 });
   await A.page.getByRole('button', { name: /Play with Friends/ }).click({ timeout: 30000 });
   await A.page.locator('.modebtn[data-mode="ctf"]').click();
   await A.page.getByRole('button', { name: 'Create a room' }).click();
@@ -97,6 +101,7 @@ try {
   await B.page.getByText(/Игроки 2\//).waitFor({ timeout: 90000 });
   check((await A.page.locator('.teamcol').count()) === 2 && (await B.page.locator('.teamcol').count()) === 2, 'both lobbies show the red and blue columns');
   check((await B.page.locator('.modebtn[data-mode="ctf"][aria-pressed="true"]').count()) === 1, 'B (in Russian) sees the mode the host picked');
+  check((await B.page.locator('.player img.ava[data-avatar="dog"]').count()) === 1, 'B sees the avatar A picked next to A in the lobby');
   const rulesB = await B.page.getByTestId('mode-rules').innerText();
   check(/флаг/i.test(rulesB), `B reads the rules in Russian («${rulesB.slice(0, 60)}…»)`);
   const teamsBefore = await A.page.evaluate(() => window.__blatkom.app.lastLobby.players.map((p) => `${p.name}:${p.team}`).sort().join(','));
@@ -170,6 +175,6 @@ try {
 await browser.close();
 const bad = problems.filter((p) => /pageerror/.test(p));
 if (problems.length) console.log(problems.slice(0, 10).join('\n'));
-const ok = checks.length >= 13 && checks.every((c) => c.ok) && bad.length === 0;
+const ok = checks.length >= 14 && checks.every((c) => c.ok) && bad.length === 0;
 console.log(ok ? '[modes] passed' : '[modes] FAILED');
 process.exit(ok ? 0 : 1);

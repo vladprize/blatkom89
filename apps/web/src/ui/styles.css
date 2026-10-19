@@ -113,11 +113,41 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .tile__body { position: absolute; inset: 0; padding: 20px 12px 12px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; text-align: left; min-width: 0; }
 .tile__body:focus-visible { outline: 2px solid var(--tape); outline-offset: -4px; }
 .tile__head { display: flex; gap: 8px; align-items: center; min-width: 0; padding-right: 34px; }
-.tile--profile .nm { font-family: Oswald, sans-serif; font-weight: 600; font-size: 19px; line-height: 1.15; white-space: nowrap; overflow: hidden; min-width: 0; margin-top: 2px; }
+.tile--profile .nm { font-family: Oswald, sans-serif; font-weight: 600; font-size: 17px; line-height: 1.15; white-space: nowrap; overflow: hidden; min-width: 0; margin-top: 2px; }
+/* profile avatars (ui/avatars.ts): round portraits, the picker grid */
+.ava { display: block; flex: none; width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: #0d0b0a; box-shadow: 0 0 0 2px var(--line), 0 3px 0 rgba(0,0,0,.45); image-rendering: auto; }
+.ava--char { image-rendering: pixelated; }
+.ava--empty { display: grid; place-items: center; font-family: Oswald, sans-serif; font-weight: 700; font-size: 24px; line-height: 1; color: var(--muted); background: var(--panel-2); box-shadow: inset 0 0 0 2px var(--line); }
+.ava--big { width: 76px; height: 76px; }
+.ava-btn--big .ava { width: 64px; height: 64px; }
+/* the profile's avatar says it can be changed */
+.ava-btn--big::after { content: '✎'; position: absolute; right: -3px; bottom: -3px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--panel-2); box-shadow: 0 0 0 2px var(--line); color: var(--beige); font-size: 12px; line-height: 1; }
+@media (max-width: 520px) { .ava-btn--big .ava { width: 52px; height: 52px; } }
+.ava-btn { position: relative; flex: none; padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; color: inherit; }
+.ava-btn:hover .ava { box-shadow: 0 0 0 2px var(--tape), 0 3px 0 rgba(0,0,0,.45); }
+.ava-btn:hover .ava--empty { color: var(--beige); }
+.ava-btn:focus-visible { outline: 2px solid var(--tape); outline-offset: 3px; }
+.player img.ava { width: 40px; height: 40px; image-rendering: auto; }
+.player img.ava--char { image-rendering: pixelated; }
+/* a dialog taller than the screen scrolls inside the overlay (auto margins centre it when it fits) */
+.overlay--scroll { overflow-y: auto; align-items: flex-start; }
+.overlay--scroll > .modal { margin: auto; }
+.modal--wide { width: min(640px, 100%); margin-top: 10px; }
+.avapick { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-top: 6px; }
+@media (max-width: 520px) { .avapick { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; } }
+.avapick button { aspect-ratio: 1 / 1; padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; transition: transform .08s; }
+.avapick button .ava { width: 100%; height: 100%; }
+.avapick button:hover .ava { box-shadow: 0 0 0 2px var(--tape), 0 3px 0 rgba(0,0,0,.45); }
+.avapick button:active { transform: scale(.96); }
+.avapick button:focus-visible { outline: 2px solid var(--tape); outline-offset: 3px; }
+.avapick button[aria-pressed='true'] .ava { box-shadow: 0 0 0 3px var(--red), 0 0 0 5px rgba(0,0,0,.55); }
+.avapick--busy button { cursor: progress; }
+.avapick--busy button:not([aria-busy]) { opacity: .5; }
 /* aliases fitted by ui/fit.ts: the text block inside is measured; one that is too long even at the
    smallest one-line size takes two lines */
-.fit-text { display: block; }
+.fit-text { display: inline-block; vertical-align: top; max-width: none; }
 .fit-wrap { white-space: normal !important; overflow-wrap: anywhere; }
+.fit-wrap > .fit-text { display: block; }
 .tile--profile .xpbar { height: 6px; }
 .tile--profile .xp { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .tile__wallet { margin-top: auto; display: flex; flex-wrap: wrap; gap: 2px 14px; font-family: Oswald, sans-serif; font-size: 17px; }

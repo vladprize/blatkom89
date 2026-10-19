@@ -179,6 +179,22 @@ async function startedMatch() {
   return { a, b, ca, cb, room };
 }
 
+test('the lobby roster shows every player\'s avatar (null: the character\'s portrait)', async () => {
+  const userId = `u${++userNo}-avatar`;
+  const a = { userId, token: services.sessions.issue({ userId, displayName: 'Шляпа', level: 3, avatar: 'militia', platform: null }), name: 'Шляпа' };
+  const b = user('Без аватарки');
+  const room = await privateRoom(a);
+  const ca = Client.join(a, room.roomId, 'petya');
+  await ca.msg('welcome');
+  const cb = Client.join(b, room.roomId, 'valuta');
+  await cb.msg('welcome');
+  const roster = await cb.msg('roster', (m) => m.players.length === 2);
+  assert.equal(roster.players.find((p) => p.id === a.userId)?.avatar, 'militia');
+  assert.equal(roster.players.find((p) => p.id === b.userId)?.avatar, null);
+  ca.close();
+  cb.close();
+});
+
 test('rooms API: auth required, invite resolves to a joinable room', async () => {
   const anon = await api('POST', '/api/rooms', null, { mapId: 'factory', isPrivate: true });
   assert.equal(anon.status, 401);

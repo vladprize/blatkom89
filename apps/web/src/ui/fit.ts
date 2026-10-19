@@ -14,16 +14,24 @@ export interface FitOptions {
    * checked (the element should not wrap: white-space: nowrap).
    */
   lines?: number;
+  /** One line: room kept free at the end of the line, px (heavy fonts draw a little past their width). */
+  margin?: number;
 }
 
 const px = (v: number | (() => number)) => Math.round((typeof v === 'function' ? v() : v) * 2) / 2;
 
 // Heights are compared on the text block, not with scrollHeight: tall fonts (Oswald) report glyph
-// overflow beyond a tight line-height as scrollable even when every line is inside the box.
-function fits(el: HTMLElement, lines: number): boolean {
+// overflow beyond a tight line-height as scrollable even when every line is inside the box. One line
+// held by an inline-block (.fit-text) is measured exactly (scrollWidth is rounded to whole pixels).
+function fits(el: HTMLElement, lines: number, margin = 0): boolean {
+  const inner = el.firstElementChild as HTMLElement | null;
+  if (lines <= 1 && inner && getComputedStyle(inner).display === 'inline-block') {
+    const cs = getComputedStyle(el);
+    const room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    return inner.getBoundingClientRect().width <= room - margin;
+  }
   if (el.scrollWidth > el.clientWidth + 1) return false;
   if (lines <= 1) return true;
-  const inner = el.firstElementChild as HTMLElement | null;
   if (!inner) return true;
   const cs = getComputedStyle(el);
   const room = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
@@ -38,7 +46,7 @@ export function fitTextGroup(els: readonly HTMLElement[], o: FitOptions): number
   const live = els.filter((e) => e.isConnected && e.clientWidth > 0);
   if (!live.length) return max;
   const lines = o.lines ?? 1;
-  const ok = (e: HTMLElement) => fits(e, lines);
+  const ok = (e: HTMLElement) => fits(e, lines, o.margin ?? 0);
   const apply = (size: number) => {
     for (const e of live) e.style.fontSize = `${size}px`;
   };
@@ -57,14 +65,15 @@ export function fitTextGroup(els: readonly HTMLElement[], o: FitOptions): number
 }
 
 /**
- * An alias (the element holds one block child with the text): one line, shrunk down to `min`; an
- * alias that is still too long goes onto two lines (class `fit-wrap`) at the largest size that fits.
+ * An alias (the element holds one .fit-text child with the text): one line, shrunk down to `min` with
+ * `margin` px to spare; one still too long goes onto two lines (class `fit-wrap`) at the largest size that fits.
  */
-export function fitAlias(el: HTMLElement, o: { max: number | (() => number); min: number; minTwoLines: number }): void {
+export function fitAlias(el: HTMLElement, o: { max: number | (() => number); min: number; minTwoLines: number; margin?: number }): void {
   if (!el.isConnected || el.clientWidth === 0) return;
   el.classList.remove('fit-wrap');
-  fitTextGroup([el], { max: o.max, min: o.min });
-  if (fits(el, 1)) return;
+  const margin = o.margin ?? 6;
+  fitTextGroup([el], { max: o.max, min: o.min, margin });
+  if (fits(el, 1, margin)) return;
   el.classList.add('fit-wrap');
   fitTextGroup([el], { max: o.max, min: o.minTwoLines, lines: 2 });
 }

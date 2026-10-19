@@ -4,8 +4,8 @@
  * server recorder (`applyMatchProgress`), so a level means the same in both builds. Pure functions;
  * persistence is in localStore.ts. The online build never uses this — there the server owns progress.
  */
-import { ACHIEVEMENT_IDS, ACHIEVEMENTS, applyMatchProgress, displayNameSchema, isCharacterId, isMapId, levelForXp } from '@blatkom/shared';
-import type { AchievementId, AchievementStatus, CharacterId, MapId, MatchHistoryEntry, PersonalResult, PublicProfile, Standing, TeamResultSummary } from '@blatkom/shared';
+import { ACHIEVEMENT_IDS, ACHIEVEMENTS, applyMatchProgress, displayNameSchema, isAvatarId, isCharacterId, isMapId, levelForXp } from '@blatkom/shared';
+import type { AchievementId, AchievementStatus, AvatarId, CharacterId, MapId, MatchHistoryEntry, PersonalResult, PublicProfile, Standing, TeamResultSummary } from '@blatkom/shared';
 
 export const LOCAL_HISTORY_MAX = 20;
 
@@ -44,6 +44,8 @@ export interface LocalProfile {
   achievements: Partial<Record<AchievementId, string>>;
   /** Newest first, at most LOCAL_HISTORY_MAX. */
   history: LocalMatch[];
+  /** Profile avatar (game-rules/avatars.ts); absent: the character's portrait. */
+  avatar?: AvatarId;
 }
 
 export function createLocalProfile(name: string, now = new Date()): LocalProfile {
@@ -69,6 +71,14 @@ export function createLocalProfile(name: string, now = new Date()): LocalProfile
 
 export function renameLocalProfile(p: LocalProfile, name: string): LocalProfile {
   return { ...p, displayName: displayNameSchema.parse(name) };
+}
+
+/** Picks an avatar (null removes it). */
+export function setLocalAvatar(p: LocalProfile, avatar: AvatarId | null): LocalProfile {
+  const next: LocalProfile = { ...p };
+  if (avatar && isAvatarId(avatar)) next.avatar = avatar;
+  else delete next.avatar;
+  return next;
 }
 
 const count = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(Math.floor(v), 1e9) : 0);
@@ -128,6 +138,7 @@ export function sanitizeLocalProfile(raw: unknown, now = new Date()): LocalProfi
     bestWinStreak: count(r.bestWinStreak),
     achievements,
     history,
+    ...(isAvatarId(r.avatar) ? { avatar: r.avatar } : {}),
   };
 }
 
@@ -227,6 +238,7 @@ export function localProfileView(p: LocalProfile, preferredCharacter: CharacterI
       currentWinStreak: p.currentWinStreak,
       bestWinStreak: p.bestWinStreak,
       preferredCharacter,
+      avatar: p.avatar ?? null,
       tokens: 0,
       diamonds: 0,
       email: null,
