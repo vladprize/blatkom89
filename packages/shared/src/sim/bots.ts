@@ -181,7 +181,7 @@ export class BotBrain {
     // blinded by a flashbang: nobody is visible
     if (now < me.flashedUntil) bestD = 0;
     for (const p of this.world.players.values()) {
-      if (p === me || !p.alive) continue;
+      if (p === me || !p.alive || !this.world.hostile(me, p)) continue;
       const d = Math.sqrt((p.x - me.x) ** 2 + (p.y - me.y) ** 2);
       const sticky = p.id === this.targetId ? 80 : 0;
       if (d - sticky < bestD && this.world.collision.lineOfSight(me.x, me.y, p.x, p.y) && !this.world.smokeBlocks(me.x, me.y, p.x, p.y)) {
@@ -219,7 +219,7 @@ export class BotBrain {
     let nearestEnemy: PlayerState | null = null;
     let nd = Infinity;
     for (const p of this.world.players.values()) {
-      if (p === me || !p.alive) continue;
+      if (p === me || !p.alive || !this.world.hostile(me, p)) continue;
       const d = Math.abs(p.x - me.x) + Math.abs(p.y - me.y);
       if (d < nd) {
         nd = d;

@@ -12,6 +12,9 @@ export interface KillFeedEntry {
   /** Names of players credited with an assist. */
   assists: string[];
   assistLocal: boolean;
+  /** Team matches: the teams of the killer and the victim (null in free-for-all). */
+  killerTeam?: import('@blatkom/shared').Team | null;
+  victimTeam?: import('@blatkom/shared').Team | null;
 }
 
 /** Points the local player just earned (floating «+2» popup). */

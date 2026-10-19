@@ -1,4 +1,4 @@
-import type { ArmsId, CharacterId, GadgetId, MapId, MatchPhase, PelletResult, PersonalResult, Standing, WeaponId } from '@blatkom/shared';
+import type { ArmsId, CharacterId, GadgetId, GameMode, MapId, MatchPhase, PelletResult, PersonalResult, Standing, Team, TeamResultSummary, WeaponId } from '@blatkom/shared';
 
 export interface RenderPlayer {
   slot: number;
@@ -29,6 +29,8 @@ export interface RenderPlayer {
   laser: boolean;
   /** Blinded by a flashbang for this many more ms. */
   flashedMs: number;
+  /** Team matches: 0 red, 1 blue; null in free-for-all. */
+  team: Team | null;
 }
 
 /** Equipment in the world (thrown grenades, fire, smoke, mines, C4, turrets). */
@@ -112,6 +114,12 @@ export interface HudState {
   c4Armed: boolean;
   /** Blinded by a flashbang for this many more ms (white screen). */
   flashedMs: number;
+  /** Free-for-all or teams; in team matches the eliminations of red and blue and the limit. */
+  gameMode: GameMode;
+  teamScore: [number, number];
+  teamScoreLimit: number;
+  /** The local player's team (null in free-for-all). */
+  myTeam: Team | null;
 }
 
 export interface ResultsData {
@@ -121,11 +129,16 @@ export interface ResultsData {
   standings: Standing[];
   mapId: MapId;
   personal: PersonalResult | null;
+  /** Match mode (free-for-all when absent) and, for team matches, the team result. */
+  gameMode?: GameMode;
+  teams?: TeamResultSummary;
 }
 
 export interface GameSession {
   readonly mode: 'offline' | 'online';
   readonly mapId: MapId;
+  /** Free-for-all or red vs blue. */
+  readonly gameMode: GameMode;
   localSlot(): number;
   /** One fixed 60 Hz step with the local input (null while the local player is not controlling). */
   step(input: import('@blatkom/shared').InputFrame | null): void;

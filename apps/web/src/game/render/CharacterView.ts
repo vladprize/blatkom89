@@ -24,10 +24,16 @@ const SMOKERS: Partial<Record<CharacterId, { f: number; s: number }>> = {
 };
 const LOCAL_TAG = '#f2e6c8';
 const ENEMY_TAG = '#ffffff';
+/** Team matches: name tags, health bars and the ring under the feet in the team colour. */
+const TEAM_TAG = ['#ff9a8a', '#9fd0f8'] as const;
+const TEAM_FILL = [0xd8392e, 0x4a9be0] as const;
 
 export class CharacterView {
   readonly slot: number;
   private readonly shadow: Phaser.GameObjects.Image;
+  /** Team matches: a coloured ring under the character. */
+  private readonly ring: Phaser.GameObjects.Image;
+  private ringTeam: number | null = -1;
   private readonly legs: Phaser.GameObjects.Sprite;
   private readonly torso: Phaser.GameObjects.Sprite;
   /** Weapon in hand (atlas «weapons», origin = grip). */
@@ -58,6 +64,7 @@ export class CharacterView {
     this.character = p.character;
     this.weapon = p.weapon;
     this.shadow = scene.add.image(p.x, p.y, 'fx', 'shadow').setScale(0.6, 0.48).setAlpha(0.55).setDepth(D.CHAR_SHADOW);
+    this.ring = scene.add.image(p.x, p.y, 'fx', 'ring').setScale(0.42).setAlpha(0.8).setDepth(D.CHAR_SHADOW + 0.01).setVisible(false);
     this.legs = scene.add.sprite(p.x, p.y, `char_${p.character}`, `${p.character}_legs_idle_0`).setScale(SCALE).setDepth(D.LEGS);
     this.torso = scene.add.sprite(p.x, p.y, `char_${p.character}`, `${p.character}_${WEAPONS[p.weapon].pose}_idle_0`).setScale(SCALE).setDepth(D.TORSO + p.slot * 0.01);
     this.gun = scene.add.image(p.x, p.y, 'weapons', `w_${p.weapon}`).setScale(SCALE).setDepth(D.TORSO + p.slot * 0.01 - 0.004);
@@ -133,7 +140,16 @@ export class CharacterView {
       for (const o of [this.shadow, this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.setVisible(visible);
       if (visible) this.playIdle();
     }
+    if (p.team !== this.ringTeam) {
+      this.ringTeam = p.team;
+      if (p.team === 0 || p.team === 1) {
+        this.ring.setTint(TEAM_FILL[p.team]);
+        this.label.setColor(TEAM_TAG[p.team]);
+      } else this.label.setColor(p.isLocal ? LOCAL_TAG : ENEMY_TAG);
+    }
+    this.ring.setVisible(visible && p.team !== null && !concealed);
     if (!visible) return;
+    if (p.team !== null) this.ring.setPosition(p.x, p.y);
     if (p.weapon !== this.weapon) this.setWeapon(p.weapon);
     // reload state
     if (p.reloading && !this.reloading && WEAPONS[p.weapon].kind !== 'melee') {
@@ -214,7 +230,7 @@ export class CharacterView {
     const bx = Math.round(p.x - w / 2);
     const by = Math.round(p.y - 21);
     this.bar.fillStyle(0x0b0908, 0.85).fillRect(bx - 1, by - 1, w + 2, 3.5);
-    this.bar.fillStyle(p.isLocal ? 0xd8322a : 0x3d8fd8, 1).fillRect(bx, by, (w * Math.max(0, p.hp)) / 100, 1.5);
+    this.bar.fillStyle(p.team === 0 || p.team === 1 ? TEAM_FILL[p.team] : p.isLocal ? 0xd8322a : 0x3d8fd8, 1).fillRect(bx, by, (w * Math.max(0, p.hp)) / 100, 1.5);
     const lvl = p.level === null ? '' : String(p.level);
     if (this.levelTag.text !== lvl) this.levelTag.setText(lvl);
     if (lvl) {
@@ -239,7 +255,7 @@ export class CharacterView {
   }
 
   destroy(): void {
-    for (const o of [this.shadow, this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.destroy();
+    for (const o of [this.shadow, this.ring, this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.destroy();
   }
 }
 

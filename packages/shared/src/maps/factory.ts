@@ -279,5 +279,7 @@ export function buildFactoryMap(): MapDef {
   // first-aid kits: one per quarter, away from the weapon pickups
   b.medkit(544, 160).medkit(1180, 576).medkit(240, 680).medkit(824, 880);
 
+  // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
+  b.spawn(884, 532, 180).spawn(380, 596, 0).spawn(1084, 44, 135).spawn(324, 116, 45).spawn(1020, 908, -135).spawn(604, 372, 45).spawn(1172, 636, 180);
   return b.build();
 }

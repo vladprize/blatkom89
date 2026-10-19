@@ -308,5 +308,7 @@ export function buildStroykaMap(): MapDef {
   b.medkit(150, 690).medkit(706, 110).medkit(1310, 400).medkit(940, 800);
   b.supply(300, 470).supply(1160, 190).supply(640, 820).supply(1250, 700).supply(880, 70);
 
+  // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
+  b.spawn(340, 36, 45).spawn(572, 420, 0).spawn(964, 620, -135).spawn(372, 644, -45).spawn(1044, 252, 135).spawn(68, 196, 0).spawn(1076, 852, -135);
   return b.build();
 }

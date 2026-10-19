@@ -1,7 +1,7 @@
 /** Owns all rooms, the shared 60 Hz tick loop and room discovery (quick match, invites). */
 import { randomBytes } from 'node:crypto';
 import { MAP_ORDER, TICK_MS } from '@blatkom/shared';
-import type { MapId, MatchConfig } from '@blatkom/shared';
+import type { GameMode, MapId, MatchConfig } from '@blatkom/shared';
 import { MatchRoom } from './MatchRoom.js';
 import type { Services } from '../services/contracts.js';
 import type { Logger } from '../logging/logger.js';
@@ -44,24 +44,24 @@ export class RoomManager {
     return [...this.rooms.values()].filter((r) => !r.closed);
   }
 
-  create(mapId: MapId, isPrivate: boolean, hostUserId: string | null, inviteCode: string | null = null): MatchRoom {
+  create(mapId: MapId, isPrivate: boolean, hostUserId: string | null, inviteCode: string | null = null, mode: GameMode = 'ffa'): MatchRoom {
     if (this.rooms.size >= this.opts.maxRooms) throw new Error('room limit reached');
     let id = newRoomId();
     while (this.rooms.has(id)) id = newRoomId();
-    const room = new MatchRoom({ id, mapId, isPrivate, hostUserId, inviteCode, config: this.opts.config }, this.services, this.log);
+    const room = new MatchRoom({ id, mapId, isPrivate, hostUserId, inviteCode, mode, config: this.opts.config }, this.services, this.log);
     this.rooms.set(id, room);
-    this.services.analytics.server('lobby_created', { roomId: id, mapId, isPrivate }, { userId: hostUserId });
+    this.services.analytics.server('lobby_created', { roomId: id, mapId, isPrivate, mode }, { userId: hostUserId });
     return room;
   }
 
-  /** Finds a public joinable room (preferring the requested map and fuller rooms) or creates one. */
-  quickMatch(userId: string, mapId?: MapId): MatchRoom {
+  /** Finds a public joinable room of the mode (preferring the requested map and fuller rooms) or creates one. */
+  quickMatch(userId: string, mapId?: MapId, mode: GameMode = 'ffa'): MatchRoom {
     const candidates = this.list()
-      .filter((r) => !r.isPrivate && r.isJoinable(userId) && (!mapId || r.mapId === mapId))
+      .filter((r) => !r.isPrivate && r.mode === mode && r.isJoinable(userId) && (!mapId || r.mapId === mapId))
       .sort((a, b) => b.occupancy - a.occupancy);
     if (candidates[0]) return candidates[0];
     const map = mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)]!;
-    return this.create(map, false, null);
+    return this.create(map, false, null, null, mode);
   }
 
   start(): void {

@@ -17,7 +17,7 @@ import {
   weaponAmmo,
   weaponFor,
 } from '@blatkom/shared';
-import type { CollisionWorld, GameEvent, InputFrame, MapId, MatchConfig, PlayerState, RosterEntry, Snapshot, NetPlayer, Standing, PersonalResult, PelletResult, MatchPhase } from '@blatkom/shared';
+import type { CollisionWorld, GameEvent, GameMode, InputFrame, MapId, MatchConfig, PlayerState, RosterEntry, Snapshot, NetPlayer, Standing, PersonalResult, PelletResult, MatchPhase, Team, TeamResultSummary } from '@blatkom/shared';
 import type { GameSession, HudState, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
 import type { GameConnection } from '../../net/GameConnection.js';
 
@@ -32,6 +32,8 @@ interface TimedEvent {
 export class OnlineSession implements GameSession {
   readonly mode = 'online' as const;
   readonly mapId: MapId;
+  readonly gameMode: GameMode;
+  private myTeam: Team | null = null;
   private readonly collision: CollisionWorld;
   private me: PlayerState | null = null;
   private pending: InputFrame[] = [];
@@ -65,8 +67,10 @@ export class OnlineSession implements GameSession {
     roster: RosterEntry[],
   ) {
     this.mapId = mapId;
+    this.gameMode = config.mode;
     this.collision = getCollision(mapId);
     this.setRoster(roster);
+    this.myTeam = roster.find((r) => r.id === playerId)?.team ?? null;
     void getMap(mapId);
   }
 
@@ -136,8 +140,9 @@ export class OnlineSession implements GameSession {
     }
   }
 
-  setResults(r: { matchId: string; reason: 'time' | 'score' | 'aborted'; durationMs: number; standings: Standing[]; mapId: MapId }): void {
-    this.resultsData = { ...r, personal: this.personal };
+  setResults(r: { matchId: string; reason: 'time' | 'score' | 'aborted'; durationMs: number; standings: Standing[]; mapId: MapId; mode?: GameMode; teams?: TeamResultSummary }): void {
+    const { mode, teams, ...rest } = r;
+    this.resultsData = { ...rest, personal: this.personal, gameMode: mode ?? this.gameMode, ...(teams ? { teams } : {}) };
   }
 
   setPersonal(p: PersonalResult): void {
@@ -184,6 +189,8 @@ export class OnlineSession implements GameSession {
     me.score = np.score;
     me.walking = np.walking;
     me.connected = np.connected;
+    me.team = np.team;
+    this.myTeam = np.team;
     me.lastSeq = np.ack;
     me.clock = np.ack * TICK_MS;
     me.reloadWeapon = np.reloading ? np.weapon : null;
@@ -325,6 +332,7 @@ export class OnlineSession implements GameSession {
         level: r?.level ?? null,
         laser: src.laser,
         flashedMs: src.flashedRemaining,
+        team: pb.team,
       });
     }
     // equipment: thrown grenades glide between snapshots, the rest stands still
@@ -381,6 +389,7 @@ export class OnlineSession implements GameSession {
         level: r?.level ?? null,
         laser: me.mods[me.weapon]?.includes('laser') ?? false,
         flashedMs: this.localFlashMs(),
+        team: this.myTeam,
       });
     }
     return out;
@@ -444,6 +453,10 @@ export class OnlineSession implements GameSession {
       gadgetCharges: me?.gadgetCharges ?? 0,
       c4Armed: !!s?.gadgets.some((g) => g.kind === 'c4' && g.owner === this.slot),
       flashedMs: this.localFlashMs(),
+      gameMode: this.gameMode,
+      teamScore: s ? [s.teamScore[0], s.teamScore[1]] : [0, 0],
+      teamScoreLimit: this.config.teamScoreLimit,
+      myTeam: this.myTeam,
     };
   }
 
@@ -453,7 +466,7 @@ export class OnlineSession implements GameSession {
     return s.players
       .map((p) => ({ p, r: this.roster.get(p.slot) }))
       .sort((x, y) => y.p.score - x.p.score || y.p.kills - x.p.kills || x.p.deaths - y.p.deaths)
-      .map(({ p, r }, i) => ({ id: r?.id ?? String(p.slot), slot: p.slot, name: r?.name ?? '???', character: r?.character ?? 'petya', isBot: false, kills: p.kills, assists: p.assists, deaths: p.deaths, score: p.score, damageDealt: 0, bestStreak: 0, place: i + 1 }));
+      .map(({ p, r }, i) => ({ id: r?.id ?? String(p.slot), slot: p.slot, name: r?.name ?? '???', character: r?.character ?? 'petya', isBot: false, team: p.team, kills: p.kills, assists: p.assists, deaths: p.deaths, score: p.score, damageDealt: 0, bestStreak: 0, place: i + 1 }));
   }
 
   results(): ResultsData | null {

@@ -161,5 +161,7 @@ export function buildYardMap(): MapDef {
   // first-aid kits: west and east of the courtyard centre, and behind the southern block
   b.medkit(560, 560).medkit(1000, 680).medkit(820, 1040);
 
+  // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
+  b.spawn(692, 1044, -90).spawn(708, 44, 90).spawn(692, 604, -90).spawn(1364, 556, 180).spawn(44, 548, 0).spawn(820, 324, 135);
   return b.build();
 }

@@ -59,6 +59,36 @@ export function renderFit(prims: Prim[], scale: number, margin = 3): Img {
   return b ? img.crop(Math.max(0, b.x - 1), Math.max(0, b.y - 1), Math.min(img.w - Math.max(0, b.x - 1), b.w + 2), Math.min(img.h - Math.max(0, b.y - 1), b.h + 2)) : img;
 }
 
+/**
+ * Renders prims scaled to fit a fixed W×H box (texels) with `margin` free texels around, centred
+ * on what is actually drawn. Every shop icon of a kind shares one box, so a knife and a rifle
+ * occupy the same space (the shop compares items, not their real lengths).
+ */
+export function renderInBox(prims: Prim[], W: number, H: number, margin = 2): Img {
+  const [x0, y0, x1, y1] = primBounds(prims);
+  let s = Math.min((W - 2 * margin) / Math.max(1e-3, x1 - x0), (H - 2 * margin) / Math.max(1e-3, y1 - y0));
+  let cx = (x0 + x1) / 2;
+  let cy = (y0 + y1) / 2;
+  // primBounds is conservative (radii, rotated boxes): measure the real silhouette and refit
+  for (let pass = 0; pass < 2; pass++) {
+    const probe = render(prims, W * 3, H * 3, { scale: s, cx, cy });
+    const b = probe.bounds();
+    if (!b) break;
+    const k = Math.min((W - 2 * margin) / b.w, (H - 2 * margin) / b.h);
+    cx += (b.x + b.w / 2 - (W * 3) / 2) / s;
+    cy += (b.y + b.h / 2 - (H * 3) / 2) / s;
+    s *= k;
+  }
+  return render(prims, W, H, { scale: s, cx, cy });
+}
+
+/** Shop icon boxes (texels): large (cards, modification rows) and small (slots, tables, chips). */
+export const ICON_BOX = {
+  weapon: { big: [168, 56], small: [84, 28] },
+  gadget: { big: [168, 56], small: [84, 28] },
+  mod: { big: [72, 36], small: [36, 18] },
+} as const;
+
 /** White silhouette with dark inner lines and outline (HUD icon style). */
 function silhouette(src: Img): Img {
   const pad = 2;
@@ -97,8 +127,11 @@ export function buildWeapons(spritesDir: string, uiDir: string, genFile: string)
     frames.push({ name: `pickup_${id}`, img: render(transformPrims(lying, 0, -(cx * ca - cy * sa), -(cx * sa + cy * ca)), 128, 96) });
     const side = renderFit(sidePrims(id), 2);
     frames.push({ name: `ico_${id}`, img: silhouette(side) });
-    renderFit(sidePrims(id), 4, 2).savePng(join(uiDir, 'weapons', `${id}.png`));
+    renderInBox(sidePrims(id), ...ICON_BOX.weapon.big, 3).savePng(join(uiDir, 'weapons', `${id}.png`));
+    renderInBox(sidePrims(id), ...ICON_BOX.weapon.small, 2).savePng(join(uiDir, 'weapons', `${id}_s.png`));
   }
+  // main-menu Arsenal tile: a TT pistol tilted up, bigger than any shop icon
+  renderInBox(transformPrims(sidePrims('tt'), -0.22, 0, 0), 132, 96, 4).savePng(join(uiDir, 'menu_arsenal.png'));
   // equipment: top-down sprites in the world, HUD/kill-feed silhouettes, shop images (3/4 view)
   mkdirSync(join(uiDir, 'gadgets'), { recursive: true });
   mkdirSync(join(uiDir, 'mods'), { recursive: true });
@@ -112,9 +145,14 @@ export function buildWeapons(spritesDir: string, uiDir: string, genFile: string)
     const prims = id === 'turret' ? [...GADGET_MODELS.turret(), ...GADGET_MODELS.turret_head()] : GADGET_MODELS[id]();
     const view = viewPrims(prims, 0.35, 0.75);
     frames.push({ name: `ico_${id}`, img: silhouette(renderFit(viewPrims(prims, 0, 0.25), 2)) });
-    renderFit(view, 5, 2).savePng(join(uiDir, 'gadgets', `${id}.png`));
+    renderInBox(view, ...ICON_BOX.gadget.big, 3).savePng(join(uiDir, 'gadgets', `${id}.png`));
+    renderInBox(view, ...ICON_BOX.gadget.small, 2).savePng(join(uiDir, 'gadgets', `${id}_s.png`));
   }
-  for (const id of MOD_IDS) renderFit(viewPrims(MOD_MODELS[id](), 0, 0.15), 4, 2).savePng(join(uiDir, 'mods', `${id}.png`));
+  for (const id of MOD_IDS) {
+    const view = viewPrims(MOD_MODELS[id](), 0, 0.15);
+    renderInBox(view, ...ICON_BOX.mod.big, 2).savePng(join(uiDir, 'mods', `${id}.png`));
+    renderInBox(view, ...ICON_BOX.mod.small, 1).savePng(join(uiDir, 'mods', `${id}_s.png`));
+  }
   frames.push({ name: 'pickup_medkit', img: render(medkitPrims(), 40, 32) });
   frames.push({ name: 'proj_rocket', img: render(rocketPrims('rocket'), 32, 16) });
   frames.push({ name: 'proj_grenade', img: render(rocketPrims('grenade'), 16, 12) });

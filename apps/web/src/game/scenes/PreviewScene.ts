@@ -83,6 +83,7 @@ export class PreviewScene extends Phaser.Scene {
         level: null,
         laser: false,
         flashedMs: 0,
+        team: null,
       };
       const view = new CharacterView(this, p);
       view.onSmoke = (x, y) => this.fx.cigaretteSmoke(x, y);

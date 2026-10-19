@@ -2,10 +2,10 @@
  * App shell: screen navigation (HTML/CSS over the canvas), offline practice flow, online flow
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
-import { CHARACTERS, CHARACTER_IDS, FREE_CHARACTERS, GADGETS, MAP_ORDER, MODS, WEAPONS, DEFAULT_LOADOUT, getMap, isCharacterId, isMapId, levelForXp } from '@blatkom/shared';
-import type { CharacterId, MapId, BotDifficulty, Standing, PersonalResult, Loadout } from '@blatkom/shared';
+import { CHARACTERS, CHARACTER_IDS, FREE_CHARACTERS, GADGETS, MODS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, isCharacterId, isMapId, levelForXp } from '@blatkom/shared';
+import type { CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
-import { OfflineSession } from '../game/session/OfflineSession.js';
+import { OfflineSession, MAX_PRACTICE_BOTS } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
 import { hudBus } from '../game/scenes/hudBus.js';
 import { h, toast, portrait, asset, fmtDuration } from '../ui/dom.js';
@@ -23,26 +23,53 @@ import type { LocalProfile } from '../profile/localProfile.js';
 import { clearLocalProfile, loadLocalProfile, saveLocalProfile } from '../profile/localStore.js';
 import { openNicknameDialog, randomNickname } from '../profile/nickname.js';
 import { renderResults } from '../ui/screens/results.js';
-import { renderLobby } from '../ui/screens/lobby.js';
+import { renderLobby, modeSwitch } from '../ui/screens/lobby.js';
+import { mapPicker } from '../ui/maps.js';
 import { renderArsenal, characterPriceNote, amount } from '../ui/screens/shop.js';
 import type { ArsenalTab, TryOn } from '../ui/screens/shop.js';
 import { renderAccountPanel, openEmailLogin, openPasswordReset } from '../ui/screens/account.js';
 import { sfx } from '../game/audio/Sfx.js';
+import { music } from '../game/audio/Music.js';
+import { t, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
+import { charText } from '../i18n/content.js';
+
+/** Room capacity shown in the menu. */
+const MAX_ROOM_PLAYERS = DEFAULT_MATCH_CONFIG.maxPlayers;
 
 type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
 
 /** Profile id whose nickname has been confirmed in the first-launch dialog (online build). */
 const NICK_CONFIRMED_KEY = 'blatkom89.nick-confirmed.v1';
+/** Last game mode picked for a quick match / a new room. */
+const QUICK_MODE_KEY = 'blatkom89.quick-mode';
 
-const MAP_BLURB: Partial<Record<MapId, string>> = {
-  factory: 'The checkpoint, Workshop No. 3, the warehouse. Corridors, cover, key points.',
-  garages: 'Rows of garages, narrow lanes, ambushes at close range.',
-  yard: 'Panel blocks, archways and a playground. Flanks and mid-range fights.',
-  stroyka: 'A half-built block under the crane: sections, the pit, stacks of bricks.',
-  dk: 'The auditorium, the stage, dressing rooms, the billiard room and the foyer.',
-  gastronom: 'Aisles of shelves, counters, the warehouse and the loading dock.',
-  hospital: 'Wards, the operating theatre, X-ray and one long corridor.',
-};
+
+/** Speaker with sound waves (music on) or a cross (muted), drawn as inline SVG. */
+function speakerIcon(on: boolean): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '18');
+  svg.setAttribute('height', '18');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = (d: string, stroke: boolean) => {
+    const p = document.createElementNS(NS, 'path');
+    p.setAttribute('d', d);
+    if (stroke) {
+      p.setAttribute('fill', 'none');
+      p.setAttribute('stroke', 'currentColor');
+      p.setAttribute('stroke-width', '2');
+      p.setAttribute('stroke-linecap', 'round');
+    } else p.setAttribute('fill', 'currentColor');
+    svg.append(p);
+  };
+  path('M3 9h4l5-4v14l-5-4H3z', false);
+  if (on) {
+    path('M15.5 8.5a5 5 0 0 1 0 7', true);
+    path('M18.5 5.5a9.5 9.5 0 0 1 0 13', true);
+  } else path('M16 9.5l5 5M21 9.5l-5 5', true);
+  return svg;
+}
 
 export class App {
   private host!: GameHost;
@@ -53,13 +80,16 @@ export class App {
   private session: GameSession | null = null;
   private online: OnlineClient | null = null;
   private pauseEl: HTMLElement | null = null;
-  private lastPractice: { mapId: MapId; bots: number; difficulty: BotDifficulty } = { mapId: 'factory', bots: 3, difficulty: 'normal' };
+  private lastPractice: { mapId: MapId; bots: number; difficulty: BotDifficulty; gameMode: GameMode } = { mapId: 'factory', bots: 3, difficulty: 'normal', gameMode: 'ffa' };
   private resultsShown = false;
   /** Demo build only: the browser-only profile (nickname, XP, stats). Online, the server owns it. */
   private localProfile: LocalProfile | null = null;
   private lastLocalResult: { matchId: string; personal: PersonalResult } | null = null;
   private nickClose: (() => void) | null = null;
   private stripEl: HTMLElement | null = null;
+  /** Last lobby state and results (to redraw them after a language switch). */
+  private lastLobby: LobbyState | null = null;
+  private lastResults: ResultsData | null = null;
 
   constructor() {
     const saved = storageGet('blatkom89.character');
@@ -67,6 +97,51 @@ export class App {
     if (!ONLINE_AVAILABLE) this.localProfile = loadLocalProfile();
     hudBus.on('pause', () => this.togglePause());
     hudBus.on('match-end', () => setTimeout(() => this.onMatchFinished(), 2200));
+    onLangChange(() => this.relocalize());
+  }
+
+  /** The language was switched: draw the current screen again in the new language. */
+  private relocalize() {
+    switch (this.screen) {
+      case 'menu':
+        return this.goMenu();
+      case 'characters':
+      case 'practice':
+      case 'friends':
+      case 'profile':
+      case 'settings':
+      case 'arsenal':
+        return this.open(this.screen, false);
+      case 'lobby':
+        if (this.lastLobby) this.onLobby(this.lastLobby);
+        return;
+      case 'results':
+        if (this.lastResults) this.showResults(this.lastResults);
+        return;
+      default:
+        return;
+    }
+  }
+
+  /** Who made what: music, fonts, engine (licences in THIRD_PARTY_LICENSES.txt). */
+  private showCredits() {
+    const ov = h('div', { class: 'overlay overlay--top' });
+    const close = () => ov.remove();
+    ov.append(
+      h(
+        'div',
+        { class: 'panel modal col credits' },
+        h('span', { class: 'tag' }, t('Credits')),
+        h('div', { class: 'h2', style: 'margin-top:6px' }, 'BLATKOM ’89'),
+        h('div', null, h('b', null, t('Menu music')), ': «Hurt» — Infraction & Emerel Gray (Brazilian Phonk Sport).'),
+        h('div', null, h('b', null, t('Fonts')), ': Oswald, PT Sans Narrow, Caveat — SIL Open Font License; Permanent Marker — Apache License 2.0.'),
+        h('div', null, h('b', null, t('Engine')), ': Phaser 3 — MIT License.'),
+        h('div', { class: 'muted' }, t('Characters, maps, weapons and sound effects are original work made for this game.')),
+        h('a', { href: asset('THIRD_PARTY_LICENSES.txt'), target: '_blank', class: 'muted' }, t('Full licence texts')),
+        h('button', { class: 'btn btn--red', onclick: close }, t('Close')),
+      ),
+    );
+    this.root.append(ov);
   }
 
   async start(host: GameHost): Promise<void> {
@@ -242,53 +317,83 @@ export class App {
     this.endSession();
     this.host.showPreview();
     this.go('menu', false);
-    const c = CHARACTERS[this.character];
-    const onlineNote = ONLINE_AVAILABLE ? null : h('div', { class: 'muted', style: 'font-size:14px' }, 'This is the demo without a server: practice against bots is available. Online matches work in the online version.');
-    this.stripEl = this.profileStrip();
+    music.setWanted(true);
+    const onlineNote = ONLINE_AVAILABLE ? null : h('div', { class: 'muted', style: 'font-size:14px' }, t('This is the demo without a server: practice against bots is available. Online matches work in the online version.'));
+    this.stripEl = this.profileTile();
     const menu = h(
       'div',
       { class: 'screen screen--dim' },
       h(
         'div',
-        { class: 'wrap' },
-        this.stripEl,
-        h('img', { class: 'logo', src: asset('assets/ui/logo.png'), alt: 'BLATKOM ’89 — district business is serious business' }),
+        { class: 'wrap wrap--menu' },
+        this.cornerControls(),
+        h('img', { class: 'logo', src: asset(getLang() === 'ru' ? 'assets/ui/logo_ru.png' : 'assets/ui/logo.png'), alt: t('BLATKOM ’89 — district business is serious business') }),
         h(
           'div',
           { class: 'menu' },
           h(
             'div',
-            { class: 'panel btn-col' },
-            h('span', { class: 'tag' }, 'District Business'),
-            h('div', { style: 'height:6px' }),
-            h('button', { class: 'btn btn--red', onclick: () => this.quickMatch(), disabled: !ONLINE_AVAILABLE }, 'Quick Match', h('span', { class: 'sub' }, 'online, up to 6 comrades')),
-            h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, 'Play with Friends', h('span', { class: 'sub' }, 'a room by invitation')),
-            h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, 'Practice', h('span', { class: 'sub' }, 'against bots, no internet needed')),
-            h('button', { class: 'btn', onclick: () => this.showArsenal() }, 'Arsenal', h('span', { class: 'sub' }, 'weapons, equipment, characters')),
-            h('div', { class: 'row' }, h('button', { class: 'btn grow', onclick: () => this.showProfile() }, 'Profile'), h('button', { class: 'btn grow', onclick: () => this.showSettings() }, 'Settings')),
+            { class: 'panel menu__play' },
+            h('span', { class: 'tag' }, t('District Business')),
+            h('button', { class: 'btn btn--red', onclick: () => this.quickMatch(), disabled: !ONLINE_AVAILABLE }, t('Quick Match'), h('span', { class: 'sub' }, t('online, up to {n} comrades', { n: MAX_ROOM_PLAYERS }))),
+            h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, t('Play with Friends'), h('span', { class: 'sub' }, t('a room by invitation'))),
+            h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, t('Practice'), h('span', { class: 'sub' }, t('against bots, no internet needed'))),
+            h('button', { class: 'btn', onclick: () => this.showSettings() }, t('Settings'), h('span', { class: 'sub' }, t('picture, sound, controls, language'))),
             onlineNote,
           ),
           h(
             'div',
-            { class: 'panel col' },
-            h('span', { class: 'tag' }, 'Character'),
+            { class: 'menu__side' },
             h(
               'div',
-              { class: 'charcard', role: 'button', tabindex: '0', onclick: () => this.showCharacters(), onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && this.showCharacters() },
-              portrait(this.character),
-              h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 'name' }, c.name), h('div', { class: 'nick' }, `«${c.nickname}»`), h('div', { class: 'hand' }, c.quote)),
+              { class: 'panel col menu__char' },
+              h('span', { class: 'tag' }, t('Character')),
+              h(
+                'div',
+                { class: 'charcard', role: 'button', tabindex: '0', onclick: () => this.showCharacters(), onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && this.showCharacters() },
+                portrait(this.character),
+                h('div', { class: 'col', style: 'gap:2px;min-width:0' }, h('div', { class: 'name' }, charText(this.character).name), h('div', { class: 'nick' }, `«${charText(this.character).nickname}»`), h('div', { class: 'hand' }, charText(this.character).quote)),
+              ),
+              h('button', { class: 'btn btn--small', onclick: () => this.showCharacters() }, t('Change character')),
             ),
-            h('button', { class: 'btn btn--small', onclick: () => this.showCharacters() }, 'Change character'),
+            h('div', { class: 'tiles' }, this.stripEl, this.arsenalTile()),
           ),
         ),
         h('div', { class: 'grow' }),
         ONLINE_AVAILABLE
-          ? h('div', { class: 'footer' }, `BLATKOM ’89 · v${VERSION} · Free to play, purchases optional · `, h('a', { href: asset('privacy.html'), target: '_blank', style: 'color:inherit' }, 'Privacy'))
-          : h('div', { class: 'footer' }, `BLATKOM ’89 · v${VERSION} · Demo: the game runs right in your browser; no data is collected or sent anywhere.`),
+          ? h('div', { class: 'footer' }, t('BLATKOM ’89 · v{v} · Free to play, purchases optional', { v: VERSION }), ' · ', h('a', { href: asset(getLang() === 'ru' ? 'privacy-ru.html' : 'privacy.html'), target: '_blank', style: 'color:inherit' }, t('Privacy')), ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits')))
+          : h('div', { class: 'footer' }, t('BLATKOM ’89 · v{v} · Demo: the game runs right in your browser; no data is collected or sent anywhere.', { v: VERSION }), ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits'))),
       ),
     );
     this.render(menu);
     this.maybeAskNickname();
+  }
+
+  /** Top-right corner of the menu: language and music switches. */
+  private cornerControls(): HTMLElement {
+    const lang = h(
+      'div',
+      { class: 'seg seg--tiny', role: 'group', 'aria-label': t('Language') },
+      ...LANGS.map((l) => h('button', { 'aria-pressed': String(getLang() === l), lang: l, onclick: () => setLang(l) }, l === 'en' ? 'EN' : 'RU')),
+    );
+    const box = h('div', { class: 'corner' }, lang);
+    if (music.available()) {
+      const btn = h('button', { class: 'iconbtn', 'aria-pressed': String(music.volume() > 0) });
+      const paint = () => {
+        const on = music.volume() > 0;
+        btn.setAttribute('aria-pressed', String(on));
+        btn.setAttribute('aria-label', on ? t('Music on — tap to mute') : t('Music off — tap to play'));
+        btn.title = btn.getAttribute('aria-label')!;
+        btn.replaceChildren(speakerIcon(on));
+      };
+      btn.addEventListener('click', () => {
+        music.toggle();
+        paint();
+      });
+      paint();
+      box.append(btn);
+    }
+    return box;
   }
 
   // ── profile, nickname, level ────────────────────────────────────────────
@@ -301,41 +406,60 @@ export class App {
     return this.localProfile ? levelForXp(this.localProfile.xp).level : null;
   }
 
-  /** Top-right strip in the menu: level badge, nickname, XP bar, «✎» to rename. Opens the profile. */
-  private profileStrip(): HTMLElement {
+  /** Square tile under the character card: level, alias (✎ to rename), XP and the wallet. Opens the profile. */
+  private profileTile(): HTMLElement {
     const name = this.playerName();
-    const strip = h('div', { class: 'pstrip', 'data-testid': 'profile-strip' });
+    const tile = h('div', { class: 'tile tile--profile', 'data-testid': 'profile-strip' });
     if (!name) {
-      strip.append(h('div', { class: 'lvlbadge' }, h('small', null, 'LVL'), '—'), h('div', { class: 'who' }, h('div', { class: 'nm muted' }, this.online ? 'Signing in…' : 'No alias')));
-      if (!this.online) strip.append(h('button', { class: 'edit', 'aria-label': 'Choose an alias', onclick: () => this.editNickname() }, '✎'));
-      return strip;
+      tile.append(
+        h('span', { class: 'tag' }, t('Dossier')),
+        h('div', { class: 'tile__body' }, h('div', { class: 'tile__head' }, h('div', { class: 'lvlbadge' }, h('small', null, t('LVL')), '—')), h('div', { class: 'nm muted' }, this.online ? t('Signing in…') : t('No alias'))),
+      );
+      if (!this.online) tile.append(h('button', { class: 'edit', 'aria-label': t('Choose an alias'), onclick: () => this.editNickname() }, '✎'));
+      return tile;
     }
     const xp = this.online ? (this.online.profile?.xp ?? 0) : (this.localProfile?.xp ?? 0);
     const lvl = levelForXp(xp);
     const pct = lvl.nextLevelCost > 0 ? Math.round((lvl.intoLevel / lvl.nextLevelCost) * 100) : 100;
-    strip.append(
-      h(
-        'button',
-        { class: 'pstrip__main', onclick: () => this.showProfile(), 'aria-label': `Profile: ${name}, level ${lvl.level}` },
-        h('div', { class: 'lvlbadge' }, h('small', null, 'LVL'), String(this.playerLevel() ?? lvl.level)),
-        h(
-          'div',
-          { class: 'who' },
-          h('div', { class: 'nm', 'data-testid': 'menu-nick' }, name),
-          h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
-          h('div', { class: 'xp' }, lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} XP` : 'max level'),
-        ),
-      ),
-      h('button', { class: 'edit', 'aria-label': 'Change alias', title: 'Change alias', onclick: () => this.editNickname() }, '✎'),
-    );
+    const level = this.playerLevel() ?? lvl.level;
     const inv = this.online?.inventory;
-    if (inv) strip.append(h('button', { class: 'pstrip__wallet', onclick: () => this.showArsenal(), 'aria-label': `Talons ${inv.tokens}, diamonds ${inv.diamonds}` }, amount(inv.tokens, 'tokens'), amount(inv.diamonds, 'diamonds')));
-    return strip;
+    tile.append(
+      h('span', { class: 'tag' }, t('Dossier')),
+      h(
+        'div',
+        {
+          class: 'tile__body',
+          role: 'button',
+          tabindex: '0',
+          'aria-label': t('Profile: {name}, level {level}', { name, level }),
+          onclick: () => this.showProfile(),
+          onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && this.showProfile(),
+        },
+        h('div', { class: 'tile__head' }, h('div', { class: 'lvlbadge' }, h('small', null, t('LVL')), String(level))),
+        h('div', { class: 'nm', 'data-testid': 'menu-nick' }, name),
+        h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
+        h('div', { class: 'xp' }, lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} XP` : t('max level')),
+        inv ? h('div', { class: 'tile__wallet' }, amount(inv.tokens, 'tokens'), amount(inv.diamonds, 'diamonds')) : null,
+      ),
+      h('button', { class: 'edit', 'aria-label': t('Change alias'), title: t('Change alias'), onclick: () => this.editNickname() }, '✎'),
+    );
+    return tile;
+  }
+
+  /** The big Arsenal button: a pistol and the word. */
+  private arsenalTile(): HTMLElement {
+    return h(
+      'button',
+      { class: 'tile tile--arsenal', onclick: () => this.showArsenal(), 'data-testid': 'arsenal-tile' },
+      h('img', { class: 'tile__gun', src: asset('assets/ui/menu_arsenal.png'), alt: '', draggable: 'false', width: 132, height: 96 }),
+      h('span', { class: 'tile__title' }, t('Arsenal')),
+      h('span', { class: 'tile__sub' }, t('weapons · gear · characters')),
+    );
   }
 
   private refreshStrip() {
     if (!this.stripEl?.isConnected) return;
-    const next = this.profileStrip();
+    const next = this.profileTile();
     this.stripEl.replaceWith(next);
     this.stripEl = next;
   }
@@ -498,12 +622,14 @@ export class App {
     const el = renderArsenal({
       online: this.online,
       inTelegram: inTelegram(),
+      character: this.character,
+      textures: this.host.game.textures,
       ...(tab ? { tab } : {}),
-      onTry: (t) => this.startPractice({ ...this.lastPractice, tryOn: t }),
+      onTry: (tryOn) => this.startPractice({ ...this.lastPractice, tryOn }),
       onWallet: () => this.refreshStrip(),
       onCharacter: (c) => this.showCharacters(true, c),
     });
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Arsenal'), el)));
+    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar(t('Arsenal')), el)));
   }
 
   // ── practice ────────────────────────────────────────────────────────────
@@ -511,51 +637,53 @@ export class App {
     this.go('practice', push);
     const s = getSettings();
     let mapId: MapId = this.lastPractice.mapId;
-    let bots = s.bots;
+    let bots = Math.max(1, Math.min(MAX_PRACTICE_BOTS, s.bots));
     let diff: BotDifficulty = s.botDifficulty;
-    const maps = h('div', { class: 'col' });
-    const drawMaps = () =>
-      maps.replaceChildren(
-        ...MAP_ORDER.map((id) =>
-          h(
-            'button',
-            { class: `btn ${id === mapId ? 'btn--red' : ''}`, style: 'justify-content:space-between', onclick: () => ((mapId = id), drawMaps()) },
-            getMap(id).name,
-            h('span', { class: 'sub' }, MAP_BLURB[id]),
-          ),
-        ),
-      );
-    drawMaps();
+    let gameMode: GameMode = this.lastPractice.gameMode;
     const seg = <T extends string | number>(values: T[], cur: () => T, set: (v: T) => void, label: (v: T) => string) => {
       const el = h('div', { class: 'seg' });
-      const draw = () => el.replaceChildren(...values.map((v) => h('button', { 'aria-pressed': String(v === cur()), onclick: () => (set(v), draw()) }, label(v))));
+      const draw = () => el.replaceChildren(...values.map((v) => h('button', { 'aria-pressed': String(v === cur()), onclick: () => (set(v), draw(), note()) }, label(v))));
       draw();
       return el;
     };
+    const teamNote = h('div', { class: 'muted' });
+    const note = () => {
+      const red = Math.ceil((bots + 1) / 2);
+      teamNote.textContent = gameMode === 'teams' ? t('You play for red. Red {r} — blue {b}: the bots are dealt to both teams.', { r: red, b: bots + 1 - red }) : t('Everyone against everyone: {n} bots.', { n: bots });
+    };
+    note();
     const content = h(
       'div',
       { class: 'wrap' },
-      this.topbar('Practice'),
-      h('div', { class: 'panel col' }, h('span', { class: 'tag' }, 'Map'), maps),
+      this.topbar(t('Practice')),
+      h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Map')), mapPicker({ selected: mapId, onPick: (m) => (mapId = m) })),
       h(
         'div',
         { class: 'panel col' },
-        h('span', { class: 'tag' }, 'Opponents'),
-        h('div', { class: 'muted' }, 'Number of bots'),
-        seg([1, 2, 3, 4, 5], () => bots, (v) => (bots = v), String),
-        h('div', { class: 'muted' }, 'Difficulty'),
-        seg<BotDifficulty>(['easy', 'normal', 'hard'], () => diff, (v) => (diff = v), (v) => ({ easy: 'Easy', normal: 'Normal', hard: 'Vicious' })[v]),
+        h('span', { class: 'tag' }, t('Mode')),
+        modeSwitch({ mode: gameMode, onMode: (m) => ((gameMode = m), note()) }),
+        teamNote,
+      ),
+      h(
+        'div',
+        { class: 'panel col' },
+        h('span', { class: 'tag' }, t('Opponents')),
+        h('div', { class: 'muted' }, t('Number of bots')),
+        seg(Array.from({ length: MAX_PRACTICE_BOTS }, (_, i) => i + 1), () => bots, (v) => (bots = v), String),
+        h('div', { class: 'muted' }, t('Difficulty')),
+        seg<BotDifficulty>(['easy', 'normal', 'hard'], () => diff, (v) => (diff = v), (v) => ({ easy: t('Easy'), normal: t('Normal'), hard: t('Vicious') })[v]),
       ),
       h(
         'button',
         {
           class: 'btn btn--red',
+          'data-testid': 'practice-start',
           onclick: () => {
             updateSettings({ bots, botDifficulty: diff });
-            this.startPractice({ mapId, bots, difficulty: diff });
+            this.startPractice({ mapId, bots, difficulty: diff, gameMode });
           },
         },
-        'Start',
+        t('Start'),
       ),
     );
     this.render(h('div', { class: 'screen screen--dim' }, content));
@@ -582,8 +710,8 @@ export class App {
     return parts.join(' and ');
   }
 
-  private startPractice(opts: { mapId: MapId; bots: number; difficulty: BotDifficulty; tryOn?: TryOn; character?: CharacterId }) {
-    this.lastPractice = { mapId: opts.mapId, difficulty: opts.difficulty, bots: Math.max(1, Math.min(5, opts.bots || 3)) };
+  private startPractice(opts: { mapId: MapId; bots: number; difficulty: BotDifficulty; gameMode?: GameMode; tryOn?: TryOn; character?: CharacterId }) {
+    this.lastPractice = { mapId: opts.mapId, difficulty: opts.difficulty, bots: Math.max(1, Math.min(MAX_PRACTICE_BOTS, opts.bots || 3)), gameMode: opts.gameMode ?? 'ffa' };
     const name = this.playerName() ?? CHARACTERS[this.character].name;
     const session = new OfflineSession({
       mapId: opts.mapId,
@@ -592,6 +720,7 @@ export class App {
       level: this.playerLevel(),
       bots: this.lastPractice.bots,
       difficulty: opts.difficulty,
+      gameMode: this.lastPractice.gameMode,
       loadout: this.practiceLoadout(opts.tryOn),
     });
     if (opts.tryOn) {
@@ -603,6 +732,7 @@ export class App {
 
   private beginSession(session: GameSession) {
     this.endSession(false);
+    music.setWanted(false);
     this.session = session;
     this.resultsShown = false;
     this.go('game');
@@ -670,6 +800,8 @@ export class App {
 
   private showResults(r: ResultsData) {
     this.resultsShown = true;
+    this.lastResults = r;
+    music.setWanted(true);
     if (this.screen !== 'results') this.go('results', false);
     const offline = this.session?.mode !== 'online';
     const myId = offline ? 'local' : (this.online?.profile?.id ?? '');
@@ -709,12 +841,37 @@ export class App {
   }
 
   // ── online ──────────────────────────────────────────────────────────────
-  private async quickMatch() {
+  /** Quick match: pick free-for-all or teams (remembered), then find a public room of that mode. */
+  private quickMatch() {
+    if (!this.online) return;
+    const saved = storageGet(QUICK_MODE_KEY);
+    const ov = h('div', { class: 'overlay overlay--top' });
+    const close = () => ov.remove();
+    const go = (mode: GameMode) => {
+      storageSet(QUICK_MODE_KEY, mode);
+      close();
+      void this.findMatch(mode);
+    };
+    ov.append(
+      h(
+        'div',
+        { class: 'panel modal col', 'data-testid': 'quick-modes' },
+        h('span', { class: 'tag' }, t('Quick Match')),
+        h('div', { class: 'muted', style: 'margin-top:6px' }, t('Up to {n} players on one map. Which way do we settle it?', { n: MAX_ROOM_PLAYERS })),
+        h('button', { class: `btn ${saved !== 'teams' ? 'btn--red' : ''}`, 'data-mode': 'ffa', onclick: () => go('ffa') }, t('Every man for himself'), h('span', { class: 'sub' }, t('each for himself'))),
+        h('button', { class: `btn ${saved === 'teams' ? 'btn--red' : ''}`, 'data-mode': 'teams', onclick: () => go('teams') }, t('Red vs Blue'), h('span', { class: 'sub' }, t('two teams, no friendly fire'))),
+        h('button', { class: 'btn btn--ghost btn--small', onclick: close }, t('Cancel')),
+      ),
+    );
+    this.root.append(ov);
+  }
+
+  private async findMatch(mode: GameMode) {
     if (!this.online) return;
     this.go('loading');
-    this.render(this.loading('Looking for a match…'));
+    this.render(this.loading(t('Looking for a match…')));
     try {
-      await this.online.quickMatch(this.onlineCharacter());
+      await this.online.quickMatch(this.onlineCharacter(), mode);
     } catch (e) {
       this.showError((e as Error).message);
     }
@@ -724,41 +881,40 @@ export class App {
     if (!this.online) return;
     this.go('friends', push);
     let mapId: MapId = 'factory';
-    const maps = h('div', { class: 'seg' });
-    const drawMaps = () => maps.replaceChildren(...MAP_ORDER.map((id) => h('button', { 'aria-pressed': String(id === mapId), onclick: () => ((mapId = id), drawMaps()) }, getMap(id).name)));
-    drawMaps();
-    const code = h('input', { class: 'input', placeholder: 'Invite code', maxlength: '16', autocapitalize: 'off', autocomplete: 'off', inputmode: 'text', 'aria-label': 'Invite code' });
+    let gameMode: GameMode = storageGet(QUICK_MODE_KEY) === 'teams' ? 'teams' : 'ffa';
+    const code = h('input', { class: 'input', placeholder: t('Invite code'), maxlength: '16', autocapitalize: 'off', autocomplete: 'off', inputmode: 'text', 'aria-label': t('Invite code') });
     const content = h(
       'div',
       { class: 'wrap' },
-      this.topbar('Play with Friends'),
+      this.topbar(t('Play with Friends')),
       h(
         'div',
         { class: 'panel col' },
-        h('span', { class: 'tag' }, 'Your Own Room'),
-        h('div', { class: 'muted' }, 'Create a room and send your friends the invite link.'),
-        maps,
+        h('span', { class: 'tag' }, t('Your Own Room')),
+        h('div', { class: 'muted' }, t('Create a room and send your friends the invite link. Up to {n} players.', { n: MAX_ROOM_PLAYERS })),
+        modeSwitch({ mode: gameMode, onMode: (m) => (gameMode = m) }),
+        mapPicker({ selected: mapId, onPick: (m) => (mapId = m) }),
         h(
           'button',
           {
             class: 'btn btn--red',
             onclick: async () => {
               this.go('loading');
-              this.render(this.loading('Creating the room…'));
+              this.render(this.loading(t('Creating the room…')));
               try {
-                await this.online!.createRoom(mapId, this.onlineCharacter());
+                await this.online!.createRoom(mapId, this.onlineCharacter(), gameMode);
               } catch (e) {
                 this.showError((e as Error).message);
               }
             },
           },
-          'Create a room',
+          t('Create a room'),
         ),
       ),
       h(
         'div',
         { class: 'panel col' },
-        h('span', { class: 'tag' }, 'By Code'),
+        h('span', { class: 'tag' }, t('By Code')),
         code,
         h(
           'button',
@@ -766,11 +922,11 @@ export class App {
             class: 'btn',
             onclick: () => {
               const v = code.value.trim();
-              if (!/^[A-Za-z0-9]{6,16}$/.test(v)) return toast('Invalid code');
+              if (!/^[A-Za-z0-9]{6,16}$/.test(v)) return toast(t('Invalid code'));
               this.joinInvite(v);
             },
           },
-          'Join by code',
+          t('Join by code'),
         ),
       ),
     );
@@ -803,6 +959,7 @@ export class App {
   }
 
   private onLobby(s: LobbyState) {
+    this.lastLobby = s;
     if (this.screen === 'game' && (s.phase === 'active' || s.phase === 'countdown' || s.phase === 'ready' || s.phase === 'finished')) return;
     if (this.screen === 'results' && s.phase === 'finished') return;
     if (s.phase !== 'waiting') return;
@@ -810,6 +967,7 @@ export class App {
       this.endSession();
       this.go('lobby', false);
     }
+    music.setWanted(true);
     this.render(
       renderLobby({
         state: s,
@@ -817,6 +975,8 @@ export class App {
         onReady: (r) => this.online?.setReady(r),
         onStart: () => this.online?.startMatch(),
         onMap: (m) => this.online?.setMap(m),
+        onMode: (m) => this.online?.setMode(m),
+        onTeam: (team) => this.online?.setTeam(team),
         onCharacter: () => this.showCharacters(),
         onLeave: () => void this.online?.leave(),
         inTelegram: inTelegram(),

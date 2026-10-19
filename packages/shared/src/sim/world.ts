@@ -20,7 +20,7 @@ import {
   MOVE_AXIS_MAX,
 } from '../constants/game.js';
 import type { CharacterId } from '../game-rules/characters.js';
-import type { MatchConfig, MatchPhase } from '../game-rules/match.js';
+import type { MatchConfig, MatchPhase, Team } from '../game-rules/match.js';
 import { DEFAULT_MATCH_CONFIG, SCORING } from '../game-rules/match.js';
 import { rankPlaces } from '../game-rules/progression.js';
 import type { ModId, WeaponDef, WeaponId, WeaponMods } from '../game-rules/weapons.js';
@@ -65,6 +65,8 @@ export interface PlayerState {
   name: string;
   character: CharacterId;
   isBot: boolean;
+  /** Team matches: 0 = red, 1 = blue; null in free-for-all. */
+  team: Team | null;
   connected: boolean;
   joinedAt: number;
 
@@ -188,6 +190,8 @@ export interface Standing {
   name: string;
   character: CharacterId;
   isBot: boolean;
+  /** Team matches only. */
+  team?: Team | null;
   kills: number;
   assists: number;
   deaths: number;
@@ -196,6 +200,12 @@ export interface Standing {
   damageDealt: number;
   bestStreak: number;
   place: number;
+}
+
+/** Outcome of a team match: eliminations per team (red, blue) and the winner (null = draw). */
+export interface TeamResult {
+  scores: [number, number];
+  winner: Team | null;
 }
 
 export interface WorldOptions {
@@ -209,6 +219,8 @@ export interface ProjectileState {
   id: number;
   ownerId: string;
   ownerSlot: number;
+  /** The owner's team when fired (team matches: no damage to teammates even if the owner left). */
+  ownerTeam: Team | null;
   weapon: WeaponId;
   x: number;
   y: number;
@@ -232,6 +244,7 @@ export interface GadgetState {
   kind: GadgetId;
   ownerId: string;
   ownerSlot: number;
+  ownerTeam: Team | null;
   x: number;
   y: number;
   vx: number;
@@ -256,18 +269,20 @@ interface HistoryFrame {
   data: Float32Array; // per slot: x, y, alive
 }
 
-const MAX_SLOTS = 8;
+/** Slot numbers 0…MAX_SLOTS-1 (rooms hold up to MatchConfig.maxPlayers ≤ MAX_SLOTS players). */
+export const MAX_SLOTS = 12;
 
 /** Weapons a «дефицит» supply crate can contain. */
 export const SUPPLY_POOL: readonly WeaponId[] = ['avtomat', 'obrez', 'ksyuha', 's12', 'mp5', 'm4', 'g36', 'svd', 'm249', 'rpg'];
 
-export function createPlayerState(id: string, slot: number, name: string, character: CharacterId, isBot: boolean, now: number, seed: number): PlayerState {
+export function createPlayerState(id: string, slot: number, name: string, character: CharacterId, isBot: boolean, now: number, seed: number, team: Team | null = null): PlayerState {
   return {
     id,
     slot,
     name,
     character,
     isBot,
+    team,
     connected: true,
     joinedAt: now,
     x: 0,
@@ -511,6 +526,8 @@ export class World {
   matchStartedAt = 0;
   matchEndsAt = 0;
   endReason: 'time' | 'score' | 'aborted' | null = null;
+  /** Team matches: eliminations by red (0) and blue (1). */
+  readonly teamScore: [number, number] = [0, 0];
   readonly players = new Map<string, PlayerState>();
   readonly pickups: PickupState[] = [];
   readonly projectiles: ProjectileState[] = [];
@@ -560,12 +577,62 @@ export class World {
     return -1;
   }
 
-  addPlayer(id: string, name: string, character: CharacterId, isBot = false, loadout: Loadout = DEFAULT_LOADOUT): PlayerState {
+  get teams(): boolean {
+    return this.config.mode === 'teams';
+  }
+
+  /** Can `a` hurt `b`? Anyone else in free-for-all, only the other team in team matches. */
+  hostile(a: { id: string; team: Team | null }, b: { id: string; team: Team | null }): boolean {
+    if (a.id === b.id) return false;
+    return !this.teams || a.team === null || b.team === null || a.team !== b.team;
+  }
+
+  /** Is `q` an enemy of whoever owns this projectile / piece of equipment (owner excluded)? */
+  private hostileToOwner(owner: { ownerId: string; ownerTeam: Team | null }, q: PlayerState): boolean {
+    if (q.id === owner.ownerId) return false;
+    return !this.teams || owner.ownerTeam === null || q.team === null || owner.ownerTeam !== q.team;
+  }
+
+  teamSize(team: Team): number {
+    let n = 0;
+    for (const p of this.players.values()) if (p.team === team) n++;
+    return n;
+  }
+
+  /** The team a newcomer joins: the smaller one (the trailing one on a tie). */
+  smallerTeam(): Team {
+    const a = this.teamSize(0);
+    const b = this.teamSize(1);
+    if (a !== b) return a < b ? 0 : 1;
+    return this.teamScore[0] <= this.teamScore[1] ? 0 : 1;
+  }
+
+  /** Moves a player to a team (the caller checks when that is allowed). */
+  setTeam(id: string, team: Team): void {
+    const p = this.players.get(id);
+    if (p && this.teams) p.team = team;
+  }
+
+  /** Evens the teams out (difference of at most one): the latest arrivals move, bots first. */
+  balanceTeams(): void {
+    if (!this.teams) return;
+    for (const p of this.players.values()) if (p.team === null) p.team = this.smallerTeam();
+    for (let guard = 0; guard < 16; guard++) {
+      const a = this.teamSize(0);
+      const b = this.teamSize(1);
+      if (Math.abs(a - b) <= 1) return;
+      const from: Team = a > b ? 0 : 1;
+      const movers = [...this.players.values()].filter((p) => p.team === from).sort((x, y) => Number(y.isBot) - Number(x.isBot) || y.joinedAt - x.joinedAt || y.slot - x.slot);
+      movers[0]!.team = from === 0 ? 1 : 0;
+    }
+  }
+
+  addPlayer(id: string, name: string, character: CharacterId, isBot = false, loadout: Loadout = DEFAULT_LOADOUT, team?: Team): PlayerState {
     const existing = this.players.get(id);
     if (existing) return existing;
     const slot = this.freeSlot();
     if (slot < 0) throw new Error('room full');
-    const p = createPlayerState(id, slot, name, character, isBot, this.time, hash32(slot + 1, Math.floor(this.rng() * 0xffffffff)));
+    const p = createPlayerState(id, slot, name, character, isBot, this.time, hash32(slot + 1, Math.floor(this.rng() * 0xffffffff)), this.teams ? (team ?? this.smallerTeam()) : null);
     this.applyLoadout(p, loadout);
     this.players.set(id, p);
     if (this.phase === 'countdown' || this.phase === 'active') this.spawnPlayer(p, this.phase === 'countdown');
@@ -619,6 +686,7 @@ export class World {
   beginMatch(skipReady = false): void {
     if (this.phase !== 'waiting') return;
     this.resetScores();
+    this.balanceTeams();
     if (skipReady) this.startCountdown();
     else this.setPhase('ready', this.config.readyMs);
   }
@@ -627,6 +695,14 @@ export class World {
     this.setPhase('countdown', this.config.countdownMs);
     this.resetPickups();
     const order = [...this.players.values()].sort((a, b) => a.slot - b.slot);
+    if (this.teams) {
+      // each team starts on its own side of the map
+      for (const team of [0, 1] as const) {
+        const side = this.teamSpawnIndices(team);
+        order.filter((p) => p.team === team).forEach((p, i) => this.spawnPlayer(p, true, side[i % side.length]));
+      }
+      return;
+    }
     const spawns = this.shuffledSpawnIndices();
     order.forEach((p, i) => this.spawnPlayer(p, true, spawns[i % spawns.length]));
   }
@@ -673,6 +749,8 @@ export class World {
   }
 
   private resetScores() {
+    this.teamScore[0] = 0;
+    this.teamScore[1] = 0;
     for (const p of this.players.values()) {
       p.kills = 0;
       p.assists = 0;
@@ -714,9 +792,32 @@ export class World {
     return idx;
   }
 
-  /** Picks the spawn farthest from living opponents, penalizing spawns they can see. */
+  /**
+   * Spawn points of a team's home side: the map is split along its longer axis, red (0) gets the
+   * left/top half, blue (1) the right/bottom half (shuffled).
+   */
+  teamSpawnIndices(team: Team): number[] {
+    const horizontal = this.map.width >= this.map.height;
+    const key = (i: number) => (horizontal ? this.map.spawns[i]!.x : this.map.spawns[i]!.y);
+    const sorted = this.map.spawns.map((_, i) => i).sort((a, b) => key(a) - key(b) || a - b);
+    const half = Math.ceil(sorted.length / 2);
+    const mine = team === 0 ? sorted.slice(0, half) : sorted.slice(sorted.length - half);
+    for (let i = mine.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rng() * (i + 1));
+      [mine[i], mine[j]] = [mine[j]!, mine[i]!];
+    }
+    return mine;
+  }
+
+  /**
+   * Picks the spawn farthest from living opponents, penalizing spawns they can see. In team
+   * matches the home side and nearby teammates are preferred, so the teams keep their fronts.
+   */
   chooseSpawn(forId: string): number {
-    const enemies = [...this.players.values()].filter((p) => p.alive && p.id !== forId);
+    const me = this.players.get(forId);
+    const enemies = [...this.players.values()].filter((p) => p.alive && p.id !== forId && (!me || this.hostile(me, p)));
+    const friends = me && this.teams ? [...this.players.values()].filter((p) => p.alive && p.id !== forId && p.team === me.team) : [];
+    const home = me && this.teams && me.team !== null ? new Set(this.teamSpawnIndicesStable(me.team)) : null;
     let best = 0;
     let bestScore = -Infinity;
     this.map.spawns.forEach((s, i) => {
@@ -728,13 +829,25 @@ export class World {
         minD = Math.min(minD, d);
         if (d < 700 && this.collision.lineOfSight(e.x, e.y, s.x, s.y)) seen = true;
       }
-      const score = minD - (seen ? 400 : 0) + this.rng() * 60;
+      let bonus = 0;
+      if (home?.has(i)) bonus += 160;
+      for (const f of friends) if (Math.hypot(f.x - s.x, f.y - s.y) < 420) bonus += 40;
+      const score = minD - (seen ? 400 : 0) + Math.min(bonus, 280) + this.rng() * 60;
       if (score > bestScore) {
         bestScore = score;
         best = i;
       }
     });
     return best;
+  }
+
+  /** Home-side spawn indices without consuming the RNG (respawn scoring). */
+  private teamSpawnIndicesStable(team: Team): number[] {
+    const horizontal = this.map.width >= this.map.height;
+    const key = (i: number) => (horizontal ? this.map.spawns[i]!.x : this.map.spawns[i]!.y);
+    const sorted = this.map.spawns.map((_, i) => i).sort((a, b) => key(a) - key(b) || a - b);
+    const half = Math.ceil(sorted.length / 2);
+    return team === 0 ? sorted.slice(0, half) : sorted.slice(sorted.length - half);
   }
 
   spawnPlayer(p: PlayerState, frozen: boolean, spawnIndex?: number): void {
@@ -807,7 +920,8 @@ export class World {
     const out: Array<{ p: PlayerState; x: number; y: number }> = [];
     const frame = this.lagCompensation ? this.sampleHistory(viewTime) : null;
     for (const q of this.players.values()) {
-      if (q === exclude || !q.alive) continue;
+      // teammates are transparent to their own side's bullets and blades
+      if (q === exclude || !q.alive || !this.hostile(exclude, q)) continue;
       let x = q.x;
       let y = q.y;
       if (frame) {
@@ -826,7 +940,7 @@ export class World {
     p.invulnUntil = Math.min(p.invulnUntil, this.time);
     if (w.kind === 'projectile' && w.projectile) return this.launch(p, w, spread);
     const targets = this.targetsAt(viewTime, p);
-    const turrets = this.gadgets.filter((g) => g.kind === 'turret' && g.ownerId !== p.id);
+    const turrets = this.gadgets.filter((g) => g.kind === 'turret' && g.ownerId !== p.id && (!this.teams || g.ownerTeam !== p.team));
     const pellets: PelletResult[] = [];
     const dmgByVictim = new Map<PlayerState, number>();
     const dmgByTurret = new Map<GadgetState, number>();
@@ -880,6 +994,7 @@ export class World {
       id: this.nextProjectileId++,
       ownerId: p.id,
       ownerSlot: p.slot,
+      ownerTeam: p.team,
       weapon: w.id,
       x: p.x + dx * start,
       y: p.y + dy * start,
@@ -906,6 +1021,7 @@ export class World {
       let direct: PlayerState | null = null;
       for (const q of this.players.values()) {
         if (!q.alive || (q.id === pr.ownerId && pr.traveled < 40)) continue;
+        if (q.id !== pr.ownerId && !this.hostileToOwner(pr, q)) continue;
         const ht = rayCircle(pr.x, pr.y, pr.dx, pr.dy, q.x, q.y, PLAYER_RADIUS);
         if (ht !== null && ht <= t) {
           t = ht;
@@ -926,16 +1042,17 @@ export class World {
   }
 
   private explode(pr: ProjectileState, x: number, y: number, direct: PlayerState | null) {
-    this.blast({ id: pr.id, ownerId: pr.ownerId, ownerSlot: pr.ownerSlot, arms: pr.weapon, x, y, radius: pr.radius, splash: pr.splash, selfFactor: pr.selfFactor, direct, directDamage: pr.direct });
+    this.blast({ id: pr.id, ownerId: pr.ownerId, ownerSlot: pr.ownerSlot, ownerTeam: pr.ownerTeam, arms: pr.weapon, x, y, radius: pr.radius, splash: pr.splash, selfFactor: pr.selfFactor, direct, directDamage: pr.direct });
   }
 
   /** An explosion: splash damage with line of sight to players and turrets around (x, y). */
-  private blast(b: { id: number; ownerId: string; ownerSlot: number; arms: ArmsId; x: number; y: number; radius: number; splash: number; selfFactor: number; direct?: PlayerState | null; directDamage?: number }) {
+  private blast(b: { id: number; ownerId: string; ownerSlot: number; ownerTeam: Team | null; arms: ArmsId; x: number; y: number; radius: number; splash: number; selfFactor: number; direct?: PlayerState | null; directDamage?: number }) {
     const { x, y, radius } = b;
     this.events.push({ t: 'boom', id: b.id, shooter: b.ownerSlot, weapon: b.arms, x, y, radius });
     const owner = this.players.get(b.ownerId) ?? null;
     for (const q of [...this.players.values()]) {
       if (!q.alive) continue;
+      if (q.id !== b.ownerId && !this.hostileToOwner(b, q)) continue;
       const d = Math.hypot(q.x - x, q.y - y);
       if (d > radius + PLAYER_RADIUS) continue;
       if (q !== b.direct && !this.collision.lineOfSight(x, y, q.x, q.y)) continue;
@@ -946,6 +1063,7 @@ export class World {
     }
     for (const g of [...this.gadgets]) {
       if (g.kind !== 'turret') continue;
+      if (this.teams && g.ownerId !== b.ownerId && g.ownerTeam !== null && g.ownerTeam === b.ownerTeam) continue;
       const d = Math.hypot(g.x - x, g.y - y);
       if (d > radius + TURRET.radius || !this.collision.lineOfSight(x, y, g.x, g.y)) continue;
       this.damageTurret(g, b.splash * (1 - 0.7 * Math.max(0, Math.min(1, d / radius))));
@@ -974,7 +1092,7 @@ export class World {
     if (best) return this.applyDamage(best, p, w.damage, w.id);
     // nobody in reach: an opponent's turret can be smashed
     for (const g of this.gadgets) {
-      if (g.kind !== 'turret' || g.ownerId === p.id) continue;
+      if (g.kind !== 'turret' || g.ownerId === p.id || (this.teams && g.ownerTeam === p.team)) continue;
       const d = Math.hypot(g.x - p.x, g.y - p.y);
       if (d > w.meleeRange + TURRET.radius) continue;
       if (Math.abs(angleDiff(p.aim, Math.atan2(g.y - p.y, g.x - p.x))) > w.meleeArc / 2 && d > TURRET.radius * 1.6) continue;
@@ -987,6 +1105,8 @@ export class World {
     if (!victim.alive || amount <= 0) return;
     if (this.time < victim.invulnUntil) return;
     if (this.phase !== 'active') return;
+    // no friendly fire in team matches (the owner's own explosives still hurt the owner)
+    if (attacker && attacker !== victim && !this.hostile(attacker, victim)) return;
     victim.hp = Math.max(0, victim.hp - amount);
     victim.lastHitAt = this.time;
     if (attacker) {
@@ -1022,6 +1142,7 @@ export class World {
       killer.bestStreak = Math.max(killer.bestStreak, killer.streak);
       killer.lastKillAt = this.time;
       scorers.push(killer);
+      if (this.teams && killer.team !== null) this.teamScore[killer.team]++;
     }
     // assists: recent, meaningful damage by anyone other than the killer
     const assists: number[] = [];
@@ -1029,7 +1150,7 @@ export class World {
       if (rec.id === killer?.id || rec.id === victim.id) continue;
       if (this.time - rec.at > SCORING.assistWindowMs || rec.amount < SCORING.assistMinDamage) continue;
       const helper = this.players.get(rec.id);
-      if (!helper) continue;
+      if (!helper || !this.hostile(helper, victim)) continue;
       helper.assists++;
       helper.score += SCORING.assistPoints;
       assists.push(helper.slot);
@@ -1037,7 +1158,9 @@ export class World {
     }
     victim.recentDamage = [];
     this.events.push({ t: 'kill', killer: killer ? killer.slot : -1, victim: victim.slot, weapon, assists });
-    if (scorers.some((p) => p.score >= this.config.scoreLimit)) this.finish('score');
+    if (this.teams) {
+      if (this.teamScore[0] >= this.config.teamScoreLimit || this.teamScore[1] >= this.config.teamScoreLimit) this.finish('score');
+    } else if (scorers.some((p) => p.score >= this.config.scoreLimit)) this.finish('score');
   }
 
   // ── Equipment (slot 4) ──────────────────────────────────────────────────
@@ -1069,6 +1192,7 @@ export class World {
       kind,
       ownerId: p.id,
       ownerSlot: p.slot,
+      ownerTeam: p.team,
       x,
       y,
       vx: def.use === 'throw' ? dx * def.throwSpeed + p.vx * 0.5 : 0,
@@ -1106,7 +1230,7 @@ export class World {
   private detonateGadget(g: GadgetState) {
     const def = GADGETS[g.kind];
     this.removeGadget(g);
-    this.blast({ id: 0x10000 + g.id, ownerId: g.ownerId, ownerSlot: g.ownerSlot, arms: g.kind, x: g.x, y: g.y, radius: def.radius, splash: def.damage, selfFactor: def.selfFactor });
+    this.blast({ id: 0x10000 + g.id, ownerId: g.ownerId, ownerSlot: g.ownerSlot, ownerTeam: g.ownerTeam, arms: g.kind, x: g.x, y: g.y, radius: def.radius, splash: def.damage, selfFactor: def.selfFactor });
   }
 
   private damageTurret(g: GadgetState, amount: number) {
@@ -1212,7 +1336,7 @@ export class World {
             if (this.time >= g.triggeredAt + 250) this.detonateGadget(g);
           } else if (this.time >= g.fuseAt) {
             for (const q of this.players.values()) {
-              if (!q.alive || q.id === g.ownerId) continue;
+              if (!q.alive || !this.hostileToOwner(g, q)) continue;
               if ((q.x - g.x) ** 2 + (q.y - g.y) ** 2 > (MINE_TRIGGER + PLAYER_RADIUS) ** 2) continue;
               g.triggeredAt = this.time;
               this.events.push({ t: 'beep', id: g.id, x: g.x, y: g.y });
@@ -1248,12 +1372,16 @@ export class World {
     const owner = this.players.get(g.ownerId) ?? null;
     for (const q of [...this.players.values()]) {
       if (!q.alive) continue;
+      if (q.id !== g.ownerId && !this.hostileToOwner(g, q)) continue;
       if ((q.x - g.x) ** 2 + (q.y - g.y) ** 2 > def.radius * def.radius) continue;
       if (!this.collision.lineOfSight(g.x, g.y, q.x, q.y)) continue;
       const dmg = q.id === g.ownerId ? def.damage * def.selfFactor : def.damage;
       this.applyDamage(q, owner, Math.max(1, Math.round(dmg)), 'molotov');
     }
-    for (const t of [...this.gadgets]) if (t.kind === 'turret' && (t.x - g.x) ** 2 + (t.y - g.y) ** 2 <= def.radius * def.radius) this.damageTurret(t, def.damage);
+    for (const t of [...this.gadgets]) {
+      if (t.kind !== 'turret' || (this.teams && t.ownerId !== g.ownerId && t.ownerTeam !== null && t.ownerTeam === g.ownerTeam)) continue;
+      if ((t.x - g.x) ** 2 + (t.y - g.y) ** 2 <= def.radius * def.radius) this.damageTurret(t, def.damage);
+    }
   }
 
   /** Flashbang: blinds everyone with line of sight, longer when close and looking at it. */
@@ -1263,6 +1391,8 @@ export class World {
     this.events.push({ t: 'flashbang', x: g.x, y: g.y });
     for (const q of this.players.values()) {
       if (!q.alive) continue;
+      // teammates know it is coming and look away; the thrower can still blind himself
+      if (q.id !== g.ownerId && !this.hostileToOwner(g, q)) continue;
       const d = Math.hypot(q.x - g.x, q.y - g.y);
       if (d > def.radius || !this.collision.lineOfSight(g.x, g.y, q.x, q.y)) continue;
       const look = Math.abs(angleDiff(q.aim, Math.atan2(g.y - q.y, g.x - q.x)));
@@ -1291,7 +1421,7 @@ export class World {
     let target: PlayerState | null = null;
     let bestD = def.radius;
     for (const q of this.players.values()) {
-      if (!q.alive || q.id === g.ownerId || this.time < q.invulnUntil) continue;
+      if (!q.alive || !this.hostileToOwner(g, q) || this.time < q.invulnUntil) continue;
       const d = Math.hypot(q.x - g.x, q.y - g.y);
       if (d > bestD) continue;
       if (!this.collision.lineOfSight(g.x, g.y, q.x, q.y) || this.smokeBlocks(g.x, g.y, q.x, q.y)) continue;
@@ -1314,7 +1444,7 @@ export class World {
     let maxT = wall ? wall.t : range;
     let victim: PlayerState | null = null;
     for (const q of this.players.values()) {
-      if (!q.alive || q.id === g.ownerId) continue;
+      if (!q.alive || !this.hostileToOwner(g, q)) continue;
       const t = rayCircle(g.x, g.y, dx, dy, q.x, q.y, PLAYER_RADIUS);
       if (t !== null && t < maxT) {
         maxT = t;
@@ -1547,24 +1677,43 @@ export class World {
     return e;
   }
 
+  /** Team matches: eliminations per team and the winner (null on a draw). */
+  teamResult(): TeamResult {
+    const [a, b] = this.teamScore;
+    return { scores: [a, b], winner: a === b ? null : a > b ? 0 : 1 };
+  }
+
+  /**
+   * Final table. Free-for-all: by points with shared places for equal results. Team matches: the
+   * winning team first (place 1 for all of its players, 2 for the other team; 1 for everyone on a
+   * draw), each team ordered by points.
+   */
   standings(): Standing[] {
-    const list = [...this.players.values()].sort(
-      (a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths || b.damageDealt - a.damageDealt || a.joinedAt - b.joinedAt,
-    );
-    const places = rankPlaces(list);
-    return list.map((p, i) => ({
+    const byPerf = (a: PlayerState, b: PlayerState) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths || b.damageDealt - a.damageDealt || a.joinedAt - b.joinedAt;
+    const row = (p: PlayerState, place: number): Standing => ({
       id: p.id,
       slot: p.slot,
       name: p.name,
       character: p.character,
       isBot: p.isBot,
+      ...(this.teams ? { team: p.team } : {}),
       kills: p.kills,
       assists: p.assists,
       deaths: p.deaths,
       score: p.score,
       damageDealt: p.damageDealt,
       bestStreak: p.bestStreak,
-      place: places[i]!,
-    }));
+      place,
+    });
+    if (this.teams) {
+      const { winner } = this.teamResult();
+      const first: Team = winner ?? 0;
+      const order = (p: PlayerState) => (p.team === first ? 0 : 1);
+      const list = [...this.players.values()].sort((a, b) => order(a) - order(b) || byPerf(a, b));
+      return list.map((p) => row(p, winner === null || p.team === winner ? 1 : 2));
+    }
+    const list = [...this.players.values()].sort(byPerf);
+    const places = rankPlaces(list);
+    return list.map((p, i) => row(p, places[i]!));
   }
 }

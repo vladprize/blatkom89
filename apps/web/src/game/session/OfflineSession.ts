@@ -1,10 +1,14 @@
 /** Offline practice: the shared World + bots running locally (no server). */
-import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS, DEFAULT_LOADOUT, weaponAmmo } from '@blatkom/shared';
-import type { CharacterId, GadgetId, InputFrame, MapId, Standing, BotDifficulty, PlayerState, Loadout, WeaponId } from '@blatkom/shared';
+import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS, DEFAULT_LOADOUT, MAX_PLAYERS, weaponAmmo } from '@blatkom/shared';
+import type { CharacterId, GadgetId, GameMode, InputFrame, MapId, Standing, BotDifficulty, PlayerState, Loadout, Team, WeaponId } from '@blatkom/shared';
+import { getLang } from '../../i18n/index.js';
 import type { GameSession, HudState, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
 import { toRenderGadget, toRenderPlayer, worldEventToSession, reloadProgress } from './convert.js';
 
-const BOT_NAMES = ['Beardy', 'Comrade_312', 'The Cooperator', 'Petrovich', 'Plumber', 'Quartermaster', 'Praporshchik', 'Kolyan'];
+const BOT_NAMES_EN = ['Beardy', 'Comrade_312', 'The Cooperator', 'Petrovich', 'Plumber', 'Quartermaster', 'Praporshchik', 'Kolyan', 'Mechanic', 'Shurik', 'Valerka', 'The Docent'];
+const BOT_NAMES_RU = ['Бородач', 'Товарищ_312', 'Кооператор', 'Петрович', 'Сантехник', 'Завхоз', 'Прапорщик', 'Колян', 'Механик', 'Шурик', 'Валерка', 'Доцент'];
+/** Practice: up to nine bots (ten players, like an online room). */
+export const MAX_PRACTICE_BOTS = MAX_PLAYERS - 1;
 
 /** Practice bots carry varied gear so the training ground shows what the arsenal holds. */
 const BOT_PRIMARIES: WeaponId[] = ['avtomat', 'obrez', 'ksyuha', 'uzi', 'ppsh', 'mp5', 's12', 'm4', 'g36', 'svd', 'm24', 'm249', 'tommy'];
@@ -28,11 +32,15 @@ export interface OfflineOptions {
   scoreLimit?: number;
   /** The local player's loadout (owned weapons, modifications, equipment); the free default otherwise. */
   loadout?: Loadout;
+  /** Free-for-all (default) or teams: the player plays for red with bots on both sides. */
+  gameMode?: GameMode;
+  teamScoreLimit?: number;
 }
 
 export class OfflineSession implements GameSession {
   readonly mode = 'offline' as const;
   readonly mapId: MapId;
+  readonly gameMode: GameMode;
   readonly world: World;
   private readonly nav: NavGrid;
   private readonly brains: BotBrain[] = [];
@@ -48,18 +56,20 @@ export class OfflineSession implements GameSession {
 
   constructor(opts: OfflineOptions) {
     this.mapId = opts.mapId;
+    this.gameMode = opts.gameMode ?? 'ffa';
     this.world = new World(getMap(opts.mapId), getCollision(opts.mapId), {
       lagCompensation: false,
-      config: { readyMs: 0, countdownMs: 3000, durationMs: opts.durationMs ?? 4 * 60_000, scoreLimit: opts.scoreLimit ?? 40, maxPlayers: 8 },
+      config: { mode: this.gameMode, readyMs: 0, countdownMs: 3000, durationMs: opts.durationMs ?? 4 * 60_000, scoreLimit: opts.scoreLimit ?? 40, teamScoreLimit: opts.teamScoreLimit ?? 30, maxPlayers: MAX_PLAYERS },
       seed: Math.floor(Math.random() * 1e9),
     });
     this.nav = new NavGrid(this.world.collision);
-    this.world.addPlayer(this.localId, opts.name, opts.character, false, opts.loadout ?? DEFAULT_LOADOUT);
+    // team practice: the player is red; bots fill both sides alternately (World.smallerTeam)
+    this.world.addPlayer(this.localId, opts.name, opts.character, false, opts.loadout ?? DEFAULT_LOADOUT, this.gameMode === 'teams' ? (0 as Team) : undefined);
     if (opts.level) this.levels.set(this.localId, opts.level);
     this.matchSeq = Math.floor(Math.random() * 1e6);
     const others = CHARACTER_IDS.filter((c) => c !== opts.character);
-    const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
-    for (let i = 0; i < opts.bots; i++) {
+    const names = (getLang() === 'ru' ? BOT_NAMES_RU : BOT_NAMES_EN).slice().sort(() => Math.random() - 0.5);
+    for (let i = 0; i < Math.min(opts.bots, MAX_PRACTICE_BOTS); i++) {
       const id = `bot${i}`;
       this.world.addPlayer(id, names[i % names.length]!, others[i % others.length]!, true, botLoadout(i + Math.floor(Math.random() * 1000)));
       this.levels.set(id, 2 + Math.floor(Math.random() * 14)); // practice bots wear plausible levels
@@ -93,6 +103,8 @@ export class OfflineSession implements GameSession {
           standings: this.world.standings(),
           mapId: this.mapId,
           personal: null,
+          gameMode: this.gameMode,
+          ...(this.gameMode === 'teams' ? { teams: this.world.teamResult() } : {}),
         };
       }
     }
@@ -166,6 +178,10 @@ export class OfflineSession implements GameSession {
       gadgetCharges: me.gadgetCharges,
       c4Armed: w.gadgets.some((g) => g.kind === 'c4' && g.ownerId === me.id && w.time >= g.fuseAt),
       flashedMs: Math.max(0, me.flashedUntil - w.time),
+      gameMode: this.gameMode,
+      teamScore: [w.teamScore[0], w.teamScore[1]],
+      teamScoreLimit: w.config.teamScoreLimit,
+      myTeam: me.team,
     };
   }
 

@@ -65,6 +65,7 @@ function assetTable() {
       const rel = relative(dir, f).split('\\').join('/');
       const ext = extname(f).toLowerCase();
       if (ext === '.png') table[rel] = `data:image/png;base64,${readFileSync(f).toString('base64')}`;
+      else if (ext === '.jpg') table[rel] = `data:image/jpeg;base64,${readFileSync(f).toString('base64')}`;
       else if (ext === '.woff') table[rel] = `data:font/woff;base64,${readFileSync(f).toString('base64')}`;
       else if (ext === '.json' && rel !== 'manifest.json') table[rel] = JSON.parse(readFileSync(f, 'utf8'));
     }

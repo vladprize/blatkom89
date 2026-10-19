@@ -19,6 +19,7 @@ import { getSettings, onSettings } from '../../app/settings.js';
 import { hudBus } from './hudBus.js';
 import { haptic } from '../../telegram/tg.js';
 import { toast } from '../../ui/dom.js';
+import { t } from '../../i18n/index.js';
 
 export interface GameSceneData {
   session: GameSession;
@@ -460,7 +461,7 @@ export class GameScene extends Phaser.Scene {
         sfx.play('heal', { x: e.x, y: e.y, volume: p?.isLocal ? 1 : 0.6 });
         if (p?.isLocal) {
           haptic('notify-success');
-          hudBus.emit('points', { points: e.amount, label: 'HEALTH', heal: true });
+          hudBus.emit('points', { points: e.amount, label: t('HEALTH'), heal: true });
         }
         break;
       }
@@ -493,14 +494,14 @@ export class GameScene extends Phaser.Scene {
         }
         const helpers = e.assists.map((slot) => bySlot(slot)).filter((p): p is RenderPlayer => !!p);
         const assistLocal = helpers.some((p) => p.isLocal);
-        hudBus.emit('killfeed', { killer: killer?.name ?? '—', killerLocal: !!killer?.isLocal, victim: victim?.name ?? '—', victimLocal: !!victim?.isLocal, weapon: e.weapon, assists: helpers.map((p) => p.name), assistLocal });
+        hudBus.emit('killfeed', { killer: killer?.name ?? '—', killerLocal: !!killer?.isLocal, victim: victim?.name ?? '—', victimLocal: !!victim?.isLocal, weapon: e.weapon, assists: helpers.map((p) => p.name), assistLocal, killerTeam: killer?.team ?? null, victimTeam: victim?.team ?? null });
         if (killer?.isLocal) {
           hudBus.emit('hitmarker', true);
-          hudBus.emit('points', { points: SCORING.killPoints, label: 'ELIMINATION' });
+          hudBus.emit('points', { points: SCORING.killPoints, label: t('ELIMINATION') });
           sfx.play('kill', { volume: 0.8 });
           haptic('notify-success');
         } else if (assistLocal) {
-          hudBus.emit('points', { points: SCORING.assistPoints, label: 'ASSIST' });
+          hudBus.emit('points', { points: SCORING.assistPoints, label: t('ASSIST') });
           sfx.play('assist', { volume: 0.8 });
           haptic('impact-light');
         }

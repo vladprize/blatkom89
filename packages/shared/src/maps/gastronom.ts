@@ -283,5 +283,7 @@ export function buildGastronomMap(): MapDef {
   b.medkit(190, 380).medkit(1400, 330).medkit(700, 750).medkit(560, 930);
   b.supply(840, 530).supply(1200, 470).supply(420, 560).supply(700, 880).supply(1380, 760).supply(90, 650);
 
+  // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
+  b.spawn(284, 36, 45).spawn(548, 516, 0).spawn(964, 612, -135).spawn(412, 828, -45).spawn(1076, 956, -135).spawn(36, 260, 0).spawn(1156, 276, 135);
   return b.build();
 }

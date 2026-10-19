@@ -345,24 +345,100 @@ test('invalid handshakes and commands are rejected without affecting the room', 
   ch.close();
 });
 
-test('room capacity is enforced (max 6 players)', async () => {
+test('room capacity is enforced (max 10 players)', async () => {
   const host = user('Хозяин');
   const room = await privateRoom(host);
   const clients = [Client.join(host, room.roomId)];
   await clients[0]!.msg('welcome');
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 9; i++) {
     const c = Client.join(user(`Игрок${i}`), room.roomId, (['petya', 'valuta', 'uchastkovy', 'mihalych'] as const)[i % 4]);
     await c.msg('welcome');
     clients.push(c);
   }
-  await clients[0]!.msg('roster', (m) => m.players.length === 6);
+  const roster = await clients[0]!.msg('roster', (m) => m.players.length === 10);
+  assert.equal(roster.maxPlayers, 10);
+  assert.equal(new Set(roster.players.map((p) => p.slot)).size, 10, 'ten distinct slots');
   const inv = await api<{ status: string; players: number }>('GET', `/api/invites/${room.inviteCode}`, null);
   assert.equal(inv.data.status, 'full');
-  const seventh = Client.join(user('Лишний'), room.roomId);
-  const closed = await seventh.waitClose();
+  const eleventh = Client.join(user('Лишний'), room.roomId);
+  const closed = await eleventh.waitClose();
   assert.equal(closed.code, WS_CLOSE.ROOM_FULL);
-  assert.ok(seventh.msgs.some((m) => m.type === 'error' && m.code === 'room_full'));
+  assert.ok(eleventh.msgs.some((m) => m.type === 'error' && m.code === 'room_full'));
+  // all ten can play: the match starts and spawns everybody on separate points
+  clients[0]!.send({ type: 'start' });
+  const snap = await clients[0]!.snap((sn) => sn.phase === 'active' && sn.players.filter((p) => p.alive).length === 10, 6000);
+  assert.equal(new Set(snap.players.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`)).size, 10);
   for (const c of clients) c.close();
+});
+
+test('team match: teams alternate on join, switching keeps them even, the host can change the mode, no friendly fire, team results', async () => {
+  const host = user('Красный');
+  const r = await api<{ roomId: string; inviteCode: string; mode: string }>('POST', '/api/rooms', host.token, { mapId: 'factory', isPrivate: true, mode: 'teams' });
+  assert.equal(r.status, 201);
+  assert.equal(r.data.mode, 'teams');
+  const inv = await api<{ mode: string }>('GET', `/api/invites/${r.data.inviteCode}`, null);
+  assert.equal(inv.data.mode, 'teams');
+  const others = [user('Синий'), user('Красный2'), user('Синий2')];
+  const ch = Client.join(host, r.data.roomId, 'petya');
+  const w = await ch.msg('welcome');
+  assert.equal(w.mode, 'teams');
+  const cs = others.map((u, i) => Client.join(u, r.data.roomId, (['valuta', 'uchastkovy', 'mihalych'] as const)[i]));
+  for (const c of cs) await c.msg('welcome');
+  const roster = await ch.msg('roster', (m) => m.players.length === 4);
+  assert.equal(roster.mode, 'teams');
+  const teamOf = (m: Extract<ServerMessage, { type: 'roster' }>, id: string) => m.players.find((p) => p.id === id)!.team;
+  assert.deepEqual([host, ...others].map((u) => teamOf(roster, u.userId)), [0, 1, 0, 1]);
+  // 2 v 2: moving to the other side would make it 1 v 3 — refused
+  cs[0]!.send({ type: 'team', team: 0 });
+  await cs[0]!.msg('error', (m) => m.code === 'team_full');
+  // a guest cannot change the mode
+  cs[0]!.send({ type: 'mode', mode: 'ffa' });
+  await cs[0]!.msg('error', (m) => m.code === 'not_host');
+  // the host switches to free-for-all and back: teams are dealt anew
+  ch.send({ type: 'mode', mode: 'ffa' });
+  await ch.msg('roster', (m) => m.mode === 'ffa' && m.players.every((p) => p.team === null));
+  ch.send({ type: 'mode', mode: 'teams' });
+  const back = await ch.msg('roster', (m) => m.mode === 'teams' && m.players.length === 4 && m.players.every((p) => p.team !== null));
+  assert.equal(back.players.filter((p) => p.team === 0).length, 2);
+  // start: teammates cannot hurt each other, the team score is in the snapshots
+  ch.send({ type: 'start' });
+  await ch.snap((s) => s.phase === 'active', 5000);
+  const room = rooms.get(r.data.roomId)!;
+  const ps = [host, ...others].map((u) => room.world.players.get(u.userId)!);
+  const red = ps.filter((p) => p.team === 0);
+  const blue = ps.filter((p) => p.team === 1);
+  for (const p of ps) p.invulnUntil = 0;
+  room.world.applyDamage(red[1]!, red[0]!, 60, 'pistol');
+  assert.equal(red[1]!.hp, 100, 'no friendly fire on the server');
+  room.world.applyDamage(blue[0]!, red[0]!, 200, 'pistol');
+  const s1 = await ch.snap((s) => s.teamScore[0] === 1);
+  assert.deepEqual(s1.teamScore, [1, 0]);
+  assert.ok(s1.players.every((p) => p.team === 0 || p.team === 1));
+  room.world.finish('time');
+  const res = await ch.msg('results', () => true, 6000);
+  assert.equal(res.mode, 'teams');
+  assert.deepEqual(res.teams, { scores: [1, 0], winner: 0 });
+  assert.ok(res.standings.slice(0, 2).every((s) => s.team === 0 && s.place === 1));
+  await sleep(200);
+  const recorded = [...services.recorder.completed.values()].find((m) => m.roomId === r.data.roomId)!;
+  assert.equal(recorded.mode, 'teams');
+  assert.equal(recorded.winnerTeam, 0);
+  assert.ok(recorded.participants.filter((p) => p.team === 0).every((p) => p.teamOutcome === 'win'));
+  assert.ok(recorded.participants.filter((p) => p.team === 1).every((p) => p.teamOutcome === 'loss'));
+  for (const c of [ch, ...cs]) c.close();
+});
+
+test('quick match keeps free-for-all and team players apart', async () => {
+  const a = user('Одиночка');
+  const b = user('Командный');
+  const qa = await api<{ roomId: string; mode: string }>('POST', '/api/rooms/quick', a.token, { mode: 'ffa' });
+  const qb = await api<{ roomId: string; mode: string }>('POST', '/api/rooms/quick', b.token, { mode: 'teams' });
+  assert.equal(qa.data.mode, 'ffa');
+  assert.equal(qb.data.mode, 'teams');
+  assert.notEqual(qa.data.roomId, qb.data.roomId);
+  const c = user('Ещё командный');
+  const qc = await api<{ roomId: string }>('POST', '/api/rooms/quick', c.token, { mode: 'teams' });
+  assert.equal(qc.data.roomId, qb.data.roomId);
 });
 
 test('disconnect during a match keeps the slot; reconnecting resumes it; a second tab replaces the first', async () => {
@@ -463,7 +539,7 @@ test('gear: rooms spawn players with their owned loadout, modifications and equi
   assert.equal(roster.players.find((p) => p.id === b.userId)!.character, 'petya');
   assert.deepEqual(roster.players.find((p) => p.id === a.userId)!.mods, { svd: ['extmag'] }, 'own modifications travel for client prediction');
   cb.send({ type: 'character', character: 'akula' });
-  await cb.msg('error', (m) => m.code === 'invalid_state');
+  await cb.msg('error', (m) => m.code === 'character_locked');
   ca.send({ type: 'start' });
   const s = await ca.snap((x) => x.phase === 'active' && x.players.some((p) => p.slot === welcomeA.slot && p.alive));
   const pa = s.players.find((p) => p.slot === welcomeA.slot)!;

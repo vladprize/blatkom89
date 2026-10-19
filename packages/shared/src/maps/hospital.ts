@@ -295,5 +295,7 @@ export function buildHospitalMap(): MapDef {
   b.medkit(1280, 655, 18_000).medkit(250, 260, 18_000).medkit(620, 740, 20_000).medkit(1000, 430, 20_000).medkit(1452, 732, 20_000).medkit(850, 610, 20_000);
   b.supply(850, 460).supply(300, 410).supply(1250, 420).supply(720, 960).supply(120, 400).supply(1440, 500);
 
+  // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
+  b.spawn(732, 668, -90).spawn(468, 340, 45).spawn(412, 644, -45).spawn(1076, 564, 180).spawn(36, 812, -45).spawn(1164, 164, 135);
   return b.build();
 }

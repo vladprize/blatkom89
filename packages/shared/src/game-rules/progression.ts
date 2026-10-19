@@ -7,6 +7,9 @@ export const XP_RULES = Object.freeze({
   perKill: 10,
   perAssist: 5,
   placement: [100, 50, 25] as readonly number[],
+  /** Team matches: every player of the winning team (a draw gives both teams the smaller bonus). */
+  teamWin: 75,
+  teamDraw: 25,
   playedWithFriends: 20,
   maxPerMatch: 400,
 });
@@ -48,10 +51,16 @@ export interface MatchPerformance {
   withFriends: boolean;
   /** Another player finished with exactly the same result (a draw for this place). */
   sharedPlace?: boolean;
+  /** Team matches: how the player's team did (placement does not apply then). */
+  teamOutcome?: 'win' | 'loss' | 'draw';
 }
 
-/** A win is a sole first place in a match that had at least one opponent at the end. */
+/**
+ * A win is a sole first place in a match that had at least one opponent at the end; in a team
+ * match, being on the winning team.
+ */
 export function isWin(p: MatchPerformance): boolean {
+  if (p.teamOutcome) return p.completed && p.teamOutcome === 'win' && p.playersAtEnd >= 2;
   return p.completed && p.place === 1 && !p.sharedPlace && p.playersAtEnd >= 2;
 }
 
@@ -68,7 +77,9 @@ export function rankPlaces<T extends { score: number; kills: number; deaths: num
 export function xpForMatch(p: MatchPerformance): number {
   if (!p.completed) return 0;
   let xp = XP_RULES.completion + XP_RULES.perKill * p.kills + XP_RULES.perAssist * (p.assists ?? 0);
-  if (p.playersAtEnd >= 2) {
+  if (p.teamOutcome) {
+    if (p.playersAtEnd >= 2) xp += p.teamOutcome === 'win' ? XP_RULES.teamWin : p.teamOutcome === 'draw' ? XP_RULES.teamDraw : 0;
+  } else if (p.playersAtEnd >= 2) {
     const bonus = XP_RULES.placement[p.place - 1];
     if (bonus && (p.place === 1 || p.playersAtEnd >= p.place + 1)) xp += bonus;
   }

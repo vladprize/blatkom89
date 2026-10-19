@@ -304,5 +304,7 @@ export function buildDkMap(): MapDef {
   b.medkit(430, 700).medkit(1260, 640).medkit(920, 800).medkit(110, 270);
   b.supply(830, 460).supply(220, 860).supply(1420, 720).supply(600, 140).supply(1100, 920).supply(700, 780);
 
+  // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
+  b.spawn(668, 708, -90).spawn(524, 364, 45).spawn(468, 932, -45).spawn(1036, 468, 180).spawn(388, 652, -45).spawn(860, 956, -90);
   return b.build();
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Renders the BLATKOM ’89 wordmark (distressed red condensed letters, star with brass knuckles,
-'89 in marker) following the poster reference (references/01-poster.png). Requires Pillow."""
+'89 in marker) following the poster reference (references/01-poster.png), in English (logo.png)
+and Russian (logo_ru.png, «БЛАТКОМ»). Requires Pillow."""
 import math
 import random
 from pathlib import Path
@@ -41,7 +42,16 @@ def distress(img, seed, amount=0.16):
     img.putalpha(ImageChops.multiply(a, mask))
     return img
 
+VARIANTS = {
+    '': ('BLATKOM', 'D I S T R I C T   B U S I N E S S  —  S E R I O U S   B U S I N E S S'),
+    '_ru': ('БЛАТКОМ', 'Р А Й О Н Н Ы Е   Д Е Л А  —  С Е Р Ь Ё З Н Ы Е   Д Е Л А'),
+}
+
 def main():
+    for suffix, (word, tag) in VARIANTS.items():
+        render(suffix, word, tag)
+
+def render(suffix, word, tag):
     OUT.mkdir(parents=True, exist_ok=True)
     W, H = 1500, 640
     img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
@@ -51,7 +61,6 @@ def main():
         f.set_variation_by_axes([700])
     except Exception:
         pass
-    word = 'BLATKOM'
     tw = ImageDraw.Draw(img).textbbox((0, 0), word, font=f)
     text = Image.new('RGBA', (tw[2] + 40, tw[3] + 40), (0, 0, 0, 0))
     ImageDraw.Draw(text).text((20, 0), word, font=f, fill=RED)
@@ -104,15 +113,14 @@ def main():
         ft.set_variation_by_axes([500])
     except Exception:
         pass
-    tag = 'D I S T R I C T   B U S I N E S S  —  S E R I O U S   B U S I N E S S'
     tb = d.textbbox((0, 0), tag, font=ft)
     d.text((ox + 30 + (text.width - 50 - (tb[2] - tb[0])) / 2, band_y + 4), tag, font=ft, fill=BEIGE)
     bbox = img.getbbox()
     img = img.crop((max(0, bbox[0] - 8), max(0, bbox[1] - 8), min(W, bbox[2] + 8), min(H, bbox[3] + 8)))
-    img.save(OUT / 'logo.png', optimize=True)
+    img.save(OUT / f'logo{suffix}.png', optimize=True)
     small = img.resize((img.width // 2, img.height // 2), Image.Resampling.LANCZOS)
-    small.save(OUT / 'logo_small.png', optimize=True)
-    print('logo', img.size)
+    small.save(OUT / f'logo_small{suffix}.png', optimize=True)
+    print('logo' + suffix, img.size)
 
 if __name__ == '__main__':
     main()

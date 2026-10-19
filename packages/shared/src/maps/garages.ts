@@ -153,5 +153,7 @@ export function buildGaragesMap(): MapDef {
   // first-aid kits in the lanes between the garage blocks
   b.medkit(330, 760).medkit(860, 310).medkit(1266, 644);
 
+  // more spawn points for 10-player rooms: seven on each half (team matches start on their own half)
+  b.spawn(668, 836, -90).spawn(748, 156, 90).spawn(476, 356, 45).spawn(1068, 836, -135).spawn(396, 636, 0).spawn(1308, 532, 180).spawn(676, 564, -45).spawn(1092, 172, 135);
   return b.build();
 }

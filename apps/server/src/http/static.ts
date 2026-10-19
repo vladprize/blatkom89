@@ -14,6 +14,7 @@ const TYPES: Record<string, string> = {
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.woff': 'font/woff',
+  '.mp3': 'audio/mpeg',
   '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8',
   '.webmanifest': 'application/manifest+json',
@@ -92,6 +93,25 @@ export function serveStatic(root: string) {
       ctx.res.end();
       return true;
     }
+    headers['accept-ranges'] = 'bytes';
+    // byte ranges: Safari (and Telegram on iOS) only plays media from servers that answer them
+    const range = parseRange(ctx.req.headers.range, st.size);
+    if (range === 'invalid') {
+      ctx.res.writeHead(416, { ...headers, 'content-range': `bytes */${st.size}` });
+      ctx.res.end();
+      return true;
+    }
+    if (range) {
+      headers['content-range'] = `bytes ${range.start}-${range.end}/${st.size}`;
+      headers['content-length'] = String(range.end - range.start + 1);
+      ctx.res.writeHead(206, headers);
+      if (ctx.method === 'HEAD') {
+        ctx.res.end();
+        return true;
+      }
+      createReadStream(target, { start: range.start, end: range.end }).pipe(ctx.res);
+      return true;
+    }
     headers['content-length'] = String(st.size);
     ctx.res.writeHead(200, headers);
     if (ctx.method === 'HEAD') {
@@ -101,4 +121,26 @@ export function serveStatic(root: string) {
     createReadStream(target).pipe(ctx.res);
     return true;
   };
+}
+
+/** A single `bytes=` range (multipart ranges are answered with the whole file). */
+export function parseRange(header: string | undefined, size: number): { start: number; end: number } | null | 'invalid' {
+  if (!header) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m) return null;
+  const [, a, b] = m;
+  if (a === '' && b === '') return 'invalid';
+  let start: number;
+  let end: number;
+  if (a === '') {
+    const n = Number(b);
+    if (n === 0) return 'invalid';
+    start = Math.max(0, size - n);
+    end = size - 1;
+  } else {
+    start = Number(a);
+    end = b === '' ? size - 1 : Math.min(Number(b), size - 1);
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) return 'invalid';
+  return { start, end };
 }

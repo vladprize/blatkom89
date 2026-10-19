@@ -45,15 +45,15 @@ export class PgMatchRecorder implements MatchRecorder {
     if (!UUID_RE.test(m.matchId)) return;
     await this.sql.begin(async (tx) => {
       await tx`
-        INSERT INTO matches (id, room_id, map_id, is_private, status, started_at, player_count)
-        VALUES (${m.matchId}, ${m.roomId}, ${m.mapId}, ${m.isPrivate}, 'active', ${m.startedAt}, ${m.players.length})
+        INSERT INTO matches (id, room_id, map_id, mode, is_private, status, started_at, player_count)
+        VALUES (${m.matchId}, ${m.roomId}, ${m.mapId}, ${m.mode}, ${m.isPrivate}, 'active', ${m.startedAt}, ${m.players.length})
         ON CONFLICT (id) DO NOTHING`;
       const known = await existingUsers(tx, m.players.map((p) => p.userId));
       for (const p of m.players) {
         if (!known.has(p.userId)) continue;
         await tx`
-          INSERT INTO match_participants (match_id, user_id, character, via_invite, joined_at)
-          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.viaInvite}, ${m.startedAt})
+          INSERT INTO match_participants (match_id, user_id, character, team, via_invite, joined_at)
+          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.team}, ${p.viaInvite}, ${m.startedAt})
           ON CONFLICT (match_id, user_id) DO NOTHING`;
       }
     });
@@ -63,8 +63,8 @@ export class PgMatchRecorder implements MatchRecorder {
     if (!UUID_RE.test(m.matchId)) throw new Error('matchId must be a UUID');
     return this.sql.begin(async (tx) => {
       await tx`
-        INSERT INTO matches (id, room_id, map_id, is_private, status, started_at, player_count)
-        VALUES (${m.matchId}, ${m.roomId}, ${m.mapId}, ${m.isPrivate}, 'active', ${m.startedAt}, ${m.playersAtEnd})
+        INSERT INTO matches (id, room_id, map_id, mode, is_private, status, started_at, player_count)
+        VALUES (${m.matchId}, ${m.roomId}, ${m.mapId}, ${m.mode}, ${m.isPrivate}, 'active', ${m.startedAt}, ${m.playersAtEnd})
         ON CONFLICT (id) DO NOTHING`;
       const locked = await tx<Array<{ results_processed_at: Date | null }>>`SELECT results_processed_at FROM matches WHERE id = ${m.matchId} FOR UPDATE`;
       const known = await existingUsers(tx, m.participants.map((p) => p.userId));
@@ -78,7 +78,7 @@ export class PgMatchRecorder implements MatchRecorder {
           SELECT xp, level, matches_completed, wins, current_win_streak, best_win_streak FROM profiles WHERE user_id = ${p.userId} FOR UPDATE`;
         const withFriends = m.isPrivate && p.viaInvite && m.playersAtEnd >= 2;
         const sharedPlace = p.completed && m.participants.some((o) => o.userId !== p.userId && o.completed && o.place === p.place);
-        const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends, sharedPlace };
+        const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends, sharedPlace, ...(p.teamOutcome ? { teamOutcome: p.teamOutcome } : {}) };
         const ownedRows = await tx<Array<{ achievement_id: AchievementId }>>`SELECT achievement_id FROM player_achievements WHERE user_id = ${p.userId}`;
         const prev = { xp: prof!.xp, level: prof!.level, matchesCompleted: prof!.matches_completed, wins: prof!.wins, currentWinStreak: prof!.current_win_streak };
         const { won, lost, streak, unlocked, xpGained: xp, totalXp, level } = applyMatchProgress(prev, perf, new Set(ownedRows.map((r) => r.achievement_id)));
@@ -105,10 +105,10 @@ export class PgMatchRecorder implements MatchRecorder {
         }
         const totalTokens = await awardMatchTokens(tx, p.userId, m.matchId, tokens);
         await tx`
-          INSERT INTO match_participants (match_id, user_id, character, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, tokens_awarded, joined_at, left_at)
-          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${tokens}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
+          INSERT INTO match_participants (match_id, user_id, character, team, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, tokens_awarded, joined_at, left_at)
+          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.team}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${tokens}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
           ON CONFLICT (match_id, user_id) DO UPDATE SET
-            character = EXCLUDED.character, place = EXCLUDED.place, kills = EXCLUDED.kills, assists = EXCLUDED.assists, deaths = EXCLUDED.deaths,
+            character = EXCLUDED.character, team = EXCLUDED.team, place = EXCLUDED.place, kills = EXCLUDED.kills, assists = EXCLUDED.assists, deaths = EXCLUDED.deaths,
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
             tokens_awarded = EXCLUDED.tokens_awarded, left_at = EXCLUDED.left_at`;
@@ -116,7 +116,7 @@ export class PgMatchRecorder implements MatchRecorder {
       }
       await tx`
         UPDATE matches SET status = 'completed', ended_at = ${m.endedAt}, duration_ms = ${Math.max(0, Math.round(m.durationMs))},
-          end_reason = ${m.endReason}, player_count = ${m.playersAtEnd}, results_processed_at = now()
+          end_reason = ${m.endReason}, player_count = ${m.playersAtEnd}, mode = ${m.mode}, winner_team = ${m.winnerTeam}, results_processed_at = now()
         WHERE id = ${m.matchId}`;
       return out;
     });

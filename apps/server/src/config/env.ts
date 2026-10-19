@@ -36,8 +36,10 @@ const EnvSchema = z.object({
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: z.coerce.number().int().min(30).max(900).default(240),
   MATCH_SCORE_LIMIT: z.coerce.number().int().min(1).max(400).default(50),
-  MATCH_MIN_PLAYERS: z.coerce.number().int().min(2).max(6).default(2),
-  MATCH_MAX_PLAYERS: z.coerce.number().int().min(2).max(6).default(6),
+  MATCH_MIN_PLAYERS: z.coerce.number().int().min(2).max(10).default(2),
+  MATCH_MAX_PLAYERS: z.coerce.number().int().min(2).max(10).default(10),
+  /** Team matches end when a team reaches this many eliminations. */
+  MATCH_TEAM_SCORE_LIMIT: z.coerce.number().int().min(1).max(400).default(40),
   /** Paid cases can be switched off where randomised paid items are restricted (docs/ECONOMY.md). */
   CASES_ENABLED: bool.default('true'),
   /** Card payments (Stripe Checkout). Both keys are required to enable them. */
@@ -76,6 +78,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 }
 
 /** Match configuration derived from the environment (see MATCH_* variables). */
-export function matchConfigFromEnv(env: Env): { durationMs: number; scoreLimit: number; minPlayers: number; maxPlayers: number } {
-  return { durationMs: env.MATCH_DURATION_SEC * 1000, scoreLimit: env.MATCH_SCORE_LIMIT, minPlayers: env.MATCH_MIN_PLAYERS, maxPlayers: env.MATCH_MAX_PLAYERS };
+export function matchConfigFromEnv(env: Env): { durationMs: number; scoreLimit: number; teamScoreLimit: number; minPlayers: number; maxPlayers: number } {
+  return { durationMs: env.MATCH_DURATION_SEC * 1000, scoreLimit: env.MATCH_SCORE_LIMIT, teamScoreLimit: env.MATCH_TEAM_SCORE_LIMIT, minPlayers: env.MATCH_MIN_PLAYERS, maxPlayers: env.MATCH_MAX_PLAYERS };
 }

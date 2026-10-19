@@ -7,6 +7,8 @@ import { GADGET_IDS } from '../game-rules/gadgets.js';
 import type { WeaponId } from '../game-rules/weapons.js';
 import type { Currency, DiamondPack, Inventory, Rarity } from '../game-rules/economy.js';
 import { MAP_IDS } from '../maps/types.js';
+import { GAME_MODES } from '../game-rules/match.js';
+import type { GameMode } from '../game-rules/match.js';
 import type { MapId } from '../maps/types.js';
 import type { AchievementId } from '../game-rules/progression.js';
 import { MAX_NAME_LENGTH } from '../constants/game.js';
@@ -125,8 +127,8 @@ export interface LedgerEntry {
 export const UpdateProfileRequest = z
   .object({ displayName: displayNameSchema.optional(), preferredCharacter: z.enum(CHARACTER_IDS).optional() })
   .strict();
-export const CreateRoomRequest = z.object({ mapId: z.enum(MAP_IDS), isPrivate: z.boolean().default(true) }).strict();
-export const QuickMatchRequest = z.object({ mapId: z.enum(MAP_IDS).optional() }).strict();
+export const CreateRoomRequest = z.object({ mapId: z.enum(MAP_IDS), isPrivate: z.boolean().default(true), mode: z.enum(GAME_MODES).default('ffa') }).strict();
+export const QuickMatchRequest = z.object({ mapId: z.enum(MAP_IDS).optional(), mode: z.enum(GAME_MODES).default('ffa') }).strict();
 
 export interface PublicProfile {
   id: string;
@@ -167,6 +169,7 @@ export interface CreateRoomResponse {
   inviteUrl: string | null;
   webUrl: string;
   mapId: MapId;
+  mode: GameMode;
 }
 
 export type InviteStatus = 'joinable' | 'full' | 'in_progress' | 'finished' | 'expired' | 'not_found';
@@ -176,6 +179,7 @@ export interface InviteInfo {
   status: InviteStatus;
   roomId: string | null;
   mapId: MapId | null;
+  mode: GameMode | null;
   players: number;
   maxPlayers: number;
   hostName: string | null;

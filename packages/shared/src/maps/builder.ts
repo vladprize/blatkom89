@@ -47,6 +47,8 @@ export class MapBuilder {
       pickups: [],
       supplyPoints: [],
       medkits: [],
+      flagStands: [],
+      bases: [],
       ambient: { color: 0x2a3550, level: 0.55 },
       minimapFloor: '#3a3632',
     };
@@ -150,6 +152,18 @@ export class MapBuilder {
   /** A spot where a «дефицит» supply crate may appear during the match. */
   supply(x: number, y: number): this {
     this.def.supplyPoints.push({ x, y });
+    return this;
+  }
+
+  /** Capture the flag: the red (team 0) or blue (team 1) flag stand. */
+  flagStand(team: 0 | 1, x: number, y: number): this {
+    this.def.flagStands[team] = { x, y };
+    return this;
+  }
+
+  /** Base capture: the next base (A, B, C in order). */
+  base(x: number, y: number): this {
+    this.def.bases.push({ x, y });
     return this;
   }
 

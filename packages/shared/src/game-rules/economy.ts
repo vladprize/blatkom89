@@ -145,17 +145,35 @@ export function diamondPack(id: string): DiamondPack | undefined {
   return DIAMOND_PACKS.find((p) => p.id === id);
 }
 
-/** Tokens per online match (same eligibility as experience: the match must be finished). */
-export const TOKEN_REWARD = Object.freeze({ completion: 10, perKill: 3, perAssist: 1, placement: [10, 6, 3] as readonly number[], maxPerMatch: 60 });
+/**
+ * Talons per online match, earned mostly with eliminations: 5 per elimination, 2 per assist and
+ * 5 for playing the match to the end, at most 100 per match. Same eligibility as experience (the
+ * match must be finished; practice earns nothing).
+ */
+export const TOKEN_REWARD = Object.freeze({ perKill: 5, perAssist: 2, completion: 5, maxPerMatch: 100 });
+
+export interface TokenBreakdown {
+  kills: number;
+  assists: number;
+  completion: number;
+  /** Before the per-match cap. */
+  sum: number;
+  total: number;
+  capped: boolean;
+}
+
+export function tokenBreakdown(p: Pick<MatchPerformance, 'kills' | 'assists' | 'completed'>): TokenBreakdown {
+  if (!p.completed) return { kills: 0, assists: 0, completion: 0, sum: 0, total: 0, capped: false };
+  const kills = TOKEN_REWARD.perKill * Math.max(0, p.kills);
+  const assists = TOKEN_REWARD.perAssist * Math.max(0, p.assists ?? 0);
+  const completion = TOKEN_REWARD.completion;
+  const sum = kills + assists + completion;
+  const total = Math.min(sum, TOKEN_REWARD.maxPerMatch);
+  return { kills, assists, completion, sum, total, capped: total < sum };
+}
 
 export function tokensForMatch(p: MatchPerformance): number {
-  if (!p.completed) return 0;
-  let t = TOKEN_REWARD.completion + TOKEN_REWARD.perKill * p.kills + TOKEN_REWARD.perAssist * (p.assists ?? 0);
-  if (p.playersAtEnd >= 2) {
-    const bonus = TOKEN_REWARD.placement[p.place - 1];
-    if (bonus && (p.place === 1 || p.playersAtEnd >= p.place + 1)) t += bonus;
-  }
-  return Math.min(t, TOKEN_REWARD.maxPerMatch);
+  return tokenBreakdown(p).total;
 }
 
 /** What a player owns and has equipped (GET /api/me/inventory). */

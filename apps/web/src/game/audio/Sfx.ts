@@ -37,6 +37,11 @@ class SfxEngine {
     if (this.master) this.master.gain.value = v;
   }
 
+  /** The shared AudioContext once unlocked by a gesture (the menu music is routed through it). */
+  context(): AudioContext | null {
+    return this.ctx;
+  }
+
   setListener(x: number, y: number): void {
     this.listener.x = x;
     this.listener.y = y;

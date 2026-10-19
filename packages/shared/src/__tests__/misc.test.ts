@@ -61,7 +61,7 @@ for (const id of MAP_ORDER) {
     const m = getMap(id);
     const c = getCollision(id);
     const nav = new NavGrid(c);
-    assert.ok(m.spawns.length >= 6, 'at least 6 spawns for 6 players');
+    assert.ok(m.spawns.length >= 12, 'at least 12 spawns for 10 players');
     const s0 = m.spawns[0]!;
     const reach = nav.flood(nav.index(s0.x, s0.y));
     for (const s of m.spawns) {

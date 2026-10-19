@@ -27,7 +27,7 @@ async function newUser(name: string) {
 }
 
 function part(userId: string, place: number, kills: number, deaths: number, extra: Partial<MatchParticipantResult> = {}): MatchParticipantResult {
-  return { userId, character: 'petya', place, kills, assists: 0, deaths, score: kills * 2, damageDealt: kills * 100, completed: true, viaInvite: false, playtimeMs: 180_000, ...extra };
+  return { userId, character: 'petya', place, kills, assists: 0, deaths, score: kills * 2, damageDealt: kills * 100, completed: true, viaInvite: false, team: null, playtimeMs: 180_000, ...extra };
 }
 
 function completion(participants: MatchParticipantResult[], extra: Partial<MatchCompletion> = {}): MatchCompletion {
@@ -36,6 +36,8 @@ function completion(participants: MatchParticipantResult[], extra: Partial<Match
     matchId: randomUUID(),
     roomId: 'room123456',
     mapId: 'factory',
+    mode: 'ffa',
+    winnerTeam: null,
     isPrivate: false,
     startedAt: new Date(now - 200_000),
     endedAt: new Date(now),
@@ -57,7 +59,7 @@ test('recorder: completion updates counters, XP, level and first achievements', 
   const a = await newUser('Петя');
   const b = await newUser('Валюта');
   const m = completion([part(a, 1, 6, 2), part(b, 2, 2, 6)]);
-  await rec.matchStarted({ matchId: m.matchId, roomId: m.roomId, mapId: m.mapId, isPrivate: false, startedAt: m.startedAt, players: [{ userId: a, character: 'petya', viaInvite: false }, { userId: b, character: 'valuta', viaInvite: false }] });
+  await rec.matchStarted({ matchId: m.matchId, roomId: m.roomId, mapId: m.mapId, mode: 'ffa', isPrivate: false, startedAt: m.startedAt, players: [{ userId: a, character: 'petya', viaInvite: false, team: null }, { userId: b, character: 'valuta', viaInvite: false, team: null }] });
   const res = await rec.matchCompleted(m);
   const ra = res.get(a)!;
   const expectedA = XP_RULES.completion + 6 * XP_RULES.perKill + 100 + ACHIEVEMENTS.first_match.xpReward + ACHIEVEMENTS.first_win.xpReward + ACHIEVEMENTS.multi_kill.xpReward;
@@ -126,7 +128,7 @@ test('recorder: unknown/invalid user ids are ignored; abandoned matches are mark
   const res = await rec.matchCompleted(m);
   assert.deepEqual([...res.keys()], [a]);
   const id = randomUUID();
-  await rec.matchStarted({ matchId: id, roomId: 'r2', mapId: 'yard', isPrivate: true, startedAt: new Date(), players: [{ userId: a, character: 'mihalych', viaInvite: true }, { userId: 'not-a-uuid', character: 'petya', viaInvite: false }] });
+  await rec.matchStarted({ matchId: id, roomId: 'r2', mapId: 'yard', mode: 'ffa', isPrivate: true, startedAt: new Date(), players: [{ userId: a, character: 'mihalych', viaInvite: true, team: null }, { userId: 'not-a-uuid', character: 'petya', viaInvite: false, team: null }] });
   await rec.matchAbandoned(id, 'empty');
   const [row] = await db.sql<Array<{ status: string; end_reason: string }>>`SELECT status, end_reason FROM matches WHERE id = ${id}`;
   assert.deepEqual({ ...row }, { status: 'abandoned', end_reason: 'empty' });
@@ -151,4 +153,35 @@ test('recorder: assists are stored per match, added to the profile and earn XP',
   await rec.matchCompleted(m);
   const [again] = await db.sql<Array<{ assists: number }>>`SELECT assists FROM profiles WHERE user_id = ${a}`;
   assert.equal(again!.assists, 4);
+});
+
+test('recorder: team match — the whole winning team wins, mode/teams are stored, talons follow eliminations', async () => {
+  const [r1, r2, b1, b2] = await Promise.all(['Красный 1', 'Красный 2', 'Синий 1', 'Синий 2'].map((n) => newUser(n)));
+  const m = completion(
+    [
+      part(r1!, 1, 4, 1, { team: 0, teamOutcome: 'win' }),
+      part(r2!, 1, 0, 2, { team: 0, teamOutcome: 'win' }),
+      part(b1!, 2, 3, 2, { team: 1, teamOutcome: 'loss' }),
+      part(b2!, 2, 0, 2, { team: 1, teamOutcome: 'loss' }),
+    ],
+    { mode: 'teams', winnerTeam: 0 },
+  );
+  await rec.matchStarted({ matchId: m.matchId, roomId: m.roomId, mapId: m.mapId, mode: 'teams', isPrivate: false, startedAt: m.startedAt, players: [r1!, r2!, b1!, b2!].map((userId, i) => ({ userId, character: 'petya' as const, viaInvite: false, team: (i < 2 ? 0 : 1) as 0 | 1 })) });
+  const res = await rec.matchCompleted(m);
+  // a teammate with no eliminations still wins (shared first place is not a draw in a team match)
+  const p2 = await profile(r2!);
+  assert.equal(p2.wins, 1);
+  assert.equal(p2.losses, 0);
+  const pb = await profile(b1!);
+  assert.equal(pb.wins, 0);
+  assert.equal(pb.losses, 1);
+  assert.equal(res.get(r2!)!.xpGained, XP_RULES.completion + XP_RULES.teamWin + ACHIEVEMENTS.first_match.xpReward + ACHIEVEMENTS.first_win.xpReward);
+  assert.equal(res.get(b2!)!.xpGained, XP_RULES.completion + ACHIEVEMENTS.first_match.xpReward);
+  // talons: 5 per elimination + 5 for finishing
+  assert.equal(res.get(r1!)!.tokensGained, 4 * 5 + 5);
+  assert.equal(res.get(r2!)!.tokensGained, 5);
+  const [row] = await db.sql<Array<{ mode: string; winner_team: number | null }>>`SELECT mode, winner_team FROM matches WHERE id = ${m.matchId}`;
+  assert.deepEqual({ ...row }, { mode: 'teams', winner_team: 0 });
+  const teams = await db.sql<Array<{ user_id: string; team: number | null }>>`SELECT user_id, team FROM match_participants WHERE match_id = ${m.matchId} ORDER BY team, user_id`;
+  assert.deepEqual(teams.map((t) => t.team), [0, 0, 1, 1]);
 });

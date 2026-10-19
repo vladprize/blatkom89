@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { CHARACTER_IDS } from '../game-rules/characters.js';
 import { MAP_IDS } from '../maps/types.js';
+import { GAME_MODES } from '../game-rules/match.js';
 
 export const ANALYTICS_EVENTS = [
   'app_opened',
@@ -77,11 +78,11 @@ export const CLIENT_EVENT_PROPS = {
 export const SERVER_EVENT_PROPS = {
   session_started: z.object({ platform, method: z.enum(['telegram', 'dev', 'guest', 'email']) }),
   profile_created: z.object({ method: z.enum(['telegram', 'dev', 'guest']) }),
-  lobby_created: z.object({ roomId: z.string(), mapId: z.enum(MAP_IDS), isPrivate: z.boolean() }),
+  lobby_created: z.object({ roomId: z.string(), mapId: z.enum(MAP_IDS), isPrivate: z.boolean(), mode: z.enum(GAME_MODES).optional() }),
   lobby_joined: z.object({ roomId: z.string(), viaInvite: z.boolean() }),
   lobby_left: z.object({ roomId: z.string(), phase: z.string() }),
-  match_started: z.object({ matchId: z.string(), roomId: z.string(), mapId: z.enum(MAP_IDS), players: z.number().int() }),
-  match_completed: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS), durationMs: z.number().int(), players: z.number().int(), reason: z.string() }),
+  match_started: z.object({ matchId: z.string(), roomId: z.string(), mapId: z.enum(MAP_IDS), players: z.number().int(), mode: z.enum(GAME_MODES).optional() }),
+  match_completed: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS), durationMs: z.number().int(), players: z.number().int(), reason: z.string(), mode: z.enum(GAME_MODES).optional() }),
   match_abandoned: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS), phase: z.string() }),
   map_played: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS) }),
   invite_created: z.object({ code: z.string(), roomId: z.string() }),

@@ -2,7 +2,7 @@
  * Service contracts between the realtime game layer (rooms) and persistence/analytics.
  * Implementations: services/persistence.ts (PostgreSQL) and services/memory.ts (tests/offline).
  */
-import type { CharacterId, Loadout, MapId, PersonalResult } from '@blatkom/shared';
+import type { CharacterId, GameMode, Loadout, MapId, PersonalResult, Team } from '@blatkom/shared';
 import type { Platform } from '@blatkom/shared';
 
 export interface AuthedUser {
@@ -24,9 +24,10 @@ export interface MatchStart {
   matchId: string;
   roomId: string;
   mapId: MapId;
+  mode: GameMode;
   isPrivate: boolean;
   startedAt: Date;
-  players: Array<{ userId: string; character: CharacterId; viaInvite: boolean }>;
+  players: Array<{ userId: string; character: CharacterId; viaInvite: boolean; team: Team | null }>;
 }
 
 export interface MatchParticipantResult {
@@ -41,6 +42,9 @@ export interface MatchParticipantResult {
   /** Present when the match ended (not disconnected/abandoned). */
   completed: boolean;
   viaInvite: boolean;
+  /** Team matches: the player's team and how it did. */
+  team: Team | null;
+  teamOutcome?: 'win' | 'loss' | 'draw';
   /** Time actually spent in the match. */
   playtimeMs: number;
 }
@@ -49,6 +53,9 @@ export interface MatchCompletion {
   matchId: string;
   roomId: string;
   mapId: MapId;
+  mode: GameMode;
+  /** Team matches: the winning team (null = draw, or a free-for-all match). */
+  winnerTeam: Team | null;
   isPrivate: boolean;
   startedAt: Date;
   endedAt: Date;

@@ -6,6 +6,7 @@ import type {
   MapId,
   PublicProfile,
   CharacterId,
+  GameMode,
   MatchHistoryResponse,
   AchievementsResponse,
   Inventory,
@@ -21,7 +22,9 @@ import type {
 } from '@blatkom/shared';
 import { platform } from '../telegram/tg.js';
 import { VERSION } from '../app/config.js';
+import { errorText } from './errors.js';
 
+/** A refused API call: `code` is stable, `message` is already in the player's language. */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -31,13 +34,6 @@ export class ApiError extends Error {
     super(message);
   }
 }
-
-const MESSAGES: Record<string, string> = {
-  unauthorized: 'Your session has gone stale. Restart the game.',
-  rate_limited: 'Easy, comrade — too many requests. Wait a moment.',
-  capacity: 'The server is packed like a tram at rush hour. Try again later.',
-  room_not_found: 'Room not found.',
-};
 
 export class Api {
   token: string | null = null;
@@ -51,7 +47,7 @@ export class Api {
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch {
-      throw new ApiError(0, 'network', 'No line to the server. Check your internet.');
+      throw new ApiError(0, 'network', errorText('network'));
     }
     if (res.status === 204) return undefined as T;
     let data: unknown = null;
@@ -63,7 +59,7 @@ export class Api {
     if (!res.ok) {
       const err = (data as { error?: { code?: string; message?: string } } | null)?.error;
       const code = err?.code ?? `http_${res.status}`;
-      throw new ApiError(res.status, code, MESSAGES[code] ?? err?.message ?? `Server error (${res.status})`);
+      throw new ApiError(res.status, code, errorText(code, err?.message ?? null, res.status));
     }
     return data as T;
   }
@@ -142,11 +138,11 @@ export class Api {
   deleteAccount() {
     return this.req<void>('DELETE', '/api/me');
   }
-  createRoom(mapId: MapId, isPrivate: boolean) {
-    return this.req<CreateRoomResponse>('POST', '/api/rooms', { mapId, isPrivate });
+  createRoom(mapId: MapId, isPrivate: boolean, mode: GameMode = 'ffa') {
+    return this.req<CreateRoomResponse>('POST', '/api/rooms', { mapId, isPrivate, mode });
   }
-  quickMatch(mapId?: MapId) {
-    return this.req<{ roomId: string; mapId: MapId }>('POST', '/api/rooms/quick', mapId ? { mapId } : {});
+  quickMatch(mapId?: MapId, mode: GameMode = 'ffa') {
+    return this.req<{ roomId: string; mapId: MapId; mode: GameMode }>('POST', '/api/rooms/quick', mapId ? { mapId, mode } : { mode });
   }
   invite(code: string) {
     return this.req<InviteInfo>('GET', `/api/invites/${encodeURIComponent(code)}`);

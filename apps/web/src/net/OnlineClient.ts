@@ -2,7 +2,7 @@
  * Online flow controller: authentication (Telegram initData or dev login), room creation/quick
  * match/invites over HTTP, the game WebSocket, lobby state and the OnlineSession lifecycle.
  */
-import type { CharacterId, InviteInfo, Inventory, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, WeaponId } from '@blatkom/shared';
+import type { CharacterId, GameMode, InviteInfo, Inventory, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, WeaponId } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { GameConnection } from './GameConnection.js';
 import { OnlineSession } from '../game/session/OnlineSession.js';
@@ -23,6 +23,8 @@ export interface LobbyState {
   inviteUrl: string | null;
   isPrivate: boolean;
   maxPlayers: number;
+  /** Free-for-all or teams (the host switches it). */
+  mode: GameMode;
 }
 
 export interface OnlineCallbacks {
@@ -226,16 +228,16 @@ export class OnlineClient {
     this.profile = await this.api.updateMe({ displayName: name });
   }
 
-  async quickMatch(c: CharacterId): Promise<void> {
+  async quickMatch(c: CharacterId, mode: GameMode = 'ffa'): Promise<void> {
     await this.ensureAuth();
-    const r = await this.api.quickMatch();
+    const r = await this.api.quickMatch(undefined, mode);
     this.inviteUrl = null;
     await this.joinRoom(r.roomId, c);
   }
 
-  async createRoom(mapId: MapId, c: CharacterId): Promise<void> {
+  async createRoom(mapId: MapId, c: CharacterId, mode: GameMode = 'ffa'): Promise<void> {
     await this.ensureAuth();
-    const r = await this.api.createRoom(mapId, true);
+    const r = await this.api.createRoom(mapId, true, mode);
     this.inviteUrl = r.inviteUrl ?? r.webUrl;
     await this.joinRoom(r.roomId, c);
   }
@@ -309,11 +311,13 @@ export class OnlineClient {
           inviteUrl: this.inviteUrl ?? (m.inviteCode ? `${location.origin}${location.pathname}?invite=${m.inviteCode}` : null),
           isPrivate: m.isPrivate,
           maxPlayers: m.maxPlayers,
+          mode: m.mode,
         };
         if (this.session) this.session.setRoster(m.players);
         const inMatch = m.phase === 'ready' || m.phase === 'countdown' || m.phase === 'active';
         if (inMatch && !this.session && this.config && this.conn) {
-          this.session = new OnlineSession(this.conn, this.mapId, this.slot, this.playerId, this.config, this.roster);
+          // the host may have switched the mode after we joined: the roster carries the current one
+          this.session = new OnlineSession(this.conn, this.mapId, this.slot, this.playerId, { ...this.config, mode: m.mode }, this.roster);
           this.lastResults = null;
           this.cb.onMatchStart(this.session);
         } else if (m.phase === 'waiting' && this.session) {
@@ -329,7 +333,10 @@ export class OnlineClient {
         if (this.session) {
           this.session.setResults(m);
           this.lastResults = this.session.results();
-        } else this.lastResults = { ...m, personal: null };
+        } else {
+          const { mode, teams, ...rest } = m;
+          this.lastResults = { ...rest, personal: null, gameMode: mode, ...(teams ? { teams } : {}) };
+        }
         if (this.lastResults) this.cb.onResults(this.lastResults);
         break;
       case 'progress':
@@ -357,6 +364,12 @@ export class OnlineClient {
   }
   setMap(mapId: MapId): void {
     this.conn?.send({ type: 'map', mapId });
+  }
+  setMode(mode: GameMode): void {
+    this.conn?.send({ type: 'mode', mode });
+  }
+  setTeam(team: Team): void {
+    this.conn?.send({ type: 'team', team });
   }
   rematch(): void {
     this.conn?.send({ type: 'rematch' });

@@ -2,7 +2,8 @@
 import { z } from 'zod';
 import { CHARACTER_IDS } from '../game-rules/characters.js';
 import type { CharacterId } from '../game-rules/characters.js';
-import type { MatchConfig, MatchPhase } from '../game-rules/match.js';
+import type { GameMode, MatchConfig, MatchPhase, Team, TeamResultSummary } from '../game-rules/match.js';
+import { GAME_MODES } from '../game-rules/match.js';
 import { MAP_IDS } from '../maps/types.js';
 import type { MapId } from '../maps/types.js';
 import type { ModId, WeaponId } from '../game-rules/weapons.js';
@@ -13,8 +14,9 @@ import type { AchievementId } from '../game-rules/progression.js';
 /**
  * v2: match points with assists, «дефицит» supply drops. v3: loadouts, rockets, medkits.
  * v4: the owner's arsenal (32 weapons), modifications, equipment (grenades, mines, C4, turret).
+ * v5: up to 10 players, team matches (red vs blue): team in roster and snapshots, team scores.
  */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 const roomId = z.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 
@@ -31,6 +33,10 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ready'), ready: z.boolean() }),
   z.object({ type: z.literal('character'), character: z.enum(CHARACTER_IDS) }),
   z.object({ type: z.literal('map'), mapId: z.enum(MAP_IDS) }),
+  /** Host: free-for-all or teams (lobby only). */
+  z.object({ type: z.literal('mode'), mode: z.enum(GAME_MODES) }),
+  /** Team matches: move to the other team (lobby only, while the teams stay even). */
+  z.object({ type: z.literal('team'), team: z.union([z.literal(0), z.literal(1)]) }),
   z.object({ type: z.literal('start') }),
   z.object({ type: z.literal('rematch') }),
   /** The player changed their loadout over the API: the server re-reads it (applies from the next spawn). */
@@ -50,6 +56,8 @@ export interface RosterEntry {
   isHost: boolean;
   isBot: boolean;
   level: number;
+  /** Team matches: 0 red, 1 blue. */
+  team: Team | null;
   /** Equipped modifications of the player's weapons (client-side prediction of their own weapons). */
   mods?: Partial<Record<WeaponId, ModId[]>>;
 }
@@ -93,6 +101,7 @@ export type ServerMessage =
       slot: number;
       roomId: string;
       reconnectToken: string;
+      mode: GameMode;
       serverTime: number;
       tick: number;
       mapId: MapId;
@@ -108,9 +117,10 @@ export type ServerMessage =
       inviteCode: string | null;
       isPrivate: boolean;
       maxPlayers: number;
+      mode: GameMode;
     }
   | { type: 'ev'; tick: number; events: GameEvent[] }
-  | { type: 'results'; matchId: string; reason: 'time' | 'score' | 'aborted'; durationMs: number; standings: Standing[]; mapId: MapId }
+  | { type: 'results'; matchId: string; reason: 'time' | 'score' | 'aborted'; durationMs: number; standings: Standing[]; mapId: MapId; mode: GameMode; teams?: TeamResultSummary }
   | { type: 'progress'; matchId: string; result: PersonalResult }
   | { type: 'error'; code: ErrorCode; message: string }
   | { type: 'pong'; t: number; serverTime: number }
@@ -126,6 +136,10 @@ export type ErrorCode =
   | 'invalid_state'
   | 'rate_limited'
   | 'version_mismatch'
+  | 'character_locked'
+  | 'match_running'
+  | 'not_enough_players'
+  | 'team_full'
   | 'internal';
 
 export const WS_CLOSE = {

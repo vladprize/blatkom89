@@ -1,5 +1,6 @@
 /**
- * One multiplayer room: lobby + authoritative deathmatch simulation for 2–6 players.
+ * One multiplayer room: lobby + authoritative deathmatch simulation for 2–10 players, every man for
+ * himself or two teams (red vs blue).
  * Clients send inputs; the room runs the shared World at 60 Hz and broadcasts binary snapshots at
  * 30 Hz plus JSON control messages. Results are recorded once through MatchRecorder.
  */
@@ -30,6 +31,7 @@ import type {
   CharacterId,
   ClientMessage,
   GameEvent,
+  GameMode,
   InputFrame,
   MapId,
   MatchConfig,
@@ -50,6 +52,8 @@ export interface RoomOptions {
   inviteCode?: string | null;
   /** Public rooms start automatically once enough players are present. */
   autoStart?: boolean;
+  /** Free-for-all (default) or teams; the host can switch it in the lobby. */
+  mode?: GameMode;
 }
 
 interface Client {
@@ -86,7 +90,8 @@ export class MatchRoom {
   readonly id: string;
   readonly isPrivate: boolean;
   readonly createdAt = Date.now();
-  readonly config: MatchConfig;
+  /** Match rules; `mode` changes when the host switches between free-for-all and teams. */
+  config: MatchConfig;
   mapId: MapId;
   hostId: string | null;
   inviteCode: string | null;
@@ -115,7 +120,7 @@ export class MatchRoom {
     this.hostId = opts.hostUserId;
     this.inviteCode = opts.inviteCode ?? null;
     this.autoStart = opts.autoStart ?? !opts.isPrivate;
-    this.config = { ...DEFAULT_MATCH_CONFIG, ...opts.config };
+    this.config = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? 'ffa' };
     this.log = log.child({ room: this.id });
     this.world = this.createWorld();
   }
@@ -126,6 +131,10 @@ export class MatchRoom {
 
   get phase() {
     return this.world.phase;
+  }
+
+  get mode(): GameMode {
+    return this.config.mode;
   }
 
   /** Players occupying a slot (connected or within the reconnect grace window). */
@@ -224,6 +233,7 @@ export class MatchRoom {
       slot: p?.slot ?? -1,
       roomId: this.id,
       reconnectToken: c.reconnectToken,
+      mode: this.config.mode,
       serverTime: this.world.time,
       tick: this.world.tick,
       mapId: this.mapId,
@@ -322,7 +332,7 @@ export class MatchRoom {
         this.broadcastRoster();
         return;
       case 'character': {
-        if (!c.gear.characters.has(msg.character)) return this.error(c, 'invalid_state', 'This character isn’t unlocked yet');
+        if (!c.gear.characters.has(msg.character)) return this.error(c, 'character_locked', 'This character isn’t unlocked yet');
         c.character = msg.character;
         const p = this.world.players.get(c.user.userId);
         if (p && (this.world.phase === 'waiting' || !p.alive)) p.character = msg.character;
@@ -331,14 +341,32 @@ export class MatchRoom {
       }
       case 'map':
         if (c.user.userId !== this.hostId) return this.error(c, 'not_host', 'Only the room’s host changes the map');
-        if (this.world.phase !== 'waiting') return this.error(c, 'invalid_state', 'The match is already on');
+        if (this.world.phase !== 'waiting') return this.error(c, 'match_running', 'The match is already on');
         if (!isMapId(msg.mapId)) return;
         this.changeMap(msg.mapId);
         return;
+      case 'mode':
+        if (c.user.userId !== this.hostId) return this.error(c, 'not_host', 'Only the room’s host changes the mode');
+        if (this.world.phase !== 'waiting') return this.error(c, 'match_running', 'The match is already on');
+        this.changeMode(msg.mode);
+        return;
+      case 'team': {
+        if (this.config.mode !== 'teams') return;
+        if (this.world.phase !== 'waiting') return this.error(c, 'match_running', 'Teams are fixed once the match is on');
+        const p = this.world.players.get(c.user.userId);
+        if (!p || p.team === msg.team) return;
+        // the teams must stay even: at most one player more on either side
+        const to = this.world.teamSize(msg.team) + 1;
+        const from = this.world.teamSize(msg.team === 0 ? 1 : 0) - (p.team === null ? 0 : 1);
+        if (to - from > 1) return this.error(c, 'team_full', 'That team already has more players');
+        this.world.setTeam(c.user.userId, msg.team);
+        this.broadcastRoster();
+        return;
+      }
       case 'start':
         if (c.user.userId !== this.hostId) return this.error(c, 'not_host', 'Only the room’s host starts the match');
-        if (this.world.phase !== 'waiting') return this.error(c, 'invalid_state', 'The match is already on');
-        if (this.connectedCount < this.config.minPlayers) return this.error(c, 'invalid_state', `At least ${this.config.minPlayers} players needed`);
+        if (this.world.phase !== 'waiting') return this.error(c, 'match_running', 'The match is already on');
+        if (this.connectedCount < this.config.minPlayers) return this.error(c, 'not_enough_players', `At least ${this.config.minPlayers} players needed`);
         this.startMatch();
         return;
       case 'loadout': {
@@ -375,11 +403,26 @@ export class MatchRoom {
   }
 
   private changeMap(mapId: MapId) {
-    const roster = [...this.world.players.values()];
     this.mapId = mapId;
+    this.rebuildWorld(true);
+  }
+
+  /** Free-for-all ↔ teams: the roster stays, teams are dealt anew (alternating by arrival). */
+  private changeMode(mode: GameMode) {
+    if (mode === this.config.mode) return;
+    this.config = { ...this.config, mode };
+    this.rebuildWorld(false);
+    this.services.analytics.server('lobby_created', { roomId: this.id, mapId: this.mapId, isPrivate: this.isPrivate, mode }, { userId: this.hostId });
+  }
+
+  private rebuildWorld(keepTeams: boolean) {
+    const roster = [...this.world.players.values()].sort((a, b) => a.joinedAt - b.joinedAt || a.slot - b.slot);
     this.world = this.createWorld();
-    // loadouts (owned weapons, modifications and equipment) carry over to the new map
-    for (const p of roster) this.world.addPlayer(p.id, p.name, p.character, p.isBot, { sidearm: p.sidearm, melee: p.melee, primary: p.primary, gadget: p.gadget, mods: p.mods }).connected = p.connected;
+    // loadouts (owned weapons, modifications and equipment) carry over
+    for (const p of roster) {
+      const team = keepTeams && this.config.mode === 'teams' && p.team !== null ? p.team : undefined;
+      this.world.addPlayer(p.id, p.name, p.character, p.isBot, { sidearm: p.sidearm, melee: p.melee, primary: p.primary, gadget: p.gadget, mods: p.mods }, team).connected = p.connected;
+    }
     this.broadcastRoster();
   }
 
@@ -399,13 +442,13 @@ export class MatchRoom {
     this.matchId = randomUUID();
     this.matchStartedAtWall = Date.now();
     this.resultsSent = false;
-    const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite }));
+    const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite, team: this.world.players.get(c.user.userId)?.team ?? null }));
     this.services.recorder
-      .matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, isPrivate: this.isPrivate, startedAt: new Date(), players })
+      .matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, startedAt: new Date(), players })
       .catch((e: Error) => this.log.error('matchStarted failed', { err: e }));
-    this.services.analytics.server('match_started', { matchId: this.matchId, roomId: this.id, mapId: this.mapId, players: players.length });
+    this.services.analytics.server('match_started', { matchId: this.matchId, roomId: this.id, mapId: this.mapId, players: players.length, mode: this.config.mode });
     this.services.analytics.server('map_played', { matchId: this.matchId, mapId: this.mapId });
-    this.log.info('match started', { matchId: this.matchId, players: players.length, map: this.mapId });
+    this.log.info('match started', { matchId: this.matchId, players: players.length, map: this.mapId, mode: this.config.mode });
     this.broadcastRoster();
   }
 
@@ -429,9 +472,10 @@ export class MatchRoom {
     this.resultsSent = true;
     const standings: Standing[] = this.world.standings();
     const durationMs = Math.max(0, this.world.time - this.world.matchStartedAt);
+    const teams = this.config.mode === 'teams' ? this.world.teamResult() : undefined;
     // deliver the deciding shot/kill events before the results screen
     this.flush();
-    this.broadcast({ type: 'results', matchId: this.matchId, reason, durationMs, standings, mapId: this.mapId });
+    this.broadcast({ type: 'results', matchId: this.matchId, reason, durationMs, standings, mapId: this.mapId, mode: this.config.mode, ...(teams ? { teams } : {}) });
     const matchId = this.matchId;
     const presentAtEnd = standings.filter((s) => this.clients.get(s.id)?.connected);
     const presentPlaces = rankPlaces(presentAtEnd);
@@ -440,10 +484,14 @@ export class MatchRoom {
       .map((s) => {
         const c = this.clients.get(s.id)!;
         const presentIdx = presentAtEnd.findIndex((x) => x.id === s.id);
+        const team = s.team ?? null;
         return {
           userId: s.id,
           character: c.character,
-          place: presentIdx >= 0 ? presentPlaces[presentIdx]! : standings.length,
+          // team matches: 1 for the winning team (both on a draw), 2 for the other
+          place: teams ? s.place : presentIdx >= 0 ? presentPlaces[presentIdx]! : standings.length,
+          team,
+          ...(teams ? { teamOutcome: teams.winner === null ? ('draw' as const) : team === teams.winner ? ('win' as const) : ('loss' as const) } : {}),
           kills: s.kills,
           assists: s.assists,
           deaths: s.deaths,
@@ -454,12 +502,14 @@ export class MatchRoom {
           playtimeMs: Math.round(c.matchTimeMs),
         };
       });
-    this.services.analytics.server('match_completed', { matchId, mapId: this.mapId, durationMs, players: presentAtEnd.length, reason });
+    this.services.analytics.server('match_completed', { matchId, mapId: this.mapId, durationMs, players: presentAtEnd.length, reason, mode: this.config.mode });
     this.services.recorder
       .matchCompleted({
         matchId,
         roomId: this.id,
         mapId: this.mapId,
+        mode: this.config.mode,
+        winnerTeam: teams ? teams.winner : null,
         isPrivate: this.isPrivate,
         startedAt: new Date(this.matchStartedAtWall),
         endedAt: new Date(),
@@ -555,6 +605,7 @@ export class MatchRoom {
       time: w.time,
       phase: w.phase,
       phaseRemaining: w.phase === 'active' ? w.matchTimeLeftMs : w.phaseEndsAt ? Math.max(0, w.phaseEndsAt - w.time) : 0,
+      teamScore: w.teamScore,
       players: w.players.values(),
       pickups: w.pickups,
       gadgets: w.gadgets,
@@ -606,10 +657,11 @@ export class MatchRoom {
         isHost: c.user.userId === this.hostId,
         isBot: false,
         level: c.user.level,
+        team: p?.team ?? null,
         mods: c.gear.loadout.mods,
       };
     });
-    return { type: 'roster', players, hostId: this.hostId, mapId: this.mapId, phase: this.world.phase, inviteCode: this.inviteCode, isPrivate: this.isPrivate, maxPlayers: this.config.maxPlayers };
+    return { type: 'roster', players, hostId: this.hostId, mapId: this.mapId, phase: this.world.phase, inviteCode: this.inviteCode, isPrivate: this.isPrivate, maxPlayers: this.config.maxPlayers, mode: this.config.mode };
   }
 
   broadcastRoster(): void {
@@ -630,7 +682,7 @@ export class MatchRoom {
   }
 
   info() {
-    return { id: this.id, mapId: this.mapId, phase: this.world.phase, players: this.clients.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
   }
 
   static protocolVersion = PROTOCOL_VERSION;

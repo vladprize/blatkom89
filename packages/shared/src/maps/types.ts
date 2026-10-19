@@ -156,6 +156,10 @@ export interface MapDef {
   supplyPoints: Array<{ x: number; y: number }>;
   /** First-aid kits (restore health, respawn after a while). */
   medkits: MedkitSpawn[];
+  /** Capture the flag: the stands of the red (0) and blue (1) flags, deep in each team's half. */
+  flagStands: Array<{ x: number; y: number }>;
+  /** Base capture: the bases A, B, C (centres; see BASES.radius). */
+  bases: Array<{ x: number; y: number }>;
   /** Ambient light colour multiplier for the night lightmap (0xRRGGBB) and strength 0..1. */
   ambient: { color: number; level: number };
   /** Minimap palette hint. */

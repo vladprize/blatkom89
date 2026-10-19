@@ -4,7 +4,7 @@
  */
 import { MAX_INPUTS_PER_MESSAGE, POS_SCALE, VEL_SCALE } from '../constants/game.js';
 import { MATCH_PHASES } from '../game-rules/match.js';
-import type { MatchPhase } from '../game-rules/match.js';
+import type { MatchPhase, Team } from '../game-rules/match.js';
 import { WEAPONS, WEAPON_BY_INDEX } from '../game-rules/weapons.js';
 import type { WeaponId } from '../game-rules/weapons.js';
 import { GADGETS, GADGET_IDS, armsAt, armsIndex } from '../game-rules/gadgets.js';
@@ -112,6 +112,8 @@ export interface NetPlayer {
   flashedRemaining: number;
   /** The weapon in hand has a laser sight (visible to everyone). */
   laser: boolean;
+  /** Team matches: 0 red, 1 blue; null in free-for-all. */
+  team: Team | null;
 }
 
 export interface NetGadget {
@@ -169,6 +171,8 @@ export interface Snapshot {
   serverTime: number;
   phase: MatchPhase;
   phaseRemaining: number;
+  /** Team matches: eliminations by red and blue (zeros in free-for-all). */
+  teamScore: [number, number];
   players: NetPlayer[];
   pickups: NetPickup[];
   shots: NetShot[];
@@ -181,6 +185,7 @@ export interface SnapshotSource {
   time: number;
   phase: MatchPhase;
   phaseRemaining: number;
+  teamScore?: readonly [number, number];
   players: Iterable<PlayerState>;
   pickups: readonly PickupState[];
   gadgets: readonly GadgetState[];
@@ -188,7 +193,8 @@ export interface SnapshotSource {
   now: number;
 }
 
-const PLAYER_BYTES = 46;
+const HEADER_BYTES = 19;
+const PLAYER_BYTES = 47;
 const GADGET_BYTES = 15;
 const GADGET_PHASES = ['moving', 'armed', 'active'] as const;
 
@@ -202,7 +208,7 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
   const melees = src.events.filter((e): e is Extract<WorldEvent, { t: 'melee' }> => e.t === 'melee');
   const pickups = src.pickups.filter((p) => p.active || !p.dropped);
   const gadgets = src.gadgets.slice(0, 255);
-  let size = 1 + 4 + 4 + 1 + 4 + 1 + players.length * PLAYER_BYTES + 1 + pickups.length * 8 + 2 + 1 + 1;
+  let size = HEADER_BYTES + players.length * PLAYER_BYTES + 1 + pickups.length * 8 + 2 + 1 + 1;
   for (const s of shots) size += 10 + s.pellets.length * 6;
   size += melees.length * 4 + gadgets.length * GADGET_BYTES;
   const buf = new ArrayBuffer(size);
@@ -213,8 +219,10 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
   v.setUint32(o + 5, Math.max(0, Math.round(src.time)) >>> 0, true);
   v.setUint8(o + 9, MATCH_PHASES.indexOf(src.phase));
   v.setUint32(o + 10, Math.max(0, Math.round(src.phaseRemaining)) >>> 0, true);
-  v.setUint8(o + 14, players.length);
-  o += 15;
+  v.setUint16(o + 14, u16(src.teamScore?.[0] ?? 0), true);
+  v.setUint16(o + 16, u16(src.teamScore?.[1] ?? 0), true);
+  v.setUint8(o + 18, players.length);
+  o += HEADER_BYTES;
   for (const p of players) {
     const flags =
       (p.alive ? 1 : 0) |
@@ -252,6 +260,7 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
     v.setUint8(o + 42, p.gadget ? GADGETS[p.gadget].index : 255);
     v.setUint8(o + 43, u8c(p.gadgetCharges));
     v.setUint16(o + 44, u16(Math.max(0, p.flashedUntil - src.time)), true);
+    v.setUint8(o + 46, p.team === null ? 255 : p.team);
     o += PLAYER_BYTES;
   }
   v.setUint8(o, pickups.length);
@@ -323,6 +332,12 @@ function armsFrom(i: number): ArmsId {
   return a;
 }
 
+function teamAt(i: number): Team | null {
+  if (i === 255) return null;
+  if (i === 0 || i === 1) return i;
+  throw new ProtocolError('bad team');
+}
+
 function gadgetAt(i: number): GadgetId {
   const g = GADGET_IDS[i];
   if (!g) throw new ProtocolError('bad gadget index');
@@ -336,7 +351,7 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
   const need = (n: number) => {
     if (o + n > u8.byteLength) throw new ProtocolError('truncated snapshot');
   };
-  need(15);
+  need(HEADER_BYTES);
   if (v.getUint8(0) !== MSG_SNAPSHOT) throw new ProtocolError('not a snapshot');
   const phase = MATCH_PHASES[v.getUint8(9)];
   if (!phase) throw new ProtocolError('bad phase');
@@ -345,14 +360,15 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
     serverTime: v.getUint32(5, true),
     phase,
     phaseRemaining: v.getUint32(10, true),
+    teamScore: [v.getUint16(14, true), v.getUint16(16, true)],
     players: [],
     pickups: [],
     shots: [],
     melees: [],
     gadgets: [],
   };
-  const np = v.getUint8(14);
-  o = 15;
+  const np = v.getUint8(18);
+  o = HEADER_BYTES;
   for (let i = 0; i < np; i++) {
     need(PLAYER_BYTES);
     const flags = v.getUint8(o + 1);
@@ -391,6 +407,7 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
       gadgetCharges: v.getUint8(o + 43),
       flashedRemaining: v.getUint16(o + 44, true),
       laser: (flags & 64) !== 0,
+      team: teamAt(v.getUint8(o + 46)),
     });
     o += PLAYER_BYTES;
   }

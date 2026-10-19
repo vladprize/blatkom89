@@ -3,7 +3,7 @@
  * portrait, weapon & ammo with slots, centre messages, hit markers, scoreboard and touch controls.
  */
 import * as Phaser from 'phaser';
-import { CHARACTERS, getMap, PROP_DEFS, propFootprint, WEAPONS, SCORING } from '@blatkom/shared';
+import { getMap, PROP_DEFS, propFootprint, WEAPONS, SCORING } from '@blatkom/shared';
 import type { MapDef, WeaponId } from '@blatkom/shared';
 import type { GameSession, RenderPlayer } from '../session/types.js';
 import { hudBus } from './hudBus.js';
@@ -12,8 +12,13 @@ import { touchState, isTouchDevice } from '../input/TouchState.js';
 import { getSettings, storageGet, storageSet } from '../../app/settings.js';
 import { analytics } from '../../analytics/client.js';
 import { sfx } from '../audio/Sfx.js';
+import { t, plural, getLang } from '../../i18n/index.js';
+import { charName, mapName, weaponName } from '../../i18n/content.js';
 
 const TUTORIAL_KEY = 'blatkom89.tutorial.v1';
+/** Team colours: names / text and fills (red 0, blue 1). */
+const TEAM_TEXT = ['#ff8a7a', '#8cc8f6'] as const;
+const TEAM_FILL = [0xd8392e, 0x4a9be0] as const;
 
 const BEIGE = '#e8dcc0';
 const RED = '#d8392e';
@@ -52,11 +57,6 @@ function txt(scene: Phaser.Scene, x: number, y: number, s: string, size: number,
   return scene.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, fontStyle: weight, color, stroke: '#0b0908', strokeThickness: Math.max(2, size / 7) });
 }
 
-/** «to 50 points», «to 1 point». */
-function pointsWord(n: number): string {
-  return n === 1 ? 'POINT' : 'POINTS';
-}
-
 /** Shortens `s` with an ellipsis until the text object fits `maxW` pixels. */
 function fitText(t: Phaser.GameObjects.Text, s: string, maxW: number): Phaser.GameObjects.Text {
   t.setText(s);
@@ -87,6 +87,10 @@ export class HudScene extends Phaser.Scene {
   private leadScore!: Phaser.GameObjects.Text;
   private timer!: Phaser.GameObjects.Text;
   private mode!: Phaser.GameObjects.Text;
+  /** Team matches: a frame around the local player's team score. */
+  private teamMark!: Phaser.GameObjects.Graphics;
+  private scoreCx = 0;
+  private scorePad = 14;
   // feed
   private feed: FeedLine[] = [];
   // minimap
@@ -109,7 +113,7 @@ export class HudScene extends Phaser.Scene {
   private bannerUntil = 0;
   private supplyPings: Array<{ x: number; y: number; at: number }> = [];
   private edge!: Phaser.GameObjects.Graphics;
-  private modeLimit = -1;
+  private modeSig = '';
   private sbSig = '';
   private feedY0 = 14;
   private tutorial: Phaser.GameObjects.Container | null = null;
@@ -170,7 +174,7 @@ export class HudScene extends Phaser.Scene {
     this.supplyPings = [];
     this.shownName = '';
     this.shownLevel = undefined;
-    this.modeLimit = -1;
+    this.modeSig = '';
     this.sbSig = '';
     this.wasFlashed = false;
     this.gadgetBtn = null;
@@ -246,7 +250,8 @@ export class HudScene extends Phaser.Scene {
     this.myScore = txt(this, 0, 0, '0', 26, BEIGE, '700').setOrigin(0.5);
     this.leadScore = txt(this, 0, 0, '0', 26, BEIGE, '700').setOrigin(0.5);
     this.timer = txt(this, 0, 0, '00:00', 24, BEIGE, '600').setOrigin(0.5, 0);
-    this.mode = txt(this, 0, 0, 'DEATHMATCH', 10, '#b8a888', '500').setOrigin(0.5, 0);
+    this.mode = txt(this, 0, 0, '', 10, '#b8a888', '500').setOrigin(0.5, 0);
+    this.teamMark = this.add.graphics();
   }
 
   private buildMinimap() {
@@ -272,7 +277,7 @@ export class HudScene extends Phaser.Scene {
     this.mm.draw(g, 0, 0);
     g.destroy();
     this.mmDots = this.add.graphics();
-    this.mmLabel = this.tape(m.name.toUpperCase(), this.touch ? 9 : 10);
+    this.mmLabel = this.tape(mapName(m.id).toUpperCase(), this.touch ? 9 : 10);
   }
 
   private buildHealth() {
@@ -280,7 +285,7 @@ export class HudScene extends Phaser.Scene {
     const me = this.session.players().find((p) => p.isLocal);
     const c = me?.character ?? 'petya';
     this.portrait = this.add.image(0, 0, this.touch ? `portrait_small_${c}` : `portrait_${c}`).setOrigin(0, 0);
-    this.nameText = txt(this, 0, 0, me?.name ?? CHARACTERS[c].name, this.touch ? 12 : 15, BEIGE, '600');
+    this.nameText = txt(this, 0, 0, me?.name ?? charName(c), this.touch ? 12 : 15, BEIGE, '600');
     this.levelText = txt(this, 0, 0, '', this.touch ? 10 : 12, '#ffd36a', '600');
     this.hpText = txt(this, 0, 0, '100/100', this.touch ? 12 : 15, BEIGE, '500');
     this.hpBar = this.add.graphics();
@@ -314,9 +319,9 @@ export class HudScene extends Phaser.Scene {
     this.tutorialState = null;
     if (storageGet(TUTORIAL_KEY)) return;
     const lines = this.touch
-      ? ['Left stick — move', 'Right stick — aim and fire', '⟳ — reload · ⇄ — switch weapon', 'Grenade button — equipment', 'Weapons and medkits are picked up on the move']
-      : ['WASD — move · Shift — walk quietly', 'Mouse — aim · Left click — fire', 'R — reload · 1/2/3, Q — weapons', 'G — grenade / equipment', 'E — pick up · Tab — score · Esc — pause'];
-    const title = txt(this, 0, 0, 'HOW BUSINESS IS DONE', 13, '#1a1410', '700').setStroke('#000', 0).setOrigin(0.5, 0);
+      ? [t('Left stick — move'), t('Right stick — aim and fire'), t('⟳ — reload · ⇄ — switch weapon'), t('Grenade button — equipment'), t('Weapons and medkits are picked up on the move')]
+      : [t('WASD — move · Shift — walk quietly'), t('Mouse — aim · Left click — fire'), t('R — reload · 1/2/3, Q — weapons'), t('G — grenade / equipment'), t('E — pick up · Tab — score · Esc — pause')];
+    const title = txt(this, 0, 0, t('HOW BUSINESS IS DONE'), 13, '#1a1410', '700').setStroke('#000', 0).setOrigin(0.5, 0);
     const body = txt(this, 0, 0, lines.join('\n'), this.touch ? 12 : 14, BEIGE, '500').setOrigin(0.5, 0).setAlign('center').setLineSpacing(4);
     const w = Math.max(title.width, body.width) + 32;
     const h = title.height + body.height + 26;
@@ -531,6 +536,8 @@ export class HudScene extends Phaser.Scene {
     this.scoreBg.fillStyle(0x14304e, 0.95).fillRect(cx + 68, pad, 50, 40);
     this.scoreBg.lineStyle(2, 0x4a9be0, 1).strokeRect(cx + 69, pad + 1, 48, 38);
     this.panel(this.scoreBg, cx - 62, pad, 124, 46);
+    this.scoreCx = cx;
+    this.scorePad = pad;
     this.myScore.setPosition(cx - 93, pad + 20);
     this.leadScore.setPosition(cx + 93, pad + 20);
     this.timer.setPosition(cx, pad + 2);
@@ -604,13 +611,15 @@ export class HudScene extends Phaser.Scene {
 
   // ── events ─────────────────────────────────────────────────────────────
   private onKillFeed(e: KillFeedEntry) {
-    const k = txt(this, 0, 0, e.killer, 14, e.killerLocal ? RED : BLUE, '600');
+    // free-for-all: the local player red, everyone else blue; teams: everyone in their team colour
+    const teamColor = (team: number | null | undefined, local: boolean) => (team === 0 || team === 1 ? TEAM_TEXT[team] : local ? RED : BLUE);
+    const k = txt(this, 0, 0, e.killer, 14, teamColor(e.killerTeam, e.killerLocal), '600');
     let right = k.width;
     // assisters ride along after the killer: «Petya + Valyuta [sawn-off] Mikhalych»
-    const a = e.assists.length ? txt(this, right + 5, 3, `+ ${e.assists.join(', ')}`, 11, e.assistLocal ? '#ff8a7a' : '#9fbfdf', '500') : null;
+    const a = e.assists.length ? txt(this, right + 5, 3, `+ ${e.assists.join(', ')}`, 11, e.killerTeam === 0 || e.killerTeam === 1 ? TEAM_TEXT[e.killerTeam] : e.assistLocal ? '#ff8a7a' : '#9fbfdf', '500') : null;
     if (a) right = a.x + a.width;
     const icon = fitIcon(this.add.image(right + 8, k.height / 2, 'weapons', `ico_${e.weapon}`).setOrigin(0, 0.5), `ico_${e.weapon}`, 46, 15, 0.8);
-    const v = txt(this, icon.x + icon.displayWidth + 8, 0, e.victim, 14, e.victimLocal ? RED : BLUE, '600');
+    const v = txt(this, icon.x + icon.displayWidth + 8, 0, e.victim, 14, teamColor(e.victimTeam, e.victimLocal), '600');
     const bgW = v.x + v.width + 10;
     const bg = this.add.graphics();
     bg.fillStyle(PANEL, 0.55).fillRect(-6, -1, bgW, k.height + 2);
@@ -645,10 +654,10 @@ export class HudScene extends Phaser.Scene {
 
   private onSupply(e: SupplyEntry) {
     this.banner?.destroy();
-    const name = WEAPONS[e.weapon].name;
-    const title = this.tape(this.touch ? `DEFICIT GOODS: ${name.toUpperCase()}` : 'DEFICIT GOODS DELIVERED!', this.touch ? 13 : 17);
+    const name = weaponName(e.weapon);
+    const title = this.tape(this.touch ? t('DEFICIT GOODS: {name}', { name: name.toUpperCase() }) : t('DEFICIT GOODS DELIVERED!'), this.touch ? 13 : 17);
     const parts: Phaser.GameObjects.GameObject[] = [title];
-    if (!this.touch) parts.push(txt(this, 0, 16, `In the crate: ${name} with a full load of ammo — look for the marker on the map`, 13, BEIGE, '500').setOrigin(0.5, 0));
+    if (!this.touch) parts.push(txt(this, 0, 16, t('In the crate: {name} with a full load of ammo — look for the marker on the map', { name }), 13, BEIGE, '500').setOrigin(0.5, 0));
     this.banner = this.add.container(0, 0, parts).setDepth(23).setAlpha(0);
     this.bannerUntil = this.time.now + 3400;
     this.supplyPings.push({ x: e.x, y: e.y, at: this.time.now });
@@ -743,15 +752,25 @@ export class HudScene extends Phaser.Scene {
     const me = players.find((p) => p.isLocal);
     const sorted = players.slice().sort((a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths);
     const leader = sorted.find((p) => !p.isLocal);
-    // score / timer
-    this.myScore.setText(String(me?.score ?? 0));
-    this.leadScore.setText(String(leader?.score ?? 0));
-    const t = hud.phase === 'active' ? hud.timeLeftMs : hud.phase === 'countdown' || hud.phase === 'ready' ? hud.timeLeftMs : 0;
-    this.timer.setText(fmtTime(t));
-    this.timer.setColor(hud.phase === 'active' && t < 30_000 ? '#ff6a5a' : BEIGE);
-    if (this.modeLimit !== hud.scoreLimit) {
-      this.modeLimit = hud.scoreLimit;
-      this.mode.setText(`DEATHMATCH · FIRST TO ${hud.scoreLimit} ${pointsWord(hud.scoreLimit)}`);
+    const teams = hud.gameMode === 'teams';
+    // score / timer: free-for-all — mine vs the best opponent; teams — red vs blue
+    this.myScore.setText(String(teams ? hud.teamScore[0] : (me?.score ?? 0)));
+    this.leadScore.setText(String(teams ? hud.teamScore[1] : (leader?.score ?? 0)));
+    const left = hud.phase === 'active' ? hud.timeLeftMs : hud.phase === 'countdown' || hud.phase === 'ready' ? hud.timeLeftMs : 0;
+    this.timer.setText(fmtTime(left));
+    this.timer.setColor(hud.phase === 'active' && left < 30_000 ? '#ff6a5a' : BEIGE);
+    const modeSig = `${hud.gameMode}|${hud.scoreLimit}|${hud.teamScoreLimit}|${getLang()}`;
+    if (this.modeSig !== modeSig) {
+      this.modeSig = modeSig;
+      this.mode.setText(teams ? t('RED VS BLUE · TO {n}', { n: hud.teamScoreLimit }) : t('DEATHMATCH · TO {n} {points}', { n: hud.scoreLimit, points: plural(hud.scoreLimit, 'point').toUpperCase() }));
+    }
+    this.teamMark.clear();
+    if (teams && hud.myTeam !== null) {
+      // the local player's side: a light frame and a notch under the box
+      const bx = hud.myTeam === 0 ? this.scoreCx - 118 : this.scoreCx + 68;
+      const by = this.scorePad;
+      this.teamMark.lineStyle(2, 0xf2e6c8, 0.95).strokeRect(bx - 2, by - 2, 54, 44);
+      this.teamMark.fillStyle(0xf2e6c8, 0.95).fillTriangle(bx + 19, by + 44, bx + 31, by + 44, bx + 25, by + 50);
     }
     // feed
     let fy = this.feedY0;
@@ -778,9 +797,9 @@ export class HudScene extends Phaser.Scene {
       if ((me.name && this.shownName !== me.name) || this.shownLevel !== me.level) {
         this.shownName = me.name;
         this.shownLevel = me.level;
-        this.levelText.setText(me.level !== null ? `LVL ${me.level}` : '');
+        this.levelText.setText(me.level !== null ? `${t('LVL')} ${me.level}` : '');
         const room = (this.touch ? 128 : 162) - (me.level !== null ? this.levelText.width + 6 : 0);
-        fitText(this.nameText, me.name || CHARACTERS[me.character].name, room);
+        fitText(this.nameText, me.name || charName(me.character), room);
       }
       this.levelText.setPosition(this.nameText.x + this.nameText.width + 6, this.nameText.y + (this.touch ? 1.5 : 3));
     }
@@ -806,7 +825,7 @@ export class HudScene extends Phaser.Scene {
     const def = WEAPONS[hud.weapon];
     this.ammoText.setText(def.kind === 'melee' ? '—' : `${hud.mag}/${hud.reserve < 0 ? '∞' : hud.reserve}`);
     this.ammoText.setColor(def.kind !== 'melee' && hud.mag === 0 ? '#ff6a5a' : BEIGE);
-    this.weaponName.setText(hud.reloading ? 'RELOADING…' : def.name.toUpperCase());
+    this.weaponName.setText(hud.reloading ? t('RELOADING…') : weaponName(hud.weapon).toUpperCase());
     if (!this.touch) this.drawSlots(hud.weapon, [hud.sidearm, hud.melee, hud.heavy]);
     this.updateGadget(hud, time);
     // flashbang: full white, then fades over the last 0.7 s; the ears ring while it lasts
@@ -819,18 +838,22 @@ export class HudScene extends Phaser.Scene {
       const y = this.ammoText.y + (this.touch ? 22 : 28);
       this.hpBar.fillStyle(0x2a241e, 1).fillRect(x, y, 80, 3).fillStyle(0xe8dcc0, 1).fillRect(x, y, 80 * hud.reloadProgress, 3);
     }
-    // minimap dots: me always, enemies only when recently firing (no wallhack)
+    // minimap dots: me always; teammates always (team matches); enemies only when recently firing (no wallhack)
     this.mmDots.clear();
     const s = this.mmScale;
     const ox = this.mm.x + 2;
     const oy = this.mm.y + 2;
     for (const p of players) {
       if (!p.alive) continue;
+      const mate = teams && hud.myTeam !== null && p.team === hud.myTeam;
       if (p.isLocal) {
-        this.mmDots.fillStyle(0xff4a3a, 1).fillCircle(ox + p.x * s, oy + p.y * s, 3);
+        this.mmDots.fillStyle(teams && hud.myTeam !== null ? TEAM_FILL[hud.myTeam] : 0xff4a3a, 1).fillCircle(ox + p.x * s, oy + p.y * s, 3);
         this.mmDots.lineStyle(1, 0xffe0c0, 1).lineBetween(ox + p.x * s, oy + p.y * s, ox + p.x * s + Math.cos(p.aim) * 6, oy + p.y * s + Math.sin(p.aim) * 6);
+      } else if (mate) {
+        this.mmDots.fillStyle(TEAM_FILL[hud.myTeam!], 0.9).fillCircle(ox + p.x * s, oy + p.y * s, 2.2);
+        this.mmDots.lineStyle(1, 0xf2e6c8, 0.7).strokeCircle(ox + p.x * s, oy + p.y * s, 2.6);
       } else if (time - (this.lastShotAt.get(p.slot) ?? -1e9) < 2000) {
-        this.mmDots.fillStyle(0x4a9be0, 1).fillCircle(ox + p.x * s, oy + p.y * s, 2.5);
+        this.mmDots.fillStyle(teams && (p.team === 0 || p.team === 1) ? TEAM_FILL[p.team] : 0x4a9be0, 1).fillCircle(ox + p.x * s, oy + p.y * s, 2.5);
       }
     }
     for (const pk of this.session.pickups()) {
@@ -869,7 +892,7 @@ export class HudScene extends Phaser.Scene {
     }
     // status
     const conn = hud.connection;
-    this.statusText.setText(conn === 'offline' ? 'PRACTICE' : conn === 'reconnecting' ? 'RECONNECTING…' : conn === 'lost' ? 'LINE IS DEAD' : hud.ping !== null ? `${hud.ping} ms` : '');
+    this.statusText.setText(conn === 'offline' ? t('PRACTICE') : conn === 'reconnecting' ? t('RECONNECTING…') : conn === 'lost' ? t('LINE IS DEAD') : hud.ping !== null ? t('{n} ms', { n: hud.ping }) : '');
     this.statusText.setColor(conn === 'online' ? ((hud.ping ?? 0) > 150 ? '#e8a040' : '#8fae78') : conn === 'offline' ? '#9a9080' : '#ff6a5a');
     // touch interact button only when a weapon can be swapped
     if (this.interactBtn) {
@@ -878,7 +901,7 @@ export class HudScene extends Phaser.Scene {
       this.interactBtn.ring.setVisible(v);
       this.interactBtn.icon.setVisible(v);
     }
-    if (this.scoreboardVisible) this.drawScoreboard(sorted);
+    if (this.scoreboardVisible) this.drawScoreboard(sorted, teams ? hud.teamScore : null);
     if (this.fpsText) this.fpsText.setText(`${Math.round(this.game.loop.actualFps)} fps`);
     void delta;
   }
@@ -946,70 +969,107 @@ export class HudScene extends Phaser.Scene {
   private centre(hud: ReturnType<GameSession['hud']>, me: RenderPlayer | undefined, time: number) {
     let big = '';
     let sub = '';
-    if (hud.phase === 'ready') big = 'GET READY';
+    let color = BEIGE;
+    const teams = hud.gameMode === 'teams';
+    const teamName = (team: 0 | 1) => (team === 0 ? t('RED') : t('BLUE'));
+    if (hud.phase === 'ready') big = t('GET READY');
     else if (hud.phase === 'countdown') {
       big = String(Math.max(1, Math.ceil(hud.phaseRemainingMs / 1000)));
-      sub = 'District business is serious business';
-    } else if (hud.phase === 'active' && time < this.goUntil) big = 'FORWARD!';
+      sub = teams && hud.myTeam !== null ? t('You play for the {team} team', { team: teamName(hud.myTeam) }) : t('District business is serious business');
+      if (teams && hud.myTeam !== null) color = TEAM_TEXT[hud.myTeam];
+    } else if (hud.phase === 'active' && time < this.goUntil) big = t('FORWARD!');
     else if (hud.phase === 'finished') {
-      big = 'MATCH OVER';
+      big = t('MATCH OVER');
+      if (teams) {
+        const [r, b] = hud.teamScore;
+        sub = r === b ? t('Draw: {r} — {b}', { r, b }) : t('{team} team wins {r} — {b}', { team: teamName(r > b ? 0 : 1), r, b });
+      }
     } else if (me && !me.alive && hud.phase === 'active') {
-      big = 'ELIMINATED';
-      sub = `${hud.killedBy ? `Dropped by ${hud.killedBy} · ` : ''}back in ${(hud.respawnInMs / 1000).toFixed(1)} s`;
+      big = t('ELIMINATED');
+      color = '#ff5a4a';
+      const back = t('back in {s} s', { s: (hud.respawnInMs / 1000).toFixed(1) });
+      sub = hud.killedBy ? `${t('Dropped by {name}', { name: hud.killedBy })} · ${back}` : back;
     }
     if (hud.connection === 'reconnecting') {
-      big = 'CONNECTION LOST';
-      sub = 'Reconnecting…';
+      big = t('CONNECTION LOST');
+      sub = t('Reconnecting…');
+      color = '#ff5a4a';
     }
     this.bigText.setText(big).setFontSize(big.length > 3 ? (this.touch ? 34 : 44) : 72);
-    this.bigText.setColor(big === 'ELIMINATED' || big === 'CONNECTION LOST' ? '#ff5a4a' : BEIGE);
+    this.bigText.setColor(color);
     this.subText.setText(sub);
     let prompt = '';
-    if (hud.alive && hud.pickupPrompt) prompt = this.touch ? `Take: ${WEAPONS[hud.pickupPrompt].name}` : `[E] — pick up the ${WEAPONS[hud.pickupPrompt].name}`;
+    if (hud.alive && hud.pickupPrompt) prompt = this.touch ? t('Take: {name}', { name: weaponName(hud.pickupPrompt) }) : t('[E] — pick up the {name}', { name: weaponName(hud.pickupPrompt) });
     // a placed C4 waits for the second press
-    else if (hud.alive && hud.c4Armed) prompt = this.touch ? 'Equipment button — detonate the C4' : '[G] — detonate the C4';
+    else if (hud.alive && hud.c4Armed) prompt = this.touch ? t('Equipment button — detonate the C4') : t('[G] — detonate the C4');
     this.promptText.setText(prompt);
   }
 
-  /** Tab table: rebuilt only when its content or the screen width changes. */
-  private drawScoreboard(sorted: RenderPlayer[]) {
+  /**
+   * Tab table: rebuilt only when its content or the screen width changes. Team matches: a red and a
+   * blue section with the team's eliminations in the header.
+   */
+  private drawScoreboard(sorted: RenderPlayer[], teamScore: [number, number] | null) {
     const W = this.scale.width;
-    const sig = `${W}|${sorted.map((p) => `${p.slot}:${p.name}:${p.level}:${p.kills}:${p.assists}:${p.deaths}:${p.score}:${p.isBot}`).join('|')}`;
+    const H = this.scale.height;
+    const sig = `${W}|${H}|${getLang()}|${teamScore?.join(':') ?? ''}|${sorted.map((p) => `${p.slot}:${p.name}:${p.level}:${p.kills}:${p.assists}:${p.deaths}:${p.score}:${p.isBot}:${p.team}`).join('|')}`;
     if (sig === this.sbSig) return;
     this.sbSig = sig;
     this.scoreboard.removeAll(true);
+    type Row = { kind: 'team'; team: 0 | 1; score: number } | { kind: 'player'; p: RenderPlayer; rank: number };
+    const rows: Row[] = [];
+    if (teamScore) {
+      for (const team of [0, 1] as const) {
+        rows.push({ kind: 'team', team, score: teamScore[team] });
+        sorted.filter((p) => p.team === team).forEach((p, i) => rows.push({ kind: 'player', p, rank: i + 1 }));
+      }
+    } else sorted.forEach((p, i) => rows.push({ kind: 'player', p, rank: i + 1 }));
     const w = Math.min(560, W - 24);
     const step = w < 470 ? 38 : 50;
-    const h = 66 + sorted.length * 28;
+    // ten players + two team headers must fit on a phone held sideways
+    const rowH = Math.max(20, Math.min(28, Math.floor((H - 80 - 86) / Math.max(1, rows.length))));
+    const font = rowH < 24 ? 13 : 15;
+    const h = 66 + rows.length * rowH;
     const x = (W - w) / 2;
-    const y = 80;
+    const y = Math.max(8, Math.min(80, H - h - 8));
     const g = this.add.graphics();
     this.panel(g, x, y, w, h, 0.92);
     this.scoreboard.add(g);
     const cols: Array<[string, (p: RenderPlayer) => string]> = [
-      ['LVL', (p) => (p.level === null ? '—' : String(p.level))],
-      ['ELIM', (p) => String(p.kills)],
-      ['AST', (p) => String(p.assists)],
-      ['DTH', (p) => String(p.deaths)],
-      ['PTS', (p) => String(p.score)],
+      [t('LVL'), (p) => (p.level === null ? '—' : String(p.level))],
+      [t('ELIM'), (p) => String(p.kills)],
+      [t('AST'), (p) => String(p.assists)],
+      [t('DTH'), (p) => String(p.deaths)],
+      [t('PTS'), (p) => String(p.score)],
     ];
     const colX = (i: number) => x + w - 14 - step / 2 - (cols.length - 1 - i) * step;
-    this.scoreboard.add(txt(this, x + 16, y + 12, 'PLAYER', 12, '#b8a888', '600'));
+    this.scoreboard.add(txt(this, x + 16, y + 12, t('PLAYER'), 12, '#b8a888', '600'));
     cols.forEach(([label], i) => this.scoreboard.add(txt(this, colX(i), y + 12, label, 11, i === cols.length - 1 ? BEIGE : '#b8a888', '600').setOrigin(0.5, 0)));
     const nameRoom = colX(0) - step / 2 - (x + 46) - 6;
-    sorted.forEach((p, i) => {
-      const ry = y + 40 + i * 28;
-      if (p.isLocal) g.fillStyle(0x8a1a16, 0.35).fillRect(x + 8, ry - 3, w - 16, 28);
-      const portrait = this.add.image(x + 16, ry, `portrait_small_${p.character}`).setOrigin(0, 0).setDisplaySize(22, 22);
-      const n = fitText(txt(this, x + 46, ry + 1, '', 15, p.isLocal ? RED : BEIGE, '500'), `${i + 1}. ${p.name}${p.isBot ? ' · bot' : ''}`, nameRoom);
+    rows.forEach((row, i) => {
+      const ry = y + 40 + i * rowH;
+      if (row.kind === 'team') {
+        g.fillStyle(TEAM_FILL[row.team], 0.28).fillRect(x + 8, ry - 3, w - 16, rowH);
+        g.fillStyle(TEAM_FILL[row.team], 1).fillRect(x + 8, ry - 3, 3, rowH);
+        this.scoreboard.add(txt(this, x + 18, ry + 1, row.team === 0 ? t('RED TEAM') : t('BLUE TEAM'), font, TEAM_TEXT[row.team], '700'));
+        this.scoreboard.add(txt(this, colX(cols.length - 1), ry + 1, String(row.score), font, TEAM_TEXT[row.team], '700').setOrigin(0.5, 0));
+        this.scoreboard.add(txt(this, colX(cols.length - 2) + step / 2, ry + 3, t('eliminations'), 10, '#b8a888', '500').setOrigin(1, 0));
+        return;
+      }
+      const p = row.p;
+      if (p.isLocal) g.fillStyle(0x8a1a16, 0.35).fillRect(x + 8, ry - 3, w - 16, rowH);
+      const size = Math.min(22, rowH - 4);
+      const portrait = this.add.image(x + 16, ry, `portrait_small_${p.character}`).setOrigin(0, 0).setDisplaySize(size, size);
+      const nameColor = p.team === 0 || p.team === 1 ? TEAM_TEXT[p.team] : p.isLocal ? RED : BEIGE;
+      const n = fitText(txt(this, x + 46, ry + 1, '', font, nameColor, p.isLocal ? '700' : '500'), `${row.rank}. ${p.name}${p.isBot ? ` · ${t('bot')}` : ''}`, nameRoom);
       this.scoreboard.add([portrait, n]);
       cols.forEach(([, get], c) => {
         const last = c === cols.length - 1;
         const color = c === 0 ? '#ffd36a' : last ? BEIGE : '#d9cdb2';
-        this.scoreboard.add(txt(this, colX(c), ry + 1, get(p), 15, color, last ? '700' : '500').setOrigin(0.5, 0));
+        this.scoreboard.add(txt(this, colX(c), ry + 1, get(p), font, color, last ? '700' : '500').setOrigin(0.5, 0));
       });
     });
-    const rule = `Elimination +${SCORING.killPoints} · assist +${SCORING.assistPoints} (${SCORING.assistMinDamage}+ damage within ${SCORING.assistWindowMs / 1000} s before the elimination)`;
+    const rule = t('Elimination +{k} · assist +{a} ({d}+ damage within {s} s before the elimination)', { k: SCORING.killPoints, a: SCORING.assistPoints, d: SCORING.assistMinDamage, s: SCORING.assistWindowMs / 1000 });
     this.scoreboard.add(fitText(txt(this, W / 2, y + h - 20, '', 11, '#9a9080', '400').setOrigin(0.5, 0), rule, w - 24));
   }
 }
