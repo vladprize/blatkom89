@@ -286,6 +286,8 @@ export interface AdminCharts {
   sessionDuration: Array<{ bucket: string; count: number }>;
   matchDuration: Array<{ bucket: string; count: number }>;
   maps: Array<{ key: string; count: number }>;
+  /** Matches per game mode (ffa, teams, ctf, bases). */
+  modes: Array<{ key: string; count: number }>;
   characters: Array<{ key: string; count: number }>;
   platforms: Array<{ key: string; count: number }>;
 }

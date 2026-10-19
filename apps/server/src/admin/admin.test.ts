@@ -234,6 +234,7 @@ describe('metrics (deterministic clock)', () => {
     assert.deepEqual(c.retention[0], { day: '2026-03-01', cohort: 4, d1: 0.5, d7: 0.5 });
     assert.equal(c.retention[1]!.d1, null, 'empty cohort day → null');
     assert.deepEqual(c.maps, [{ key: 'factory', count: 1 }]);
+    assert.deepEqual(c.modes, [{ key: 'ffa', count: 1 }]);
     assert.deepEqual(c.characters.map((x) => x.key).sort(), ['petya', 'valuta']);
     assert.equal(c.sessionDuration.find((b) => b.bucket === '1–3 мин')!.count, 1);
     assert.equal(c.sessionDuration.find((b) => b.bucket === '3–5 мин')!.count, 1);
@@ -243,6 +244,7 @@ describe('metrics (deterministic clock)', () => {
     assert.deepEqual(emptyCharts.registrations.map((x) => x.count), [0, 0]);
     assert.ok(emptyCharts.retention.every((r) => r.d1 === null && r.d7 === null));
     assert.deepEqual(emptyCharts.maps, []);
+    assert.deepEqual(emptyCharts.modes, []);
   });
 
   test('errors are grouped by fingerprint; player list works without filters', async () => {

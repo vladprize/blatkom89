@@ -2,13 +2,16 @@
 import type { AdminCharts, AdminOverview } from '@blatkom/shared';
 import { h, clear } from '../dom.js';
 import { apiFetch, rangeQuery } from '../api.js';
-import { num, pct, duration, shortDay, MAP_NAMES, CHARACTER_NAMES, PLATFORM_NAMES, dateTime } from '../format.js';
+import { num, pct, duration, shortDay, MAP_NAMES, MODE_NAMES, CHARACTER_NAMES, PLATFORM_NAMES, dateTime } from '../format.js';
 import { lineChart, barChart, hBarChart, COLORS } from '../charts.js';
 import { rangePicker, getRange } from './range.js';
 
 interface RoomInfo {
   id: string;
+  mapId: string;
+  /** The server's (English) map name, shown only for maps this panel doesn't know yet. */
   mapName: string;
+  mode?: string;
   phase: string;
   players: number;
   maxPlayers: number;
@@ -91,6 +94,7 @@ export async function renderOverview(root: HTMLElement): Promise<void> {
       card('Длительность сессий', barChart(c.sessionDuration.map((b) => b.bucket), c.sessionDuration.map((b) => b.count), { ariaLabel: 'Распределение длительности сессий', color: COLORS.violet })),
       card('Длительность матчей', barChart(c.matchDuration.map((b) => b.bucket), c.matchDuration.map((b) => b.count), { ariaLabel: 'Распределение длительности матчей', color: COLORS.amber })),
       card('Популярность карт', hBarChart(c.maps.map((m) => ({ label: MAP_NAMES[m.key] ?? m.key, value: m.count })), { ariaLabel: 'Матчи по картам', color: COLORS.red })),
+      card('Режимы', hBarChart((c.modes ?? []).map((m) => ({ label: MODE_NAMES[m.key] ?? m.key, value: m.count })), { ariaLabel: 'Матчи по режимам', color: COLORS.amber })),
       card('Популярность персонажей', hBarChart(c.characters.map((m) => ({ label: CHARACTER_NAMES[m.key] ?? m.key, value: m.count })), { ariaLabel: 'Участия по персонажам', color: COLORS.green })),
       card('Платформы', hBarChart(c.platforms.map((m) => ({ label: PLATFORM_NAMES[m.key] ?? m.key, value: m.count })), { ariaLabel: 'Игроки по платформам', color: COLORS.blue }), 'По данным клиента при входе (без криптографической проверки).'),
     ),
@@ -99,11 +103,11 @@ export async function renderOverview(root: HTMLElement): Promise<void> {
     ? h(
         'table',
         { class: 'table' },
-        h('thead', {}, h('tr', {}, ...['Комната', 'Карта', 'Фаза', 'Игроки', 'Тип', 'Создана'].map((t) => h('th', {}, t)))),
+        h('thead', {}, h('tr', {}, ...['Комната', 'Карта', 'Режим', 'Фаза', 'Игроки', 'Тип', 'Создана'].map((t) => h('th', {}, t)))),
         h(
           'tbody',
           {},
-          ...rooms.map((r) => h('tr', {}, h('td', { class: 'mono' }, r.id), h('td', {}, r.mapName), h('td', {}, PHASES[r.phase] ?? r.phase), h('td', {}, `${r.players}/${r.maxPlayers}`), h('td', {}, r.isPrivate ? 'приватная' : 'публичная'), h('td', {}, dateTime(r.createdAt)))),
+          ...rooms.map((r) => h('tr', {}, h('td', { class: 'mono' }, r.id), h('td', {}, MAP_NAMES[r.mapId] ?? r.mapName), h('td', {}, r.mode ? (MODE_NAMES[r.mode] ?? r.mode) : '—'), h('td', {}, PHASES[r.phase] ?? r.phase), h('td', {}, `${r.players}/${r.maxPlayers}`), h('td', {}, r.isPrivate ? 'приватная' : 'публичная'), h('td', {}, dateTime(r.createdAt)))),
         ),
       )
     : h('div', { class: 'chart-empty' }, 'Сейчас нет активных комнат');

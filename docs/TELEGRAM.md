@@ -30,9 +30,14 @@ enables the development login (never in production).
 * Safe areas: `safeAreaInset` + `contentSafeAreaInset` (Bot API 8.0 fullscreen) are applied as CSS
   variables; menus and HUD keep clear of notches and Telegram controls.
 * Haptic feedback on hits, kills and pickups; native confirmation dialog for account deletion.
-* Invitations: «Call the lads» opens Telegram's share sheet (`t.me/share/url`) with the invite link.
-  When a friend opens the link, Telegram passes the code as `start_param`; the game resolves it
-  (`GET /api/invites/:code` → joinable / full / in progress / finished / expired / not found) and joins.
+* Invitations: «Call the lads» («Позвать своих») opens Telegram's share sheet (`t.me/share/url`) with
+  the invite link and a text in the player's language. When a friend opens the link, Telegram passes
+  the code as `start_param`; the game resolves it (`GET /api/invites/:code` → joinable / full / in
+  progress / finished / expired / not found) and joins.
+* Language (`apps/web/src/i18n`): the player's saved EN/RU choice (menu or Settings); otherwise the
+  Telegram user's `language_code` — Russian for `ru`, `be`, `kk`, `ky`, English for `en` — then the
+  browser languages, otherwise English. Server refusals arrive as codes or English text and are shown
+  in the player's language.
 * Platform (`ios`, `android`, `tdesktop`, `weba`/`webk`, …) is reported at login for the dashboard's
   platform chart (informational only).
 
@@ -66,6 +71,9 @@ disabled in production).
 - [ ] `NODE_ENV=production`, `DEV_AUTH_ENABLED=false`, real `SESSION_SECRET`, `TELEGRAM_BOT_TOKEN` set.
 - [ ] BotFather Mini App URL points to the domain; the bot's «Open» button opens the menu.
 - [ ] Two phones: create a room, «Call the lads», join from the shared link, play a match.
+- [ ] A Telegram account with Russian as the app language opens the game in Russian, an English one in
+      English; the EN/RU switch works and is remembered after closing and reopening the Mini App.
+- [ ] A team match (red vs blue, capture the flag or base capture) with players on both phones.
 - [ ] The Arsenal's Diamonds tab inside Telegram says purchases come later via Telegram Stars (card/crypto are web-only; the server refuses them for Telegram sessions).
 - [ ] `/admin` shows the two players and the match.
 

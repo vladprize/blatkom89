@@ -168,6 +168,8 @@ export async function charts(sql: Sql, r: AdminRange, now = new Date()): Promise
     ) b GROUP BY bucket`;
   const maps = await sql<Array<{ key: string; count: number }>>`
     SELECT map_id AS key, count(*)::int AS count FROM matches WHERE started_at BETWEEN ${from} AND ${to} GROUP BY map_id ORDER BY count DESC`;
+  const modes = await sql<Array<{ key: string; count: number }>>`
+    SELECT mode AS key, count(*)::int AS count FROM matches WHERE started_at BETWEEN ${from} AND ${to} GROUP BY mode ORDER BY count DESC`;
   const characters = await sql<Array<{ key: string; count: number }>>`
     SELECT mp.character AS key, count(*)::int AS count
     FROM match_participants mp JOIN matches m ON m.id = mp.match_id
@@ -189,6 +191,7 @@ export async function charts(sql: Sql, r: AdminRange, now = new Date()): Promise
     sessionDuration: fillBuckets(SESSION_BUCKETS, [...sessionDuration]),
     matchDuration: fillBuckets(MATCH_BUCKETS, [...matchDuration]),
     maps: [...maps],
+    modes: [...modes],
     characters: [...characters],
     platforms: [...platforms],
   };

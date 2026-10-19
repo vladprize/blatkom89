@@ -7,11 +7,17 @@ import { sfx } from './game/audio/Sfx.js';
 import { getSettings } from './app/settings.js';
 import { loadFonts } from './app/fonts.js';
 import { music } from './game/audio/Music.js';
-import { getLang, t } from './i18n/index.js';
+import { getLang, onLangChange, t } from './i18n/index.js';
 
+/** Page language and the tab title follow the game language (Cyrillic name in Russian). */
+function applyLang() {
+  document.documentElement.lang = getLang();
+  document.title = getLang() === 'ru' ? 'БЛАТКОМ ’89' : 'BLATKOM ’89';
+}
 
 async function main() {
-  document.documentElement.lang = getLang();
+  applyLang();
+  onLangChange(applyLang);
   const hint = document.querySelector('.boot__hint');
   if (hint) hint.textContent = t('Rewinding the tape…');
   const app = new App();

@@ -26,7 +26,7 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 ```
 
 * **Single process, single port.** The same server serves `index.html` + assets, `/admin`, `/api/*` and
-  upgrades `/ws`. Horizontal scaling is not needed for the MVP (one process hosts hundreds of 2–6 player
+  upgrades `/ws`. Horizontal scaling is not needed for the MVP (one process hosts hundreds of 2–10 player
   rooms; rooms are independent). Scaling later = several processes behind a sticky router keyed by room id.
 * **Server authority.** Clients send only inputs (movement axes, aim angle, buttons, weapon slot, the
   timeline they were viewing). The room runs the shared `World` and decides movement, hits, damage,
@@ -42,10 +42,10 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 | Module | Contents |
 |---|---|
 | `constants/game.ts` | tick rate (60 Hz), snapshot rate (30 Hz), speeds, rewind window, quantisation scales, input limits |
-| `game-rules/` | characters (14, identical stats), weapons (32: base, Arsenal, rare; modifications), equipment (7 gadgets), loadouts, economy (prices, talons per match, cases, diamond packs), match config & phases, scoring (elimination +2, assist +1), XP/levels/achievements and `applyMatchProgress` — the one progression rule set used by the server recorder and by the demo's browser-only profile |
-| `maps/` | map format (`types.ts`), prop registry (footprints, collision, render layer), `MapBuilder`, the seven maps, collision world (grid + rects + circles, ray casts, swept movement) |
-| `sim/world.ts` | deterministic match simulation: movement with sliding, weapons (fire rate, spread, reload, ammo, pickups, modifications), rockets with splash, equipment (grenades, smoke, fire, mines, C4, turrets), medkits, «deficit goods» supply drops, lag-compensated hitscan, melee, damage with per-attacker damage log (assists), respawn, spawn selection, scoring, phase machine |
-| `sim/bots.ts`, `sim/nav.ts` | offline bot AI (grid A*, line-of-sight aiming, difficulty levels) |
+| `game-rules/` | characters (14, identical stats), weapons (32: base, Arsenal, rare; modifications), equipment (7 gadgets), loadouts, economy (prices, talons per match by eliminations and assists, cases, diamond packs), match config & phases, game modes (`ffa`, `teams`, `ctf`, `bases`; `CTF_RULES`, `BASE_RULES`, limits), scoring (elimination +2, assist +1, objective points), XP/levels/achievements and `applyMatchProgress` — the one progression rule set used by the server recorder and by the demo's browser-only profile |
+| `maps/` | map format (`types.ts`: spawns, pickups, medkits, supply points, flag stands, bases), prop registry (footprints, collision, render layer), `MapBuilder`, the seven maps, collision world (grid + rects + circles, ray casts, swept movement) |
+| `sim/world.ts` | deterministic match simulation: movement with sliding, weapons (fire rate, spread, reload, ammo, pickups, modifications), rockets with splash, equipment (grenades, smoke, fire, mines, C4, turrets), medkits, «deficit goods» supply drops, lag-compensated hitscan, melee, damage with per-attacker damage log (assists), teams (balancing, no friendly fire, team score), flags and bases, respawn, spawn selection (team halves), scoring, phase machine |
+| `sim/bots.ts`, `sim/nav.ts` | offline bot AI (grid A*, line-of-sight aiming, difficulty levels; team-aware; in objective modes raiders, flag guards, flag returns, escorts and base takers) |
 | `net/codec.ts`, `net/protocol.ts` | binary input/snapshot codec with bounds checks; zod-validated JSON control messages; close codes |
 | `events/analytics.ts`, `schemas/api.ts` | analytics event schemas, HTTP request/response schemas and types |
 
@@ -67,20 +67,22 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 ### apps/web
 | Module | Responsibility |
 |---|---|
-| `app/App.ts` | screens: menu (profile strip: level, nickname, XP), character select, practice setup, friends (create/join), lobby, game, results, profile, settings, errors; first-launch nickname dialog |
+| `app/App.ts` | screens: menu (play column; character card, «Dossier» profile tile and the Arsenal tile; language and music switches), character select with the personal file, practice setup (map tiles, mode, 1–9 bots), Quick Match mode chooser, friends (create/join), lobby (team columns in team modes), game, results, profile, settings, credits, errors; first-launch nickname dialog |
+| `i18n/` | English (source strings) and Russian (`ru.ts`, `ru-content.ts` for characters, weapons, maps…): `t()`, Russian plurals, language detection (Telegram → browser → English), switching at run time |
+| `ui/` | DOM helpers, screens (Arsenal with the dressing room, lobby, results, settings, account, profile), map pickers with thumbnails, mode switch and pictograms, the in-game «doll» preview |
 | `profile/` | nickname dialog and suggestions; the demo build's browser-only profile (`localProfile.ts` pure rules + `localStore.ts` localStorage) — the online build always uses the server profile |
 | `net/` | REST client, `GameConnection` (WS, reconnect with backoff, ping), `OnlineClient` (auth, rooms, lobby state) |
 | `game/session/` | `OfflineSession` (local World + bots), `OnlineSession` (prediction, reconciliation, interpolation, delayed remote events) — both expose the same `GameSession` interface to the scenes |
 | `game/scenes/` | `BootScene` (loading), `GameScene` (fixed-step loop, camera, events → feedback), `HudScene` (HUD, touch controls, scoreboard), `PreviewScene` (animated map behind menus) |
-| `game/render/` | map renderer (tiles, decals, litter, props, walls, overhead layer, culling), lighting (light map, fixtures), effects, character views, VHS post-process |
+| `game/render/` | map renderer (tiles, decals, litter, props, walls, overhead layer, culling), lighting (light map, fixtures, objective light pools), effects, character views (team rings and name colours), equipment, flags and bases (`ObjectiveView`), VHS post-process |
 | `game/input/` | keyboard/mouse input and twin-stick touch controls (move stick, aim stick, fire/reload/swap buttons, left-handed mode) |
-| `game/audio/Sfx.ts` | WebAudio-synthesised sound effects with distance attenuation (no audio files) |
+| `game/audio/` | `Sfx.ts` — WebAudio-synthesised sound effects with distance attenuation; `Music.ts` — the menu soundtrack (streamed MP3 through the same audio context, fades out in matches) |
 | `telegram/tg.ts` | Mini Apps SDK wrapper: init, safe areas, back button, haptics, sharing, confirm dialogs |
 | `analytics/client.ts` | batched client events with UUIDs, flushed with `keepalive` when the app is hidden |
 | `admin/` | the `/admin` dashboard (separate entry, never loaded by players) |
 
 ## 3. Data model (PostgreSQL)
-Migrations: `apps/server/src/database/migrations/` (`001_init.sql`, `002_fk_retention_indexes.sql`).
+Migrations: `apps/server/src/database/migrations/` (`001_init.sql` … `006_team_matches.sql`: assists, guest auth, economy and email, team modes — `matches.mode` (`ffa`/`teams`/`ctf`/`bases`), `matches.winner_team`, `match_participants.team`).
 
 `users` (internal UUID, Telegram id unique, display name, language) · `profiles` (level, XP, matches,
 wins, losses, kills, deaths, playtime, streaks, preferred character) · `sessions` (token hash, expiry,

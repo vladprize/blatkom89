@@ -1,7 +1,8 @@
 // Single-file demo E2E (no server): first-launch nickname dialog → practice match with the new
 // scoring (an assist and a kill are staged through the real World API), a «deficit goods» supply drop,
-// the Tab table → results with XP from the browser-only profile → menu strip and profile screen →
-// reload keeps the profile.
+// the Tab table → results with XP from the browser-only profile → menu profile tile and profile screen →
+// capture the flag and base capture practice (flags, bases, HUD strip, objective events, team results) →
+// the Arsenal dressing room → Russian language → reload keeps the profile.
 //
 // Usage: node tests/e2e/demo.mjs <path-to-blatkom89-demo.html> <outDir>
 import { chromium } from 'playwright';
@@ -41,8 +42,9 @@ try {
   await page.screenshot({ path: `${outDir}/demo_nickname.png` });
   await page.getByRole('button', { name: 'Done' }).click();
   await page.getByTestId('menu-nick').filter({ hasText: NICK }).waitFor({ timeout: 10000 });
-  const badge0 = (await page.locator('.pstrip .lvlbadge').innerText()).replace(/\s+/g, ' ');
-  check(/1$/.test(badge0), `menu strip shows the nickname and level 1 (${badge0})`);
+  const badge0 = (await page.locator('[data-testid="profile-strip"] .lvlbadge').innerText()).replace(/\s+/g, ' ');
+  check(/1$/.test(badge0), `menu profile tile shows the nickname and level 1 (${badge0})`);
+  check((await page.getByTestId('arsenal-tile').count()) === 1, 'menu has the Arsenal tile');
   await page.screenshot({ path: `${outDir}/demo_menu.png` });
 
   // ── practice match ──────────────────────────────────────────────────────
@@ -108,13 +110,78 @@ try {
   // ── menu strip, profile, persistence ────────────────────────────────────
   await page.getByRole('button', { name: 'To menu' }).click();
   await page.getByTestId('menu-nick').waitFor({ timeout: 10000 });
-  const xpLine = await page.locator('.pstrip .xp').innerText();
-  check(!/^0 \//.test(xpLine), `menu strip XP updated (${xpLine})`);
-  await page.locator('.pstrip__main').click();
+  const xpLine = await page.locator('[data-testid="profile-strip"] .xp').innerText();
+  check(!/^0 \//.test(xpLine), `menu profile tile XP updated (${xpLine})`);
+  await page.locator('[data-testid="profile-strip"] .tile__body').click();
   await page.getByTestId('profile-name').waitFor({ timeout: 10000 });
   const stats = await page.locator('.stats').innerText();
   check(/1\s*matches/i.test(stats.replace(/\n/g, ' ')) && /assists/i.test(stats), 'profile screen: 1 match played, assists stat present');
   await page.screenshot({ path: `${outDir}/demo_profile.png`, fullPage: true });
+
+  // ── capture the flag: practice with bots, a staged steal and capture ────
+  await page.evaluate(() => window.__blatkom.app.goMenu());
+  await page.getByRole('button', { name: /Practice/ }).click();
+  await page.locator('.modebtn[data-mode="ctf"]').click();
+  check((await page.locator('.modebtn').count()) === 4, 'practice offers four modes');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await page.waitForFunction(() => window.__blatkom?.game?.scene.getScene('game')?.session?.phase?.() === 'active', null, { timeout: 60000 });
+  const ctf = await page.evaluate(async () => {
+    const s = window.__blatkom.game.scene.getScene('game').session;
+    const w = s.world;
+    const me = w.players.get('local');
+    const enemy = w.flags.find((f) => f.team !== me.team);
+    const own = w.flags.find((f) => f.team === me.team);
+    const before = { mode: s.gameMode, flags: w.flags.length, team: me.team };
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    Object.assign(me, { x: enemy.standX, y: enemy.standY, invulnUntil: w.time + 60000 });
+    await wait(300);
+    const carried = enemy.carrierId === 'local';
+    Object.assign(me, { x: own.standX, y: own.standY });
+    await wait(300);
+    return { ...before, carried, captured: w.teamScore[me.team], strip: window.__blatkom.game.scene.getScene('hud').objTexts.map((x) => x.text) };
+  });
+  check(ctf.mode === 'ctf' && ctf.flags === 2 && ctf.team === 0, `capture the flag: two flags, the player is red (${JSON.stringify(ctf)})`);
+  check(ctf.carried && ctf.captured === 1, 'the enemy flag is taken from its stand and captured at our own');
+  check(ctf.strip.length === 2, `the HUD strip shows both flags (${ctf.strip.join(' / ')})`);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${outDir}/demo_ctf.png` });
+  await page.evaluate(() => window.__blatkom.game.scene.getScene('game').session.world.finish('score'));
+  await page.getByText('Match report').waitFor({ timeout: 20000 });
+  const ctfHead = await page.locator('table.table thead').innerText();
+  check(/Flags/i.test(ctfHead) && (await page.locator('.teamwin').count()) === 1, 'capture the flag results: team banner and a Flags column');
+
+  // ── base capture ────────────────────────────────────────────────────────
+  await page.evaluate(() => window.__blatkom.app.startPractice({ mapId: 'yard', bots: 3, difficulty: 'easy', gameMode: 'bases' }));
+  await page.waitForFunction(() => window.__blatkom?.game?.scene.getScene('game')?.session?.phase?.() === 'active', null, { timeout: 60000 });
+  const bases = await page.evaluate(async () => {
+    const w = window.__blatkom.game.scene.getScene('game').session.world;
+    const me = w.players.get('local');
+    const b = w.bases[1];
+    for (const p of w.players.values()) if (p.id !== 'local') Object.assign(p, { x: 60, y: 60 });
+    window.__blatkom.game.scene.getScene('game').session.brains.length = 0;
+    Object.assign(me, { x: b.x, y: b.y, invulnUntil: w.time + 60000 });
+    await new Promise((r) => setTimeout(r, 7500));
+    return { n: w.bases.length, owner: b.owner, team: me.team, score: w.teamScore[me.team] };
+  });
+  check(bases.n === 3 && bases.owner === bases.team && bases.score >= 1, `base capture: base B taken in ~6 s and scoring (${JSON.stringify(bases)})`);
+  await page.screenshot({ path: `${outDir}/demo_bases.png` });
+
+  // ── Arsenal dressing room ───────────────────────────────────────────────
+  await page.evaluate(() => window.__blatkom.app.goMenu());
+  await page.getByTestId('arsenal-tile').click();
+  await page.getByTestId('dressing-room').waitFor({ timeout: 10000 });
+  const heroOk = await page.locator('[data-testid="dressing-room"] img').first().evaluate((img) => img.complete && img.naturalWidth > 0);
+  check(heroOk, 'the Arsenal dressing room shows the character art');
+  await page.screenshot({ path: `${outDir}/demo_arsenal.png` });
+
+  // ── Russian ─────────────────────────────────────────────────────────────
+  await page.evaluate(() => window.__blatkom.app.goMenu());
+  await page.locator('.corner button[lang="ru"]').click();
+  await page.getByRole('button', { name: /Тренировка/ }).waitFor({ timeout: 10000 });
+  check(await page.evaluate(() => document.documentElement.lang === 'ru' && localStorage.getItem('blatkom89.lang.v1') === 'ru'), 'the menu switches to Russian and remembers it');
+  await page.screenshot({ path: `${outDir}/demo_menu_ru.png` });
+  await page.locator('.corner button[lang="en"]').click();
+  await page.getByRole('button', { name: /Practice/ }).waitFor({ timeout: 10000 });
   await page.reload();
   await page.getByTestId('menu-nick').filter({ hasText: NICK }).waitFor({ timeout: 60000 });
   const dialogAgain = await page.getByRole('textbox', { name: 'Alias' }).count();

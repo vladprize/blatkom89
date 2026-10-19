@@ -115,7 +115,8 @@ Let the selected range be `[from, to]` (timestamps) with UTC days `firstDay … 
 
 Charts: registrations per day; DAU per day; matches started vs completed per day; D1/D7 per
 registration cohort day; session-duration and match-duration histograms; map popularity (matches
-started per `map_id`); character popularity (participations per character in matches started in
+started per `map_id`); game modes (matches started per `matches.mode`: free-for-all, red vs blue,
+capture the flag, base capture); character popularity (participations per character in matches started in
 range); platforms (distinct users per `sessions.platform` for sessions created in range).
 
 **Platform caveat:** `platform` is reported by the client at login (derived from

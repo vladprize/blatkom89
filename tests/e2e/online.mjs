@@ -236,9 +236,21 @@ if (adminUser && adminPass) {
   await page.locator('input[name=username]').fill(adminUser);
   await page.locator('input[name=password]').fill(adminPass);
   await page.getByRole('button', { name: 'Войти' }).click();
-  await page.waitForTimeout(3500);
+  // the dashboard shows the «Обзор» page with the game-mode chart once the login is accepted
+  report.adminLoggedIn = await page
+    .getByText('Режимы', { exact: true })
+    .waitFor({ timeout: 15000 })
+    .then(() => true)
+    .catch(() => false);
+  await page.waitForTimeout(1500);
   await page.screenshot({ path: `${outDir}/admin_overview.png`, fullPage: true });
-  step('admin logged in; overview captured');
+  step(report.adminLoggedIn ? 'admin logged in; overview (with the game-mode chart) captured' : 'admin login FAILED (an admin with another password may already exist in this database)');
+  // live rooms (this match's room is still open on the results screen): map and mode in Russian
+  const roomTables = page.locator('table.table');
+  const roomsText = (await roomTables.count()) ? await roomTables.last().innerText() : '';
+  report.adminRooms = roomsText ? roomsText.replace(/\s+/g, ' ').slice(0, 160) : null;
+  report.adminRoomsRussian = !roomsText || (/Заводская проходная/.test(roomsText) && /Каждый сам за себя/.test(roomsText) && !/Factory Checkpoint/.test(roomsText));
+  step(`admin live rooms: ${report.adminRooms ?? 'none open'}`);
   await page.goto(base + '/admin#/players');
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `${outDir}/admin_players.png`, fullPage: true });
@@ -260,5 +272,6 @@ const ok =
   report.equipment?.seenOnB === true &&
   report.equipment?.explodedOnB === true &&
   report.equipment?.chargesAfter === report.equipment?.chargesBefore - 1 &&
-  deviations.length > 0;
+  deviations.length > 0 &&
+  (!adminUser || (report.adminLoggedIn === true && report.adminRoomsRussian === true));
 process.exit(ok ? 0 : 1);

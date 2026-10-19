@@ -35,6 +35,7 @@ Permanent Marker — Apache License 2.0 (assets/fonts/permanentmarker-LICENSE.tx
 
 Menu music (assets/audio/theme.mp3; not in the single-file offline demo)
 ---------------------------------------------------------------------------
-«Hurt» — Infraction & Emerel Gray (Brazilian Phonk Sport), published by the authors as
-"No Copyright Music". Credited here and on the game's Credits screen; re-encoded to 96 kbit/s.
-The authors' licence terms for use in games must be confirmed by the operator (see docs/DEPLOYMENT.md).
+«Hurt» — Infraction & Emerel Gray (Brazilian Phonk Sport). Supplied by the product owner as the
+game's soundtrack in a file labelled "No Copyright Music". Credited here and on the game's Credits
+screen; re-encoded to 96 kbit/s. The rights holders' terms for use in a game (and the attribution they
+require) must be confirmed by the operator before public release (see docs/DEPLOYMENT.md).

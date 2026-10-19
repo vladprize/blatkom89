@@ -83,10 +83,47 @@ deterministic noise.
 Character sheets are rendered with the torso and legs as separate layers: legs rotate with the
 movement direction, the torso (with the weapon) with the aim direction.
 
+### Interface art (v2)
+
+| Asset | How it is made | Where it is used |
+|---|---|---|
+| Hero art `assets/heroes/<id>.jpg` (360×480) | `tools/extract-heroes.py`: head and torso cropped 3:4 from the owner's character sheets in `references/` (logo, titles and side panels left out) | Arsenal dressing room (the character «holding» the weapon being tried on), the «Personal File» on the character screen, character cards in the Arsenal — the characters look exactly as on the BLATKOM sheets |
+| Weapon / equipment / modification icons `ui/weapons/<id>.png` + `_s.png`, `ui/gadgets/…`, `ui/mods/…` | `tools/art/build-weapons.ts`, `renderInBox`: every icon is fitted into the same box (weapons and equipment 168×56 / 84×28, modifications 72×36 / 36×18) by its drawn bounds | Arsenal lists and slots, results — all icons the same size |
+| Arsenal tile pistol `ui/menu_arsenal.png` | TT pistol side view rendered by the weapon pipeline | the Arsenal tile in the main menu |
+| Map thumbnails `assets/maps/<id>.jpg` (320×320) | `tools/map-thumbs.mjs`: each map captured from the real renderer (night lighting on, players hidden), fitted into a square, lifted a little for small sizes | map pickers (practice, rooms, lobby) |
+| Logo `ui/logo.png` / `logo_ru.png` | `tools/make-logo.py`: Latin «BLATKOM» with the English tagline, Cyrillic «БЛАТКОМ» with «Районные дела — серьёзные дела» | main menu, by language |
+| Mode pictograms | inline SVG in `apps/web/src/ui/modes.ts` (crosshair, red/blue halves, a flag with a star, three zones) | mode buttons, Quick Match chooser |
+
+The in-game preview in the dressing room («In the game») is not an image: it draws the frames of the
+character, weapon and effects atlases that Phaser has already loaded onto a canvas
+(`apps/web/src/ui/doll.ts`), with the same grip and muzzle points as `CharacterView`, so it always
+matches the game.
+
+### Objective modes in the world
+
+Drawn every frame from session state by `apps/web/src/game/render/ObjectiveView.ts` (Phaser Graphics,
+no new textures): flag stands (a metal plate with the team rim, dashed while the flag is away), flags in
+the team colour with a star, leaning «up» the screen as tall objects do in top-down games, waving
+(faster on a running carrier), lying on the floor with a draining «back home» ring when dropped; the
+three bases as painted dashed zones with the owner's tint, a capture bar in the capturing team's colour
+around the zone (blinking white when contested), the letter A/B/C and a flagpole whose cloth climbs as
+the bar fills. Rims, bars and letters are drawn above the night light map so they read in dark areas;
+flags and bases also add team-coloured light pools to it (`Lighting.setSteady`). The HUD repeats the
+state in a strip under the timer, on the minimap and as edge markers.
+
 ## 5. Fonts and audio
 
 * Fonts (bundled, subset): Oswald, PT Sans Narrow, Caveat (SIL OFL 1.1) and Permanent Marker
   (Apache 2.0); licence files ship next to the fonts in `assets/fonts/`.
-* Audio: every sound is synthesised at runtime with WebAudio (`apps/web/src/game/audio/Sfx.ts`):
-  per-weapon shots, ricochets, hits, deaths, footsteps, reloads, pickups, countdown beeps. No audio
-  files, no third-party samples. There is no background music in this release.
+* Sound effects are synthesised at runtime with WebAudio (`apps/web/src/game/audio/Sfx.ts`):
+  per-weapon shots, ricochets, hits, deaths, footsteps, reloads, pickups, countdown beeps, equipment,
+  and the objective cues — a factory klaxon when a flag is stolen, a bugle call for a capture, chimes
+  for bases taken and lost. No third-party samples.
+* Menu music: «Hurt» by Infraction & Emerel Gray (Brazilian Phonk Sport), supplied by the product owner
+  as the game's soundtrack; `assets/audio/theme.mp3` (loudness-normalised, 96 kbps). It plays in the
+  menus, the lobby and on the results screen, fades out when a match starts and pauses when the tab is
+  hidden (`apps/web/src/game/audio/Music.ts`); volume in Settings, a mute button in the menu corner.
+  It is credited in the menu («Credits») and in `THIRD_PARTY_LICENSES.txt`. **The licence for use in
+  a game could not be verified while building this release: the operator must confirm the terms and
+  the required attribution with the rights holders before public launch** (or replace the file). The
+  single-file demo does not include the music.

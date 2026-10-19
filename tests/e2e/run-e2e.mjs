@@ -9,6 +9,8 @@
 //      and level, profile screen, persistence after reload (tests/e2e/demo.mjs)
 //   7. equipment: F-1, smoke, flashbang, molotov, mine, C4 and turret used with the G key in the demo
 //      build, checked against the World state (tests/e2e/gadgets.mjs)
+//   8. game modes online: a capture-the-flag room for an English and a Russian browser, mode switching
+//      in the lobby, flags in both HUDs, team results, Quick Match by mode (tests/e2e/modes.mjs)
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
 // E2E_PROD=1 runs the prebuilt deploy/ bundle exactly as a host would (NODE_ENV=production, guest login,
 // RENDER_EXTERNAL_URL, TRUST_PROXY) instead of the development server.
@@ -101,6 +103,9 @@ try {
   if (process.env.E2E_ADMIN_USER) args.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
   const online = spawnSync(process.execPath, args, { stdio: 'inherit' });
   if (online.status !== 0) failed = true;
+  console.log('\n[e2e] game modes online (capture the flag, base capture; English and Russian)');
+  const modes = spawnSync(process.execPath, ['tests/e2e/modes.mjs', base, join(out, 'modes')], { stdio: 'inherit' });
+  if (modes.status !== 0) failed = true;
   console.log('\n[e2e] single-file demo (no server)');
   const demo = spawnSync(process.execPath, ['tests/e2e/demo.mjs', 'apps/web/dist-demo/blatkom89-demo.html', join(out, 'demo')], { stdio: 'inherit' });
   if (demo.status !== 0) failed = true;

@@ -7787,8 +7787,14 @@ var EnvSchema = external_exports.object({
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
   MATCH_SCORE_LIMIT: external_exports.coerce.number().int().min(1).max(400).default(50),
-  MATCH_MIN_PLAYERS: external_exports.coerce.number().int().min(2).max(6).default(2),
-  MATCH_MAX_PLAYERS: external_exports.coerce.number().int().min(2).max(6).default(6),
+  MATCH_MIN_PLAYERS: external_exports.coerce.number().int().min(2).max(10).default(2),
+  MATCH_MAX_PLAYERS: external_exports.coerce.number().int().min(2).max(10).default(10),
+  /** Team deathmatch ends when a team reaches this many eliminations. */
+  MATCH_TEAM_SCORE_LIMIT: external_exports.coerce.number().int().min(1).max(400).default(40),
+  /** Capture the flag: captures to win. */
+  MATCH_CAPTURE_LIMIT: external_exports.coerce.number().int().min(1).max(20).default(3),
+  /** Base capture: points to win (a point per base held per second). */
+  MATCH_BASE_SCORE_LIMIT: external_exports.coerce.number().int().min(10).max(2e3).default(250),
   /** Paid cases can be switched off where randomised paid items are restricted (docs/ECONOMY.md). */
   CASES_ENABLED: bool.default("true"),
   /** Card payments (Stripe Checkout). Both keys are required to enable them. */
@@ -7821,7 +7827,15 @@ function loadEnv(source = process.env) {
   return env2;
 }
 function matchConfigFromEnv(env2) {
-  return { durationMs: env2.MATCH_DURATION_SEC * 1e3, scoreLimit: env2.MATCH_SCORE_LIMIT, minPlayers: env2.MATCH_MIN_PLAYERS, maxPlayers: env2.MATCH_MAX_PLAYERS };
+  return {
+    durationMs: env2.MATCH_DURATION_SEC * 1e3,
+    scoreLimit: env2.MATCH_SCORE_LIMIT,
+    teamScoreLimit: env2.MATCH_TEAM_SCORE_LIMIT,
+    captureLimit: env2.MATCH_CAPTURE_LIMIT,
+    baseScoreLimit: env2.MATCH_BASE_SCORE_LIMIT,
+    minPlayers: env2.MATCH_MIN_PLAYERS,
+    maxPlayers: env2.MATCH_MAX_PLAYERS
+  };
 }
 
 // apps/server/src/logging/logger.ts
@@ -10187,6 +10201,7 @@ var TYPES = {
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
   ".woff": "font/woff",
+  ".mp3": "audio/mpeg",
   ".woff2": "font/woff2",
   ".txt": "text/plain; charset=utf-8",
   ".webmanifest": "application/manifest+json"
@@ -10260,6 +10275,24 @@ function serveStatic(root) {
       ctx.res.end();
       return true;
     }
+    headers["accept-ranges"] = "bytes";
+    const range = parseRange(ctx.req.headers.range, st.size);
+    if (range === "invalid") {
+      ctx.res.writeHead(416, { ...headers, "content-range": `bytes */${st.size}` });
+      ctx.res.end();
+      return true;
+    }
+    if (range) {
+      headers["content-range"] = `bytes ${range.start}-${range.end}/${st.size}`;
+      headers["content-length"] = String(range.end - range.start + 1);
+      ctx.res.writeHead(206, headers);
+      if (ctx.method === "HEAD") {
+        ctx.res.end();
+        return true;
+      }
+      createReadStream(target, { start: range.start, end: range.end }).pipe(ctx.res);
+      return true;
+    }
     headers["content-length"] = String(st.size);
     ctx.res.writeHead(200, headers);
     if (ctx.method === "HEAD") {
@@ -10269,6 +10302,26 @@ function serveStatic(root) {
     createReadStream(target).pipe(ctx.res);
     return true;
   };
+}
+function parseRange(header, size2) {
+  if (!header) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m) return null;
+  const [, a, b2] = m;
+  if (a === "" && b2 === "") return "invalid";
+  let start;
+  let end;
+  if (a === "") {
+    const n = Number(b2);
+    if (n === 0) return "invalid";
+    start = Math.max(0, size2 - n);
+    end = size2 - 1;
+  } else {
+    start = Number(a);
+    end = b2 === "" ? size2 - 1 : Math.min(Number(b2), size2 - 1);
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size2) return "invalid";
+  return { start, end };
 }
 
 // packages/shared/src/constants/game.ts
@@ -10984,15 +11037,18 @@ var DIAMOND_PACKS = [
 function diamondPack(id) {
   return DIAMOND_PACKS.find((p) => p.id === id);
 }
-var TOKEN_REWARD = Object.freeze({ completion: 10, perKill: 3, perAssist: 1, placement: [10, 6, 3], maxPerMatch: 60 });
+var TOKEN_REWARD = Object.freeze({ perKill: 5, perAssist: 2, completion: 5, maxPerMatch: 100 });
+function tokenBreakdown(p) {
+  if (!p.completed) return { kills: 0, assists: 0, completion: 0, sum: 0, total: 0, capped: false };
+  const kills = TOKEN_REWARD.perKill * Math.max(0, p.kills);
+  const assists = TOKEN_REWARD.perAssist * Math.max(0, p.assists ?? 0);
+  const completion = TOKEN_REWARD.completion;
+  const sum = kills + assists + completion;
+  const total = Math.min(sum, TOKEN_REWARD.maxPerMatch);
+  return { kills, assists, completion, sum, total, capped: total < sum };
+}
 function tokensForMatch(p) {
-  if (!p.completed) return 0;
-  let t = TOKEN_REWARD.completion + TOKEN_REWARD.perKill * p.kills + TOKEN_REWARD.perAssist * (p.assists ?? 0);
-  if (p.playersAtEnd >= 2) {
-    const bonus = TOKEN_REWARD.placement[p.place - 1];
-    if (bonus && (p.place === 1 || p.playersAtEnd >= p.place + 1)) t += bonus;
-  }
-  return Math.min(t, TOKEN_REWARD.maxPerMatch);
+  return tokenBreakdown(p).total;
 }
 function priceOf(kind, id) {
   return kind === "weapon" ? WEAPON_PRICES[id] : kind === "character" ? CHARACTER_PRICES[id] : GADGET_PRICES[id];
@@ -11044,6 +11100,33 @@ var CASE_WEAPONS = CASE_TABLE.map((e) => e.weapon);
 
 // packages/shared/src/game-rules/match.ts
 var MATCH_PHASES = ["waiting", "ready", "countdown", "active", "finished", "closed"];
+var GAME_MODES = ["ffa", "teams", "ctf", "bases"];
+var TEAMS = [0, 1];
+function isTeamMode(mode) {
+  return mode !== "ffa";
+}
+var CTF_RULES = Object.freeze({
+  /** Pick-up / return / capture distance from the flag (the player's radius included). */
+  touchRadius: 24,
+  returnMs: 15e3,
+  /** Match points for the player. */
+  capturePoints: 6,
+  returnPoints: 2,
+  takePoints: 1,
+  /** Bonus for eliminating the enemy carrier. */
+  carrierKillPoints: 1
+});
+var BASE_RULES = Object.freeze({
+  radius: 56,
+  captureMs: 6e3,
+  extraPlayerRate: 0.5,
+  maxRate: 2.5,
+  decayRate: 0.5,
+  tickMs: 1e3,
+  /** Match points for every capturer inside the base. */
+  capturePoints: 3
+});
+var MAX_PLAYERS = 10;
 var SCORING = Object.freeze({
   killPoints: 2,
   assistPoints: 1,
@@ -11051,11 +11134,15 @@ var SCORING = Object.freeze({
   assistMinDamage: 20
 });
 var DEFAULT_MATCH_CONFIG = {
+  mode: "ffa",
   minPlayers: 2,
-  maxPlayers: 6,
+  maxPlayers: MAX_PLAYERS,
   durationMs: 4 * 6e4,
   /** Points: an elimination is 2, an assist 1 (≈25 eliminations). */
   scoreLimit: 50,
+  teamScoreLimit: 40,
+  captureLimit: 3,
+  baseScoreLimit: 250,
   readyMs: 1200,
   countdownMs: 3e3,
   finishedMs: 15e3,
@@ -11074,7 +11161,12 @@ var XP_RULES = Object.freeze({
   completion: 50,
   perKill: 10,
   perAssist: 5,
+  /** Capture the flag: a flag captured; base capture: a base captured. */
+  perObjective: 15,
   placement: [100, 50, 25],
+  /** Team matches: every player of the winning team (a draw gives both teams the smaller bonus). */
+  teamWin: 75,
+  teamDraw: 25,
   playedWithFriends: 20,
   maxPerMatch: 400
 });
@@ -11092,6 +11184,7 @@ function levelForXp(xp) {
   return { level, intoLevel: remaining, nextLevelCost: level >= LEVEL_CAP ? 0 : levelStepCost(level) };
 }
 function isWin(p) {
+  if (p.teamOutcome) return p.completed && p.teamOutcome === "win" && p.playersAtEnd >= 2;
   return p.completed && p.place === 1 && !p.sharedPlace && p.playersAtEnd >= 2;
 }
 function rankPlaces(sorted) {
@@ -11104,8 +11197,10 @@ function rankPlaces(sorted) {
 }
 function xpForMatch(p) {
   if (!p.completed) return 0;
-  let xp = XP_RULES.completion + XP_RULES.perKill * p.kills + XP_RULES.perAssist * (p.assists ?? 0);
-  if (p.playersAtEnd >= 2) {
+  let xp = XP_RULES.completion + XP_RULES.perKill * p.kills + XP_RULES.perAssist * (p.assists ?? 0) + XP_RULES.perObjective * (p.objectives ?? 0);
+  if (p.teamOutcome) {
+    if (p.playersAtEnd >= 2) xp += p.teamOutcome === "win" ? XP_RULES.teamWin : p.teamOutcome === "draw" ? XP_RULES.teamDraw : 0;
+  } else if (p.playersAtEnd >= 2) {
     const bonus = XP_RULES.placement[p.place - 1];
     if (bonus && (p.place === 1 || p.playersAtEnd >= p.place + 1)) xp += bonus;
   }
@@ -11192,6 +11287,8 @@ var MapBuilder = class {
       pickups: [],
       supplyPoints: [],
       medkits: [],
+      flagStands: [],
+      bases: [],
       ambient: { color: 2766160, level: 0.55 },
       minimapFloor: "#3a3632"
     };
@@ -11277,6 +11374,16 @@ var MapBuilder = class {
   /** A spot where a «дефицит» supply crate may appear during the match. */
   supply(x, y) {
     this.def.supplyPoints.push({ x, y });
+    return this;
+  }
+  /** Capture the flag: the red (team 0) or blue (team 1) flag stand. */
+  flagStand(team, x, y) {
+    this.def.flagStands[team] = { x, y };
+    return this;
+  }
+  /** Base capture: the next base (A, B, C in order). */
+  base(x, y) {
+    this.def.bases.push({ x, y });
     return this;
   }
   build() {
@@ -11382,6 +11489,9 @@ function buildFactoryMap() {
   b2.pickup("obrez", 680, 536, 16e3).pickup("avtomat", 1280, 52, 2e4).pickup("obrez", 52, 616, 16e3).pickup("avtomat", 920, 960, 2e4).pickup("avtomat", 384, 496, 2e4).pickup("obrez", 952, 568, 16e3);
   b2.supply(784, 288).supply(544, 744).supply(792, 752).supply(544, 272).supply(920, 112).supply(128, 96);
   b2.medkit(544, 160).medkit(1180, 576).medkit(240, 680).medkit(824, 880);
+  b2.spawn(884, 532, 180).spawn(380, 596, 0).spawn(1084, 44, 135).spawn(324, 116, 45).spawn(1020, 908, -135).spawn(604, 372, 45).spawn(1172, 636, 180);
+  b2.flagStand(0, 112, 488).flagStand(1, 1368, 496);
+  b2.base(352, 488).base(696, 440).base(1104, 480);
   return b2.build();
 }
 
@@ -11446,6 +11556,9 @@ function buildGaragesMap() {
   b2.pickup("obrez", 600, 152, 16e3).pickup("avtomat", 856, 840, 2e4).pickup("obrez", 1144, 736, 16e3).pickup("avtomat", 408, 360, 2e4).pickup("obrez", 1256, 360, 16e3).pickup("avtomat", 52, 632, 2e4);
   b2.supply(248, 528).supply(624, 800).supply(824, 192).supply(1144, 192).supply(960, 680).supply(688, 320);
   b2.medkit(330, 760).medkit(860, 310).medkit(1266, 644);
+  b2.spawn(668, 836, -90).spawn(748, 156, 90).spawn(476, 356, 45).spawn(1068, 836, -135).spawn(396, 636, 0).spawn(1308, 532, 180).spawn(676, 564, -45).spawn(1092, 172, 135);
+  b2.flagStand(0, 100, 360).flagStand(1, 1400, 440);
+  b2.base(256, 496).base(736, 256).base(1104, 672);
   return b2.build();
 }
 
@@ -11516,6 +11629,9 @@ function buildYardMap() {
   b2.pickup("obrez", 664, 52, 16e3).pickup("avtomat", 592, 744, 2e4).pickup("obrez", 992, 544, 16e3).pickup("avtomat", 400, 544, 2e4).pickup("obrez", 552, 280, 16e3).pickup("avtomat", 52, 728, 2e4);
   b2.supply(848, 752).supply(888, 320).supply(1328, 256).supply(1312, 840).supply(88, 248).supply(728, 232);
   b2.medkit(560, 560).medkit(1e3, 680).medkit(820, 1040);
+  b2.spawn(692, 1044, -90).spawn(708, 44, 90).spawn(692, 604, -90).spawn(1364, 556, 180).spawn(44, 548, 0).spawn(820, 324, 135);
+  b2.flagStand(0, 72, 544).flagStand(1, 1336, 544);
+  b2.base(392, 576).base(704, 544).base(1056, 544);
   return b2.build();
 }
 
@@ -11678,6 +11794,9 @@ function buildStroykaMap() {
   b2.pickup("obrez", 360, 200, 16e3).pickup("avtomat", 500, 180, 2e4).pickup("obrez", 820, 250, 16e3).pickup("avtomat", 1006, 360, 2e4).pickup("obrez", 450, 340, 16e3).pickup("avtomat", 870, 620, 2e4).pickup("obrez", 1130, 660, 16e3).pickup("avtomat", 520, 790, 2e4).pickup("obrez", 1270, 540, 16e3);
   b2.medkit(150, 690).medkit(706, 110).medkit(1310, 400).medkit(940, 800);
   b2.supply(300, 470).supply(1160, 190).supply(640, 820).supply(1250, 700).supply(880, 70);
+  b2.spawn(340, 36, 45).spawn(572, 420, 0).spawn(964, 620, -135).spawn(372, 644, -45).spawn(1044, 252, 135).spawn(68, 196, 0).spawn(1076, 852, -135);
+  b2.flagStand(0, 72, 440).flagStand(1, 1368, 456);
+  b2.base(264, 448).base(664, 448).base(1e3, 496);
   return b2.build();
 }
 
@@ -11780,6 +11899,9 @@ function buildDkMap() {
   b2.pickup("obrez", 300, 270, 16e3).pickup("avtomat", 440, 524, 2e4).pickup("obrez", 600, 300, 16e3).pickup("avtomat", 1066, 300, 2e4).pickup("obrez", 740, 600, 16e3).pickup("avtomat", 1210, 410, 2e4).pickup("obrez", 660, 760, 16e3).pickup("avtomat", 1250, 900, 2e4).pickup("obrez", 200, 700, 16e3).pickup("avtomat", 1420, 380, 2e4);
   b2.medkit(430, 700).medkit(1260, 640).medkit(920, 800).medkit(110, 270);
   b2.supply(830, 460).supply(220, 860).supply(1420, 720).supply(600, 140).supply(1100, 920).supply(700, 780);
+  b2.spawn(668, 708, -90).spawn(524, 364, 45).spawn(468, 932, -45).spawn(1036, 468, 180).spawn(388, 652, -45).spawn(860, 956, -90);
+  b2.flagStand(0, 120, 496).flagStand(1, 1416, 544);
+  b2.base(400, 656).base(760, 576).base(1040, 560);
   return b2.build();
 }
 
@@ -11874,6 +11996,9 @@ function buildGastronomMap() {
   b2.pickup("obrez", 330, 280, 16e3).pickup("avtomat", 600, 270, 2e4).pickup("obrez", 1220, 270, 16e3).pickup("avtomat", 705, 450, 2e4).pickup("obrez", 975, 450, 16e3).pickup("avtomat", 1370, 440, 2e4).pickup("obrez", 200, 560, 16e3).pickup("avtomat", 600, 660, 2e4).pickup("obrez", 1110, 750, 16e3).pickup("avtomat", 820, 930, 2e4);
   b2.medkit(190, 380).medkit(1400, 330).medkit(700, 750).medkit(560, 930);
   b2.supply(840, 530).supply(1200, 470).supply(420, 560).supply(700, 880).supply(1380, 760).supply(90, 650);
+  b2.spawn(284, 36, 45).spawn(548, 516, 0).spawn(964, 612, -135).spawn(412, 828, -45).spawn(1076, 956, -135).spawn(36, 260, 0).spawn(1156, 276, 135);
+  b2.flagStand(0, 96, 520).flagStand(1, 1390, 600);
+  b2.base(344, 512).base(824, 568).base(1088, 472);
   return b2.build();
 }
 
@@ -11981,6 +12106,9 @@ function buildHospitalMap() {
   b2.pickup("obrez", 365, 352, 16e3).pickup("avtomat", 660, 340, 2e4).pickup("obrez", 990, 350, 16e3).pickup("avtomat", 1290, 350, 2e4).pickup("obrez", 510, 520, 16e3).pickup("avtomat", 1160, 560, 2e4).pickup("obrez", 440, 680, 16e3).pickup("avtomat", 1230, 745, 2e4).pickup("obrez", 110, 700, 16e3).pickup("avtomat", 1440, 820, 2e4);
   b2.medkit(1280, 655, 18e3).medkit(250, 260, 18e3).medkit(620, 740, 2e4).medkit(1e3, 430, 2e4).medkit(1452, 732, 2e4).medkit(850, 610, 2e4);
   b2.supply(850, 460).supply(300, 410).supply(1250, 420).supply(720, 960).supply(120, 400).supply(1440, 500);
+  b2.spawn(732, 668, -90).spawn(468, 340, 45).spawn(412, 644, -45).spawn(1076, 564, 180).spawn(36, 812, -45).spawn(1164, 164, 135);
+  b2.flagStand(0, 72, 496).flagStand(1, 1408, 520);
+  b2.base(392, 520).base(728, 496).base(1152, 504);
   return b2.build();
 }
 
@@ -12458,15 +12586,16 @@ var BTN = {
   /** Throw / place / deploy the equipment (slot 4); detonates a placed C4. */
   GADGET: 32
 };
-var MAX_SLOTS = 8;
+var MAX_SLOTS = 12;
 var SUPPLY_POOL = ["avtomat", "obrez", "ksyuha", "s12", "mp5", "m4", "g36", "svd", "m249", "rpg"];
-function createPlayerState(id, slot, name, character, isBot, now, seed) {
+function createPlayerState(id, slot, name, character, isBot, now, seed, team = null) {
   return {
     id,
     slot,
     name,
     character,
     isBot,
+    team,
     connected: true,
     joinedAt: now,
     x: 0,
@@ -12514,6 +12643,7 @@ function createPlayerState(id, slot, name, character, isBot, now, seed) {
     lastHitAt: -1e9,
     lastDamagedBy: null,
     assists: 0,
+    objectives: 0,
     recentDamage: []
   };
 }
@@ -12680,6 +12810,16 @@ var World = class {
   matchStartedAt = 0;
   matchEndsAt = 0;
   endReason = null;
+  /**
+   * Team matches, red (0) and blue (1): eliminations (teams), flags captured (ctf) or points from
+   * the bases held (bases).
+   */
+  teamScore = [0, 0];
+  /** Capture the flag: the two flags (empty in other modes). */
+  flags = [];
+  /** Base capture: the bases (empty in other modes). */
+  bases = [];
+  nextBaseTickAt = 0;
   players = /* @__PURE__ */ new Map();
   pickups = [];
   projectiles = [];
@@ -12719,6 +12859,23 @@ var World = class {
     map.medkits.forEach((m, i) => {
       this.pickups.push({ id: this.nextPickupId++, kind: "medkit", weapon: null, x: m.x, y: m.y, active: true, dropped: false, mag: 0, reserve: 0, respawnAt: 0, expiresAt: 0, spawnIndex: i, supply: false });
     });
+    if (this.config.mode === "ctf") {
+      for (const team of TEAMS) {
+        const s = map.flagStands[team] ?? this.fallbackStand(team);
+        this.flags.push({ team, status: "home", x: s.x, y: s.y, standX: s.x, standY: s.y, carrierId: null, carrierSlot: -1, returnAt: 0 });
+      }
+    } else if (this.config.mode === "bases") {
+      const pts = map.bases.length > 0 ? map.bases : [{ x: map.width / 2, y: map.height / 2 }];
+      pts.forEach((b2, index) => this.bases.push({ index, x: b2.x, y: b2.y, owner: null, capturer: null, progress: 0, contested: false, inside: [0, 0] }));
+    }
+  }
+  /** A map without flag stands: the deepest spawn point of the team's half. */
+  fallbackStand(team) {
+    const horizontal = this.map.width >= this.map.height;
+    const key = (i2) => horizontal ? this.map.spawns[i2].x : this.map.spawns[i2].y;
+    const side = this.teamSpawnIndicesStable(team);
+    const i = side.reduce((a, b2) => (team === 0 ? key(b2) < key(a) : key(b2) > key(a)) ? b2 : a);
+    return { x: this.map.spawns[i].x, y: this.map.spawns[i].y };
   }
   // ── Roster ──────────────────────────────────────────────────────────────
   freeSlot() {
@@ -12726,12 +12883,56 @@ var World = class {
     for (let s = 0; s < MAX_SLOTS; s++) if (!used.has(s)) return s;
     return -1;
   }
-  addPlayer(id, name, character, isBot = false, loadout = DEFAULT_LOADOUT) {
+  /** Two teams (every mode but free-for-all). */
+  get teams() {
+    return isTeamMode(this.config.mode);
+  }
+  /** Can `a` hurt `b`? Anyone else in free-for-all, only the other team in team matches. */
+  hostile(a, b2) {
+    if (a.id === b2.id) return false;
+    return !this.teams || a.team === null || b2.team === null || a.team !== b2.team;
+  }
+  /** Is `q` an enemy of whoever owns this projectile / piece of equipment (owner excluded)? */
+  hostileToOwner(owner, q) {
+    if (q.id === owner.ownerId) return false;
+    return !this.teams || owner.ownerTeam === null || q.team === null || owner.ownerTeam !== q.team;
+  }
+  teamSize(team) {
+    let n = 0;
+    for (const p of this.players.values()) if (p.team === team) n++;
+    return n;
+  }
+  /** The team a newcomer joins: the smaller one (the trailing one on a tie). */
+  smallerTeam() {
+    const a = this.teamSize(0);
+    const b2 = this.teamSize(1);
+    if (a !== b2) return a < b2 ? 0 : 1;
+    return this.teamScore[0] <= this.teamScore[1] ? 0 : 1;
+  }
+  /** Moves a player to a team (the caller checks when that is allowed). */
+  setTeam(id, team) {
+    const p = this.players.get(id);
+    if (p && this.teams) p.team = team;
+  }
+  /** Evens the teams out (difference of at most one): the latest arrivals move, bots first. */
+  balanceTeams() {
+    if (!this.teams) return;
+    for (const p of this.players.values()) if (p.team === null) p.team = this.smallerTeam();
+    for (let guard = 0; guard < 16; guard++) {
+      const a = this.teamSize(0);
+      const b2 = this.teamSize(1);
+      if (Math.abs(a - b2) <= 1) return;
+      const from = a > b2 ? 0 : 1;
+      const movers = [...this.players.values()].filter((p) => p.team === from).sort((x, y) => Number(y.isBot) - Number(x.isBot) || y.joinedAt - x.joinedAt || y.slot - x.slot);
+      movers[0].team = from === 0 ? 1 : 0;
+    }
+  }
+  addPlayer(id, name, character, isBot = false, loadout = DEFAULT_LOADOUT, team) {
     const existing = this.players.get(id);
     if (existing) return existing;
     const slot = this.freeSlot();
     if (slot < 0) throw new Error("room full");
-    const p = createPlayerState(id, slot, name, character, isBot, this.time, hash32(slot + 1, Math.floor(this.rng() * 4294967295)));
+    const p = createPlayerState(id, slot, name, character, isBot, this.time, hash32(slot + 1, Math.floor(this.rng() * 4294967295)), this.teams ? team ?? this.smallerTeam() : null);
     this.applyLoadout(p, loadout);
     this.players.set(id, p);
     if (this.phase === "countdown" || this.phase === "active") this.spawnPlayer(p, this.phase === "countdown");
@@ -12758,6 +12959,8 @@ var World = class {
     const p = this.players.get(id);
     if (!p) return;
     if (p.alive && p.heavy) this.dropHeavy(p);
+    const flag = this.flags.find((f) => f.carrierId === id);
+    if (flag) this.dropFlag(flag, p);
     this.players.delete(id);
     for (let i = this.gadgets.length - 1; i >= 0; i--) {
       const g = this.gadgets[i];
@@ -12778,13 +12981,22 @@ var World = class {
   beginMatch(skipReady = false) {
     if (this.phase !== "waiting") return;
     this.resetScores();
+    this.balanceTeams();
     if (skipReady) this.startCountdown();
     else this.setPhase("ready", this.config.readyMs);
   }
   startCountdown() {
     this.setPhase("countdown", this.config.countdownMs);
     this.resetPickups();
+    this.resetObjectives();
     const order = [...this.players.values()].sort((a, b2) => a.slot - b2.slot);
+    if (this.teams) {
+      for (const team of [0, 1]) {
+        const side = this.teamSpawnIndices(team);
+        order.filter((p) => p.team === team).forEach((p, i) => this.spawnPlayer(p, true, side[i % side.length]));
+      }
+      return;
+    }
     const spawns = this.shuffledSpawnIndices();
     order.forEach((p, i) => this.spawnPlayer(p, true, spawns[i % spawns.length]));
   }
@@ -12793,6 +13005,7 @@ var World = class {
     this.matchStartedAt = this.time;
     this.matchEndsAt = this.time + this.config.durationMs;
     this.nextSupplyAt = this.time + this.config.supplyFirstMs;
+    this.nextBaseTickAt = this.time + BASE_RULES.tickMs;
     for (const p of this.players.values()) {
       if (!p.alive) this.spawnPlayer(p, false);
       p.invulnUntil = this.time + this.config.spawnProtectionMs;
@@ -12821,11 +13034,14 @@ var World = class {
     this.projectiles.length = 0;
     this.gadgets.length = 0;
     this.resetPickups();
+    this.resetObjectives();
   }
   close() {
     this.setPhase("closed", 0);
   }
   resetScores() {
+    this.teamScore[0] = 0;
+    this.teamScore[1] = 0;
     for (const p of this.players.values()) {
       p.kills = 0;
       p.assists = 0;
@@ -12835,6 +13051,7 @@ var World = class {
       p.streak = 0;
       p.bestStreak = 0;
       p.lastKillAt = 0;
+      p.objectives = 0;
     }
   }
   resetPickups() {
@@ -12863,12 +13080,37 @@ var World = class {
     }
     return idx;
   }
-  /** Picks the spawn farthest from living opponents, penalizing spawns they can see. */
+  /**
+   * Spawn points of a team's home side: the map is split along its longer axis, red (0) gets the
+   * left/top half, blue (1) the right/bottom half (shuffled).
+   */
+  teamSpawnIndices(team) {
+    const horizontal = this.map.width >= this.map.height;
+    const key = (i) => horizontal ? this.map.spawns[i].x : this.map.spawns[i].y;
+    const sorted = this.map.spawns.map((_, i) => i).sort((a, b2) => key(a) - key(b2) || a - b2);
+    const half = Math.ceil(sorted.length / 2);
+    const mine = team === 0 ? sorted.slice(0, half) : sorted.slice(sorted.length - half);
+    for (let i = mine.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rng() * (i + 1));
+      [mine[i], mine[j]] = [mine[j], mine[i]];
+    }
+    return mine;
+  }
+  /**
+   * Picks the spawn farthest from living opponents, penalizing spawns they can see. In team
+   * matches the home side and nearby teammates are preferred, so the teams keep their fronts; in
+   * capture the flag and base capture a team always comes back on its own half.
+   */
   chooseSpawn(forId) {
-    const enemies = [...this.players.values()].filter((p) => p.alive && p.id !== forId);
-    let best = 0;
+    const me = this.players.get(forId);
+    const enemies = [...this.players.values()].filter((p) => p.alive && p.id !== forId && (!me || this.hostile(me, p)));
+    const friends = me && this.teams ? [...this.players.values()].filter((p) => p.alive && p.id !== forId && p.team === me.team) : [];
+    const home = me && this.teams && me.team !== null ? new Set(this.teamSpawnIndicesStable(me.team)) : null;
+    const homeOnly = !!home && (this.config.mode === "ctf" || this.config.mode === "bases");
+    let best = home && homeOnly ? [...home][0] : 0;
     let bestScore = -Infinity;
     this.map.spawns.forEach((s, i) => {
+      if (homeOnly && !home.has(i)) return;
       if (this.collision.overlapsCircle(s.x, s.y, PLAYER_RADIUS)) return;
       let minD = 1200;
       let seen = false;
@@ -12877,13 +13119,24 @@ var World = class {
         minD = Math.min(minD, d);
         if (d < 700 && this.collision.lineOfSight(e.x, e.y, s.x, s.y)) seen = true;
       }
-      const score = minD - (seen ? 400 : 0) + this.rng() * 60;
+      let bonus = 0;
+      if (home?.has(i)) bonus += 160;
+      for (const f of friends) if (Math.hypot(f.x - s.x, f.y - s.y) < 420) bonus += 40;
+      const score = minD - (seen ? 400 : 0) + Math.min(bonus, 280) + this.rng() * 60;
       if (score > bestScore) {
         bestScore = score;
         best = i;
       }
     });
     return best;
+  }
+  /** Home-side spawn indices without consuming the RNG (respawn scoring). */
+  teamSpawnIndicesStable(team) {
+    const horizontal = this.map.width >= this.map.height;
+    const key = (i) => horizontal ? this.map.spawns[i].x : this.map.spawns[i].y;
+    const sorted = this.map.spawns.map((_, i) => i).sort((a, b2) => key(a) - key(b2) || a - b2);
+    const half = Math.ceil(sorted.length / 2);
+    return team === 0 ? sorted.slice(0, half) : sorted.slice(sorted.length - half);
   }
   spawnPlayer(p, frozen, spawnIndex) {
     const i = spawnIndex ?? this.chooseSpawn(p.id);
@@ -12950,7 +13203,7 @@ var World = class {
     const out = [];
     const frame = this.lagCompensation ? this.sampleHistory(viewTime) : null;
     for (const q of this.players.values()) {
-      if (q === exclude || !q.alive) continue;
+      if (q === exclude || !q.alive || !this.hostile(exclude, q)) continue;
       let x = q.x;
       let y = q.y;
       if (frame) {
@@ -12968,7 +13221,7 @@ var World = class {
     p.invulnUntil = Math.min(p.invulnUntil, this.time);
     if (w.kind === "projectile" && w.projectile) return this.launch(p, w, spread);
     const targets = this.targetsAt(viewTime, p);
-    const turrets = this.gadgets.filter((g) => g.kind === "turret" && g.ownerId !== p.id);
+    const turrets = this.gadgets.filter((g) => g.kind === "turret" && g.ownerId !== p.id && (!this.teams || g.ownerTeam !== p.team));
     const pellets = [];
     const dmgByVictim = /* @__PURE__ */ new Map();
     const dmgByTurret = /* @__PURE__ */ new Map();
@@ -13020,6 +13273,7 @@ var World = class {
       id: this.nextProjectileId++,
       ownerId: p.id,
       ownerSlot: p.slot,
+      ownerTeam: p.team,
       weapon: w.id,
       x: p.x + dx * start,
       y: p.y + dy * start,
@@ -13045,6 +13299,7 @@ var World = class {
       let direct = null;
       for (const q of this.players.values()) {
         if (!q.alive || q.id === pr.ownerId && pr.traveled < 40) continue;
+        if (q.id !== pr.ownerId && !this.hostileToOwner(pr, q)) continue;
         const ht = rayCircle(pr.x, pr.y, pr.dx, pr.dy, q.x, q.y, PLAYER_RADIUS);
         if (ht !== null && ht <= t) {
           t = ht;
@@ -13063,7 +13318,7 @@ var World = class {
     }
   }
   explode(pr, x, y, direct) {
-    this.blast({ id: pr.id, ownerId: pr.ownerId, ownerSlot: pr.ownerSlot, arms: pr.weapon, x, y, radius: pr.radius, splash: pr.splash, selfFactor: pr.selfFactor, direct, directDamage: pr.direct });
+    this.blast({ id: pr.id, ownerId: pr.ownerId, ownerSlot: pr.ownerSlot, ownerTeam: pr.ownerTeam, arms: pr.weapon, x, y, radius: pr.radius, splash: pr.splash, selfFactor: pr.selfFactor, direct, directDamage: pr.direct });
   }
   /** An explosion: splash damage with line of sight to players and turrets around (x, y). */
   blast(b2) {
@@ -13072,6 +13327,7 @@ var World = class {
     const owner = this.players.get(b2.ownerId) ?? null;
     for (const q of [...this.players.values()]) {
       if (!q.alive) continue;
+      if (q.id !== b2.ownerId && !this.hostileToOwner(b2, q)) continue;
       const d = Math.hypot(q.x - x, q.y - y);
       if (d > radius + PLAYER_RADIUS) continue;
       if (q !== b2.direct && !this.collision.lineOfSight(x, y, q.x, q.y)) continue;
@@ -13082,6 +13338,7 @@ var World = class {
     }
     for (const g of [...this.gadgets]) {
       if (g.kind !== "turret") continue;
+      if (this.teams && g.ownerId !== b2.ownerId && g.ownerTeam !== null && g.ownerTeam === b2.ownerTeam) continue;
       const d = Math.hypot(g.x - x, g.y - y);
       if (d > radius + TURRET.radius || !this.collision.lineOfSight(x, y, g.x, g.y)) continue;
       this.damageTurret(g, b2.splash * (1 - 0.7 * Math.max(0, Math.min(1, d / radius))));
@@ -13108,7 +13365,7 @@ var World = class {
     this.events.push({ t: "melee", shooter: p.slot, angle: p.aim, hit: best ? best.slot : -1 });
     if (best) return this.applyDamage(best, p, w.damage, w.id);
     for (const g of this.gadgets) {
-      if (g.kind !== "turret" || g.ownerId === p.id) continue;
+      if (g.kind !== "turret" || g.ownerId === p.id || this.teams && g.ownerTeam === p.team) continue;
       const d = Math.hypot(g.x - p.x, g.y - p.y);
       if (d > w.meleeRange + TURRET.radius) continue;
       if (Math.abs(angleDiff(p.aim, Math.atan2(g.y - p.y, g.x - p.x))) > w.meleeArc / 2 && d > TURRET.radius * 1.6) continue;
@@ -13120,6 +13377,7 @@ var World = class {
     if (!victim.alive || amount <= 0) return;
     if (this.time < victim.invulnUntil) return;
     if (this.phase !== "active") return;
+    if (attacker && attacker !== victim && !this.hostile(attacker, victim)) return;
     victim.hp = Math.max(0, victim.hp - amount);
     victim.lastHitAt = this.time;
     if (attacker) {
@@ -13146,6 +13404,8 @@ var World = class {
     victim.vy = 0;
     victim.reloadWeapon = null;
     if (victim.heavy) this.dropHeavy(victim);
+    const carried = this.flags.find((f) => f.carrierId === victim.id);
+    if (carried) this.dropFlag(carried, victim);
     const scorers = [];
     if (killer && killer !== victim) {
       killer.kills++;
@@ -13154,13 +13414,15 @@ var World = class {
       killer.bestStreak = Math.max(killer.bestStreak, killer.streak);
       killer.lastKillAt = this.time;
       scorers.push(killer);
+      if (this.config.mode === "teams" && killer.team !== null) this.teamScore[killer.team]++;
+      if (carried && killer.team === carried.team) killer.score += CTF_RULES.carrierKillPoints;
     }
     const assists = [];
     for (const rec of victim.recentDamage) {
       if (rec.id === killer?.id || rec.id === victim.id) continue;
       if (this.time - rec.at > SCORING.assistWindowMs || rec.amount < SCORING.assistMinDamage) continue;
       const helper = this.players.get(rec.id);
-      if (!helper) continue;
+      if (!helper || !this.hostile(helper, victim)) continue;
       helper.assists++;
       helper.score += SCORING.assistPoints;
       assists.push(helper.slot);
@@ -13168,7 +13430,155 @@ var World = class {
     }
     victim.recentDamage = [];
     this.events.push({ t: "kill", killer: killer ? killer.slot : -1, victim: victim.slot, weapon, assists });
-    if (scorers.some((p) => p.score >= this.config.scoreLimit)) this.finish("score");
+    if (this.config.mode === "teams") {
+      if (this.teamScore[0] >= this.config.teamScoreLimit || this.teamScore[1] >= this.config.teamScoreLimit) this.finish("score");
+    } else if (this.config.mode === "ffa" && scorers.some((p) => p.score >= this.config.scoreLimit)) this.finish("score");
+  }
+  // ── Objectives: capture the flag, base capture ──────────────────────────
+  resetObjectives() {
+    for (const f of this.flags) this.flagHome(f);
+    for (const b2 of this.bases) {
+      b2.owner = null;
+      b2.capturer = null;
+      b2.progress = 0;
+      b2.contested = false;
+      b2.inside = [0, 0];
+    }
+  }
+  flagHome(f) {
+    f.status = "home";
+    f.x = f.standX;
+    f.y = f.standY;
+    f.carrierId = null;
+    f.carrierSlot = -1;
+    f.returnAt = 0;
+  }
+  dropFlag(f, carrier) {
+    f.status = "dropped";
+    f.x = carrier.x;
+    f.y = carrier.y;
+    f.carrierId = null;
+    f.carrierSlot = -1;
+    f.returnAt = this.time + CTF_RULES.returnMs;
+    this.events.push({ t: "flag", action: "dropped", team: f.team, slot: carrier.slot });
+  }
+  /** The flag `p` carries, if any. */
+  flagCarriedBy(id) {
+    return this.flags.find((f) => f.carrierId === id);
+  }
+  stepFlags() {
+    const r2 = CTF_RULES.touchRadius * CTF_RULES.touchRadius;
+    for (const f of this.flags) {
+      if (f.status === "carried") {
+        const c = f.carrierId ? this.players.get(f.carrierId) : void 0;
+        if (!c || !c.alive || !c.connected) {
+          f.status = "dropped";
+          f.carrierId = null;
+          f.carrierSlot = -1;
+          f.returnAt = this.time + CTF_RULES.returnMs;
+          this.events.push({ t: "flag", action: "dropped", team: f.team, slot: c ? c.slot : -1 });
+          continue;
+        }
+        f.x = c.x;
+        f.y = c.y;
+      } else if (f.status === "dropped" && this.time >= f.returnAt) {
+        this.flagHome(f);
+        this.events.push({ t: "flag", action: "returned", team: f.team, slot: -1 });
+      }
+    }
+    const order = [...this.players.values()].filter((p) => p.alive && p.team !== null).sort((a, b2) => a.slot - b2.slot);
+    for (const p of order) {
+      const team = p.team;
+      for (const f of this.flags) {
+        if (f.status === "carried" || (p.x - f.x) ** 2 + (p.y - f.y) ** 2 > r2) continue;
+        if (f.team !== team) {
+          f.status = "carried";
+          f.carrierId = p.id;
+          f.carrierSlot = p.slot;
+          f.returnAt = 0;
+          f.x = p.x;
+          f.y = p.y;
+          p.score += CTF_RULES.takePoints;
+          p.invulnUntil = Math.min(p.invulnUntil, this.time);
+          this.events.push({ t: "flag", action: "taken", team: f.team, slot: p.slot });
+        } else if (f.status === "dropped") {
+          this.flagHome(f);
+          p.score += CTF_RULES.returnPoints;
+          this.events.push({ t: "flag", action: "returned", team: f.team, slot: p.slot });
+        }
+      }
+      const carried = this.flagCarriedBy(p.id);
+      const own = this.flags.find((f) => f.team === team);
+      if (carried && own && own.status === "home" && (p.x - own.standX) ** 2 + (p.y - own.standY) ** 2 <= r2) {
+        this.flagHome(carried);
+        p.score += CTF_RULES.capturePoints;
+        p.objectives++;
+        this.teamScore[team]++;
+        this.events.push({ t: "flag", action: "captured", team: carried.team, slot: p.slot });
+        if (this.teamScore[team] >= this.config.captureLimit) {
+          this.finish("score");
+          return;
+        }
+      }
+    }
+  }
+  stepBases() {
+    const r2 = BASE_RULES.radius * BASE_RULES.radius;
+    const unit = TICK_MS / BASE_RULES.captureMs;
+    for (const b2 of this.bases) {
+      const inside = [0, 0];
+      for (const p of this.players.values()) {
+        if (p.alive && p.team !== null && (p.x - b2.x) ** 2 + (p.y - b2.y) ** 2 <= r2) inside[p.team]++;
+      }
+      b2.inside = inside;
+      b2.contested = inside[0] > 0 && inside[1] > 0;
+      if (b2.contested) continue;
+      const team = inside[0] > 0 ? 0 : inside[1] > 0 ? 1 : null;
+      if (team === null) {
+        if (b2.capturer !== null) {
+          b2.progress -= unit * BASE_RULES.decayRate;
+          if (b2.progress <= 0) {
+            b2.progress = 0;
+            b2.capturer = null;
+          }
+        }
+        continue;
+      }
+      const rate = unit * Math.min(BASE_RULES.maxRate, 1 + (inside[team] - 1) * BASE_RULES.extraPlayerRate);
+      if (b2.capturer !== null && b2.capturer !== team) {
+        b2.progress -= rate;
+        if (b2.progress <= 0) {
+          b2.progress = 0;
+          b2.capturer = null;
+        }
+        continue;
+      }
+      if (b2.owner === team) continue;
+      b2.capturer = team;
+      b2.progress += rate;
+      if (b2.progress >= 1 - 1e-9) {
+        const from = b2.owner;
+        b2.owner = team;
+        b2.capturer = null;
+        b2.progress = 0;
+        const slots = [];
+        for (const p of this.players.values()) {
+          if (p.alive && p.team === team && (p.x - b2.x) ** 2 + (p.y - b2.y) ** 2 <= r2) {
+            p.score += BASE_RULES.capturePoints;
+            p.objectives++;
+            slots.push(p.slot);
+          }
+        }
+        slots.sort((x, y) => x - y);
+        this.events.push({ t: "base", base: b2.index, team, from, slots });
+      }
+    }
+    if (this.time >= this.nextBaseTickAt) {
+      this.nextBaseTickAt = Math.max(this.nextBaseTickAt + BASE_RULES.tickMs, this.time + 1);
+      for (const b2 of this.bases) if (b2.owner !== null) this.teamScore[b2.owner]++;
+      const limit = this.config.baseScoreLimit;
+      if (this.teamScore[0] >= limit || this.teamScore[1] >= limit) this.finish("score");
+    }
   }
   // ── Equipment (slot 4) ──────────────────────────────────────────────────
   /** Throw / place / deploy the equipped gadget, or detonate this player's armed C4. */
@@ -13198,6 +13608,7 @@ var World = class {
       kind,
       ownerId: p.id,
       ownerSlot: p.slot,
+      ownerTeam: p.team,
       x,
       y,
       vx: def.use === "throw" ? dx * def.throwSpeed + p.vx * 0.5 : 0,
@@ -13232,7 +13643,7 @@ var World = class {
   detonateGadget(g) {
     const def = GADGETS[g.kind];
     this.removeGadget(g);
-    this.blast({ id: 65536 + g.id, ownerId: g.ownerId, ownerSlot: g.ownerSlot, arms: g.kind, x: g.x, y: g.y, radius: def.radius, splash: def.damage, selfFactor: def.selfFactor });
+    this.blast({ id: 65536 + g.id, ownerId: g.ownerId, ownerSlot: g.ownerSlot, ownerTeam: g.ownerTeam, arms: g.kind, x: g.x, y: g.y, radius: def.radius, splash: def.damage, selfFactor: def.selfFactor });
   }
   damageTurret(g, amount) {
     if (g.kind !== "turret" || !this.gadgets.includes(g)) return;
@@ -13333,7 +13744,7 @@ var World = class {
             if (this.time >= g.triggeredAt + 250) this.detonateGadget(g);
           } else if (this.time >= g.fuseAt) {
             for (const q of this.players.values()) {
-              if (!q.alive || q.id === g.ownerId) continue;
+              if (!q.alive || !this.hostileToOwner(g, q)) continue;
               if ((q.x - g.x) ** 2 + (q.y - g.y) ** 2 > (MINE_TRIGGER + PLAYER_RADIUS) ** 2) continue;
               g.triggeredAt = this.time;
               this.events.push({ t: "beep", id: g.id, x: g.x, y: g.y });
@@ -13367,12 +13778,16 @@ var World = class {
     const owner = this.players.get(g.ownerId) ?? null;
     for (const q of [...this.players.values()]) {
       if (!q.alive) continue;
+      if (q.id !== g.ownerId && !this.hostileToOwner(g, q)) continue;
       if ((q.x - g.x) ** 2 + (q.y - g.y) ** 2 > def.radius * def.radius) continue;
       if (!this.collision.lineOfSight(g.x, g.y, q.x, q.y)) continue;
       const dmg = q.id === g.ownerId ? def.damage * def.selfFactor : def.damage;
       this.applyDamage(q, owner, Math.max(1, Math.round(dmg)), "molotov");
     }
-    for (const t of [...this.gadgets]) if (t.kind === "turret" && (t.x - g.x) ** 2 + (t.y - g.y) ** 2 <= def.radius * def.radius) this.damageTurret(t, def.damage);
+    for (const t of [...this.gadgets]) {
+      if (t.kind !== "turret" || this.teams && t.ownerId !== g.ownerId && t.ownerTeam !== null && t.ownerTeam === g.ownerTeam) continue;
+      if ((t.x - g.x) ** 2 + (t.y - g.y) ** 2 <= def.radius * def.radius) this.damageTurret(t, def.damage);
+    }
   }
   /** Flashbang: blinds everyone with line of sight, longer when close and looking at it. */
   flashbang(g) {
@@ -13381,6 +13796,7 @@ var World = class {
     this.events.push({ t: "flashbang", x: g.x, y: g.y });
     for (const q of this.players.values()) {
       if (!q.alive) continue;
+      if (q.id !== g.ownerId && !this.hostileToOwner(g, q)) continue;
       const d = Math.hypot(q.x - g.x, q.y - g.y);
       if (d > def.radius || !this.collision.lineOfSight(g.x, g.y, q.x, q.y)) continue;
       const look = Math.abs(angleDiff(q.aim, Math.atan2(g.y - q.y, g.x - q.x)));
@@ -13407,7 +13823,7 @@ var World = class {
     let target = null;
     let bestD = def.radius;
     for (const q of this.players.values()) {
-      if (!q.alive || q.id === g.ownerId || this.time < q.invulnUntil) continue;
+      if (!q.alive || !this.hostileToOwner(g, q) || this.time < q.invulnUntil) continue;
       const d = Math.hypot(q.x - g.x, q.y - g.y);
       if (d > bestD) continue;
       if (!this.collision.lineOfSight(g.x, g.y, q.x, q.y) || this.smokeBlocks(g.x, g.y, q.x, q.y)) continue;
@@ -13430,7 +13846,7 @@ var World = class {
     let maxT = wall ? wall.t : range;
     let victim = null;
     for (const q of this.players.values()) {
-      if (!q.alive || q.id === g.ownerId) continue;
+      if (!q.alive || !this.hostileToOwner(g, q)) continue;
       const t = rayCircle(g.x, g.y, dx, dy, q.x, q.y, PLAYER_RADIUS);
       if (t !== null && t < maxT) {
         maxT = t;
@@ -13567,6 +13983,8 @@ var World = class {
       }
       this.stepProjectiles();
       this.stepGadgets();
+      if (this.phase === "active" && this.flags.length > 0) this.stepFlags();
+      if (this.phase === "active" && this.bases.length > 0) this.stepBases();
       if (this.nextSupplyAt > 0 && this.time >= this.nextSupplyAt) {
         this.nextSupplyAt = this.time + this.config.supplyIntervalMs;
         this.dropSupply();
@@ -13653,25 +14071,44 @@ var World = class {
     this.events = [];
     return e;
   }
+  /** Team matches: team scores and the winner (null on a draw). */
+  teamResult() {
+    const [a, b2] = this.teamScore;
+    return { scores: [a, b2], winner: a === b2 ? null : a > b2 ? 0 : 1 };
+  }
+  /**
+   * Final table. Free-for-all: by points with shared places for equal results. Team matches: the
+   * winning team first (place 1 for all of its players, 2 for the other team; 1 for everyone on a
+   * draw), each team ordered by points.
+   */
   standings() {
-    const list = [...this.players.values()].sort(
-      (a, b2) => b2.score - a.score || b2.kills - a.kills || a.deaths - b2.deaths || b2.damageDealt - a.damageDealt || a.joinedAt - b2.joinedAt
-    );
-    const places = rankPlaces(list);
-    return list.map((p, i) => ({
+    const byPerf = (a, b2) => b2.score - a.score || b2.kills - a.kills || a.deaths - b2.deaths || b2.damageDealt - a.damageDealt || a.joinedAt - b2.joinedAt;
+    const row = (p, place) => ({
       id: p.id,
       slot: p.slot,
       name: p.name,
       character: p.character,
       isBot: p.isBot,
+      ...this.teams ? { team: p.team } : {},
+      ...this.config.mode === "ctf" || this.config.mode === "bases" ? { objectives: p.objectives } : {},
       kills: p.kills,
       assists: p.assists,
       deaths: p.deaths,
       score: p.score,
       damageDealt: p.damageDealt,
       bestStreak: p.bestStreak,
-      place: places[i]
-    }));
+      place
+    });
+    if (this.teams) {
+      const { winner } = this.teamResult();
+      const first = winner ?? 0;
+      const order = (p) => p.team === first ? 0 : 1;
+      const list2 = [...this.players.values()].sort((a, b2) => order(a) - order(b2) || byPerf(a, b2));
+      return list2.map((p) => row(p, winner === null || p.team === winner ? 1 : 2));
+    }
+    const list = [...this.players.values()].sort(byPerf);
+    const places = rankPlaces(list);
+    return list.map((p, i) => row(p, places[i]));
   }
 };
 
@@ -13711,7 +14148,12 @@ function decodeInputs(data) {
   }
   return out;
 }
-var PLAYER_BYTES = 46;
+var HEADER_BYTES = 19;
+var PLAYER_BYTES = 48;
+var FLAG_BYTES = 9;
+var BASE_BYTES = 4;
+var FLAG_STATUSES = ["home", "carried", "dropped"];
+var MAX_BASES = 8;
 var GADGET_BYTES = 15;
 var GADGET_PHASES = ["moving", "armed", "active"];
 var u16 = (x) => clamp(Math.round(x), 0, 65535);
@@ -13723,9 +14165,12 @@ function encodeSnapshot(src) {
   const melees = src.events.filter((e) => e.t === "melee");
   const pickups = src.pickups.filter((p) => p.active || !p.dropped);
   const gadgets = src.gadgets.slice(0, 255);
-  let size2 = 1 + 4 + 4 + 1 + 4 + 1 + players.length * PLAYER_BYTES + 1 + pickups.length * 8 + 2 + 1 + 1;
+  const flags = (src.flags ?? []).slice(0, 2);
+  const bases = (src.bases ?? []).slice(0, MAX_BASES);
+  let size2 = HEADER_BYTES + players.length * PLAYER_BYTES + 1 + pickups.length * 8 + 2 + 1 + 1;
   for (const s of shots) size2 += 10 + s.pellets.length * 6;
   size2 += melees.length * 4 + gadgets.length * GADGET_BYTES;
+  size2 += 1 + flags.length * FLAG_BYTES + 1 + bases.length * BASE_BYTES;
   const buf = new ArrayBuffer(size2);
   const v = new DataView(buf);
   let o = 0;
@@ -13734,12 +14179,14 @@ function encodeSnapshot(src) {
   v.setUint32(o + 5, Math.max(0, Math.round(src.time)) >>> 0, true);
   v.setUint8(o + 9, MATCH_PHASES.indexOf(src.phase));
   v.setUint32(o + 10, Math.max(0, Math.round(src.phaseRemaining)) >>> 0, true);
-  v.setUint8(o + 14, players.length);
-  o += 15;
+  v.setUint16(o + 14, u16(src.teamScore?.[0] ?? 0), true);
+  v.setUint16(o + 16, u16(src.teamScore?.[1] ?? 0), true);
+  v.setUint8(o + 18, players.length);
+  o += HEADER_BYTES;
   for (const p of players) {
-    const flags = (p.alive ? 1 : 0) | (p.connected ? 2 : 0) | (p.reloadWeapon ? 4 : 0) | (src.now < p.invulnUntil ? 8 : 0) | (p.walking ? 16 : 0) | (p.heavy ? 32 : 0) | (p.mods[p.weapon]?.includes("laser") ? 64 : 0);
+    const flags2 = (p.alive ? 1 : 0) | (p.connected ? 2 : 0) | (p.reloadWeapon ? 4 : 0) | (src.now < p.invulnUntil ? 8 : 0) | (p.walking ? 16 : 0) | (p.heavy ? 32 : 0) | (p.mods[p.weapon]?.includes("laser") ? 64 : 0);
     v.setUint8(o, p.slot);
-    v.setUint8(o + 1, flags);
+    v.setUint8(o + 1, flags2);
     v.setUint16(o + 2, u16(p.x * POS_SCALE), true);
     v.setUint16(o + 4, u16(p.y * POS_SCALE), true);
     v.setInt16(o + 6, i16(p.vx * VEL_SCALE), true);
@@ -13766,6 +14213,8 @@ function encodeSnapshot(src) {
     v.setUint8(o + 42, p.gadget ? GADGETS[p.gadget].index : 255);
     v.setUint8(o + 43, u8c(p.gadgetCharges));
     v.setUint16(o + 44, u16(Math.max(0, p.flashedUntil - src.time)), true);
+    v.setUint8(o + 46, p.team === null ? 255 : p.team);
+    v.setUint8(o + 47, u8c(p.objectives));
     o += PLAYER_BYTES;
   }
   v.setUint8(o, pickups.length);
@@ -13821,12 +14270,32 @@ function encodeSnapshot(src) {
     v.setUint8(o + 14, 0);
     o += GADGET_BYTES;
   }
+  v.setUint8(o, flags.length);
+  o += 1;
+  for (const f of flags) {
+    v.setUint8(o, f.team);
+    v.setUint8(o + 1, FLAG_STATUSES.indexOf(f.status));
+    v.setUint8(o + 2, f.carrierSlot < 0 ? 255 : f.carrierSlot);
+    v.setUint16(o + 3, u16(f.x * POS_SCALE), true);
+    v.setUint16(o + 5, u16(f.y * POS_SCALE), true);
+    v.setUint16(o + 7, u16(f.status === "dropped" ? Math.max(0, f.returnAt - src.time) / 10 : 0), true);
+    o += FLAG_BYTES;
+  }
+  v.setUint8(o, bases.length);
+  o += 1;
+  for (const b2 of bases) {
+    v.setUint8(o, b2.owner === null ? 255 : b2.owner);
+    v.setUint8(o + 1, b2.capturer === null ? 255 : b2.capturer);
+    v.setUint8(o + 2, u8c(b2.progress * 255));
+    v.setUint8(o + 3, (b2.contested ? 1 : 0) | Math.min(7, b2.inside[0]) << 1 | Math.min(7, b2.inside[1]) << 4);
+    o += BASE_BYTES;
+  }
   if (o !== size2) throw new Error(`snapshot size mismatch ${o} != ${size2}`);
   return buf;
 }
 
 // packages/shared/src/net/protocol.ts
-var PROTOCOL_VERSION = 4;
+var PROTOCOL_VERSION = 6;
 var roomId = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 var ClientMessageSchema = external_exports.discriminatedUnion("type", [
   external_exports.object({
@@ -13841,6 +14310,10 @@ var ClientMessageSchema = external_exports.discriminatedUnion("type", [
   external_exports.object({ type: external_exports.literal("ready"), ready: external_exports.boolean() }),
   external_exports.object({ type: external_exports.literal("character"), character: external_exports.enum(CHARACTER_IDS) }),
   external_exports.object({ type: external_exports.literal("map"), mapId: external_exports.enum(MAP_IDS) }),
+  /** Host: the game mode (lobby only). */
+  external_exports.object({ type: external_exports.literal("mode"), mode: external_exports.enum(GAME_MODES) }),
+  /** Team matches: move to the other team (lobby only, while the teams stay even). */
+  external_exports.object({ type: external_exports.literal("team"), team: external_exports.union([external_exports.literal(0), external_exports.literal(1)]) }),
   external_exports.object({ type: external_exports.literal("start") }),
   external_exports.object({ type: external_exports.literal("rematch") }),
   /** The player changed their loadout over the API: the server re-reads it (applies from the next spawn). */
@@ -13896,11 +14369,11 @@ var CLIENT_EVENT_PROPS = {
 var SERVER_EVENT_PROPS = {
   session_started: external_exports.object({ platform, method: external_exports.enum(["telegram", "dev", "guest", "email"]) }),
   profile_created: external_exports.object({ method: external_exports.enum(["telegram", "dev", "guest"]) }),
-  lobby_created: external_exports.object({ roomId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean() }),
+  lobby_created: external_exports.object({ roomId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean(), mode: external_exports.enum(GAME_MODES).optional() }),
   lobby_joined: external_exports.object({ roomId: external_exports.string(), viaInvite: external_exports.boolean() }),
   lobby_left: external_exports.object({ roomId: external_exports.string(), phase: external_exports.string() }),
-  match_started: external_exports.object({ matchId: external_exports.string(), roomId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), players: external_exports.number().int() }),
-  match_completed: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), durationMs: external_exports.number().int(), players: external_exports.number().int(), reason: external_exports.string() }),
+  match_started: external_exports.object({ matchId: external_exports.string(), roomId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), players: external_exports.number().int(), mode: external_exports.enum(GAME_MODES).optional() }),
+  match_completed: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), durationMs: external_exports.number().int(), players: external_exports.number().int(), reason: external_exports.string(), mode: external_exports.enum(GAME_MODES).optional() }),
   match_abandoned: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), phase: external_exports.string() }),
   map_played: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS) }),
   invite_created: external_exports.object({ code: external_exports.string(), roomId: external_exports.string() }),
@@ -13972,8 +14445,8 @@ var LoadoutRequest = external_exports.object({
 var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true) }).strict();
 var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card", "crypto"]) }).strict();
 var UpdateProfileRequest = external_exports.object({ displayName: displayNameSchema.optional(), preferredCharacter: external_exports.enum(CHARACTER_IDS).optional() }).strict();
-var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true) }).strict();
-var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional() }).strict();
+var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true), mode: external_exports.enum(GAME_MODES).default("ffa") }).strict();
+var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional(), mode: external_exports.enum(GAME_MODES).default("ffa") }).strict();
 var AdminLoginRequest = external_exports.object({ username: external_exports.string().min(3).max(32), password: external_exports.string().min(1).max(256) }).strict();
 var AdminCreateUserRequest = external_exports.object({
   username: external_exports.string().regex(/^[a-z0-9_.-]{3,32}$/),
@@ -14057,7 +14530,7 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
     const body = await ctx.body(CreateRoomRequest);
     let room;
     try {
-      room = rooms2.create(body.mapId, body.isPrivate, user.userId);
+      room = rooms2.create(body.mapId, body.isPrivate, user.userId, null, body.mode);
     } catch {
       throw new HttpError(503, "capacity", "The server is full, try again later");
     }
@@ -14073,14 +14546,14 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
       webUrl = urls.web;
       services2.analytics.server("invite_created", { code: inv.code, roomId: room.id }, user);
     }
-    const res = { roomId: room.id, inviteCode, inviteUrl, webUrl, mapId: room.mapId };
+    const res = { roomId: room.id, inviteCode, inviteUrl, webUrl, mapId: room.mapId, mode: room.mode };
     ctx.json(201, res);
   });
   router.post("/api/rooms/quick", auth, rateLimit(lookupLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
     const user = currentUser(ctx);
     const body = await ctx.body(QuickMatchRequest);
-    const room = rooms2.quickMatch(user.userId, body.mapId);
-    ctx.json(200, { roomId: room.id, mapId: room.mapId });
+    const room = rooms2.quickMatch(user.userId, body.mapId, body.mode);
+    ctx.json(200, { roomId: room.id, mapId: room.mapId, mode: room.mode });
   });
   router.get("/api/rooms/:id", auth, (ctx) => {
     const room = rooms2.get(ctx.params.id ?? "");
@@ -14092,14 +14565,14 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
     const code = ctx.params.code ?? "";
     if (!/^[A-Za-z0-9]{6,16}$/.test(code)) throw new HttpError(400, "bad_code", "Invalid invitation code");
     const resolved = await services2.invites.resolve(code);
-    let info = { code, status: "not_found", roomId: null, mapId: null, players: 0, maxPlayers: 0, hostName: null };
+    let info = { code, status: "not_found", roomId: null, mapId: null, mode: null, players: 0, maxPlayers: 0, hostName: null };
     if (resolved) {
       const room = rooms2.get(resolved.roomId);
       if (!room) info = { ...info, status: "expired" };
       else {
         const phase = room.phase;
         const status = room.occupancy >= room.config.maxPlayers ? "full" : phase === "finished" ? "finished" : phase === "waiting" ? "joinable" : room.isJoinable() ? "in_progress" : "full";
-        info = { code, status, roomId: room.id, mapId: room.mapId, players: room.occupancy, maxPlayers: room.config.maxPlayers, hostName: room.hostName() };
+        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.occupancy, maxPlayers: room.config.maxPlayers, hostName: room.hostName() };
       }
     }
     ctx.json(200, info);
@@ -14629,15 +15102,15 @@ var PgMatchRecorder = class {
     if (!UUID_RE.test(m.matchId)) return;
     await this.sql.begin(async (tx) => {
       await tx`
-        INSERT INTO matches (id, room_id, map_id, is_private, status, started_at, player_count)
-        VALUES (${m.matchId}, ${m.roomId}, ${m.mapId}, ${m.isPrivate}, 'active', ${m.startedAt}, ${m.players.length})
+        INSERT INTO matches (id, room_id, map_id, mode, is_private, status, started_at, player_count)
+        VALUES (${m.matchId}, ${m.roomId}, ${m.mapId}, ${m.mode}, ${m.isPrivate}, 'active', ${m.startedAt}, ${m.players.length})
         ON CONFLICT (id) DO NOTHING`;
       const known = await existingUsers(tx, m.players.map((p) => p.userId));
       for (const p of m.players) {
         if (!known.has(p.userId)) continue;
         await tx`
-          INSERT INTO match_participants (match_id, user_id, character, via_invite, joined_at)
-          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.viaInvite}, ${m.startedAt})
+          INSERT INTO match_participants (match_id, user_id, character, team, via_invite, joined_at)
+          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.team}, ${p.viaInvite}, ${m.startedAt})
           ON CONFLICT (match_id, user_id) DO NOTHING`;
       }
     });
@@ -14646,8 +15119,8 @@ var PgMatchRecorder = class {
     if (!UUID_RE.test(m.matchId)) throw new Error("matchId must be a UUID");
     return this.sql.begin(async (tx) => {
       await tx`
-        INSERT INTO matches (id, room_id, map_id, is_private, status, started_at, player_count)
-        VALUES (${m.matchId}, ${m.roomId}, ${m.mapId}, ${m.isPrivate}, 'active', ${m.startedAt}, ${m.playersAtEnd})
+        INSERT INTO matches (id, room_id, map_id, mode, is_private, status, started_at, player_count)
+        VALUES (${m.matchId}, ${m.roomId}, ${m.mapId}, ${m.mode}, ${m.isPrivate}, 'active', ${m.startedAt}, ${m.playersAtEnd})
         ON CONFLICT (id) DO NOTHING`;
       const locked = await tx`SELECT results_processed_at FROM matches WHERE id = ${m.matchId} FOR UPDATE`;
       const known = await existingUsers(tx, m.participants.map((p) => p.userId));
@@ -14660,7 +15133,7 @@ var PgMatchRecorder = class {
           SELECT xp, level, matches_completed, wins, current_win_streak, best_win_streak FROM profiles WHERE user_id = ${p.userId} FOR UPDATE`;
         const withFriends = m.isPrivate && p.viaInvite && m.playersAtEnd >= 2;
         const sharedPlace = p.completed && m.participants.some((o) => o.userId !== p.userId && o.completed && o.place === p.place);
-        const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends, sharedPlace };
+        const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends, sharedPlace, ...p.teamOutcome ? { teamOutcome: p.teamOutcome } : {}, objectives: p.objectives ?? 0 };
         const ownedRows = await tx`SELECT achievement_id FROM player_achievements WHERE user_id = ${p.userId}`;
         const prev = { xp: prof.xp, level: prof.level, matchesCompleted: prof.matches_completed, wins: prof.wins, currentWinStreak: prof.current_win_streak };
         const { won, lost, streak, unlocked, xpGained: xp, totalXp, level } = applyMatchProgress(prev, perf, new Set(ownedRows.map((r) => r.achievement_id)));
@@ -14687,10 +15160,10 @@ var PgMatchRecorder = class {
         }
         const totalTokens = await awardMatchTokens(tx, p.userId, m.matchId, tokens);
         await tx`
-          INSERT INTO match_participants (match_id, user_id, character, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, tokens_awarded, joined_at, left_at)
-          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${tokens}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
+          INSERT INTO match_participants (match_id, user_id, character, team, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, tokens_awarded, joined_at, left_at)
+          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.team}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${tokens}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
           ON CONFLICT (match_id, user_id) DO UPDATE SET
-            character = EXCLUDED.character, place = EXCLUDED.place, kills = EXCLUDED.kills, assists = EXCLUDED.assists, deaths = EXCLUDED.deaths,
+            character = EXCLUDED.character, team = EXCLUDED.team, place = EXCLUDED.place, kills = EXCLUDED.kills, assists = EXCLUDED.assists, deaths = EXCLUDED.deaths,
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
             tokens_awarded = EXCLUDED.tokens_awarded, left_at = EXCLUDED.left_at`;
@@ -14698,7 +15171,7 @@ var PgMatchRecorder = class {
       }
       await tx`
         UPDATE matches SET status = 'completed', ended_at = ${m.endedAt}, duration_ms = ${Math.max(0, Math.round(m.durationMs))},
-          end_reason = ${m.endReason}, player_count = ${m.playersAtEnd}, results_processed_at = now()
+          end_reason = ${m.endReason}, player_count = ${m.playersAtEnd}, mode = ${m.mode}, winner_team = ${m.winnerTeam}, results_processed_at = now()
         WHERE id = ${m.matchId}`;
       return out;
     });
@@ -15977,6 +16450,8 @@ async function charts(sql2, r, now = /* @__PURE__ */ new Date()) {
     ) b GROUP BY bucket`;
   const maps = await sql2`
     SELECT map_id AS key, count(*)::int AS count FROM matches WHERE started_at BETWEEN ${from} AND ${to} GROUP BY map_id ORDER BY count DESC`;
+  const modes = await sql2`
+    SELECT mode AS key, count(*)::int AS count FROM matches WHERE started_at BETWEEN ${from} AND ${to} GROUP BY mode ORDER BY count DESC`;
   const characters = await sql2`
     SELECT mp.character AS key, count(*)::int AS count
     FROM match_participants mp JOIN matches m ON m.id = mp.match_id
@@ -15998,6 +16473,7 @@ async function charts(sql2, r, now = /* @__PURE__ */ new Date()) {
     sessionDuration: fillBuckets(SESSION_BUCKETS, [...sessionDuration]),
     matchDuration: fillBuckets(MATCH_BUCKETS, [...matchDuration]),
     maps: [...maps],
+    modes: [...modes],
     characters: [...characters],
     platforms: [...platforms]
   };
@@ -16705,7 +17181,7 @@ var MatchRoom = class {
     this.hostId = opts.hostUserId;
     this.inviteCode = opts.inviteCode ?? null;
     this.autoStart = opts.autoStart ?? !opts.isPrivate;
-    this.config = { ...DEFAULT_MATCH_CONFIG, ...opts.config };
+    this.config = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? "ffa" };
     this.log = log2.child({ room: this.id });
     this.world = this.createWorld();
   }
@@ -16713,6 +17189,7 @@ var MatchRoom = class {
   id;
   isPrivate;
   createdAt = Date.now();
+  /** Match rules; `mode` changes when the host switches between free-for-all and teams. */
   config;
   mapId;
   hostId;
@@ -16735,6 +17212,9 @@ var MatchRoom = class {
   }
   get phase() {
     return this.world.phase;
+  }
+  get mode() {
+    return this.config.mode;
   }
   /** Players occupying a slot (connected or within the reconnect grace window). */
   get occupancy() {
@@ -16825,6 +17305,7 @@ var MatchRoom = class {
       slot: p?.slot ?? -1,
       roomId: this.id,
       reconnectToken: c.reconnectToken,
+      mode: this.config.mode,
       serverTime: this.world.time,
       tick: this.world.tick,
       mapId: this.mapId,
@@ -16917,7 +17398,7 @@ var MatchRoom = class {
         this.broadcastRoster();
         return;
       case "character": {
-        if (!c.gear.characters.has(msg.character)) return this.error(c, "invalid_state", "This character isn\u2019t unlocked yet");
+        if (!c.gear.characters.has(msg.character)) return this.error(c, "character_locked", "This character isn\u2019t unlocked yet");
         c.character = msg.character;
         const p = this.world.players.get(c.user.userId);
         if (p && (this.world.phase === "waiting" || !p.alive)) p.character = msg.character;
@@ -16926,14 +17407,31 @@ var MatchRoom = class {
       }
       case "map":
         if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host changes the map");
-        if (this.world.phase !== "waiting") return this.error(c, "invalid_state", "The match is already on");
+        if (this.world.phase !== "waiting") return this.error(c, "match_running", "The match is already on");
         if (!isMapId(msg.mapId)) return;
         this.changeMap(msg.mapId);
         return;
+      case "mode":
+        if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host changes the mode");
+        if (this.world.phase !== "waiting") return this.error(c, "match_running", "The match is already on");
+        this.changeMode(msg.mode);
+        return;
+      case "team": {
+        if (!isTeamMode(this.config.mode)) return;
+        if (this.world.phase !== "waiting") return this.error(c, "match_running", "Teams are fixed once the match is on");
+        const p = this.world.players.get(c.user.userId);
+        if (!p || p.team === msg.team) return;
+        const to = this.world.teamSize(msg.team) + 1;
+        const from = this.world.teamSize(msg.team === 0 ? 1 : 0) - (p.team === null ? 0 : 1);
+        if (to - from > 1) return this.error(c, "team_full", "That team already has more players");
+        this.world.setTeam(c.user.userId, msg.team);
+        this.broadcastRoster();
+        return;
+      }
       case "start":
         if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host starts the match");
-        if (this.world.phase !== "waiting") return this.error(c, "invalid_state", "The match is already on");
-        if (this.connectedCount < this.config.minPlayers) return this.error(c, "invalid_state", `At least ${this.config.minPlayers} players needed`);
+        if (this.world.phase !== "waiting") return this.error(c, "match_running", "The match is already on");
+        if (this.connectedCount < this.config.minPlayers) return this.error(c, "not_enough_players", `At least ${this.config.minPlayers} players needed`);
         this.startMatch();
         return;
       case "loadout": {
@@ -16965,10 +17463,27 @@ var MatchRoom = class {
     }
   }
   changeMap(mapId) {
-    const roster = [...this.world.players.values()];
     this.mapId = mapId;
+    this.rebuildWorld(true);
+  }
+  /**
+   * A new game mode: the roster stays; teams carry over between team modes and are dealt anew
+   * (alternating by arrival) when coming from free-for-all.
+   */
+  changeMode(mode) {
+    if (mode === this.config.mode) return;
+    const keepTeams = isTeamMode(this.config.mode) && isTeamMode(mode);
+    this.config = { ...this.config, mode };
+    this.rebuildWorld(keepTeams);
+    this.services.analytics.server("lobby_created", { roomId: this.id, mapId: this.mapId, isPrivate: this.isPrivate, mode }, { userId: this.hostId });
+  }
+  rebuildWorld(keepTeams) {
+    const roster = [...this.world.players.values()].sort((a, b2) => a.joinedAt - b2.joinedAt || a.slot - b2.slot);
     this.world = this.createWorld();
-    for (const p of roster) this.world.addPlayer(p.id, p.name, p.character, p.isBot, { sidearm: p.sidearm, melee: p.melee, primary: p.primary, gadget: p.gadget, mods: p.mods }).connected = p.connected;
+    for (const p of roster) {
+      const team = keepTeams && isTeamMode(this.config.mode) && p.team !== null ? p.team : void 0;
+      this.world.addPlayer(p.id, p.name, p.character, p.isBot, { sidearm: p.sidearm, melee: p.melee, primary: p.primary, gadget: p.gadget, mods: p.mods }, team).connected = p.connected;
+    }
     this.broadcastRoster();
   }
   // ── Match lifecycle ─────────────────────────────────────────────────────
@@ -16985,11 +17500,11 @@ var MatchRoom = class {
     this.matchId = randomUUID3();
     this.matchStartedAtWall = Date.now();
     this.resultsSent = false;
-    const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite }));
-    this.services.recorder.matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, isPrivate: this.isPrivate, startedAt: /* @__PURE__ */ new Date(), players }).catch((e) => this.log.error("matchStarted failed", { err: e }));
-    this.services.analytics.server("match_started", { matchId: this.matchId, roomId: this.id, mapId: this.mapId, players: players.length });
+    const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite, team: this.world.players.get(c.user.userId)?.team ?? null }));
+    this.services.recorder.matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, startedAt: /* @__PURE__ */ new Date(), players }).catch((e) => this.log.error("matchStarted failed", { err: e }));
+    this.services.analytics.server("match_started", { matchId: this.matchId, roomId: this.id, mapId: this.mapId, players: players.length, mode: this.config.mode });
     this.services.analytics.server("map_played", { matchId: this.matchId, mapId: this.mapId });
-    this.log.info("match started", { matchId: this.matchId, players: players.length, map: this.mapId });
+    this.log.info("match started", { matchId: this.matchId, players: players.length, map: this.mapId, mode: this.config.mode });
     this.broadcastRoster();
   }
   toLobby(rematch) {
@@ -17011,33 +17526,41 @@ var MatchRoom = class {
     this.resultsSent = true;
     const standings = this.world.standings();
     const durationMs = Math.max(0, this.world.time - this.world.matchStartedAt);
+    const teams = isTeamMode(this.config.mode) ? this.world.teamResult() : void 0;
     this.flush();
-    this.broadcast({ type: "results", matchId: this.matchId, reason, durationMs, standings, mapId: this.mapId });
+    this.broadcast({ type: "results", matchId: this.matchId, reason, durationMs, standings, mapId: this.mapId, mode: this.config.mode, ...teams ? { teams } : {} });
     const matchId = this.matchId;
     const presentAtEnd = standings.filter((s) => this.clients.get(s.id)?.connected);
     const presentPlaces = rankPlaces(presentAtEnd);
     const participants = standings.filter((s) => !s.isBot && this.clients.has(s.id)).map((s) => {
       const c = this.clients.get(s.id);
       const presentIdx = presentAtEnd.findIndex((x) => x.id === s.id);
+      const team = s.team ?? null;
       return {
         userId: s.id,
         character: c.character,
-        place: presentIdx >= 0 ? presentPlaces[presentIdx] : standings.length,
+        // team matches: 1 for the winning team (both on a draw), 2 for the other
+        place: teams ? s.place : presentIdx >= 0 ? presentPlaces[presentIdx] : standings.length,
+        team,
+        ...teams ? { teamOutcome: teams.winner === null ? "draw" : team === teams.winner ? "win" : "loss" } : {},
         kills: s.kills,
         assists: s.assists,
         deaths: s.deaths,
         score: s.score,
         damageDealt: s.damageDealt,
+        objectives: s.objectives ?? 0,
         completed: c.connected,
         viaInvite: c.viaInvite,
         playtimeMs: Math.round(c.matchTimeMs)
       };
     });
-    this.services.analytics.server("match_completed", { matchId, mapId: this.mapId, durationMs, players: presentAtEnd.length, reason });
+    this.services.analytics.server("match_completed", { matchId, mapId: this.mapId, durationMs, players: presentAtEnd.length, reason, mode: this.config.mode });
     this.services.recorder.matchCompleted({
       matchId,
       roomId: this.id,
       mapId: this.mapId,
+      mode: this.config.mode,
+      winnerTeam: teams ? teams.winner : null,
       isPrivate: this.isPrivate,
       startedAt: new Date(this.matchStartedAtWall),
       endedAt: /* @__PURE__ */ new Date(),
@@ -17121,9 +17644,12 @@ var MatchRoom = class {
       time: w.time,
       phase: w.phase,
       phaseRemaining: w.phase === "active" ? w.matchTimeLeftMs : w.phaseEndsAt ? Math.max(0, w.phaseEndsAt - w.time) : 0,
+      teamScore: w.teamScore,
       players: w.players.values(),
       pickups: w.pickups,
       gadgets: w.gadgets,
+      flags: w.flags,
+      bases: w.bases,
       events: this.pendingShots,
       now: w.time
     });
@@ -17169,10 +17695,11 @@ var MatchRoom = class {
         isHost: c.user.userId === this.hostId,
         isBot: false,
         level: c.user.level,
+        team: p?.team ?? null,
         mods: c.gear.loadout.mods
       };
     });
-    return { type: "roster", players, hostId: this.hostId, mapId: this.mapId, phase: this.world.phase, inviteCode: this.inviteCode, isPrivate: this.isPrivate, maxPlayers: this.config.maxPlayers };
+    return { type: "roster", players, hostId: this.hostId, mapId: this.mapId, phase: this.world.phase, inviteCode: this.inviteCode, isPrivate: this.isPrivate, maxPlayers: this.config.maxPlayers, mode: this.config.mode };
   }
   broadcastRoster() {
     this.broadcast(this.roster());
@@ -17188,7 +17715,7 @@ var MatchRoom = class {
     this.send(c, { type: "error", code, message });
   }
   info() {
-    return { id: this.id, mapId: this.mapId, phase: this.world.phase, players: this.clients.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
   }
   static protocolVersion = PROTOCOL_VERSION;
 };
@@ -17223,21 +17750,21 @@ var RoomManager = class {
   list() {
     return [...this.rooms.values()].filter((r) => !r.closed);
   }
-  create(mapId, isPrivate, hostUserId, inviteCode = null) {
+  create(mapId, isPrivate, hostUserId, inviteCode = null, mode = "ffa") {
     if (this.rooms.size >= this.opts.maxRooms) throw new Error("room limit reached");
     let id = newRoomId();
     while (this.rooms.has(id)) id = newRoomId();
-    const room = new MatchRoom({ id, mapId, isPrivate, hostUserId, inviteCode, config: this.opts.config }, this.services, this.log);
+    const room = new MatchRoom({ id, mapId, isPrivate, hostUserId, inviteCode, mode, config: this.opts.config }, this.services, this.log);
     this.rooms.set(id, room);
-    this.services.analytics.server("lobby_created", { roomId: id, mapId, isPrivate }, { userId: hostUserId });
+    this.services.analytics.server("lobby_created", { roomId: id, mapId, isPrivate, mode }, { userId: hostUserId });
     return room;
   }
-  /** Finds a public joinable room (preferring the requested map and fuller rooms) or creates one. */
-  quickMatch(userId, mapId) {
-    const candidates = this.list().filter((r) => !r.isPrivate && r.isJoinable(userId) && (!mapId || r.mapId === mapId)).sort((a, b2) => b2.occupancy - a.occupancy);
+  /** Finds a public joinable room of the mode (preferring the requested map and fuller rooms) or creates one. */
+  quickMatch(userId, mapId, mode = "ffa") {
+    const candidates = this.list().filter((r) => !r.isPrivate && r.mode === mode && r.isJoinable(userId) && (!mapId || r.mapId === mapId)).sort((a, b2) => b2.occupancy - a.occupancy);
     if (candidates[0]) return candidates[0];
     const map = mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)];
-    return this.create(map, false, null);
+    return this.create(map, false, null, null, mode);
   }
   start() {
     if (this.timer) return;

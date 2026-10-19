@@ -69,6 +69,22 @@ instructions win; the original criteria are re-evaluated in §4.
 | «The whole game in English with Soviet jargon and naphthalene» | All player-facing text (menus, HUD, shop, lore, weapons, achievements, server messages, privacy policy, logo «BLATKOM ’89») in English; in-world signage stays Cyrillic; `/admin` stays Russian | ✅ E2E follow the English UI |
 | Admin analytics for the new parts | «Воронка» (visitor and new-player cohorts, referrers), «Экономика» (talons/diamonds by reason, revenue, payers, ARPPU, purchases, modifications, cases), player card with wallet/items/ledger/payments, audited balance grants and password-reset links, masked emails | ✅ `admin/economy-admin.test.ts`, seeded-data screenshots |
 
+## 2c. Update 2026-10-19 — «Правки по Блатком v2» and objective modes
+
+| Request (owner) | Implementation | Status |
+|---|---|---|
+| 1. English and Russian | `apps/web/src/i18n`: English source strings, a 580-entry Russian dictionary (+ Russian texts of characters, weapons, maps, achievements, refusals and the server's English messages), Russian plurals, gender-neutral wording; language from Telegram/browser (Russian for ru/be/kk/ky), EN/RU switch in the menu and in Settings, remembered; Cyrillic logo, Russian privacy policy (`privacy-ru.html`), bilingual alias suggestions | ✅ `i18n.test.ts` (every key, plural and server message covered), E2E in both languages |
+| 2. Symmetric main screen per the drawing | play column «District Business» on the left; on the right the character card, then a «Dossier» tile (level, alias, XP, wallet) and an Arsenal tile of the same height | ✅ screenshots desktop / phone / landscape |
+| 3. Arsenal button with a weapon icon, more prominent | the Arsenal tile with a big TT pistol and the title | ✅ |
+| 4. Weapon icons the same size | all weapon, equipment and modification icons re-rendered into fixed boxes by their drawn bounds (`renderInBox`) | ✅ |
+| 5. Arsenal: the player's character trying on shop weapons | the dressing room: the character's portrait from the BLATKOM sheets holding the weapon being tried on, and the same character «in the game» drawn from the game's sprites with the right grip, muzzle flash and sound on «Fire!»; «Test in practice» | ✅ E2E checks the art loads; screenshots |
+| «Character visuals at the BLATKOM level» | hero art from the owner's sheets in the dressing room, the character cards and the new «Personal File» on the character screen | ✅ |
+| 6. Map selection with square top-down thumbnails | thumbnails captured from the real renderer for all seven maps; tile pickers in practice, rooms and lobby | ✅ |
+| 7. Up to 10 players; free-for-all or two teams red/blue | rooms of 10 (14 spawns per map), team deathmatch with balancing, team switching in the lobby, no friendly fire, team score/limit, team HUD/scoreboard/results/XP; Quick Match per mode | ✅ shared + realtime tests, E2E |
+| 8. Talons per match by eliminations | 5 per elimination, 2 per assist, 5 for finishing (≤ 100), breakdown on the results screen | ✅ economy tests |
+| 9. Menu soundtrack | «Hurt» (Infraction & Emerel Gray) in menus/lobby/results, fades in matches, volume and mute | 🟡 works; **the licence for use in a game must be confirmed by the operator** |
+| Capture the flag and base capture | `ctf` (flag stands on every map, steal/carry/drop/return/capture, 3 captures) and `bases` (A, B, C, capture bars, contested zones, a point per base per second, 250 points); objective bots; protocol v6; flags and bases in the world with team light, HUD strip, minimap, edge markers, banners, kill-feed lines, sounds; Tab/results columns; XP per capture; admin «Режимы» chart | ✅ `objectives.test.ts`, realtime test, `modes.mjs` and demo E2E |
+
 ## 3. Open risks / next steps
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).
@@ -80,6 +96,8 @@ instructions win; the original criteria are re-evaluated in §4.
 - Telegram Stars for diamonds inside the Mini App (docs/TELEGRAM.md, «Payments inside Telegram»).
 - Resend (or another mail provider) with a verified sender domain for password-reset letters.
 - Content growth (more maps/characters) fits the existing map format and atlas conventions.
+- Confirm the menu music licence («Hurt», Infraction & Emerel Gray) for use in the game, or replace it.
+- Balance of the new modes with real players (capture limit 3, base limit 250, 15 s flag return, 6 s base capture are first guesses tuned with bots).
 
 ## 4. Acceptance checklist (state on 2026-10-19)
 
@@ -87,7 +105,7 @@ instructions win; the original criteria are re-evaluated in §4.
 |---|---|---|
 | The project builds successfully | ✅ | `npm run typecheck`; `node apps/web/build.mjs --mode=production`; `node apps/server/build.mjs` |
 | The server starts | ✅ | bundled `apps/server/dist/server.js` started against PostgreSQL; `/api/health`, `/api/ready` OK |
-| PostgreSQL works | ✅ | migrations 001–005 applied; DB-backed integration tests (incl. economy, payments, email, admin funnel/economy) on PostgreSQL 16 |
+| PostgreSQL works | ✅ | migrations 001–006 applied; DB-backed integration tests (incl. economy, payments, email, admin funnel/economy) on PostgreSQL 16 |
 | Strict top-down 2D camera; not isometric / first-person | ✅ | orthographic camera, top-down sprites; screenshots in all modes |
 | Flagship factory map fully playable | ✅ | offline E2E + online two-browser E2E on «Заводская проходная» |
 | Four characters playable | ✅ | now 14 (4 free + 10 from the Arsenal) with sprites, portraits and animations; locked ones are refused by the server unless owned |
@@ -109,7 +127,7 @@ instructions win; the original criteria are re-evaluated in §4.
 | Retention calculations are documented | ✅ | `docs/ANALYTICS.md` |
 | Analytics events are deduplicated | ✅ | UUID primary key, tests across requests and inside batches |
 | CSV export works | ✅ | export tests incl. formula-injection neutralisation |
-| Critical tests pass | ✅ | 129/129 unit+integration; browser E2E (development and production mode) — see `docs/TESTING.md` §3 |
+| Critical tests pass | ✅ | 169/169 unit+integration; browser E2E (development and production mode) — see `docs/TESTING.md` §3 |
 | No real secrets are exposed | ✅ | `.env*` ignored; bot token/DB/session secrets server-only; logger redaction |
 | Deployment instructions match the actual project | 🟡 | non-Docker path executed locally; Docker/compose/Caddy not executed |
 | The first release is completely free | ⚠️ changed by the owner | free to play with optional purchases (owner's request): talons from matches, diamonds for money on the website; fight-changing extras (modifications, equipment) cost talons only; paid weapons are sidegrades |
@@ -117,4 +135,7 @@ instructions win; the original criteria are re-evaluated in §4.
 | Diamonds inside Telegram (Stars, `XTR`) | ⛔ | not implemented; card/crypto disabled inside Telegram (UI + server) |
 | Password-reset letters | 🟡 | Resend integration written; not sent live (no key). Admin one-time reset links work (tested) |
 | Whole game in English with Soviet flavour | ✅ | all player-facing texts; E2E drive the English UI; signage on maps stays Cyrillic by design; `/admin` Russian |
+| English and Russian | ✅ | every player-facing string in both languages (test); switch in the menu; E2E with a Russian browser |
+| Up to 10 players, team modes, capture the flag, base capture | ✅ | shared, realtime and E2E tests (see 2c) |
+| Menu music licence | ⛔ | not verifiable here — operator to confirm before launch |
 | Lint/format clean | ⛔ | ESLint/Prettier unavailable in the build sandbox (tsc strict with unused-code checks passes) |

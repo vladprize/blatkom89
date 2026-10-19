@@ -54,7 +54,8 @@ Copy `.env.example` to `.env` and set at least:
 | `SESSION_SECRET` | ≥ 32 random chars: `openssl rand -base64 48` (rotating it logs everyone out) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_MINIAPP_SHORT_NAME` | from BotFather |
 | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD` | optional first admin, created on start only when no admin exists — remove after first start (or use the CLI below) |
-| `MATCH_DURATION_SEC`, `MATCH_SCORE_LIMIT`, `MATCH_MIN_PLAYERS`, `MATCH_MAX_PLAYERS` | match rules (defaults 240 s, 50 points, 2, 6) |
+| `MATCH_DURATION_SEC`, `MATCH_SCORE_LIMIT`, `MATCH_MIN_PLAYERS`, `MATCH_MAX_PLAYERS` | match rules (defaults 240 s, 50 points, 2, 10; at most 10 players per room) |
+| `MATCH_TEAM_SCORE_LIMIT`, `MATCH_CAPTURE_LIMIT`, `MATCH_BASE_SCORE_LIMIT` | team modes: eliminations in «red vs blue» (40), flags in capture the flag (3), points in base capture (250) |
 | `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` | optional: diamonds by card (Stripe Checkout); webhook `https://$DOMAIN/api/pay/stripe/webhook` — events in [ECONOMY.md](ECONOMY.md) §5 |
 | `NOWPAYMENTS_API_KEY` + `NOWPAYMENTS_IPN_SECRET` | optional: diamonds by crypto (NOWPayments invoices; `NOWPAYMENTS_SANDBOX=true` for the sandbox) |
 | `RESEND_API_KEY` + `MAIL_FROM` | optional: password-reset letters (Resend; the sender domain must be verified there). Without them admins issue one-time reset links in `/admin` |
@@ -126,3 +127,6 @@ proxy_read_timeout 1h;`) and set `TRUST_PROXY=true` so rate limits see real clie
 - [ ] `/admin` is protected by server-side sessions, CSRF tokens, roles, rate limits and an audit log —
       optionally also restrict it by IP at the proxy.
 - [ ] Monitor `/api/ready`, disk space for PostgreSQL and the backups directory.
+- [ ] Menu music: confirm the rights holders' terms for «Hurt» (Infraction & Emerel Gray) for use in
+      the game and the attribution they require (credited in the menu and `THIRD_PARTY_LICENSES.txt`),
+      or replace `apps/web/public/assets/audio/theme.mp3` before public launch.

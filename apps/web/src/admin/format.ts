@@ -37,6 +37,13 @@ export function shortDay(day: string): string {
   return dayf.format(new Date(`${day}T00:00:00Z`));
 }
 
+export const MODE_NAMES: Record<string, string> = {
+  ffa: 'Каждый сам за себя',
+  teams: 'Красные против синих',
+  ctf: 'Захват флага',
+  bases: 'Захват баз',
+};
+
 export const MAP_NAMES: Record<string, string> = {
   factory: 'Заводская проходная',
   garages: 'Гаражный кооператив',

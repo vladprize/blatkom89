@@ -1,5 +1,5 @@
-Third-party software and fonts included in the БЛАТКОМ ’89 web client
-================================================================
+Third-party software, fonts and music included in the БЛАТКОМ ’89 web client
+=============================================================================
 
 Phaser 3.90.0 — https://phaser.io
 ----------------------------------
@@ -31,3 +31,11 @@ Oswald — SIL Open Font License 1.1 (assets/fonts/oswald-OFL.txt)
 PT Sans Narrow — SIL Open Font License 1.1 (assets/fonts/ptsansnarrow-OFL.txt)
 Caveat — SIL Open Font License 1.1 (assets/fonts/caveat-OFL.txt)
 Permanent Marker — Apache License 2.0 (assets/fonts/permanentmarker-LICENSE.txt)
+
+
+Menu music (assets/audio/theme.mp3; not in the single-file offline demo)
+---------------------------------------------------------------------------
+«Hurt» — Infraction & Emerel Gray (Brazilian Phonk Sport). Supplied by the product owner as the
+game's soundtrack in a file labelled "No Copyright Music". Credited here and on the game's Credits
+screen; re-encoded to 96 kbit/s. The rights holders' terms for use in a game (and the attribution they
+require) must be confirmed by the operator before public release (see docs/DEPLOYMENT.md).

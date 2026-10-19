@@ -9,26 +9,32 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
 | Item | Value | Where |
 |---|---|---|
 | Simulation | 60 Hz fixed step (`TICK_MS` 16.67 ms), same code on server and client | `constants/game.ts` |
-| Snapshots | 30 Hz (every 2nd tick), binary, ~15 B header + 40 B/player + pickups/shots | `codec.ts` |
+| Snapshots | 30 Hz (every 2nd tick), binary: 19 B header + 48 B/player + pickups, shots, melee, equipment, flags, bases | `codec.ts` |
 | Inputs | one 14-byte frame per client tick, sent in batches of 2 (≈30 messages/s) | `GameConnection.queueInput` |
 | Interpolation delay | 100 ms behind the estimated server clock | `OnlineSession` |
 | Lag compensation | history 600 ms, rewind clamped to 250 ms | `World.sampleHistory` |
-| Bandwidth (6 players) | ≈9–10 KB/s down, ≈1 KB/s up per client | measured from encoded sizes |
+| Bandwidth (10 players) | ≈21 KB/s down (snapshots average ≈0.7 KB, peaks ≈0.85 KB in fights), ≈1 KB/s up per client | measured from encoded sizes of a 10-bot match in every mode |
 
 ## 2. Connection lifecycle
 
 1. `POST /api/rooms` (create, private → invite code) or `POST /api/rooms/quick` → `roomId`.
 2. WebSocket `GET /ws` (same origin; foreign `Origin` → 403; ≤24 sockets per IP; 4 KB max frame).
 3. First message must be JSON `hello {protocol, token, roomId, character, clientVersion}` within 8 s
-   (`PROTOCOL_VERSION` = 2 since assists and supply drops were added; older clients get `version_mismatch`).
+   (`PROTOCOL_VERSION` = 6: v2 assists and supply drops, v3 loadouts, rockets, medkits, v4 the arsenal,
+   modifications and equipment, v5 ten players and team matches, v6 capture the flag and base capture;
+   older clients get `version_mismatch`).
    The session token is verified exactly like the REST bearer token. Wrong protocol → `error
    version_mismatch` + close 1008; bad token → 4001; unknown room → 4004; full → 4005; finished → 4010.
-4. Server replies `welcome {playerId, slot, config, serverTime, tick, resumed}` and broadcasts `roster`.
-5. Lobby: `ready`, `character`, host-only `map`/`start`, `leave`. Public rooms start 4 s after the
-   minimum number of players is present and ready; private rooms start when the host presses «Начать»
-   (or 0.6 s after every connected player marked themselves ready).
+4. Server replies `welcome {playerId, slot, mode, config, serverTime, tick, resumed}` and broadcasts
+   `roster {players (with team), mode, mapId, hostId, …}`.
+5. Lobby: `ready`, `character`, `loadout`, `team` (move to the other side while the teams stay even),
+   host-only `map`/`mode`/`start`, `leave`. Rooms hold up to 10 players (`MATCH_MAX_PLAYERS`). Public
+   rooms are per mode (Quick Match never mixes free-for-all and team players) and start 4 s after the
+   minimum number of players is present and ready; private rooms start when the host presses «Start»
+   (or 0.6 s after every connected player marked themselves ready). Switching between team modes keeps the
+   teams; coming from free-for-all they are dealt anew, alternating by arrival.
 6. Match phases (server state machine): `waiting → ready → countdown → active → finished → (waiting | closed)`.
-7. Results: `results {matchId, reason, durationMs, standings}` is broadcast once, right after the
+7. Results: `results {matchId, reason, durationMs, standings, mapId, mode, teams?}` is broadcast once, right after the
    deciding events are flushed; personal `progress {xpGained, level, newAchievements}` follows when the
    database transaction commits, and the `roster` is re-broadcast with the levels just earned (nameplates
    and the Tab table in a rematch show the current level). `rematch` votes restart the room with a new
@@ -66,6 +72,23 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
   reserve, and emits `{t:'supply', x, y, weapon}`. Unclaimed crates disappear after 30 s (`supplyTtlMs`).
   Picking up a crate follows the normal pickup rules. Each map also has 6 extra fixed weapon spawns.
 
+## 3b. Game modes (`GAME_MODES` in `game-rules/match.ts`, decided by the `World`)
+
+| Mode | Team score | Ends at | Notes |
+|---|---|---|---|
+| `ffa` — every man for himself | — | 50 points of a player (`MATCH_SCORE_LIMIT`) | standings by points |
+| `teams` — red vs blue | eliminations | 40 (`MATCH_TEAM_SCORE_LIMIT`) | no friendly fire: bullets pass through teammates, blasts/fire/mines/turrets/flash spare them (the owner's own blast still hurts the owner) |
+| `ctf` — capture the flag | flags captured | 3 (`MATCH_CAPTURE_LIMIT`) | `CTF_RULES`: touch 24 px; an enemy takes a flag from its stand or the ground; a carrier who is eliminated, leaves or disconnects drops it; a teammate who touches their own dropped flag sends it home (+2), otherwise it returns by itself after 15 s; a carrier scores at their own stand only while their own flag is home (+6 points, +1 team); stealing +1, stopping a carrier +1 |
+| `bases` — base capture | a point per base held per second | 250 (`MATCH_BASE_SCORE_LIMIT`) | `BASE_RULES`: zones of 56 px (A, B, C); a team alone inside fills the bar (6 s alone, +50 % per extra teammate, ≤ 2.5×); both teams inside → contested, nothing moves; the other team's bar is pushed back first; an empty zone's bar fades at half speed; taking a base gives +3 to everyone inside |
+
+Team modes balance the teams at the start (latest arrivals and bots move first), start each team on its
+own half of the map; in `ctf` and `bases` a team always respawns on its own half. Flag stands and bases are
+part of every map (`MapDef.flagStands`, `MapDef.bases`; tests check they are open, reachable and that
+both teams walk about the same distance to the enemy flag). Objective events go out with the other JSON
+events: `{t:'flag', action:'taken'|'dropped'|'returned'|'captured', team, slot}` and
+`{t:'base', base, team, from, slots}`. Per-player captures (`objectives`) are in the snapshot, the
+results and the match record, and give XP (`XP_RULES.perObjective`, 15 each).
+
 ## 4. Client: prediction, reconciliation, interpolation
 
 * **Clock.** Each snapshot carries `serverTime`; the client keeps the maximum `(serverTime − arrival)` over a
@@ -87,27 +110,44 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
 ## 5. Snapshot layout (little-endian)
 
 ```
-u8 type=2 | u32 tick | u32 serverTimeMs | u8 phase | u32 phaseRemainingMs | u8 playerCount
-player × N (40 B): u8 slot | u8 flags(alive,connected,reloading,invulnerable,walking,hasHeavy) | u16 x*4 | u16 y*4
-   | i16 vx*8 | i16 vy*8 | u16 aim | u8 hp | u8 weapon | u8 pistolMag | u8 heavy(255=none) | u8 heavyMag
-   | u8 heavyReserve | u16 kills | u16 deaths | u16 score | u32 ackSeq | u16 reloadLeft | u16 cooldownLeft
-   | u16 spreadHeat*1e4 | u16 shotCounter | u16 respawnIn | u16 assists
-u8 pickupCount, pickup × N (8 B): u16 id | u8 weapon | u8 flags(active,dropped,supply) | u16 x*4 | u16 y*4
-u16 shotCount, shot × N: u8 shooter | u8 weapon | u16 shotId | u16 ox*4 | u16 oy*4 | u8 pellets | u8 0
+u8 type=2 | u32 tick | u32 serverTimeMs | u8 phase | u32 phaseRemainingMs | u16 teamScoreRed | u16 teamScoreBlue
+   | u8 playerCount                                                                         (19 B)
+player × N (48 B): u8 slot | u8 flags(alive,connected,reloading,invulnerable,walking,hasHeavy,laser)
+   | u16 x*4 | u16 y*4 | i16 vx*8 | i16 vy*8 | u16 aim | u8 hp | u8 weapon | u8 sideMag | u8 heavy(255=none)
+   | u8 heavyMag | u8 heavyReserve | u16 kills | u16 deaths | u16 score | u32 ackSeq | u16 reloadLeft
+   | u16 cooldownLeft | u16 spreadHeat*1e4 | u16 shotCounter | u16 respawnIn | u16 assists | u8 sidearm
+   | u8 melee | u8 gadget(255 none) | u8 gadgetCharges | u16 flashedMs | u8 team(255 none) | u8 objectives
+u8 pickupCount, pickup × N (8 B): u16 id | u8 weapon | u8 flags(active,dropped,supply,medkit) | u16 x*4 | u16 y*4
+u16 shotCount, shot × N: u8 shooter | u8 arms | u16 shotId | u16 ox*4 | u16 oy*4 | u8 pellets | u8 flags(turret,silenced)
    | pellet × n (6 B): u16 angle | u16 dist*4 | u8 hitSlot(255 none) | u8 kind(0 miss,1 wall,2 player)
 u8 meleeCount, melee × N (4 B): u8 shooter | u16 angle | u8 hitSlot
+u8 gadgetCount, gadget × N (15 B): u16 id | u8 kind | u8 ownerSlot | u8 phase(+8 triggered) | u16 x*4 | u16 y*4
+   | u16 aim | u8 hp | u16 leftMs/10 | u8 0
+u8 flagCount (0 or 2), flag × N (9 B): u8 team | u8 status(0 home,1 carried,2 dropped) | u8 carrierSlot(255)
+   | u16 x*4 | u16 y*4 | u16 returnInMs/10
+u8 baseCount (0–8), base × N (4 B): u8 owner(255) | u8 capturer(255) | u8 progress*255
+   | u8 bits(contested, red inside ≤7 <<1, blue inside ≤7 <<4)
 ```
+Flag stands and base centres are not sent: both sides read them from the shared map. A carried flag is
+drawn on its carrier (the local carrier immediately, others on the interpolated timeline).
 Input frame (14 B): `u32 seq | i8 moveX | i8 moveY | u16 aim | u8 buttons(FIRE,RELOAD,WALK,INTERACT,NEXT)
 | u8 slot | u32 viewTimeMs`, batch header `u8 type=1 | u8 count`.
 
 ## 6. Verification
 
-* `apps/server/src/rooms/realtime.test.ts` (8 tests, real HTTP+WS server, independent `ws` clients):
+* `apps/server/src/rooms/realtime.test.ts` (12 tests, real HTTP+WS server, independent `ws` clients):
   authoritative combat with identical results and identical per-tick positions on both clients, kill
   events delivered before results, results/XP sent once, speed-hack flood, invalid handshakes and
-  commands, capacity (7th player refused), disconnect/resume/replace, grace-period expiry and empty-room
-  cleanup, rematch with separately recorded matches and the roster refreshed with the earned level.
+  commands, capacity (11th player refused), team matches (dealing, switching, no friendly fire, team
+  results), capture the flag (take, carry, capture through the server, objectives in snapshots, results and
+  the match record) and base capture (Quick Match by mode, a base taken and scoring), disconnect/resume/
+  replace, grace-period expiry and empty-room cleanup, rematch with separately recorded matches and the
+  roster refreshed with the earned level, owned gear.
 * `packages/shared/src/__tests__/` — codec round-trips and malformed input rejection, lag compensation,
   walls blocking shots, movement normalisation, sliding, weapons timing, assists (window, minimum damage,
-  reaching the limit), supply drops (free point away from players, full ammo, expiry).
-* `tests/e2e/online.mjs` — two real browsers play a match through the server (see [TESTING.md](TESTING.md)).
+  reaching the limit), supply drops (free point away from players, full ammo, expiry), teams
+  (`teams.test.ts`) and objectives (`objectives.test.ts`: flag and base rules, limits, respawn sides, map
+  objective points, codec, bots taking flags and bases).
+* `tests/e2e/online.mjs` — two real browsers play a match through the server; `tests/e2e/modes.mjs` — a
+  capture-the-flag room in an English and a Russian browser, mode switching, flags in both HUDs, team
+  results, Quick Match by mode (see [TESTING.md](TESTING.md)).

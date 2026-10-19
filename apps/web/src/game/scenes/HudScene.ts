@@ -855,6 +855,8 @@ export class HudScene extends Phaser.Scene {
               ? t('RED VS BLUE · TO {n}', { n: hud.teamScoreLimit })
               : t('DEATHMATCH · TO {n} {points}', { n: hud.scoreLimit, points: plural(hud.scoreLimit, 'point').toUpperCase() }),
       );
+      // never wider than the timer panel
+      this.mode.setScale(Math.min(1, 116 / Math.max(1, this.mode.width)));
     }
     this.teamMark.clear();
     if (teams && hud.myTeam !== null) {

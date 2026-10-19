@@ -13,10 +13,17 @@ balances. The client only displays what the server returns. Admin view: «Эко
 | Sold for money | never | yes — packs of 199, 299, 499, 999 and 1999 💎 |
 | Spent on | token-priced weapons, characters, equipment, every modification | diamond-priced weapons and characters, the rare-weapon case |
 
-Talons per completed online match (`TOKEN_REWARD`): 10 for finishing, +3 per elimination,
-+1 per assist, +10 / +6 / +3 for places 1–3 (place bonuses need at least one player behind you),
-capped at 60 per match. They are credited in the same transaction as XP, exactly once per match
-and player (`currency_ledger` reason `match`, ref = match id).
+Talons per online match (`TOKEN_REWARD`, `tokenBreakdown()`): **5 per elimination, 2 per assist, 5 for
+playing the match to the end**, capped at 100 per match — the same in every mode, so a match pays for
+the work done in it, not for the place. The results screen shows the sum and how it was counted
+(«4 eliminations × 5 = 20 · 1 assist × 2 = 2 · finished +5»). Talons are credited in the same
+transaction as XP, exactly once per match and player (`currency_ledger` reason `match`, ref = match id).
+Practice earns nothing (online profile only).
+
+XP per match (`XP_RULES`): 50 for finishing, 10 per elimination, 5 per assist, 15 per flag or base
+captured (capture the flag / base capture); free-for-all adds 100 / 50 / 25 for places 1–3, team modes
+add 75 to every player of the winning team (25 to both teams on a draw); +20 for a match with friends
+by invitation; capped at 400.
 
 ## 2. What is free
 
