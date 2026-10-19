@@ -1,8 +1,10 @@
 /** Profile screen («Dossier»): nickname, level and XP, statistics, achievements, recent matches. */
 import { h, fmtDuration } from '../dom.js';
-import { getMap, CHARACTERS } from '@blatkom/shared';
+import { isCharacterId } from '@blatkom/shared';
 import type { AchievementStatus, MatchHistoryEntry, PublicProfile } from '@blatkom/shared';
 import type { OnlineClient } from '../../net/OnlineClient.js';
+import { t, num } from '../../i18n/index.js';
+import { achievementText, charName, mapName } from '../../i18n/content.js';
 
 export interface ProfileData {
   profile: PublicProfile;
@@ -17,7 +19,7 @@ export async function loadOnlineProfile(online: OnlineClient): Promise<ProfileDa
 
 export function renderProfileView(d: ProfileData, o: { local: boolean; onRename: () => void }): HTMLElement {
   const p = d.profile;
-  const kd = p.deaths > 0 ? (p.kills / p.deaths).toFixed(2) : String(p.kills);
+  const kd = p.deaths > 0 ? num(p.kills / p.deaths, 2) : String(p.kills);
   const pct = p.xpForNextLevel > 0 ? Math.round((p.xpIntoLevel / p.xpForNextLevel) * 100) : 100;
   const stat = (v: string | number, label: string) => h('div', { class: 'stat' }, h('b', null, String(v)), h('span', null, label));
   const hours = Math.floor(p.playtimeSec / 3600);
@@ -29,58 +31,61 @@ export function renderProfileView(d: ProfileData, o: { local: boolean; onRename:
     h(
       'div',
       { class: 'panel col' },
-      h('span', { class: 'tag' }, 'Dossier'),
+      h('span', { class: 'tag' }, t('Dossier')),
       h(
         'div',
         { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' },
-        h('div', { class: 'lvlbadge lvlbadge--big', title: 'Level' }, h('small', null, 'LVL'), String(p.level)),
+        h('div', { class: 'lvlbadge lvlbadge--big', title: t('Level') }, h('small', null, t('LVL')), String(p.level)),
         h('div', { class: 'h1 grow nick-line', 'data-testid': 'profile-name' }, p.displayName),
-        h('button', { class: 'btn btn--small', onclick: o.onRename, 'aria-label': 'Change alias' }, '✎ Alias'),
+        h('button', { class: 'btn btn--small', onclick: o.onRename, 'aria-label': t('Change alias') }, `✎ ${t('Alias')}`),
       ),
       h('div', { class: 'xpbar', role: 'progressbar', 'aria-valuenow': String(pct), 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('i', { style: `width:${pct}%` })),
-      h('div', { class: 'muted' }, p.xpForNextLevel > 0 ? `${p.xpIntoLevel} / ${p.xpForNextLevel} XP to level ${p.level + 1} · ${p.xp} in total` : `Top level · ${p.xp} XP`),
-      o.local ? h('div', { class: 'muted', style: 'font-size:14px' }, 'Local profile: kept only in this browser. XP comes from practice against bots.') : null,
+      h('div', { class: 'muted' }, p.xpForNextLevel > 0 ? t('{a} / {b} XP to level {n} · {total} in total', { a: p.xpIntoLevel, b: p.xpForNextLevel, n: p.level + 1, total: p.xp }) : t('Top level · {total} XP', { total: p.xp })),
+      o.local ? h('div', { class: 'muted', style: 'font-size:14px' }, t('Local profile: kept only in this browser. XP comes from practice against bots.')) : null,
     ),
     h(
       'div',
       { class: 'panel col' },
-      h('span', { class: 'tag' }, 'Statistics'),
+      h('span', { class: 'tag' }, t('Statistics')),
       h(
         'div',
         { class: 'stats', style: 'margin-top:6px' },
-        stat(p.matchesPlayed, 'matches'),
-        stat(p.wins, 'wins'),
-        stat(p.losses, 'losses'),
-        stat(p.kills, 'eliminations'),
-        stat(p.assists, 'assists'),
-        stat(p.deaths, 'deaths'),
-        stat(kd, 'E/D'),
-        stat(p.bestWinStreak, 'best streak'),
-        stat(`${hours} h ${mins} min`, 'on the job'),
+        stat(p.matchesPlayed, t('matches')),
+        stat(p.wins, t('wins')),
+        stat(p.losses, t('losses')),
+        stat(p.kills, t('eliminations')),
+        stat(p.assists, t('assists')),
+        stat(p.deaths, t('deaths')),
+        stat(kd, t('E/D')),
+        stat(p.bestWinStreak, t('best streak')),
+        stat(t('{h} h {m} min', { h: hours, m: mins }), t('on the job')),
       ),
     ),
     h(
       'div',
       { class: 'panel col' },
-      h('span', { class: 'tag' }, `Achievements · ${unlocked}/${d.achievements.length}`),
+      h('span', { class: 'tag' }, t('Achievements · {n}/{total}', { n: unlocked, total: d.achievements.length })),
       h('div', { style: 'height:4px' }),
-      d.achievements.length === 0 ? h('div', { class: 'muted' }, 'No data') : null,
-      ...d.achievements.map((a) => h('div', { class: `ach ${a.unlockedAt ? '' : 'locked'}` }, h('div', { class: 'ico' }, a.unlockedAt ? '★' : '☆'), h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 't' }, a.title), h('div', { class: 'muted' }, a.description)))),
+      d.achievements.length === 0 ? h('div', { class: 'muted' }, t('No data')) : null,
+      ...d.achievements.map((a) => {
+        const text = achievementText(a.id);
+        return h('div', { class: `ach ${a.unlockedAt ? '' : 'locked'}` }, h('div', { class: 'ico' }, a.unlockedAt ? '★' : '☆'), h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 't' }, text.title), h('div', { class: 'muted' }, text.description)));
+      }),
     ),
     h(
       'div',
       { class: 'panel col' },
-      h('span', { class: 'tag' }, 'Recent matches'),
+      h('span', { class: 'tag' }, t('Recent matches')),
       h('div', { style: 'height:4px' }),
       d.history.length === 0
-        ? h('div', { class: 'muted' }, 'No matches played yet.')
+        ? h('div', { class: 'muted' }, t('No matches played yet.'))
         : h(
             'div',
             { class: 'table-scroll' },
             h(
               'table',
               { class: 'table' },
-              h('thead', null, h('tr', null, h('th', null, 'Map'), h('th', null, 'Character'), h('th', { class: 'num' }, 'Place'), h('th', { class: 'num' }, 'Elim'), h('th', { class: 'num' }, 'Ast'), h('th', { class: 'num' }, 'Dth'), h('th', { class: 'num' }, 'XP'), h('th', { class: 'num' }, 'Time'))),
+              h('thead', null, h('tr', null, h('th', null, t('Map')), h('th', null, t('Character')), h('th', { class: 'num' }, t('Place')), h('th', { class: 'num' }, t('Elim')), h('th', { class: 'num' }, t('Ast')), h('th', { class: 'num' }, t('Dth')), h('th', { class: 'num' }, 'XP'), h('th', { class: 'num' }, t('Time')))),
               h(
                 'tbody',
                 null,
@@ -88,8 +93,8 @@ export function renderProfileView(d: ProfileData, o: { local: boolean; onRename:
                   h(
                     'tr',
                     m.won ? { class: 'won' } : null,
-                    h('td', null, getMap(m.mapId).name),
-                    h('td', null, CHARACTERS[m.character]?.name ?? m.character),
+                    h('td', null, mapName(m.mapId)),
+                    h('td', null, isCharacterId(m.character) ? charName(m.character) : m.character),
                     h('td', { class: 'num' }, `${m.place}/${m.players}`),
                     h('td', { class: 'num' }, String(m.kills)),
                     h('td', { class: 'num' }, String(m.assists)),

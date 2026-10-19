@@ -367,3 +367,15 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .quickmode .modeico { flex: none; }
 .quickmode__txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; line-height: 1.1; }
 @media (max-width: 420px) { .quickmode { padding: 8px 9px; gap: 7px; font-size: 15px; } .quickmode .modeico { width: 24px; height: 24px; } }
+
+/* character screen: the personal file with the character's portrait from the BLATKOM sheets */
+.dossier { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; }
+@media (max-width: 640px) { .dossier { grid-template-columns: 1fr; } }
+.dossier__hero { position: relative; margin: 6px 4px 4px; transform: rotate(-1.2deg); box-shadow: 0 6px 0 rgba(0,0,0,.4); border: 6px solid #e8dcc0; border-bottom-width: 22px; background: #e8dcc0; }
+.dossier__hero::before { content: ''; position: absolute; top: -14px; left: 26px; width: 14px; height: 34px; border: 3px solid #9a9890; border-radius: 8px; z-index: 2; }
+.dossier__img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 4; object-fit: cover; }
+@media (max-width: 640px) { .dossier__hero { max-width: 220px; justify-self: center; } }
+.dossier__hero--locked .dossier__img { filter: grayscale(.85) contrast(.9) brightness(.8); }
+.dossier__stamp { position: absolute; right: -6px; bottom: 28px; transform: rotate(-9deg); font-family: Oswald, sans-serif; font-weight: 700; letter-spacing: .08em; font-size: 15px; padding: 3px 10px; color: #c8312a; border: 3px solid #c8312a; background: rgba(232,220,192,.82); }
+.dossier__hero--locked .dossier__stamp { color: #4a4440; border-color: #4a4440; }
+.dossier__text { min-width: 0; }

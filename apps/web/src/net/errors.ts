@@ -9,21 +9,21 @@ import type { BuyRefusal } from '@blatkom/shared';
 
 const REFUSALS: ReadonlySet<string> = new Set<BuyRefusal>(['owned', 'level', 'funds', 'not_for_sale', 'not_fit', 'not_owned', 'collection_complete']);
 
-/** English base text per code (translated with t() when shown). */
-const CODE_TEXT: Record<string, string> = {
-  network: 'No line to the server. Check your internet.',
-  unauthorized: 'Your session has gone stale. Restart the game.',
-  capacity: 'The server is packed like a tram at rush hour. Try again later.',
-  room_not_found: 'Room not found.',
-  room_full: 'The room is full.',
-  room_closed: 'The room is closed.',
-  version_mismatch: 'The game has been updated — reload the page.',
-  not_host: 'Only the room’s host can do that.',
-  match_running: 'The match is already on.',
-  team_full: 'That team already has more players — the teams must stay even.',
-  character_locked: 'This character isn’t unlocked yet.',
-  bad_message: 'The server didn’t understand the request.',
-  internal: 'Something broke on the server. Try again.',
+/** Localized text per code (functions: the language can change at run time). */
+const CODE_TEXT: Record<string, () => string> = {
+  network: () => t('No line to the server. Check your internet.'),
+  unauthorized: () => t('Your session has gone stale. Restart the game.'),
+  capacity: () => t('The server is packed like a tram at rush hour. Try again later.'),
+  room_not_found: () => t('Room not found.'),
+  room_full: () => t('The room is full.'),
+  room_closed: () => t('The room is closed.'),
+  version_mismatch: () => t('The game has been updated — reload the page.'),
+  not_host: () => t('Only the room’s host can do that.'),
+  match_running: () => t('The match is already on.'),
+  team_full: () => t('That team already has more players — the teams must stay even.'),
+  character_locked: () => t('This character isn’t unlocked yet.'),
+  bad_message: () => t('The server didn’t understand the request.'),
+  internal: () => t('Something broke on the server. Try again.'),
 };
 
 /** Localized message for an error code (+ the server's English message as a fallback). */
@@ -35,8 +35,10 @@ export function errorText(code: string, serverMessage?: string | null, status?: 
   }
   // the code is generic for several situations: keep the server's (more precise) message
   if (code === 'rate_limited' && serverMessage) return t(serverMessage);
+  // schema validation: «field: message»; the alias rules have their own text
+  if (code === 'validation_error') return /name/i.test(serverMessage ?? '') ? t('A name may contain letters, digits, spaces and _ . -') : t('Check what you entered.');
   const fixed = CODE_TEXT[code];
-  if (fixed) return t(fixed);
+  if (fixed) return fixed();
   if (serverMessage) return t(serverMessage);
   return status ? t('Server error ({n})', { n: status }) : t('That didn’t work');
 }

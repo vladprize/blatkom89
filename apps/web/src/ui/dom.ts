@@ -45,7 +45,3 @@ export function fmtDuration(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-/** English plural: plural(5, 'point') → 'points'; plural(2, 'match', 'matches') → 'matches'. */
-export function plural(n: number, one: string, many = `${one}s`): string {
-  return Math.abs(n) === 1 ? one : many;
-}

@@ -283,7 +283,7 @@ export class GameScene extends Phaser.Scene {
       this.qualityReduced = true;
       this.cameras.main.resetPostPipeline();
       this.vhs = null;
-      toast('Video effects switched off to keep things smooth — turn them back on in the settings');
+      toast(t('Video effects switched off to keep things smooth — turn them back on in the settings'));
     }
   }
 

@@ -2,7 +2,7 @@
  * App shell: screen navigation (HTML/CSS over the canvas), offline practice flow, online flow
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
-import { CHARACTERS, CHARACTER_IDS, FREE_CHARACTERS, GADGETS, MODS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, isCharacterId, isGameMode, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
+import { CHARACTER_IDS, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, isCharacterId, isGameMode, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
 import type { CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
@@ -26,13 +26,14 @@ import { renderResults } from '../ui/screens/results.js';
 import { renderLobby, modeSwitch } from '../ui/screens/lobby.js';
 import { mapPicker } from '../ui/maps.js';
 import { MODE_ORDER, modeIcon, modeName, modeRules, modeSub } from '../ui/modes.js';
-import { renderArsenal, characterPriceNote, amount } from '../ui/screens/shop.js';
+import { renderArsenal, characterPriceNote, amount, heroImg } from '../ui/screens/shop.js';
 import type { ArsenalTab, TryOn } from '../ui/screens/shop.js';
 import { renderAccountPanel, openEmailLogin, openPasswordReset } from '../ui/screens/account.js';
 import { sfx } from '../game/audio/Sfx.js';
 import { music } from '../game/audio/Music.js';
-import { t, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
-import { charText } from '../i18n/content.js';
+import { t, count, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
+import { charText, gadgetName, modText, weaponName } from '../i18n/content.js';
+import { apiErrorText } from '../net/errors.js';
 
 /** Room capacity shown in the menu. */
 const MAX_ROOM_PLAYERS = DEFAULT_MATCH_CONFIG.maxPlayers;
@@ -134,6 +135,7 @@ export class App {
         { class: 'panel modal col credits' },
         h('span', { class: 'tag' }, t('Credits')),
         h('div', { class: 'h2', style: 'margin-top:6px' }, 'BLATKOM ’89'),
+        // names of works, authors and licences stay as they are in every language
         h('div', null, h('b', null, t('Menu music')), ': «Hurt» — Infraction & Emerel Gray (Brazilian Phonk Sport).'),
         h('div', null, h('b', null, t('Fonts')), ': Oswald, PT Sans Narrow, Caveat — SIL Open Font License; Permanent Marker — Apache License 2.0.'),
         h('div', null, h('b', null, t('Engine')), ': Phaser 3 — MIT License.'),
@@ -160,7 +162,7 @@ export class App {
         onLeft: () => this.goMenu(),
       });
       this.online.onEmailSessionExpired = (email) =>
-        openEmailLogin(this.root, this.online!, { email, note: 'This account’s session has expired — please sign in again.', onDone: () => this.afterAccountSwitch() });
+        openEmailLogin(this.root, this.online!, { email, note: t('This account’s session has expired — please sign in again.'), onDone: () => this.afterAccountSwitch() });
       this.online.pingVisit();
       void this.online
         .ensureAuth()
@@ -191,8 +193,8 @@ export class App {
     const room = params.get('room');
     if (room && this.online && /^[A-Za-z0-9_-]{4,32}$/.test(room)) {
       this.go('loading');
-      this.render(this.loading('Connecting to the room…'));
-      void this.online.joinRoom(room, this.onlineCharacter()).catch((e: Error) => this.showError(e.message));
+      this.render(this.loading(t('Connecting to the room…')));
+      void this.online.joinRoom(room, this.onlineCharacter()).catch((e: Error) => this.showError(apiErrorText(e)));
       return;
     }
     this.goMenu();
@@ -209,7 +211,7 @@ export class App {
     if (reset && /^[A-Za-z0-9_-]{20,64}$/.test(reset)) {
       setTimeout(() => openPasswordReset(this.root, online, reset, () => openEmailLogin(this.root, online, { onDone: () => this.afterAccountSwitch() })), 300);
     }
-    if (pay === 'cancel') setTimeout(() => toast('Payment cancelled'), 600);
+    if (pay === 'cancel') setTimeout(() => toast(t('Payment cancelled')), 600);
     if (pay === 'success' && pid && /^[0-9a-f-]{36}$/i.test(pid)) {
       // the provider confirms the payment to the server separately: wait for it (up to ~2 minutes)
       let tries = 0;
@@ -222,18 +224,18 @@ export class App {
             await online.loadInventory().catch(() => {});
             this.refreshStrip();
             sfx.play('buy');
-            toast(`${st.diamonds} diamonds credited`);
+            toast(t('{n} credited', { n: count(st.diamonds, 'diamond') }));
             return;
           }
-          if (st.status === 'failed' || st.status === 'expired') return toast('The payment did not go through');
+          if (st.status === 'failed' || st.status === 'expired') return toast(t('The payment did not go through'));
         } catch {
           /* keep polling */
         }
         if (tries < 40) setTimeout(() => void poll(), 3000);
-        else toast('The payment is still being processed — the diamonds will arrive automatically');
+        else toast(t('The payment is still being processed — the diamonds will arrive automatically'));
       };
       setTimeout(() => {
-        toast('Checking the payment…');
+        toast(t('Checking the payment…'));
         void poll();
       }, 800);
     }
@@ -311,7 +313,7 @@ export class App {
   }
 
   private topbar(title: string): HTMLElement {
-    return h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: () => this.back(), 'aria-label': 'Back' }, '← Back'), h('h1', { class: 'h1' }, title));
+    return h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: () => this.back(), 'aria-label': t('Back') }, t('← Back')), h('h1', { class: 'h1' }, title));
   }
 
   private loading(text: string): HTMLElement {
@@ -478,7 +480,7 @@ export class App {
       if (this.localProfile) return;
       this.nickClose = openNicknameDialog(this.root, {
         initial: randomNickname(),
-        note: 'Your opponents see your alias — above your character, on the scoreboard and in the match report. XP and levels are kept in this browser; you can change the alias in your profile.',
+        note: t('Your opponents see your alias — above your character, on the scoreboard and in the match report. XP and levels are kept in this browser; you can change the alias in your profile.'),
         onSave: (name) => this.saveNickname(name),
         onClose: () => (this.nickClose = null),
       });
@@ -490,7 +492,7 @@ export class App {
       initial: /^(Гость|Guest|Comrade)_/.test(p.displayName) ? randomNickname() : p.displayName,
       onSave: (name) => this.saveNickname(name),
       onCancel: () => storageSet(NICK_CONFIRMED_KEY, p.id),
-      cancelLabel: 'Keep it as is',
+      cancelLabel: t('Keep it as is'),
       onClose: () => (this.nickClose = null),
     });
   }
@@ -503,10 +505,10 @@ export class App {
     await new Promise<void>((resolve) => {
       this.nickClose = openNicknameDialog(this.root, {
         initial: /^(Гость|Guest|Comrade)_/.test(p.displayName) ? randomNickname() : p.displayName,
-        note: 'You’ve been invited to a room. The other players will see your alias — above your character, on the scoreboard and in the match report.',
+        note: t('You’ve been invited to a room. The other players will see your alias — above your character, on the scoreboard and in the match report.'),
         onSave: (name) => this.saveNickname(name),
         onCancel: () => storageSet(NICK_CONFIRMED_KEY, p.id),
-        cancelLabel: 'Keep it as is',
+        cancelLabel: t('Keep it as is'),
         onClose: () => {
           this.nickClose = null;
           resolve();
@@ -519,7 +521,7 @@ export class App {
     if (this.nickClose) return;
     this.nickClose = openNicknameDialog(this.root, {
       initial: this.playerName() ?? randomNickname(),
-      title: this.playerName() ? 'Change alias' : 'What do they call you round here?',
+      title: this.playerName() ? t('Change alias') : t('What do they call you round here?'),
       onSave: async (name) => {
         await this.saveNickname(name);
         after?.();
@@ -539,7 +541,7 @@ export class App {
       saveLocalProfile(this.localProfile);
     }
     this.refreshStrip();
-    toast(`Nickname: ${name}`);
+    toast(t('Alias: {name}', { name }));
   }
 
   // ── characters ──────────────────────────────────────────────────────────
@@ -547,7 +549,7 @@ export class App {
     this.go('characters', push);
     let selected = initial ?? this.character;
     this.host.previewScene()?.setFocus(selected);
-    const grid = h('div', { class: 'chars', role: 'radiogroup', 'aria-label': 'Characters' });
+    const grid = h('div', { class: 'chars', role: 'radiogroup', 'aria-label': t('Characters') });
     const dossier = h('div', { class: 'panel dossier' });
     const actions = h('div', { class: 'row' });
     const draw = () => {
@@ -568,47 +570,49 @@ export class App {
               },
             },
             portrait(id),
-            h('span', null, CHARACTERS[id].name),
+            h('span', null, charText(id).name),
           ),
         ),
       );
-      const c = CHARACTERS[selected];
+      const c = charText(selected);
       const locked = !this.ownsCharacter(selected);
       const price = locked ? characterPriceNote(selected, this.online?.inventory ?? null) : null;
       dossier.replaceChildren(
-        h('span', { class: 'tag' }, 'Personal File'),
+        h('span', { class: 'tag' }, t('Personal File')),
+        // the character's portrait from the BLATKOM sheets, as on the poster
+        h('div', { class: `dossier__hero ${locked ? 'dossier__hero--locked' : ''}` }, heroImg(selected, 'dossier__img'), h('div', { class: 'dossier__stamp' }, locked ? t('NOT IN THE CREW') : t('IN THE CREW'))),
         h(
           'div',
-          { class: 'col' },
+          { class: 'col dossier__text' },
           h('div', { class: 'h1' }, c.name, ' ', h('span', { style: 'color:var(--red)' }, `«${c.nickname}»`)),
-          h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, 'Role: '), c.role),
-          h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, 'Temper: '), c.personality),
+          h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, t('Role:'), ' '), c.role),
+          h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, t('Temper:'), ' '), c.personality),
           h('div', { class: 'quote' }, `«${c.quote}»`),
           h('div', { class: 'lore' }, c.lore),
           price ? h('div', { class: 'badge badge--host', style: 'align-self:flex-start' }, price) : null,
-        ),
-        h(
-          'div',
-          { class: 'col', style: 'gap:0' },
-          ...(
-            [
-              ['Name', c.name],
-              ['Alias', c.nickname],
-              ['Species', c.species],
-              ['District', c.district],
-              ['Business', c.business],
-              ['Weapons', c.weaponsNote],
-            ] as const
-          ).map(([k, v]) => h('div', { class: 'field' }, h('b', null, k), h('span', null, v))),
-          h('div', { class: 'muted', style: 'font-size:13px;margin-top:8px' }, 'All characters have the same stats — only their looks and temper differ.'),
+          h(
+            'div',
+            { class: 'col', style: 'gap:0;margin-top:6px' },
+            ...(
+              [
+                [t('Name'), c.name],
+                [t('Alias'), c.nickname],
+                [t('Species'), c.species],
+                [t('District'), c.district],
+                [t('Business'), c.business],
+                [t('Weapons'), c.weaponsNote],
+              ] as const
+            ).map(([k, v]) => h('div', { class: 'field' }, h('b', null, k), h('span', null, v))),
+            h('div', { class: 'muted', style: 'font-size:13px;margin-top:8px' }, t('All characters have the same stats — only their looks and temper differ.')),
+          ),
         ),
       );
       actions.replaceChildren(
         locked
-          ? h('button', { class: 'btn btn--red grow', onclick: () => this.showArsenal(true, 'characters') }, 'Unlock in the Arsenal')
-          : h('button', { class: 'btn btn--red grow', onclick: confirm }, 'Choose'),
+          ? h('button', { class: 'btn btn--red grow', onclick: () => this.showArsenal(true, 'characters') }, t('Unlock in the Arsenal'))
+          : h('button', { class: 'btn btn--red grow', onclick: confirm }, t('Choose')),
       );
-      if (locked) actions.append(h('button', { class: 'btn grow', onclick: () => this.startPractice({ ...this.lastPractice, character: selected }) }, 'Try in practice'));
+      if (locked) actions.append(h('button', { class: 'btn grow', onclick: () => this.startPractice({ ...this.lastPractice, character: selected }) }, t('Try in practice')));
     };
     const confirm = () => {
       if (!this.ownsCharacter(selected)) return;
@@ -620,7 +624,7 @@ export class App {
     };
     draw();
     if (this.online) void this.online.loadInventory().then(() => this.screen === 'characters' && draw()).catch(() => {});
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Choose a Character'), grid, dossier, actions)));
+    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar(t('Choose a Character')), grid, dossier, actions)));
   }
 
   // ── arsenal (loadout, shop, case, diamonds) ─────────────────────────────
@@ -713,16 +717,16 @@ export class App {
     return l;
   }
 
-  private static tryOnLabel(t: TryOn): string {
+  private static tryOnLabel(o: TryOn): string {
     const parts: string[] = [];
-    if (t.weapon) parts.push(WEAPONS[t.weapon].name + (t.mods?.length ? ` + ${t.mods.map((m) => MODS[m].name.toLowerCase()).join(', ')}` : ''));
-    if (t.gadget) parts.push(GADGETS[t.gadget].name);
-    return parts.join(' and ');
+    if (o.weapon) parts.push(weaponName(o.weapon) + (o.mods?.length ? ` + ${o.mods.map((m) => modText(m).name.toLowerCase()).join(', ')}` : ''));
+    if (o.gadget) parts.push(gadgetName(o.gadget));
+    return parts.join(t(' and '));
   }
 
   private startPractice(opts: { mapId: MapId; bots: number; difficulty: BotDifficulty; gameMode?: GameMode; tryOn?: TryOn; character?: CharacterId }) {
     this.lastPractice = { mapId: opts.mapId, difficulty: opts.difficulty, bots: Math.max(1, Math.min(MAX_PRACTICE_BOTS, opts.bots || 3)), gameMode: opts.gameMode ?? 'ffa' };
-    const name = this.playerName() ?? CHARACTERS[this.character].name;
+    const name = this.playerName() ?? charText(this.character).name;
     const session = new OfflineSession({
       mapId: opts.mapId,
       character: opts.character ?? this.character,
@@ -735,7 +739,7 @@ export class App {
     });
     if (opts.tryOn) {
       const label = App.tryOnLabel(opts.tryOn);
-      setTimeout(() => toast(`Trying on: ${label}${opts.tryOn!.gadget ? ' — G key' : ''}`), 1200);
+      setTimeout(() => toast(opts.tryOn!.gadget ? t('Trying on: {label} — G key', { label }) : t('Trying on: {label}', { label })), 1200);
     }
     this.beginSession(session);
   }
@@ -746,7 +750,7 @@ export class App {
     this.session = session;
     this.resultsShown = false;
     this.go('game');
-    this.root.replaceChildren(h('div', { class: 'rotate-hint panel', style: 'position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);pointer-events:none;opacity:.85' }, 'Turn your phone sideways'));
+    this.root.replaceChildren(h('div', { class: 'rotate-hint panel', style: 'position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);pointer-events:none;opacity:.85' }, t('Turn your phone sideways')));
     setTimeout(() => this.root.querySelector('.rotate-hint')?.remove(), 4000);
     enterGameMode();
     this.host.startGame(session);
@@ -779,11 +783,11 @@ export class App {
       h(
         'div',
         { class: 'panel modal col' },
-        h('span', { class: 'tag' }, offline ? 'Pause' : 'Menu'),
-        h('div', { class: 'muted', style: 'margin-top:6px' }, offline ? 'Practice is paused.' : 'The match goes on — you take control again when you come back.'),
-        h('button', { class: 'btn btn--red', onclick: () => this.togglePause() }, 'Resume'),
-        h('button', { class: 'btn', onclick: () => (this.togglePause(), this.showSettingsOverlay()) }, 'Settings'),
-        h('button', { class: 'btn', onclick: () => this.leaveMatch() }, offline ? 'Back to menu' : 'Leave the match'),
+        h('span', { class: 'tag' }, offline ? t('Pause') : t('Menu')),
+        h('div', { class: 'muted', style: 'margin-top:6px' }, offline ? t('Practice is paused.') : t('The match goes on — you take control again when you come back.')),
+        h('button', { class: 'btn btn--red', onclick: () => this.togglePause() }, t('Resume')),
+        h('button', { class: 'btn', onclick: () => (this.togglePause(), this.showSettingsOverlay()) }, t('Settings')),
+        h('button', { class: 'btn', onclick: () => this.leaveMatch() }, offline ? t('Back to menu') : t('Leave the match')),
       ),
     );
     this.root.append(this.pauseEl);
@@ -792,7 +796,7 @@ export class App {
   private showSettingsOverlay() {
     const wrapEl = h('div', { class: 'overlay' });
     const close = () => wrapEl.remove();
-    wrapEl.append(h('div', { class: 'panel modal col', style: 'max-height:90vh;overflow:auto' }, renderSettings({ inGame: true, online: this.online }), h('button', { class: 'btn btn--red', onclick: close }, 'Done')));
+    wrapEl.append(h('div', { class: 'panel modal col', style: 'max-height:90vh;overflow:auto' }, renderSettings({ inGame: true, online: this.online }), h('button', { class: 'btn btn--red', onclick: close }, t('Done'))));
     this.root.append(wrapEl);
   }
 
@@ -832,17 +836,17 @@ export class App {
       myId,
       offline,
       localProfile: local && !!this.localProfile,
-      ...(local && !this.localProfile ? { offlineNote: 'Pick a nickname in the menu and practice will start earning you XP and levels.' } : {}),
+      ...(local && !this.localProfile ? { offlineNote: t('Pick an alias in the menu and practice will start earning you XP and levels.') } : {}),
       onRematch: () => {
         if (offline && this.session instanceof OfflineSession) {
           this.resultsShown = false;
-          this.session.setLocalIdentity(this.playerName() ?? CHARACTERS[this.character].name, this.playerLevel());
+          this.session.setLocalIdentity(this.playerName() ?? charText(this.character).name, this.playerLevel());
           this.session.restart();
           this.go('game', false);
           this.root.replaceChildren();
         } else {
           this.online?.rematch();
-          toast('Rematch vote counted');
+          toast(t('Rematch vote counted'));
         }
       },
       onMenu: () => this.leaveMatch(),
@@ -886,7 +890,7 @@ export class App {
     try {
       await this.online.quickMatch(this.onlineCharacter(), mode);
     } catch (e) {
-      this.showError((e as Error).message);
+      this.showError(apiErrorText(e));
     }
   }
 
@@ -918,7 +922,7 @@ export class App {
               try {
                 await this.online!.createRoom(mapId, this.onlineCharacter(), gameMode);
               } catch (e) {
-                this.showError((e as Error).message);
+                this.showError(apiErrorText(e));
               }
             },
           },
@@ -950,26 +954,26 @@ export class App {
   private joinInvite(code: string) {
     if (!this.online) return;
     this.go('join');
-    this.render(this.loading('Checking the invitation…'));
+    this.render(this.loading(t('Checking the invitation…')));
     void this.online
       .resolveInvite(code)
       .then(async (info) => {
         analytics.track('invite_opened', { code, result: info.status });
         if (info.status === 'joinable' || info.status === 'in_progress') {
           await this.ensureNicknameBeforeJoin();
-          this.render(this.loading(`Entering the room${info.hostName ? ` (${info.hostName})` : ''}…`));
+          this.render(this.loading(info.hostName ? t('Entering the room ({host})…', { host: info.hostName }) : t('Entering the room…')));
           await this.online!.joinRoom(info.roomId!, this.onlineCharacter());
           return;
         }
         const msg: Record<string, string> = {
-          full: 'The room is full.',
-          finished: 'That match is already over.',
-          expired: 'The invitation has expired — the room is closed.',
-          not_found: 'Invitation not found.',
+          full: t('The room is full.'),
+          finished: t('That match is already over.'),
+          expired: t('The invitation has expired — the room is closed.'),
+          not_found: t('Invitation not found.'),
         };
-        this.showError(msg[info.status] ?? 'Could not join with this invitation.', false);
+        this.showError(msg[info.status] ?? t('Could not join with this invitation.'), false);
       })
-      .catch((e: Error) => this.showError(e.message));
+      .catch((e: Error) => this.showError(apiErrorText(e)));
   }
 
   private onLobby(s: LobbyState) {
@@ -1001,23 +1005,23 @@ export class App {
   private showProfile(push = true) {
     if (!this.online && !this.localProfile) return this.editNickname(() => this.showProfile());
     this.go('profile', push);
-    const box = h('div', { class: 'wrap' }, this.topbar('Profile'), this.loading('Loading the profile…'));
+    const box = h('div', { class: 'wrap' }, this.topbar(t('Profile')), this.loading(t('Loading the profile…')));
     this.render(h('div', { class: 'screen screen--dim' }, box));
     const load: Promise<ProfileData> = this.online ? loadOnlineProfile(this.online) : Promise.resolve(localProfileView(this.localProfile!, this.character));
     void load
       .then((d) => {
         if (this.screen !== 'profile') return;
-        box.replaceChildren(this.topbar('Profile'));
+        box.replaceChildren(this.topbar(t('Profile')));
         if (this.online) box.append(renderAccountPanel(this.online, { root: this.root, onChanged: () => (this.refreshStrip(), this.screen === 'profile' && this.showProfile(false)) }));
         box.append(renderProfileView(d, { local: !this.online, onRename: () => this.editNickname(() => this.screen === 'profile' && this.showProfile(false)) }));
       })
-      .catch((e: Error) => box.replaceChildren(this.topbar('Profile'), h('div', { class: 'panel' }, `Could not load the profile: ${e.message}`)));
+      .catch((e: Error) => box.replaceChildren(this.topbar(t('Profile')), h('div', { class: 'panel' }, t('Could not load the profile: {error}', { error: apiErrorText(e) }))));
   }
 
   private showSettings(push = true) {
     this.go('settings', push);
     const onResetLocal = !this.online && this.localProfile ? () => this.resetLocalProfile() : undefined;
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar('Settings'), renderSettings({ inGame: false, online: this.online, ...(onResetLocal ? { onResetLocal } : {}) }))));
+    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar(t('Settings')), renderSettings({ inGame: false, online: this.online, ...(onResetLocal ? { onResetLocal } : {}) }))));
   }
 
   /** Demo build: forget the browser-only profile (the nickname dialog opens again in the menu). */
@@ -1025,7 +1029,7 @@ export class App {
     clearLocalProfile();
     this.localProfile = null;
     this.lastLocalResult = null;
-    toast('Local profile reset');
+    toast(t('Local profile reset'));
     this.goMenu();
   }
 
@@ -1039,17 +1043,17 @@ export class App {
         h(
           'div',
           { class: 'panel modal col' },
-          h('span', { class: 'tag' }, 'Malfunction'),
+          h('span', { class: 'tag' }, t('Malfunction')),
           h('div', { style: 'font-size:18px;margin-top:8px' }, message),
-          retry ? h('button', { class: 'btn', onclick: () => location.reload() }, 'Retry') : null,
-          h('button', { class: 'btn btn--red', onclick: () => this.goMenu() }, 'To menu'),
+          retry ? h('button', { class: 'btn', onclick: () => location.reload() }, t('Retry')) : null,
+          h('button', { class: 'btn btn--red', onclick: () => this.goMenu() }, t('To menu')),
         ),
       ),
     );
   }
 
   static standingsName(s: Standing): string {
-    return s.isBot ? `${s.name} · bot` : s.name;
+    return s.isBot ? `${s.name} · ${t('bot')}` : s.name;
   }
 
   static fmt = fmtDuration;

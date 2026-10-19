@@ -7,6 +7,8 @@ import { displayNameSchema } from '@blatkom/shared';
 import { h, toast } from '../ui/dom.js';
 import { sfx } from '../game/audio/Sfx.js';
 import { randomNickname } from './nickname-words.js';
+import { t } from '../i18n/index.js';
+import { apiErrorText } from '../net/errors.js';
 
 export { randomNickname };
 
@@ -26,7 +28,7 @@ export interface NicknameDialogOptions {
 
 /** Opens the nickname dialog on top of `root`; returns a function that closes it. */
 export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions): () => void {
-  const input = h('input', { class: 'input input--big', value: o.initial, maxlength: '24', autocomplete: 'off', autocapitalize: 'words', spellcheck: 'false', 'aria-label': 'Alias' }) as HTMLInputElement;
+  const input = h('input', { class: 'input input--big', value: o.initial, maxlength: '24', autocomplete: 'off', autocapitalize: 'words', spellcheck: 'false', 'aria-label': t('Alias') }) as HTMLInputElement;
   const error = h('div', { class: 'muted', style: 'min-height:18px;font-size:14px;color:#e07a6a' });
   let busy = false;
   let closed = false;
@@ -41,7 +43,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
     if (busy) return;
     const parsed = displayNameSchema.safeParse(input.value);
     if (!parsed.success) {
-      error.textContent = input.value.trim().length < 2 ? 'At least 2 characters.' : (parsed.error.issues[0]?.message ?? 'That alias won’t do.');
+      error.textContent = input.value.trim().length < 2 ? t('At least 2 characters.') : input.value.trim().length > 24 ? t('At most 24 characters.') : t('Only letters, digits, spaces and _ . - will do.');
       input.focus();
       return;
     }
@@ -52,7 +54,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
       sfx.play('click');
       close();
     } catch (e) {
-      toast((e as Error).message || 'Couldn’t save it');
+      toast(e instanceof Error && e.message ? apiErrorText(e) : t('Couldn’t save it'));
     } finally {
       busy = false;
       saveBtn.removeAttribute('disabled');
@@ -69,16 +71,16 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
     }
   };
   input.addEventListener('input', () => (error.textContent = ''));
-  const saveBtn = h('button', { class: 'btn btn--red grow', onclick: () => void save() }, 'Done');
+  const saveBtn = h('button', { class: 'btn btn--red grow', onclick: () => void save() }, t('Done'));
   const overlay = h(
     'div',
-    { class: 'overlay overlay--top', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Alias' },
+    { class: 'overlay overlay--top', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('Alias') },
     h(
       'div',
       { class: 'panel modal col' },
-      h('span', { class: 'tag' }, 'Personal file'),
-      h('div', { class: 'h2', style: 'margin-top:8px' }, o.title ?? 'What do they call you round here?'),
-      h('div', { class: 'muted', style: 'font-size:15px' }, o.note ?? 'Rivals see your alias — above your character, on the scoreboard and in the results. You can change it in the profile.'),
+      h('span', { class: 'tag' }, t('Personal file')),
+      h('div', { class: 'h2', style: 'margin-top:8px' }, o.title ?? t('What do they call you round here?')),
+      h('div', { class: 'muted', style: 'font-size:15px' }, o.note ?? t('Rivals see your alias — above your character, on the scoreboard and in the results. You can change it in the profile.')),
       input,
       error,
       h(
@@ -94,7 +96,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
               sfx.play('click');
             },
           },
-          'Random alias',
+          t('Random alias'),
         ),
         o.onCancel
           ? h(
@@ -106,7 +108,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
                   o.onCancel?.();
                 },
               },
-              o.cancelLabel ?? 'Cancel',
+              o.cancelLabel ?? t('Cancel'),
             )
           : null,
       ),
