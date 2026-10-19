@@ -90,9 +90,9 @@ export class ProfileRepo {
 
   async history(userId: string, limit: number): Promise<MatchHistoryEntry[]> {
     const rows = await this.sql<
-      Array<{ match_id: string; map_id: MapId; character: CharacterId; ended_at: Date | null; started_at: Date; duration_ms: number | null; place: number | null; player_count: number; kills: number; assists: number; deaths: number; xp_awarded: number; won: boolean }>
+      Array<{ match_id: string; map_id: MapId; character: CharacterId; ended_at: Date | null; started_at: Date; duration_ms: number | null; place: number | null; players: number; kills: number; assists: number; deaths: number; xp_awarded: number; won: boolean }>
     >`
-      SELECT mp.match_id, m.map_id, mp.character, m.ended_at, m.started_at, m.duration_ms, mp.place, m.player_count,
+      SELECT mp.match_id, m.map_id, mp.character, m.ended_at, m.started_at, m.duration_ms, mp.place, m.player_count + m.bot_count AS players,
              mp.kills, mp.assists, mp.deaths, mp.xp_awarded, mp.won
       FROM match_participants mp JOIN matches m ON m.id = mp.match_id
       WHERE mp.user_id = ${userId} AND m.status = 'completed'
@@ -105,7 +105,8 @@ export class ProfileRepo {
       endedAt: (r.ended_at ?? r.started_at).toISOString(),
       durationMs: r.duration_ms ?? 0,
       place: r.place ?? 0,
-      players: r.player_count,
+      // the whole lineup the player saw (people and filled players alike)
+      players: r.players,
       kills: r.kills,
       assists: r.assists,
       deaths: r.deaths,

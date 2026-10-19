@@ -5,6 +5,7 @@ import { testDb } from '../admin/testkit.js';
 import type { TestDb } from '../admin/testkit.js';
 import { PgMatchRecorder, seedAchievements } from './recorder.js';
 import { UserRepo } from '../auth/users.js';
+import { ProfileRepo } from '../profiles/repo.js';
 import { silentLogger } from '../logging/logger.js';
 import { XP_RULES, ACHIEVEMENTS, levelForXp } from '@blatkom/shared';
 import type { MatchCompletion, MatchParticipantResult } from '../services/contracts.js';
@@ -184,4 +185,24 @@ test('recorder: team match — the whole winning team wins, mode/teams are store
   assert.deepEqual({ ...row }, { mode: 'teams', winner_team: 0 });
   const teams = await db.sql<Array<{ user_id: string; team: number | null }>>`SELECT user_id, team FROM match_participants WHERE match_id = ${m.matchId} ORDER BY team, user_id`;
   assert.deepEqual(teams.map((t) => t.team), [0, 0, 1, 1]);
+});
+
+test('recorder: a filled match — places count everyone, people and filled players are stored apart, alone is not «with friends»', async () => {
+  const a = await newUser('Одиночка');
+  // one person and three players the server filled in: the person came 2nd of 4 (a private room, by invite)
+  const m = completion([part(a, 2, 3, 2, { viaInvite: true })], { isPrivate: true, playersAtEnd: 4, peopleAtEnd: 1, fillAtEnd: 3 });
+  await rec.matchStarted({ matchId: m.matchId, roomId: m.roomId, mapId: m.mapId, mode: 'ffa', isPrivate: true, startedAt: m.startedAt, players: [{ userId: a, character: 'petya', viaInvite: true, team: null }], fill: 3 });
+  const [started] = await db.sql<Array<{ player_count: number; bot_count: number }>>`SELECT player_count, bot_count FROM matches WHERE id = ${m.matchId}`;
+  assert.deepEqual({ ...started }, { player_count: 1, bot_count: 3 });
+  const res = (await rec.matchCompleted(m)).get(a)!;
+  assert.ok(!res.newAchievements.includes('played_with_friends'), 'friends are people');
+  assert.ok(res.xpGained >= XP_RULES.completion + 3 * XP_RULES.perKill + (XP_RULES.placement[1] ?? 0), 'a placement among 4 earns its bonus');
+  const pa = await profile(a);
+  assert.equal(pa.losses, 1, 'second place with opponents at the end is a loss');
+  const [row] = await db.sql<Array<{ player_count: number; bot_count: number }>>`SELECT player_count, bot_count FROM matches WHERE id = ${m.matchId}`;
+  assert.deepEqual({ ...row }, { player_count: 1, bot_count: 3 });
+  // the player's match history shows the whole lineup they played in
+  const history = await new ProfileRepo(db.sql).history(a, 5);
+  assert.equal(history[0]!.place, 2);
+  assert.equal(history[0]!.players, 4);
 });

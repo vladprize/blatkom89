@@ -96,7 +96,7 @@ Range parameters (where noted): `range=24h|7d|30d|90d` (default `7d`) or
 | `GET /api/admin/me` | viewer | `{id, username, role, csrfToken}` |
 | `GET /api/admin/overview?range…` | viewer | KPI tiles (`AdminOverview`) |
 | `GET /api/admin/charts?range…` | viewer | chart series (`AdminCharts`) |
-| `GET /api/admin/rooms` | viewer | live rooms (map, game mode, phase, players, private) |
+| `GET /api/admin/rooms` | viewer | live rooms (map, game mode, phase, people, `fill` — players the server added to complete the lineup, shown as «Добор»; private) |
 | `GET /api/admin/funnel?range…` | viewer | visitor and new-player cohorts, referrers, daily visitors (`AdminFunnel`) |
 | `GET /api/admin/economy?range…` | viewer | currency flows, revenue, purchases, modifications, cases (`AdminEconomy`) |
 | `GET /api/admin/players?q=&sort=&dir=&page=&pageSize=` | viewer | search by name (case-insensitive, Cyrillic-safe), exact Telegram ID, internal UUID or exact email (the address itself is never listed); `sort` ∈ `created, last_seen, name, level, xp, matches, wins, losses, kills, assists, playtime`; `pageSize` 5–100 |

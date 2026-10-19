@@ -48,6 +48,8 @@ export class BotBrain {
   private path: Array<{ x: number; y: number }> = [];
   private pathGoal: { x: number; y: number } | null = null;
   private repathAt = 0;
+  /** A moving goal is searched for at most four times a second. */
+  private searchAt = 0;
   private targetId: string | null = null;
   private targetSeenAt = 0;
   private lastSeen: { x: number; y: number; at: number } | null = null;
@@ -357,10 +359,16 @@ export class BotBrain {
 
   private followPath(me: PlayerState, goal: { x: number; y: number }, now: number): { x: number; y: number } | null {
     const goalMoved = !this.pathGoal || Math.abs(this.pathGoal.x - goal.x) + Math.abs(this.pathGoal.y - goal.y) > 48;
-    if (this.path.length === 0 || now > this.repathAt || goalMoved) {
-      this.path = this.nav.findPath(me.x, me.y, goal.x, goal.y) ?? [];
+    // search again for a new goal (a moving one at most four times a second) and every 0.7–1.1 s; a goal
+    // reached or found unreachable waits for that instead of a new search every tick
+    if ((goalMoved && now >= this.searchAt) || now > this.repathAt) {
+      const path = this.nav.findPath(me.x, me.y, goal.x, goal.y);
+      this.path = path ?? [];
       this.pathGoal = { ...goal };
       this.repathAt = now + 700 + this.rng() * 400;
+      this.searchAt = now + 250;
+      // no way there: wander somewhere else
+      if (!path) this.roamGoal = null;
     }
     while (this.path.length > 0) {
       const wp = this.path[0]!;

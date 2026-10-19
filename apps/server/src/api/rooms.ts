@@ -57,7 +57,7 @@ export const registerRoomRoutes: RouteModule = (router, { env, services, rooms }
     const room = rooms.get(ctx.params.id ?? '');
     if (!room) throw new HttpError(404, 'room_not_found', 'Room not found');
     const user = currentUser(ctx);
-    ctx.json(200, { ...room.info(), joinable: room.isJoinable(user.userId), mapName: getMap(room.mapId).name });
+    ctx.json(200, { ...room.publicInfo(), joinable: room.isJoinable(user.userId), mapName: getMap(room.mapId).name });
   });
 
   router.get('/api/invites/:code', rateLimit(lookupLimiter), async (ctx) => {
@@ -71,7 +71,7 @@ export const registerRoomRoutes: RouteModule = (router, { env, services, rooms }
       else {
         const phase = room.phase;
         const status: InviteInfo['status'] = room.occupancy >= room.config.maxPlayers ? 'full' : phase === 'finished' ? 'finished' : phase === 'waiting' ? 'joinable' : room.isJoinable() ? 'in_progress' : 'full';
-        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.occupancy, maxPlayers: room.config.maxPlayers, hostName: room.hostName() };
+        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.lineup, maxPlayers: room.config.maxPlayers, hostName: room.hostName() };
       }
     }
     ctx.json(200, info);

@@ -250,16 +250,16 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
   router.get('/api/admin/export/matches.csv', admin, async (ctx) => {
     const p = pg();
     const r = range(ctx);
-    const rows = await p.sql<Array<{ id: string; room_id: string; map_id: string; is_private: boolean; status: string; started_at: Date; ended_at: Date | null; duration_ms: number | null; end_reason: string | null; player_count: number }>>`
-      SELECT id, room_id, map_id, is_private, status, started_at, ended_at, duration_ms, end_reason, player_count
+    const rows = await p.sql<Array<{ id: string; room_id: string; map_id: string; is_private: boolean; status: string; started_at: Date; ended_at: Date | null; duration_ms: number | null; end_reason: string | null; player_count: number; bot_count: number }>>`
+      SELECT id, room_id, map_id, is_private, status, started_at, ended_at, duration_ms, end_reason, player_count, bot_count
       FROM matches WHERE started_at BETWEEN ${new Date(r.from)} AND ${new Date(r.to)} ORDER BY started_at`;
     await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: 'export_matches', details: { rows: rows.length, from: r.from, to: r.to }, ip: ctx.ip });
     csv(
       ctx,
       `matches_${r.firstDay}_${r.lastDay}.csv`,
       toCsv(
-        ['match_id', 'room_id', 'map', 'private', 'status', 'started_at', 'ended_at', 'duration_ms', 'end_reason', 'players'],
-        rows.map((m) => [m.id, m.room_id, isMapId(m.map_id) ? getMap(m.map_id).name : m.map_id, m.is_private, m.status, m.started_at, m.ended_at, m.duration_ms, m.end_reason, m.player_count]),
+        ['match_id', 'room_id', 'map', 'private', 'status', 'started_at', 'ended_at', 'duration_ms', 'end_reason', 'players', 'fill_players'],
+        rows.map((m) => [m.id, m.room_id, isMapId(m.map_id) ? getMap(m.map_id).name : m.map_id, m.is_private, m.status, m.started_at, m.ended_at, m.duration_ms, m.end_reason, m.player_count, m.bot_count]),
       ),
     );
   });

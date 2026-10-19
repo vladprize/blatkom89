@@ -46,6 +46,11 @@ const EnvSchema = z.object({
   MATCH_CAPTURE_LIMIT: z.coerce.number().int().min(1).max(20).default(3),
   /** Base capture: points to win (a point per base held per second). */
   MATCH_BASE_SCORE_LIMIT: z.coerce.number().int().min(10).max(2000).default(250),
+  /**
+   * Complete small lineups with players the server runs itself (4 in free-for-all, 3 a side in team
+   * modes), so a match can always start; they look like everyone else (rooms/MatchRoom.ts).
+   */
+  MATCH_FILL_BOTS: bool.default('true'),
   /** Paid cases can be switched off where randomised paid items are restricted (docs/ECONOMY.md). */
   CASES_ENABLED: bool.default('true'),
   /** Card payments (Stripe Checkout). Both keys are required to enable them. */

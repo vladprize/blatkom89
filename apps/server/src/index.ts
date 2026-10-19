@@ -18,7 +18,7 @@ if (applied.length) log.info('migrations applied', { applied });
 
 const persistence = await createPersistence({ sql, env, log });
 const services = persistence.services;
-const rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env) });
+const rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env), fillBots: env.MATCH_FILL_BOTS });
 const handler = createApp({ env, sql, log, services, rooms });
 const server = createServer((req, res) => {
   handler(req, res).catch((e: Error) => log.error('fatal request error', { err: e }));

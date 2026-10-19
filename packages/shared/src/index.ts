@@ -1,6 +1,7 @@
 export * from './constants/game.js';
 export * from './game-rules/characters.js';
 export * from './game-rules/avatars.js';
+export * from './game-rules/nicknames.js';
 export * from './game-rules/weapons.js';
 export * from './game-rules/gadgets.js';
 export * from './game-rules/loadout.js';
@@ -13,6 +14,7 @@ export * from './sim/rng.js';
 export * from './sim/world.js';
 export * from './sim/nav.js';
 export * from './sim/bots.js';
+export * from './sim/fill.js';
 export * from './net/codec.js';
 export * from './net/protocol.js';
 export * from './events/analytics.js';

@@ -13,7 +13,10 @@ interface RoomInfo {
   mapName: string;
   mode?: string;
   phase: string;
+  /** People in the room. */
   players: number;
+  /** Players the server added to complete the lineup (MATCH_FILL_BOTS). */
+  fill?: number;
   maxPlayers: number;
   isPrivate: boolean;
   createdAt: string;
@@ -103,11 +106,21 @@ export async function renderOverview(root: HTMLElement): Promise<void> {
     ? h(
         'table',
         { class: 'table' },
-        h('thead', {}, h('tr', {}, ...['Комната', 'Карта', 'Режим', 'Фаза', 'Игроки', 'Тип', 'Создана'].map((t) => h('th', {}, t)))),
+        h(
+          'thead',
+          {},
+          h(
+            'tr',
+            {},
+            ...['Комната', 'Карта', 'Режим', 'Фаза', 'Игроки', 'Добор', 'Тип', 'Создана'].map((t) =>
+              h('th', t === 'Добор' ? { title: 'Игроки, которых сервер добавил до полного состава (в статистике игроков не учитываются)' } : {}, t),
+            ),
+          ),
+        ),
         h(
           'tbody',
           {},
-          ...rooms.map((r) => h('tr', {}, h('td', { class: 'mono' }, r.id), h('td', {}, MAP_NAMES[r.mapId] ?? r.mapName), h('td', {}, r.mode ? (MODE_NAMES[r.mode] ?? r.mode) : '—'), h('td', {}, PHASES[r.phase] ?? r.phase), h('td', {}, `${r.players}/${r.maxPlayers}`), h('td', {}, r.isPrivate ? 'приватная' : 'публичная'), h('td', {}, dateTime(r.createdAt)))),
+          ...rooms.map((r) => h('tr', {}, h('td', { class: 'mono' }, r.id), h('td', {}, MAP_NAMES[r.mapId] ?? r.mapName), h('td', {}, r.mode ? (MODE_NAMES[r.mode] ?? r.mode) : '—'), h('td', {}, PHASES[r.phase] ?? r.phase), h('td', {}, `${r.players}/${r.maxPlayers}`), h('td', {}, String(r.fill ?? 0)), h('td', {}, r.isPrivate ? 'приватная' : 'публичная'), h('td', {}, dateTime(r.createdAt)))),
         ),
       )
     : h('div', { class: 'chart-empty' }, 'Сейчас нет активных комнат');

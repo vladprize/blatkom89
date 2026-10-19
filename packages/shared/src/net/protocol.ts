@@ -124,6 +124,8 @@ export type ServerMessage =
       isPrivate: boolean;
       maxPlayers: number;
       mode: GameMode;
+      /** People the host needs to start the match (1 when the server fills the lineup up). */
+      minToStart?: number;
     }
   | { type: 'ev'; tick: number; events: GameEvent[] }
   | { type: 'results'; matchId: string; reason: 'time' | 'score' | 'aborted'; durationMs: number; standings: Standing[]; mapId: MapId; mode: GameMode; teams?: TeamResultSummary }

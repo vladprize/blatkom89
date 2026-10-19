@@ -1,12 +1,10 @@
 /** Offline practice: the shared World + bots running locally (no server). */
-import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS, DEFAULT_LOADOUT, MAX_PLAYERS, weaponAmmo, isTeamMode, teamScoreLimitFor } from '@blatkom/shared';
+import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS, DEFAULT_LOADOUT, MAX_PLAYERS, PRACTICE_NAMES, weaponAmmo, isTeamMode, teamScoreLimitFor } from '@blatkom/shared';
 import type { CharacterId, GadgetId, GameMode, InputFrame, MapId, Standing, BotDifficulty, PlayerState, Loadout, Team, WeaponId } from '@blatkom/shared';
 import { getLang } from '../../i18n/index.js';
 import type { GameSession, HudState, RenderBase, RenderFlag, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
 import { toRenderGadget, toRenderPlayer, worldEventToSession, reloadProgress } from './convert.js';
 
-const BOT_NAMES_EN = ['Beardy', 'Comrade_312', 'The Cooperator', 'Petrovich', 'Plumber', 'Quartermaster', 'Praporshchik', 'Kolyan', 'Mechanic', 'Shurik', 'Valerka', 'The Docent'];
-const BOT_NAMES_RU = ['Бородач', 'Товарищ_312', 'Кооператор', 'Петрович', 'Сантехник', 'Завхоз', 'Прапорщик', 'Колян', 'Механик', 'Шурик', 'Валерка', 'Доцент'];
 /** Practice: up to nine bots (ten players, like an online room). */
 export const MAX_PRACTICE_BOTS = MAX_PLAYERS - 1;
 /** Practice team deathmatch ends a little sooner than online. */
@@ -71,7 +69,7 @@ export class OfflineSession implements GameSession {
     if (opts.level) this.levels.set(this.localId, opts.level);
     this.matchSeq = Math.floor(Math.random() * 1e6);
     const others = CHARACTER_IDS.filter((c) => c !== opts.character);
-    const names = (getLang() === 'ru' ? BOT_NAMES_RU : BOT_NAMES_EN).slice().sort(() => Math.random() - 0.5);
+    const names = PRACTICE_NAMES[getLang() === 'ru' ? 'ru' : 'en'].slice().sort(() => Math.random() - 0.5);
     for (let i = 0; i < Math.min(opts.bots, MAX_PRACTICE_BOTS); i++) {
       const id = `bot${i}`;
       this.world.addPlayer(id, names[i % names.length]!, others[i % others.length]!, true, botLoadout(i + Math.floor(Math.random() * 1000)));

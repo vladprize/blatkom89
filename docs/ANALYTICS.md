@@ -35,9 +35,9 @@ occurred_at, received_at, platform, props jsonb)`.
 | `lobby_created` | `RoomManager.create` | `roomId`, `mapId`, `isPrivate` |
 | `lobby_joined` | `MatchRoom` join / resume | `roomId`, `viaInvite`, `resumed?` |
 | `lobby_left` | `MatchRoom` leave | `roomId`, `phase`, `reason` |
-| `match_started` | `MatchRoom` countdown → active | `matchId`, `roomId`, `mapId`, `players` |
+| `match_started` | `MatchRoom` countdown → active | `matchId`, `roomId`, `mapId`, `players` (people), `fill` (players the server added to complete the lineup) |
 | `map_played` | together with `match_started` | `matchId`, `mapId` |
-| `match_completed` | `MatchRoom` finish (timer / score limit) | `matchId`, `mapId`, `durationMs`, `players`, `reason` |
+| `match_completed` | `MatchRoom` finish (timer / score limit) | `matchId`, `mapId`, `durationMs`, `players` (people present at the end), `fill`, `reason` |
 | `match_abandoned` | room closed before the match finished | `matchId`, `mapId`, `phase` |
 | `invite_created` | `POST /api/rooms` (private room) | `code`, `roomId` |
 
@@ -103,7 +103,7 @@ Let the selected range be `[from, to]` (timestamps) with UTC days `firstDay … 
 | DAU | distinct users in `user_daily_activity` on `lastDay` |
 | WAU | distinct users active on any of the 7 days ending `lastDay` |
 | MAU | distinct users active on any of the 30 days ending `lastDay` |
-| Matches started | `matches.started_at ∈ [from, to]` |
+| Matches started | `matches.started_at ∈ [from, to]` (every player metric counts people only: players the server adds to complete a lineup — docs/NETCODE.md §2a — are never users or participants; `matches.bot_count` keeps how many there were next to `player_count`) |
 | Matches completed | `status = 'completed'` and `ended_at ∈ [from, to]` |
 | Active rooms | live count from the room manager at request time (not historical) |
 | Avg match duration | mean `duration_ms` of matches completed in range; `null` if none |

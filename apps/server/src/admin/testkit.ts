@@ -78,6 +78,7 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     MATCH_CAPTURE_LIMIT: 3,
     GUEST_SIGNUPS_PER_IP_HOUR: 10,
     MATCH_BASE_SCORE_LIMIT: 250,
+    MATCH_FILL_BOTS: false,
     ...overrides,
   };
 }
@@ -96,7 +97,7 @@ export async function startTestApp(envOverrides: Partial<Env> = {}): Promise<Tes
   const db = await testDb();
   const env = testEnv(envOverrides);
   const persistence = await createPersistence({ sql: db.sql, env, log: silentLogger });
-  const rooms = new RoomManager(persistence.services, silentLogger, { maxRooms: 10 });
+  const rooms = new RoomManager(persistence.services, silentLogger, { maxRooms: 10, fillBots: env.MATCH_FILL_BOTS });
   const handler = createApp({ env, sql: db.sql, log: silentLogger, services: persistence.services, rooms }, ROUTE_MODULES);
   const server = createServer((req, res) => void handler(req, res));
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

@@ -96,6 +96,13 @@ instructions win; the original criteria are re-evaluated in §4.
 | Profile avatars (PlayStation-style) | the owner's 24 round pixel portraits (`tools/crop-avatars.py`); the picker opens from the avatar in the Dossier tile or the profile; saved in `profiles.avatar` (migration 007, `PATCH /api/me {avatar}`, validated against `AVATAR_IDS`) or in the demo's local profile; other players see it in the lobby (roster), without one the character's portrait | ✅ API and realtime tests, web unit test (every id has a picture and EN/RU names), demo and online E2E |
 | Ranks by level (like Tanki Online) | — | ⏸ on hold by the owner |
 
+## 2e. Update 2026-10-19 (night) — a match can always start
+
+| Request (owner) | Implementation | Status |
+|---|---|---|
+| In every mode — Quick Match and games with friends — add bots for balance so a game can always start; nowhere may it say they are bots | filled lineups (`MATCH_FILL_BOTS`, default on; docs/NETCODE.md §2a): the room completes the lineup with players it runs itself (the practice AI through the same input path as clients) — 4 in free-for-all, 3 a side in team modes, sides always even; Quick Match after a 5 s head start, one by one, the match starts by itself ≈ 10 s after a lone person came; rooms with friends at kick-off — «Start» works for one person; people take filled places at once or after 0.5–2 s, people who leave are replaced after 2.5–6 s; names like people's, levels near theirs, avatars, characters and gear; `isBot` never leaves the server (roster and results mark nobody, UUID ids, the public room info counts the whole lineup); only people are recorded, places and rewards count everyone, «played with friends» needs two people; `matches.bot_count` (migration 008), analytics `fill`, «Добор» in the admin's live rooms; filled players never get a practice bot's name | ✅ shared fill tests, `rooms/fill.test.ts` (tick by tick), recorder test, E2E `fill.mjs` on a server with the fill on |
+| (found on the way) bots' path finding | the A* search stopped after 6000 cells, so on the larger maps long ways round failed and the bot searched again every tick — standing still (visible in practice too) and costing up to 17 % of a core for one capture-the-flag room; now a search may cover the whole map and reuses one search space per map (identical paths, 2× faster), a bot searches at most four times a second for a moving goal, otherwise every 0.7–1.1 s — a room with filled players costs 0.25–0.5 % of a core | ✅ old/new paths identical on 2800 random queries; shared test (farthest spawns connected on every map, few searches, no misses); bot tests |
+
 ## 3. Open risks / next steps
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).
@@ -109,6 +116,7 @@ instructions win; the original criteria are re-evaluated in §4.
 - Content growth (more maps/characters) fits the existing map format and atlas conventions.
 - Confirm the menu music licence («Hurt», Infraction & Emerel Gray) for use in the game, or replace it.
 - Balance of the new modes with real players (capture limit 3, base limit 250, 15 s flag return, 6 s base capture are first guesses tuned with bots).
+- Filled lineups: tune `FILL_RULES` (lineup sizes, the 5 s head start, pacing) and the AI's difficulty by level once real traffic shows how often people play alone; watch the host's CPU (≈ 0.1 ms per filled player per tick).
 
 ## 4. Acceptance checklist (state on 2026-10-19)
 
@@ -116,7 +124,7 @@ instructions win; the original criteria are re-evaluated in §4.
 |---|---|---|
 | The project builds successfully | ✅ | `npm run typecheck`; `node apps/web/build.mjs --mode=production`; `node apps/server/build.mjs` |
 | The server starts | ✅ | bundled `apps/server/dist/server.js` started against PostgreSQL; `/api/health`, `/api/ready` OK |
-| PostgreSQL works | ✅ | migrations 001–007 applied; DB-backed integration tests (incl. economy, payments, email, admin funnel/economy) on PostgreSQL 16 |
+| PostgreSQL works | ✅ | migrations 001–008 applied; DB-backed integration tests (incl. economy, payments, email, admin funnel/economy) on PostgreSQL 16 |
 | Strict top-down 2D camera; not isometric / first-person | ✅ | orthographic camera, top-down sprites; screenshots in all modes |
 | Flagship factory map fully playable | ✅ | offline E2E + online two-browser E2E on «Заводская проходная» |
 | Four characters playable | ✅ | now 14 (4 free + 10 from the Arsenal) with sprites, portraits and animations; locked ones are refused by the server unless owned |

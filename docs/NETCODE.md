@@ -34,12 +34,53 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
    minimum number of players is present and ready; private rooms start when the host presses «Start»
    (or 0.6 s after every connected player marked themselves ready). Switching between team modes keeps the
    teams; coming from free-for-all they are dealt anew, alternating by arrival.
+   **Filled lineups** (`MATCH_FILL_BOTS=true`, the default; §2a below) let one person always play.
 6. Match phases (server state machine): `waiting → ready → countdown → active → finished → (waiting | closed)`.
 7. Results: `results {matchId, reason, durationMs, standings, mapId, mode, teams?}` is broadcast once, right after the
    deciding events are flushed; personal `progress {xpGained, level, newAchievements}` follows when the
    database transaction commits, and the `roster` is re-broadcast with the levels just earned (nameplates
    and the Tab table in a rematch show the current level). `rematch` votes restart the room with a new
    match id.
+
+### 2a. Filled lineups
+
+When too few people are in a room for a good match, the room completes the lineup with players it runs
+itself — `BotBrain` (the practice AI) producing one input frame per tick through the same
+`World.applyInput` as a client, so they obey every movement and weapon rule. Rules in
+`packages/shared/src/sim/fill.ts` (`FILL_RULES`), logic in `MatchRoom` (`fillWant` / `fillStep` /
+`fillTick`):
+
+* **Lineup:** free-for-all at least 4 players; team modes at least 3 a side, the sides always even (the
+  bigger side of people sets the size of both); never beyond `MATCH_MAX_PLAYERS`. Only connected people
+  count — a person in the reconnect grace period keeps the lineup as it is.
+* **Quick Match:** people get a head start of 5 s, then players arrive one by one every 0.7–2.2 s; the
+  usual auto-start (4 s after two are present) begins the match ≈ 10 s after a lone person came, and the
+  rest of the lineup is completed at kick-off.
+* **Rooms with friends:** nobody is added while people gather; the host's «Start» works with one person
+  (`roster.minToStart` = 1, so the lobby enables the button) and the lineup is completed (and the sides
+  evened) the moment the match starts. Auto-start by «everyone ready» still needs two in the roster.
+  With the fill on, people may join the same side (at most half the room each); the room evens it out.
+* **During a match:** a person joining takes a filled place (a filled player leaves after 0.5–2 s, the one
+  doing worst; at once if the room is full); a person leaving is replaced after 2.5–6 s, like someone
+  joining in progress. After a match the filled players stay, ask for a rematch within 1.5–6 s like
+  people (after a public match about a third move on); when the last person is gone (grace period
+  over), they leave too and the room closes as an empty room.
+* **Undistinguishable:** names like people's (the alias suggestions and casual names, `game-rules/
+  nicknames.ts`), levels around the people's average (−3…+6; the AI plays easier against beginners and
+  harder against veterans), an avatar two times in three, free and Arsenal characters and gear. `isBot`
+  never leaves the server: `roster` and `results` carry `isBot: false` for everyone, ids are UUIDs like
+  user ids, the public room info (`GET /api/rooms/:id`, invites) counts the whole lineup.
+* **Records:** filled players are never stored individually; places, wins, XP and talons count them as
+  opponents (a person finishing 2nd of 4 is 2nd); «played with friends» needs two people.
+  `matches.player_count` holds the people and `matches.bot_count` (migration 008) the filled players; the
+  match history shows the whole lineup; `match_started`/`match_completed` analytics carry `players`
+  (people) and `fill`; the admin's live-rooms table has a «Добор» column.
+* **Cost:** a room with 3–5 filled players takes 0.04–0.09 ms per tick in all (0.25–0.5 % of one core,
+  measured on every mode). Navigation grids are built once per map and shared by all rooms; the A*
+  search space is reused between searches (no allocation), a bot searches for a way at most four times
+  a second for a moving goal and otherwise every 0.7–1.1 s, and a search may cover the whole map, so a
+  reachable goal is always found (it used to stop after 6000 cells: on the larger maps bots stood still
+  and searched again every tick — 17 % of a core for one capture-the-flag room on «Советский двор»).
 
 ## 3. Input path and validation (server)
 

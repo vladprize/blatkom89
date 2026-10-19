@@ -7797,6 +7797,11 @@ var EnvSchema = external_exports.object({
   MATCH_CAPTURE_LIMIT: external_exports.coerce.number().int().min(1).max(20).default(3),
   /** Base capture: points to win (a point per base held per second). */
   MATCH_BASE_SCORE_LIMIT: external_exports.coerce.number().int().min(10).max(2e3).default(250),
+  /**
+   * Complete small lineups with players the server runs itself (4 in free-for-all, 3 a side in team
+   * modes), so a match can always start; they look like everyone else (rooms/MatchRoom.ts).
+   */
+  MATCH_FILL_BOTS: bool.default("true"),
   /** Paid cases can be switched off where randomised paid items are restricted (docs/ECONOMY.md). */
   CASES_ENABLED: bool.default("true"),
   /** Card payments (Stripe Checkout). Both keys are required to enable them. */
@@ -10619,6 +10624,29 @@ function isAvatarId(v) {
   return typeof v === "string" && AVATAR_SET.has(v);
 }
 
+// packages/shared/src/game-rules/nicknames.ts
+var PRACTICE_NAMES = Object.freeze({
+  en: ["Beardy", "Comrade_312", "The Cooperator", "Petrovich", "Plumber", "Quartermaster", "Praporshchik", "Kolyan", "Mechanic", "Shurik", "Valerka", "The Docent"],
+  ru: ["\u0411\u043E\u0440\u043E\u0434\u0430\u0447", "\u0422\u043E\u0432\u0430\u0440\u0438\u0449_312", "\u041A\u043E\u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440", "\u041F\u0435\u0442\u0440\u043E\u0432\u0438\u0447", "\u0421\u0430\u043D\u0442\u0435\u0445\u043D\u0438\u043A", "\u0417\u0430\u0432\u0445\u043E\u0437", "\u041F\u0440\u0430\u043F\u043E\u0440\u0449\u0438\u043A", "\u041A\u043E\u043B\u044F\u043D", "\u041C\u0435\u0445\u0430\u043D\u0438\u043A", "\u0428\u0443\u0440\u0438\u043A", "\u0412\u0430\u043B\u0435\u0440\u043A\u0430", "\u0414\u043E\u0446\u0435\u043D\u0442"]
+});
+var ADJ_EN = ["Quiet", "Garage", "Factory", "Night", "Gloomy", "Seasoned", "Jolly", "Courtyard", "Imported", "Lucky", "Cassette", "District", "Elusive", "Shady", "Sleepy", "Bald", "Contraband", "Comrade"];
+var NOUN_EN = ["Quartermaster", "Watchman", "Storekeeper", "Gym Teacher", "Foreman", "Cabbie", "Electrician", "Fitter", "Site Boss", "Cooperator", "Plumber", "Projectionist", "Spiv", "Postman", "Janitor", "Badger", "Raccoon", "Ferret", "Beaver", "Owl", "Weasel"];
+var ADJ_RU = ["\u0422\u0438\u0445\u0438\u0439", "\u0413\u0430\u0440\u0430\u0436\u043D\u044B\u0439", "\u0417\u0430\u0432\u043E\u0434\u0441\u043A\u043E\u0439", "\u041D\u043E\u0447\u043D\u043E\u0439", "\u0425\u043C\u0443\u0440\u044B\u0439", "\u0411\u044B\u0432\u0430\u043B\u044B\u0439", "\u0412\u0435\u0441\u0451\u043B\u044B\u0439", "\u0414\u0432\u043E\u0440\u043E\u0432\u044B\u0439", "\u0418\u043C\u043F\u043E\u0440\u0442\u043D\u044B\u0439", "\u0424\u0430\u0440\u0442\u043E\u0432\u044B\u0439", "\u041A\u0430\u0441\u0441\u0435\u0442\u043D\u044B\u0439", "\u0420\u0430\u0439\u043E\u043D\u043D\u044B\u0439", "\u041D\u0435\u0443\u043B\u043E\u0432\u0438\u043C\u044B\u0439", "\u0414\u0435\u043B\u043E\u0432\u043E\u0439", "\u0421\u043E\u043D\u043D\u044B\u0439", "\u041B\u044B\u0441\u044B\u0439"];
+var NOUN_RU = ["\u0417\u0430\u0432\u0445\u043E\u0437", "\u0412\u0430\u0445\u0442\u0451\u0440", "\u041A\u043B\u0430\u0434\u043E\u0432\u0449\u0438\u043A", "\u0424\u0438\u0437\u0440\u0443\u043A", "\u0411\u0440\u0438\u0433\u0430\u0434\u0438\u0440", "\u0422\u0430\u043A\u0441\u0438\u0441\u0442", "\u042D\u043B\u0435\u043A\u0442\u0440\u0438\u043A", "\u0421\u043B\u0435\u0441\u0430\u0440\u044C", "\u041F\u0440\u043E\u0440\u0430\u0431", "\u041A\u043E\u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440", "\u0421\u0430\u043D\u0442\u0435\u0445\u043D\u0438\u043A", "\u041A\u0438\u043D\u043E\u043C\u0435\u0445\u0430\u043D\u0438\u043A", "\u0424\u0430\u0440\u0446\u043E\u0432\u0449\u0438\u043A", "\u041F\u043E\u0447\u0442\u0430\u043B\u044C\u043E\u043D", "\u0414\u0432\u043E\u0440\u043D\u0438\u043A", "\u0411\u0430\u0440\u0441\u0443\u043A", "\u0415\u043D\u043E\u0442", "\u0425\u043E\u0440\u0451\u043A", "\u0411\u043E\u0431\u0440", "\u0424\u0438\u043B\u0438\u043D", "\u0421\u044B\u0447"];
+var CASUAL_EN = ["Vadik", "Edik", "Arkasha", "Vovan", "Tolik", "Lyokha", "Seryoga", "Dimon", "Sanya", "Max", "Rustam", "Zhenya", "Gena", "Stas", "Kostyan", "Vityok", "Garik", "Zhora", "Slavik", "Tyoma", "Mishanya", "Boris", "Sanchez", "Dok", "Ryzhy", "Lis", "Kot", "Shpala"];
+var CASUAL_RU = ["\u0412\u0430\u0434\u0438\u043A", "\u042D\u0434\u0438\u043A", "\u0410\u0440\u043A\u0430\u0448\u0430", "\u0412\u043E\u0432\u0430\u043D", "\u0422\u043E\u043B\u0438\u043A", "\u041B\u0451\u0445\u0430", "\u0421\u0435\u0440\u0451\u0433\u0430", "\u0414\u0438\u043C\u043E\u043D", "\u0421\u0430\u043D\u044F", "\u041C\u0430\u043A\u0441", "\u0420\u0443\u0441\u0442\u0430\u043C", "\u0416\u0435\u043D\u0451\u043A", "\u0413\u0435\u043D\u0430", "\u0421\u0442\u0430\u0441", "\u041A\u043E\u0441\u0442\u044F\u043D", "\u0412\u0438\u0442\u0451\u043A", "\u0413\u0430\u0440\u0438\u043A", "\u0416\u043E\u0440\u0430", "\u0421\u043B\u0430\u0432\u0438\u043A", "\u0422\u0451\u043C\u044B\u0447", "\u041C\u0438\u0448\u0430\u043D\u044F", "\u0411\u0430\u0442\u044F", "\u041F\u0430\u043B\u044B\u0447", "\u041C\u0438\u0445\u0430\u043B\u044B\u0447", "\u0420\u044B\u0436\u0438\u0439", "\u041B\u0438\u0441", "\u041A\u043E\u0442", "\u0428\u043F\u0430\u043B\u0430"];
+var SUFFIX_EN = ["", "", "", "", "89", "_89", "777", "1988", "_2007", "01", "_x", " Jr"];
+var SUFFIX_RU = ["", "", "", "", "89", "_89", "777", "1988", "_2007", " \u0441 \u0440\u0430\u0439\u043E\u043D\u0430", " \u0438\u0437 5-\u0433\u043E", " \u043C\u043B."];
+var pickFrom = (rnd, a) => a[Math.floor(rnd() * a.length) % a.length];
+function randomNickname(rnd = Math.random, lang = "en") {
+  return lang === "ru" ? `${pickFrom(rnd, ADJ_RU)} ${pickFrom(rnd, NOUN_RU)}` : `${pickFrom(rnd, ADJ_EN)} ${pickFrom(rnd, NOUN_EN)}`;
+}
+function fillNickname(rnd, lang) {
+  if (rnd() < 0.5) return randomNickname(rnd, lang);
+  const name = lang === "ru" ? `${pickFrom(rnd, CASUAL_RU)}${pickFrom(rnd, SUFFIX_RU)}` : `${pickFrom(rnd, CASUAL_EN)}${pickFrom(rnd, SUFFIX_EN)}`;
+  return name.trim();
+}
+
 // packages/shared/src/game-rules/weapons.ts
 var WEAPON_IDS = [
   // base (free)
@@ -10969,7 +10997,7 @@ function sanitizeLoadout(raw, own = {}) {
   const ownsW = own.weapon ?? (() => true);
   const ownsG = own.gadget ?? (() => true);
   const ownsM = own.mod ?? (() => true);
-  const pick = (v, slot, fallback) => isWeaponId(v) && WEAPONS[v].slot === slot && ownsW(v) ? v : fallback;
+  const pick2 = (v, slot, fallback) => isWeaponId(v) && WEAPONS[v].slot === slot && ownsW(v) ? v : fallback;
   const mods = {};
   if (r.mods && typeof r.mods === "object" && !Array.isArray(r.mods)) {
     for (const [k, v] of Object.entries(r.mods)) {
@@ -10980,9 +11008,9 @@ function sanitizeLoadout(raw, own = {}) {
   }
   const gadget = r.gadget === null ? null : isGadgetId(r.gadget) && ownsG(r.gadget) ? r.gadget : DEFAULT_LOADOUT.gadget;
   return {
-    sidearm: pick(r.sidearm, 1, DEFAULT_LOADOUT.sidearm),
-    melee: pick(r.melee, 2, DEFAULT_LOADOUT.melee),
-    primary: r.primary === null ? null : pick(r.primary, 3, DEFAULT_LOADOUT.primary),
+    sidearm: pick2(r.sidearm, 1, DEFAULT_LOADOUT.sidearm),
+    melee: pick2(r.melee, 2, DEFAULT_LOADOUT.melee),
+    primary: r.primary === null ? null : pick2(r.primary, 3, DEFAULT_LOADOUT.primary),
     gadget,
     mods
   };
@@ -14146,6 +14174,601 @@ var World = class {
   }
 };
 
+// packages/shared/src/sim/nav.ts
+var NavGrid = class {
+  constructor(world, cell = 8, clearance = PLAYER_RADIUS + 1) {
+    this.world = world;
+    this.cell = cell;
+    this.cols = Math.floor(world.width / cell);
+    this.rows = Math.floor(world.height / cell);
+    this.walkable = new Uint8Array(this.cols * this.rows);
+    let walkable = 0;
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const x = c * cell + cell / 2;
+        const y = r * cell + cell / 2;
+        const ok = world.overlapsCircle(x, y, clearance) ? 0 : 1;
+        this.walkable[r * this.cols + c] = ok;
+        walkable += ok;
+      }
+    }
+    this.walkableCount = walkable;
+  }
+  world;
+  cell;
+  cols;
+  rows;
+  walkable;
+  /** Walkable cells: a search that expands this many has seen everything reachable. */
+  walkableCount;
+  /**
+   * A* scratch space, reused by every search (searches never overlap: the simulation is single-
+   * threaded). A cell's entries belong to the current search only when its stamp is that search's
+   * number, so nothing is allocated or cleared between searches — one grid serves every bot of every
+   * room on the map.
+   */
+  scratch = null;
+  searchNo = 0;
+  index(x, y) {
+    const c = Math.floor(x / this.cell);
+    const r = Math.floor(y / this.cell);
+    if (c < 0 || r < 0 || c >= this.cols || r >= this.rows) return -1;
+    return r * this.cols + c;
+  }
+  center(i) {
+    return { x: i % this.cols * this.cell + this.cell / 2, y: Math.floor(i / this.cols) * this.cell + this.cell / 2 };
+  }
+  isWalkable(x, y) {
+    const i = this.index(x, y);
+    return i >= 0 && this.walkable[i] === 1;
+  }
+  /** Nearest walkable cell index within a small radius (or -1). */
+  nearestWalkable(x, y, maxRing = 6) {
+    const c0 = Math.floor(x / this.cell);
+    const r0 = Math.floor(y / this.cell);
+    for (let ring = 0; ring <= maxRing; ring++) {
+      for (let dr = -ring; dr <= ring; dr++) {
+        for (let dc = -ring; dc <= ring; dc++) {
+          if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
+          const c = c0 + dc;
+          const r = r0 + dr;
+          if (c < 0 || r < 0 || c >= this.cols || r >= this.rows) continue;
+          const i = r * this.cols + c;
+          if (this.walkable[i]) return i;
+        }
+      }
+    }
+    return -1;
+  }
+  /** Flood fill from a cell; returns a visited mask (used for reachability checks). */
+  flood(start) {
+    const seen = new Uint8Array(this.walkable.length);
+    if (start < 0 || !this.walkable[start]) return seen;
+    const queue = new Int32Array(this.walkable.length);
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = start;
+    seen[start] = 1;
+    while (head < tail) {
+      const i = queue[head++];
+      const c = i % this.cols;
+      const r = i / this.cols | 0;
+      const nb = [c > 0 ? i - 1 : -1, c < this.cols - 1 ? i + 1 : -1, r > 0 ? i - this.cols : -1, r < this.rows - 1 ? i + this.cols : -1];
+      for (const j of nb) {
+        if (j >= 0 && !seen[j] && this.walkable[j]) {
+          seen[j] = 1;
+          queue[tail++] = j;
+        }
+      }
+    }
+    return seen;
+  }
+  /**
+   * 8-connected A* returning world-space waypoints (simplified with line-of-walk smoothing); null when
+   * the goal can't be reached. By default the search may expand every walkable cell, so a reachable
+   * goal is always found, however long the way round.
+   */
+  findPath(sx, sy, tx, ty, maxExpand = this.walkableCount) {
+    const start = this.nearestWalkable(sx, sy);
+    const goal = this.nearestWalkable(tx, ty);
+    if (start < 0 || goal < 0) return null;
+    if (start === goal) return [{ x: tx, y: ty }];
+    const n = this.walkable.length;
+    if (!this.scratch) this.scratch = { g: new Float32Array(n), came: new Int32Array(n), seen: new Uint32Array(n), closed: new Uint32Array(n), heap: new MinHeap(1024) };
+    if (this.searchNo >= 4294967280) {
+      this.scratch.seen.fill(0);
+      this.scratch.closed.fill(0);
+      this.searchNo = 0;
+    }
+    const run = ++this.searchNo;
+    const { g, came, seen, closed, heap } = this.scratch;
+    heap.clear();
+    const gc = goal % this.cols;
+    const gr = goal / this.cols | 0;
+    const h = (i) => {
+      const dc = Math.abs(i % this.cols - gc);
+      const dr = Math.abs((i / this.cols | 0) - gr);
+      return Math.max(dc, dr) + 0.4142 * Math.min(dc, dr);
+    };
+    g[start] = 0;
+    came[start] = -1;
+    seen[start] = run;
+    heap.push(start, h(start));
+    let expanded = 0;
+    while (heap.size > 0) {
+      const cur = heap.pop();
+      if (cur === goal) break;
+      if (closed[cur] === run) continue;
+      closed[cur] = run;
+      if (++expanded > maxExpand) return null;
+      const c = cur % this.cols;
+      const r = cur / this.cols | 0;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (!dr && !dc) continue;
+          const nc = c + dc;
+          const nr = r + dr;
+          if (nc < 0 || nr < 0 || nc >= this.cols || nr >= this.rows) continue;
+          const j = nr * this.cols + nc;
+          if (!this.walkable[j] || closed[j] === run) continue;
+          if (dr && dc && (!this.walkable[r * this.cols + nc] || !this.walkable[nr * this.cols + c])) continue;
+          const cost = g[cur] + (dr && dc ? 1.4142 : 1);
+          if (seen[j] !== run || cost < g[j]) {
+            g[j] = cost;
+            came[j] = cur;
+            seen[j] = run;
+            heap.push(j, cost + h(j));
+          }
+        }
+      }
+    }
+    if (seen[goal] !== run) return null;
+    const cells = [];
+    for (let i = goal; i !== -1 && i !== start; i = came[i]) cells.push(i);
+    cells.reverse();
+    const pts = cells.map((i) => this.center(i));
+    const out = [];
+    let anchor = { x: sx, y: sy };
+    for (let k = 0; k < pts.length; k++) {
+      const next = pts[k + 1];
+      if (next && this.segmentWalkable(anchor.x, anchor.y, next.x, next.y)) continue;
+      out.push(pts[k]);
+      anchor = pts[k];
+    }
+    out.push({ x: tx, y: ty });
+    return out;
+  }
+  segmentWalkable(ax, ay, bx, by) {
+    const d = Math.sqrt((bx - ax) ** 2 + (by - ay) ** 2);
+    const steps = Math.ceil(d / (this.cell * 0.5));
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps;
+      if (!this.isWalkable(ax + (bx - ax) * t, ay + (by - ay) * t)) return false;
+    }
+    return true;
+  }
+};
+var MinHeap = class {
+  ids;
+  keys;
+  size = 0;
+  constructor(capacity) {
+    this.ids = new Int32Array(capacity);
+    this.keys = new Float64Array(capacity);
+  }
+  clear() {
+    this.size = 0;
+  }
+  push(id, key) {
+    if (this.size === this.ids.length) {
+      const ids = new Int32Array(this.ids.length * 2);
+      const keys = new Float64Array(this.keys.length * 2);
+      ids.set(this.ids);
+      keys.set(this.keys);
+      this.ids = ids;
+      this.keys = keys;
+    }
+    let i = this.size++;
+    while (i > 0) {
+      const p = i - 1 >> 1;
+      if (this.keys[p] <= key) break;
+      this.ids[i] = this.ids[p];
+      this.keys[i] = this.keys[p];
+      i = p;
+    }
+    this.ids[i] = id;
+    this.keys[i] = key;
+  }
+  pop() {
+    const top = this.ids[0];
+    const n = --this.size;
+    if (n > 0) {
+      const id = this.ids[n];
+      const key = this.keys[n];
+      let i = 0;
+      for (; ; ) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let m = i;
+        let mk = key;
+        if (l < n && this.keys[l] < mk) {
+          m = l;
+          mk = this.keys[l];
+        }
+        if (r < n && this.keys[r] < mk) {
+          m = r;
+          mk = this.keys[r];
+        }
+        if (m === i) break;
+        this.ids[i] = this.ids[m];
+        this.keys[i] = mk;
+        i = m;
+      }
+      this.ids[i] = id;
+      this.keys[i] = key;
+    }
+    return top;
+  }
+};
+
+// packages/shared/src/sim/bots.ts
+var DIFFICULTY = {
+  easy: { reaction: 560, aimError: 0.17, turnRate: 4.5, tolerance: 0.28, vision: 420 },
+  normal: { reaction: 360, aimError: 0.1, turnRate: 7, tolerance: 0.18, vision: 520 },
+  hard: { reaction: 230, aimError: 0.055, turnRate: 10, tolerance: 0.11, vision: 620 }
+};
+function preferredRange(w) {
+  const d = WEAPONS[w];
+  if (d.kind === "melee") return 0;
+  if (d.kind === "projectile") return Math.max(170, (d.projectile?.radius ?? 60) * 2.6);
+  if (d.pellets > 1) return Math.min(110, d.range * 0.35);
+  if (d.range >= 900) return 380;
+  return Math.min(260, d.range * 0.45);
+}
+var BotBrain = class {
+  constructor(id, world, nav, difficulty = "normal", seed = 1) {
+    this.id = id;
+    this.world = world;
+    this.nav = nav;
+    this.rng = mulberry32(seed);
+    this.d = DIFFICULTY[difficulty];
+  }
+  id;
+  world;
+  nav;
+  seq = 0;
+  aim = 0;
+  path = [];
+  pathGoal = null;
+  repathAt = 0;
+  /** A moving goal is searched for at most four times a second. */
+  searchAt = 0;
+  targetId = null;
+  targetSeenAt = 0;
+  lastSeen = null;
+  strafeDir = 1;
+  strafeUntil = 0;
+  aimNoise = 0;
+  aimNoiseAt = 0;
+  stuckCheck = { x: 0, y: 0, at: 0 };
+  roamGoal = null;
+  gadgetAt = 0;
+  /** Capture the flag: this bot guards its own flag instead of raiding (every third bot of a team). */
+  defender = false;
+  roleAt = -1e9;
+  /** Base capture: the base this bot is heading for (sticky), and a spot to stand on inside it. */
+  baseGoal = -1;
+  holdSpot = null;
+  rng;
+  d;
+  nextInput() {
+    const now = this.world.time;
+    const me = this.world.players.get(this.id);
+    const frame = { seq: ++this.seq, moveX: 0, moveY: 0, aim: quantizeAngle(this.aim), buttons: 0, slot: 0, viewTime: now };
+    if (!me || !me.alive || this.world.phase !== "active") {
+      if (me) this.aim = me.aim;
+      frame.aim = quantizeAngle(this.aim);
+      return frame;
+    }
+    const target = this.pickTarget(me, now);
+    const obj = this.world.teams && me.team !== null ? this.objective(me) : null;
+    let moveX = 0;
+    let moveY = 0;
+    let desiredAim = this.aim;
+    if (target) {
+      const dx = target.x - me.x;
+      const dy = target.y - me.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (now > this.aimNoiseAt) {
+        this.aimNoise = (this.rng() * 2 - 1) * this.d.aimError;
+        this.aimNoiseAt = now + 250 + this.rng() * 300;
+      }
+      desiredAim = Math.atan2(dy, dx) + this.aimNoise;
+      const meleeInHand = me.weapon === me.melee;
+      const heavyDef = me.heavy ? WEAPONS[me.heavy] : null;
+      const tooCloseForLauncher = !!heavyDef?.projectile && dist < heavyDef.projectile.radius * 1.4;
+      if (me.heavy && me.weapon !== me.heavy && !tooCloseForLauncher) frame.slot = 3;
+      else if (tooCloseForLauncher && me.weapon === me.heavy) frame.slot = 1;
+      else if (!me.heavy && dist < 34 && !meleeInHand) frame.slot = 2;
+      else if (!me.heavy && dist > 60 && meleeInHand) frame.slot = 1;
+      const pref = preferredRange(me.weapon);
+      let fwd = 0;
+      if (dist > pref + 40) fwd = 1;
+      else if (dist < pref - 40 && !meleeInHand) fwd = -0.6;
+      if (now > this.strafeUntil) {
+        this.strafeDir = this.rng() < 0.5 ? -1 : 1;
+        this.strafeUntil = now + 500 + this.rng() * 900;
+      }
+      const nx = dx / (dist || 1);
+      const ny = dy / (dist || 1);
+      moveX = nx * fwd + -ny * this.strafeDir * 0.7;
+      moveY = ny * fwd + nx * this.strafeDir * 0.7;
+      if (!this.nav.isWalkable(me.x + moveX * 18, me.y + moveY * 18)) {
+        this.strafeDir *= -1;
+        moveX = nx * fwd + -ny * this.strafeDir * 0.7;
+        moveY = ny * fwd + nx * this.strafeDir * 0.7;
+      }
+      if (obj?.urgent) {
+        const wp = this.followPath(me, obj, now);
+        if (wp) {
+          const ox = wp.x - me.x;
+          const oy = wp.y - me.y;
+          const od = Math.sqrt(ox * ox + oy * oy) || 1;
+          moveX = ox / od;
+          moveY = oy / od;
+        }
+      } else if (obj && obj.hold > 0) {
+        const ox = obj.x - me.x;
+        const oy = obj.y - me.y;
+        const od = Math.sqrt(ox * ox + oy * oy);
+        if (od > obj.hold * 0.55) {
+          moveX = ox / od;
+          moveY = oy / od;
+        }
+      }
+      const aimed = Math.abs(angleDiff(this.aim, Math.atan2(dy, dx))) < this.d.tolerance + 8 / Math.max(dist, 8);
+      const reacted = now - this.targetSeenAt > this.d.reaction;
+      const w = WEAPONS[me.weapon];
+      if (aimed && reacted && dist < w.range * 0.95) frame.buttons |= BTN.FIRE;
+      if (me.gadget && me.gadgetCharges > 0 && aimed && reacted && now >= this.gadgetAt && now >= me.gadgetReadyAt) {
+        const g = GADGETS[me.gadget];
+        const throwRange = g.throwSpeed * g.throwSpeed / 1400;
+        const want = g.use === "throw" ? me.gadget === "smoke" ? me.hp < 45 : dist > 90 && dist < throwRange + 60 : me.gadget === "turret" ? dist > 120 && dist < g.radius : me.gadget === "mine" ? dist > 150 : false;
+        if (want && this.rng() < 0.08) {
+          frame.buttons |= BTN.GADGET;
+          this.gadgetAt = now + 4e3 + this.rng() * 4e3;
+        }
+      }
+    } else {
+      let goal = obj ?? this.chooseGoal(me, now);
+      if (obj && obj.hold > 0 && Math.hypot(obj.x - me.x, obj.y - me.y) < obj.hold) {
+        if (!this.holdSpot || now > this.holdSpot.until || Math.hypot(this.holdSpot.x - obj.x, this.holdSpot.y - obj.y) > obj.hold) {
+          const a = this.rng() * Math.PI * 2;
+          const r = this.rng() * obj.hold * 0.5;
+          const x = obj.x + Math.cos(a) * r;
+          const y = obj.y + Math.sin(a) * r;
+          this.holdSpot = this.nav.isWalkable(x, y) ? { x, y, until: now + 900 + this.rng() * 900 } : { x: obj.x, y: obj.y, until: now + 600 };
+        }
+        goal = this.holdSpot;
+      } else if (obj && !obj.urgent && !me.heavy) {
+        const near = this.nearPickup(me, 220);
+        if (near) goal = near;
+      }
+      const wp = this.followPath(me, goal, now);
+      if (wp) {
+        const dx = wp.x - me.x;
+        const dy = wp.y - me.y;
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        moveX = dx / d;
+        moveY = dy / d;
+        desiredAim = Math.atan2(moveY, moveX);
+      }
+      const ammo = me.weapon === me.sidearm ? me.sideMag : me.heavyMag;
+      const mag = WEAPONS[me.weapon].magazine;
+      if (mag > 0 && ammo < mag * 0.5) frame.buttons |= BTN.RELOAD;
+      if (me.heavy && me.weapon !== me.heavy) frame.slot = 3;
+    }
+    if (now - this.stuckCheck.at > 900) {
+      const moved = Math.abs(me.x - this.stuckCheck.x) + Math.abs(me.y - this.stuckCheck.y);
+      if (moved < 6 && (moveX !== 0 || moveY !== 0)) {
+        this.path = [];
+        this.repathAt = 0;
+        this.roamGoal = null;
+        this.strafeDir *= -1;
+      }
+      this.stuckCheck = { x: me.x, y: me.y, at: now };
+    }
+    const maxTurn = this.d.turnRate * TICK_DT;
+    const diff = angleDiff(this.aim, desiredAim);
+    this.aim = wrapAngle(this.aim + Math.max(-maxTurn, Math.min(maxTurn, diff)));
+    const len = Math.sqrt(moveX * moveX + moveY * moveY);
+    if (len > 1) {
+      moveX /= len;
+      moveY /= len;
+    }
+    frame.moveX = Math.round(moveX * 127);
+    frame.moveY = Math.round(moveY * 127);
+    frame.aim = quantizeAngle(this.aim);
+    return frame;
+  }
+  nearPickup(me, within) {
+    let best = null;
+    let bestD = within;
+    for (const pk of this.world.pickups) {
+      if (!pk.active || pk.kind !== "weapon") continue;
+      const d = Math.abs(pk.x - me.x) + Math.abs(pk.y - me.y);
+      if (d < bestD) {
+        bestD = d;
+        best = { x: pk.x, y: pk.y };
+      }
+    }
+    return best;
+  }
+  /** Capture the flag and base capture: where to go (null: fight as usual). */
+  objective(me) {
+    const team = me.team;
+    const w = this.world;
+    if (w.flags.length === 2) {
+      if (w.time - this.roleAt > 2e3) {
+        this.roleAt = w.time;
+        const mates = [...w.players.values()].filter((p) => p.isBot && p.team === team).sort((a, b2) => a.slot - b2.slot);
+        this.defender = mates.findIndex((p) => p.id === me.id) % 3 === 2;
+      }
+      const own = w.flags.find((f) => f.team === team);
+      const enemy = w.flags.find((f) => f.team !== team);
+      const dist = (x, y) => Math.hypot(x - me.x, y - me.y);
+      if (enemy.carrierId === me.id) return { x: own.standX, y: own.standY, urgent: true, hold: 0 };
+      if (own.status === "dropped" && (this.defender || dist(own.x, own.y) < 700)) return { x: own.x, y: own.y, urgent: true, hold: 0 };
+      if (own.status === "carried" && (this.defender || dist(own.x, own.y) < 600)) return { x: own.x, y: own.y, urgent: false, hold: 0 };
+      if (this.defender) {
+        if (dist(own.standX, own.standY) > 150) return { x: own.standX, y: own.standY, urgent: false, hold: 0 };
+        return { x: own.standX, y: own.standY, urgent: false, hold: 120 };
+      }
+      if (enemy.status === "carried") {
+        const carrier = enemy.carrierId ? w.players.get(enemy.carrierId) : void 0;
+        if (carrier) return { x: carrier.x, y: carrier.y, urgent: false, hold: 0 };
+      }
+      return { x: enemy.x, y: enemy.y, urgent: enemy.status === "dropped" && dist(enemy.x, enemy.y) < 400, hold: 0 };
+    }
+    if (w.bases.length > 0) {
+      const enemyTeam = team === 0 ? 1 : 0;
+      const score = (i) => {
+        const b3 = w.bases[i];
+        const d = Math.hypot(b3.x - me.x, b3.y - me.y);
+        if (b3.owner !== team) return d - (b3.owner === enemyTeam ? 120 : 0) - (b3.capturer === team ? 150 : 0);
+        if (b3.contested || b3.capturer === enemyTeam) return d - 180;
+        return d + 1100;
+      };
+      let best = 0;
+      for (let i = 1; i < w.bases.length; i++) if (score(i) < score(best)) best = i;
+      if (this.baseGoal >= 0 && this.baseGoal < w.bases.length && this.baseGoal !== best && score(this.baseGoal) < score(best) + 220) best = this.baseGoal;
+      this.baseGoal = best;
+      const b2 = w.bases[best];
+      if (b2.owner === team && !b2.contested && b2.capturer !== enemyTeam) return null;
+      return { x: b2.x, y: b2.y, urgent: false, hold: BASE_RULES.radius };
+    }
+    return null;
+  }
+  pickTarget(me, now) {
+    let best = null;
+    let bestD = this.d.vision;
+    if (now < me.flashedUntil) bestD = 0;
+    for (const p of this.world.players.values()) {
+      if (p === me || !p.alive || !this.world.hostile(me, p)) continue;
+      const d = Math.sqrt((p.x - me.x) ** 2 + (p.y - me.y) ** 2);
+      const sticky = p.id === this.targetId ? 80 : 0;
+      if (d - sticky < bestD && this.world.collision.lineOfSight(me.x, me.y, p.x, p.y) && !this.world.smokeBlocks(me.x, me.y, p.x, p.y)) {
+        bestD = d - sticky;
+        best = p;
+      }
+    }
+    if (best) {
+      if (best.id !== this.targetId) {
+        this.targetId = best.id;
+        this.targetSeenAt = now;
+      }
+      this.lastSeen = { x: best.x, y: best.y, at: now };
+    } else {
+      this.targetId = null;
+    }
+    return best;
+  }
+  chooseGoal(me, now) {
+    if (!me.heavy) {
+      let best = null;
+      let bestD = 900;
+      for (const pk of this.world.pickups) {
+        if (!pk.active || pk.kind === "medkit" && me.hp > 60) continue;
+        const d = Math.abs(pk.x - me.x) + Math.abs(pk.y - me.y);
+        if (d < bestD) {
+          bestD = d;
+          best = { x: pk.x, y: pk.y };
+        }
+      }
+      if (best) return best;
+    }
+    if (this.lastSeen && now - this.lastSeen.at < 4e3) return this.lastSeen;
+    let nearestEnemy = null;
+    let nd = Infinity;
+    for (const p of this.world.players.values()) {
+      if (p === me || !p.alive || !this.world.hostile(me, p)) continue;
+      const d = Math.abs(p.x - me.x) + Math.abs(p.y - me.y);
+      if (d < nd) {
+        nd = d;
+        nearestEnemy = p;
+      }
+    }
+    if (nearestEnemy && this.rng() < 0.6) return { x: nearestEnemy.x, y: nearestEnemy.y };
+    if (!this.roamGoal || Math.abs(this.roamGoal.x - me.x) + Math.abs(this.roamGoal.y - me.y) < 40) {
+      const pts = [...this.world.map.spawns, ...this.world.map.pickups];
+      const pt = pts[Math.floor(this.rng() * pts.length)];
+      this.roamGoal = { x: pt.x, y: pt.y };
+    }
+    return this.roamGoal;
+  }
+  followPath(me, goal, now) {
+    const goalMoved = !this.pathGoal || Math.abs(this.pathGoal.x - goal.x) + Math.abs(this.pathGoal.y - goal.y) > 48;
+    if (goalMoved && now >= this.searchAt || now > this.repathAt) {
+      const path = this.nav.findPath(me.x, me.y, goal.x, goal.y);
+      this.path = path ?? [];
+      this.pathGoal = { ...goal };
+      this.repathAt = now + 700 + this.rng() * 400;
+      this.searchAt = now + 250;
+      if (!path) this.roamGoal = null;
+    }
+    while (this.path.length > 0) {
+      const wp = this.path[0];
+      if (Math.abs(wp.x - me.x) + Math.abs(wp.y - me.y) < 10) this.path.shift();
+      else return wp;
+    }
+    return null;
+  }
+};
+
+// packages/shared/src/sim/fill.ts
+var FILL_RULES = Object.freeze({
+  /** Free-for-all: at least this many players in a match. */
+  ffaPlayers: 4,
+  /** Team modes: at least this many players on each side (the sides are always even). */
+  teamPlayers: 3,
+  /** Quick Match: how long the first person waits for others before players start arriving. */
+  waitMs: 5e3,
+  /** …then one more player arrives every arriveMinMs–arriveMaxMs (lobby). */
+  arriveMinMs: 700,
+  arriveMaxMs: 2200,
+  /** During a match an empty place is taken after joinMinMs–joinMaxMs (like someone joining in progress). */
+  joinMinMs: 2500,
+  joinMaxMs: 6e3,
+  /** A player beyond the lineup (a person took the place) leaves after leaveMinMs–leaveMaxMs. */
+  leaveMinMs: 500,
+  leaveMaxMs: 2e3
+});
+function fillTarget(mode, people, maxPlayers) {
+  if (isTeamMode(mode)) return { side: Math.min(Math.floor(maxPlayers / 2), Math.max(FILL_RULES.teamPlayers, people.red, people.blue)) };
+  return { total: Math.min(maxPlayers, Math.max(FILL_RULES.ffaPlayers, people.total)) };
+}
+var PRIMARIES = ["avtomat", "avtomat", "obrez", "ksyuha", "uzi", "ppsh", "mp5", "s12", "m4", "g36", "svd", "tommy"];
+var SIDEARMS2 = ["pistol", "pistol", "pistol", "tt", "p92", "deagle"];
+var MELEE = ["montirovka", "montirovka", "bita", "nozh", "topor"];
+var GADGETS2 = ["f1", "f1", "f1", "molotov", "flash", "smoke"];
+var pick = (rnd, a) => a[Math.floor(rnd() * a.length) % a.length];
+function fillPersona(rnd, o) {
+  let name = fillNickname(rnd, o.lang);
+  for (let i = 0; i < 30 && o.taken.has(name.toLowerCase()); i++) name = fillNickname(rnd, rnd() < 0.8 ? o.lang : o.lang === "ru" ? "en" : "ru");
+  const around = Math.max(1, Math.round(o.aroundLevel));
+  const level = Math.max(1, Math.min(60, Math.round(around - 3 + rnd() * 9)));
+  const r = rnd();
+  const difficulty = around < 4 ? r < 0.6 ? "easy" : "normal" : around < 15 ? r < 0.15 ? "easy" : r < 0.85 ? "normal" : "hard" : r < 0.5 ? "normal" : "hard";
+  return {
+    name,
+    character: rnd() < 0.65 ? pick(rnd, FREE_CHARACTERS) : pick(rnd, CHARACTER_IDS),
+    level,
+    avatar: rnd() < 0.65 ? pick(rnd, AVATAR_IDS) : null,
+    loadout: { sidearm: pick(rnd, SIDEARMS2), melee: pick(rnd, MELEE), primary: pick(rnd, PRIMARIES), gadget: pick(rnd, GADGETS2), mods: {} },
+    difficulty
+  };
+}
+
 // packages/shared/src/net/codec.ts
 var MSG_INPUT = 1;
 var MSG_SNAPSHOT = 2;
@@ -14406,8 +15029,9 @@ var SERVER_EVENT_PROPS = {
   lobby_created: external_exports.object({ roomId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean(), mode: external_exports.enum(GAME_MODES).optional() }),
   lobby_joined: external_exports.object({ roomId: external_exports.string(), viaInvite: external_exports.boolean() }),
   lobby_left: external_exports.object({ roomId: external_exports.string(), phase: external_exports.string() }),
-  match_started: external_exports.object({ matchId: external_exports.string(), roomId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), players: external_exports.number().int(), mode: external_exports.enum(GAME_MODES).optional() }),
-  match_completed: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), durationMs: external_exports.number().int(), players: external_exports.number().int(), reason: external_exports.string(), mode: external_exports.enum(GAME_MODES).optional() }),
+  /** players: people; fill: players the server added to complete the lineup. */
+  match_started: external_exports.object({ matchId: external_exports.string(), roomId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), players: external_exports.number().int(), fill: external_exports.number().int().optional(), mode: external_exports.enum(GAME_MODES).optional() }),
+  match_completed: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), durationMs: external_exports.number().int(), players: external_exports.number().int(), fill: external_exports.number().int().optional(), reason: external_exports.string(), mode: external_exports.enum(GAME_MODES).optional() }),
   match_abandoned: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), phase: external_exports.string() }),
   map_played: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS) }),
   invite_created: external_exports.object({ code: external_exports.string(), roomId: external_exports.string() }),
@@ -14598,7 +15222,7 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
     const room = rooms2.get(ctx.params.id ?? "");
     if (!room) throw new HttpError(404, "room_not_found", "Room not found");
     const user = currentUser(ctx);
-    ctx.json(200, { ...room.info(), joinable: room.isJoinable(user.userId), mapName: getMap(room.mapId).name });
+    ctx.json(200, { ...room.publicInfo(), joinable: room.isJoinable(user.userId), mapName: getMap(room.mapId).name });
   });
   router.get("/api/invites/:code", rateLimit(lookupLimiter), async (ctx) => {
     const code = ctx.params.code ?? "";
@@ -14611,7 +15235,7 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
       else {
         const phase = room.phase;
         const status = room.occupancy >= room.config.maxPlayers ? "full" : phase === "finished" ? "finished" : phase === "waiting" ? "joinable" : room.isJoinable() ? "in_progress" : "full";
-        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.occupancy, maxPlayers: room.config.maxPlayers, hostName: room.hostName() };
+        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.lineup, maxPlayers: room.config.maxPlayers, hostName: room.hostName() };
       }
     }
     ctx.json(200, info);
@@ -14907,7 +15531,7 @@ var ProfileRepo = class {
   }
   async history(userId, limit) {
     const rows = await this.sql`
-      SELECT mp.match_id, m.map_id, mp.character, m.ended_at, m.started_at, m.duration_ms, mp.place, m.player_count,
+      SELECT mp.match_id, m.map_id, mp.character, m.ended_at, m.started_at, m.duration_ms, mp.place, m.player_count + m.bot_count AS players,
              mp.kills, mp.assists, mp.deaths, mp.xp_awarded, mp.won
       FROM match_participants mp JOIN matches m ON m.id = mp.match_id
       WHERE mp.user_id = ${userId} AND m.status = 'completed'
@@ -14920,7 +15544,8 @@ var ProfileRepo = class {
       endedAt: (r.ended_at ?? r.started_at).toISOString(),
       durationMs: r.duration_ms ?? 0,
       place: r.place ?? 0,
-      players: r.player_count,
+      // the whole lineup the player saw (people and filled players alike)
+      players: r.players,
       kills: r.kills,
       assists: r.assists,
       deaths: r.deaths,
@@ -15146,8 +15771,8 @@ var PgMatchRecorder = class {
     if (!UUID_RE.test(m.matchId)) return;
     await this.sql.begin(async (tx) => {
       await tx`
-        INSERT INTO matches (id, room_id, map_id, mode, is_private, status, started_at, player_count)
-        VALUES (${m.matchId}, ${m.roomId}, ${m.mapId}, ${m.mode}, ${m.isPrivate}, 'active', ${m.startedAt}, ${m.players.length})
+        INSERT INTO matches (id, room_id, map_id, mode, is_private, status, started_at, player_count, bot_count)
+        VALUES (${m.matchId}, ${m.roomId}, ${m.mapId}, ${m.mode}, ${m.isPrivate}, 'active', ${m.startedAt}, ${m.players.length}, ${m.fill ?? 0})
         ON CONFLICT (id) DO NOTHING`;
       const known = await existingUsers(tx, m.players.map((p) => p.userId));
       for (const p of m.players) {
@@ -15161,10 +15786,12 @@ var PgMatchRecorder = class {
   }
   async matchCompleted(m) {
     if (!UUID_RE.test(m.matchId)) throw new Error("matchId must be a UUID");
+    const people = m.peopleAtEnd ?? m.playersAtEnd;
+    const fill = m.fillAtEnd ?? 0;
     return this.sql.begin(async (tx) => {
       await tx`
-        INSERT INTO matches (id, room_id, map_id, mode, is_private, status, started_at, player_count)
-        VALUES (${m.matchId}, ${m.roomId}, ${m.mapId}, ${m.mode}, ${m.isPrivate}, 'active', ${m.startedAt}, ${m.playersAtEnd})
+        INSERT INTO matches (id, room_id, map_id, mode, is_private, status, started_at, player_count, bot_count)
+        VALUES (${m.matchId}, ${m.roomId}, ${m.mapId}, ${m.mode}, ${m.isPrivate}, 'active', ${m.startedAt}, ${people}, ${fill})
         ON CONFLICT (id) DO NOTHING`;
       const locked = await tx`SELECT results_processed_at FROM matches WHERE id = ${m.matchId} FOR UPDATE`;
       const known = await existingUsers(tx, m.participants.map((p) => p.userId));
@@ -15175,7 +15802,7 @@ var PgMatchRecorder = class {
         await tx`INSERT INTO profiles (user_id) VALUES (${p.userId}) ON CONFLICT DO NOTHING`;
         const [prof] = await tx`
           SELECT xp, level, matches_completed, wins, current_win_streak, best_win_streak FROM profiles WHERE user_id = ${p.userId} FOR UPDATE`;
-        const withFriends = m.isPrivate && p.viaInvite && m.playersAtEnd >= 2;
+        const withFriends = m.isPrivate && p.viaInvite && people >= 2;
         const sharedPlace = p.completed && m.participants.some((o) => o.userId !== p.userId && o.completed && o.place === p.place);
         const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends, sharedPlace, ...p.teamOutcome ? { teamOutcome: p.teamOutcome } : {}, objectives: p.objectives ?? 0 };
         const ownedRows = await tx`SELECT achievement_id FROM player_achievements WHERE user_id = ${p.userId}`;
@@ -15215,7 +15842,7 @@ var PgMatchRecorder = class {
       }
       await tx`
         UPDATE matches SET status = 'completed', ended_at = ${m.endedAt}, duration_ms = ${Math.max(0, Math.round(m.durationMs))},
-          end_reason = ${m.endReason}, player_count = ${m.playersAtEnd}, mode = ${m.mode}, winner_team = ${m.winnerTeam}, results_processed_at = now()
+          end_reason = ${m.endReason}, player_count = ${people}, bot_count = ${fill}, mode = ${m.mode}, winner_team = ${m.winnerTeam}, results_processed_at = now()
         WHERE id = ${m.matchId}`;
       return out;
     });
@@ -17013,15 +17640,15 @@ var registerAdminRoutes = (router, deps) => {
     const p = pg();
     const r = range(ctx);
     const rows = await p.sql`
-      SELECT id, room_id, map_id, is_private, status, started_at, ended_at, duration_ms, end_reason, player_count
+      SELECT id, room_id, map_id, is_private, status, started_at, ended_at, duration_ms, end_reason, player_count, bot_count
       FROM matches WHERE started_at BETWEEN ${new Date(r.from)} AND ${new Date(r.to)} ORDER BY started_at`;
     await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: "export_matches", details: { rows: rows.length, from: r.from, to: r.to }, ip: ctx.ip });
     csv(
       ctx,
       `matches_${r.firstDay}_${r.lastDay}.csv`,
       toCsv(
-        ["match_id", "room_id", "map", "private", "status", "started_at", "ended_at", "duration_ms", "end_reason", "players"],
-        rows.map((m) => [m.id, m.room_id, isMapId(m.map_id) ? getMap(m.map_id).name : m.map_id, m.is_private, m.status, m.started_at, m.ended_at, m.duration_ms, m.end_reason, m.player_count])
+        ["match_id", "room_id", "map", "private", "status", "started_at", "ended_at", "duration_ms", "end_reason", "players", "fill_players"],
+        rows.map((m) => [m.id, m.room_id, isMapId(m.map_id) ? getMap(m.map_id).name : m.map_id, m.is_private, m.status, m.started_at, m.ended_at, m.duration_ms, m.end_reason, m.player_count, m.bot_count])
       )
     );
   });
@@ -17212,6 +17839,16 @@ import { randomBytes as randomBytes6 } from "node:crypto";
 
 // apps/server/src/rooms/MatchRoom.ts
 import { randomBytes as randomBytes5, randomUUID as randomUUID3 } from "node:crypto";
+var between = (a, b2) => a + Math.random() * Math.max(0, b2 - a);
+var NAV = /* @__PURE__ */ new Map();
+function navFor(mapId, world) {
+  let nav = NAV.get(mapId);
+  if (!nav) {
+    nav = new NavGrid(world.collision);
+    NAV.set(mapId, nav);
+  }
+  return nav;
+}
 var AUTO_START_DELAY_MS = 4e3;
 var FREE_GEAR = Object.freeze({ loadout: DEFAULT_LOADOUT, characters: new Set(FREE_CHARACTERS) });
 var SOLO_ABORT_MS = 2e4;
@@ -17225,6 +17862,8 @@ var MatchRoom = class {
     this.hostId = opts.hostUserId;
     this.inviteCode = opts.inviteCode ?? null;
     this.autoStart = opts.autoStart ?? !opts.isPrivate;
+    this.fillBots = opts.fillBots ?? false;
+    this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
     this.config = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? "ffa" };
     this.log = log2.child({ room: this.id });
     this.world = this.createWorld();
@@ -17246,10 +17885,20 @@ var MatchRoom = class {
   pendingShots = [];
   pendingEvents = [];
   emptySince = Date.now();
+  /** The time of the latest tick (the room's clock between ticks; the wall clock before the first). */
+  lastNow = 0;
   autoStartAt = 0;
   soloSince = 0;
   resultsSent = false;
   autoStart;
+  fillBots;
+  /** Players the room runs itself, by id (they are in the World like everyone else). */
+  seats = /* @__PURE__ */ new Map();
+  fillTiming;
+  /** Quick Match lobby: players start arriving from this time on (0: nobody waiting yet). */
+  fillFrom = 0;
+  /** When the next change of the filled lineup happens (0: none scheduled). */
+  nextFillAt = 0;
   log;
   createWorld() {
     return new World(getMap(this.mapId), getCollision(this.mapId), { config: this.config, lagCompensation: true, seed: Math.floor(Math.random() * 2 ** 31) });
@@ -17268,6 +17917,14 @@ var MatchRoom = class {
     let n = 0;
     for (const c of this.clients.values()) if (c.connected) n++;
     return n;
+  }
+  /** Everyone in the lineup as players see it: people plus the players the room filled in. */
+  get lineup() {
+    return Math.min(this.config.maxPlayers, this.clients.size + this.seats.size);
+  }
+  /** People the host needs to start: one when the room fills the lineup up itself. */
+  get minToStart() {
+    return this.fillBots ? 1 : this.config.minPlayers;
   }
   isJoinable(userId) {
     if (this.closed || this.world.phase === "closed") return false;
@@ -17311,6 +17968,12 @@ var MatchRoom = class {
       return "resumed";
     }
     if (!this.isJoinable()) return this.world.phase === "finished" || this.world.phase === "closed" ? "room_closed" : "room_full";
+    if (this.world.players.size >= this.config.maxPlayers && this.seats.size > 0) {
+      const seats = [...this.seats.values()];
+      const crowded = isTeamMode(this.config.mode) ? this.world.teamSize(0) >= this.world.teamSize(1) ? 0 : 1 : null;
+      const pool = crowded === null ? seats : seats.filter((x) => this.world.players.get(x.id)?.team === crowded);
+      this.dropSeat(this.leaver(pool.length ? pool : seats));
+    }
     const client = {
       user,
       ws,
@@ -17362,7 +18025,7 @@ var MatchRoom = class {
       if (c.ws !== ws) continue;
       c.ws = null;
       c.connected = false;
-      c.disconnectedAt = Date.now();
+      c.disconnectedAt = this.clock();
       c.queue = [];
       const p = this.world.players.get(c.user.userId);
       if (p) {
@@ -17465,6 +18128,15 @@ var MatchRoom = class {
         if (this.world.phase !== "waiting") return this.error(c, "match_running", "Teams are fixed once the match is on");
         const p = this.world.players.get(c.user.userId);
         if (!p || p.team === msg.team) return;
+        if (this.fillBots) {
+          let there = 0;
+          for (const x of this.clients.values()) if (x !== c && this.world.players.get(x.user.userId)?.team === msg.team) there++;
+          if (there + 1 > Math.floor(this.config.maxPlayers / 2)) return this.error(c, "team_full", "That team already has more players");
+          this.world.setTeam(c.user.userId, msg.team);
+          this.settleLobby();
+          this.broadcastRoster();
+          return;
+        }
         const to = this.world.teamSize(msg.team) + 1;
         const from = this.world.teamSize(msg.team === 0 ? 1 : 0) - (p.team === null ? 0 : 1);
         if (to - from > 1) return this.error(c, "team_full", "That team already has more players");
@@ -17475,7 +18147,7 @@ var MatchRoom = class {
       case "start":
         if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host starts the match");
         if (this.world.phase !== "waiting") return this.error(c, "match_running", "The match is already on");
-        if (this.connectedCount < this.config.minPlayers) return this.error(c, "not_enough_players", `At least ${this.config.minPlayers} players needed`);
+        if (this.connectedCount < this.minToStart) return this.error(c, "not_enough_players", `At least ${this.config.minPlayers} players needed`);
         this.startMatch();
         return;
       case "loadout": {
@@ -17530,8 +18202,182 @@ var MatchRoom = class {
     }
     this.broadcastRoster();
   }
+  // ── Filling the lineup ──────────────────────────────────────────────────
+  /**
+   * How many players the room should add: in total (free-for-all) or per side (teams), so that the
+   * people present get a full match (FILL_RULES). Null when the room does not fill or nobody is there.
+   */
+  fillWant() {
+    if (!this.fillBots) return null;
+    let total = 0;
+    let red = 0;
+    let blue = 0;
+    for (const c of this.clients.values()) {
+      if (!c.connected) continue;
+      total++;
+      const team = this.world.players.get(c.user.userId)?.team;
+      if (team === 0) red++;
+      else if (team === 1) blue++;
+    }
+    if (total === 0) return null;
+    const target = fillTarget(this.config.mode, { total, red, blue }, this.config.maxPlayers);
+    if ("side" in target) return { red: Math.max(0, target.side - red), blue: Math.max(0, target.side - blue) };
+    return { total: Math.max(0, target.total - total) };
+  }
+  hasFreeSlot() {
+    return this.world.players.size < this.config.maxPlayers;
+  }
+  /** Who leaves first: in a match the one doing worst (latest arrival on a tie), in the lobby the latest arrival. */
+  leaver(list) {
+    const inMatch = this.world.phase !== "waiting";
+    const score = (x) => this.world.players.get(x.id)?.score ?? 0;
+    return [...list].sort((a, b2) => (inMatch ? score(a) - score(b2) : 0) || b2.addedAt - a.addedAt)[0];
+  }
+  /** The next change towards the wanted lineup (null: it is right as it is). */
+  fillStep() {
+    const seats = [...this.seats.values()];
+    const want = this.fillWant();
+    if (!want) return null;
+    if ("total" in want) {
+      if (seats.length > want.total) return { kind: "remove", seat: this.leaver(seats) };
+      if (seats.length < want.total && this.hasFreeSlot()) return { kind: "add", team: null };
+      return null;
+    }
+    const red = seats.filter((x) => this.world.players.get(x.id)?.team === 0);
+    const blue = seats.filter((x) => this.world.players.get(x.id)?.team !== 0);
+    const extraRed = red.length - want.red;
+    const extraBlue = blue.length - want.blue;
+    if (this.world.phase === "waiting") {
+      if (extraRed > 0 && extraBlue < 0) return { kind: "move", seat: this.leaver(red), team: 1 };
+      if (extraBlue > 0 && extraRed < 0) return { kind: "move", seat: this.leaver(blue), team: 0 };
+    }
+    if (extraRed > 0 || extraBlue > 0) return { kind: "remove", seat: this.leaver(extraRed >= extraBlue ? red : blue) };
+    if ((extraRed < 0 || extraBlue < 0) && this.hasFreeSlot()) return { kind: "add", team: extraRed <= extraBlue ? 0 : 1 };
+    return null;
+  }
+  /** A new player for the lineup: a name, level, avatar, character and gear like everyone else's. */
+  addSeat(team) {
+    if (!this.hasFreeSlot()) return null;
+    let levels = 0;
+    let people = 0;
+    let cyrillic = false;
+    for (const c of this.clients.values()) {
+      if (!c.connected) continue;
+      people++;
+      levels += Math.max(1, c.user.level ?? 1);
+      if (/[а-яё]/i.test(c.user.displayName)) cyrillic = true;
+    }
+    const lang = Math.random() < (cyrillic ? 0.8 : 0.45) ? "ru" : "en";
+    const taken = /* @__PURE__ */ new Set();
+    for (const p of this.world.players.values()) taken.add(p.name.toLowerCase());
+    const persona = fillPersona(Math.random, { lang, aroundLevel: people ? levels / people : 1, taken });
+    const id = randomUUID3();
+    this.world.addPlayer(id, persona.name, persona.character, true, persona.loadout, team ?? void 0);
+    const seat = {
+      id,
+      name: persona.name,
+      character: persona.character,
+      level: persona.level,
+      avatar: persona.avatar,
+      difficulty: persona.difficulty,
+      addedAt: this.clock(),
+      brain: null,
+      brainWorld: null,
+      rematch: false,
+      rematchAt: 0
+    };
+    this.seats.set(id, seat);
+    return seat;
+  }
+  dropSeat(seat) {
+    this.seats.delete(seat.id);
+    this.world.removePlayer(seat.id);
+  }
+  applyStep(step) {
+    if (step.kind === "add") this.addSeat(step.team);
+    else if (step.kind === "remove") this.dropSeat(step.seat);
+    else this.world.setTeam(step.seat.id, step.team);
+  }
+  /** Brings the lineup to what it should be right away (the match is being started). */
+  fillNow() {
+    for (let guard = 0; guard < 2 * this.config.maxPlayers + 4; guard++) {
+      const step = this.fillStep();
+      if (!step) return;
+      this.applyStep(step);
+    }
+  }
+  /** Lobby: sides are evened out at once (moves only); arrivals and departures keep their pace. */
+  settleLobby() {
+    for (let guard = 0; guard < this.config.maxPlayers; guard++) {
+      const step = this.fillStep();
+      if (!step || step.kind !== "move") return;
+      this.applyStep(step);
+    }
+  }
+  /**
+   * Keeps the filled lineup right, at a human pace: Quick Match lobbies wait FILL_RULES.waitMs for
+   * people, then players arrive one by one; rooms with friends fill up when the match is started;
+   * during a match empty places are taken (and places a person takes are given up) after a while.
+   */
+  fillTick(now) {
+    const phase = this.world.phase;
+    if (this.clients.size === 0) {
+      if (this.seats.size > 0) {
+        for (const seat of [...this.seats.values()]) this.dropSeat(seat);
+        this.broadcastRoster();
+      }
+      this.fillFrom = 0;
+      this.nextFillAt = 0;
+      return;
+    }
+    if (phase === "finished") {
+      let voted = false;
+      for (const seat of this.seats.values()) {
+        if (!seat.rematch && seat.rematchAt && now >= seat.rematchAt) {
+          seat.rematch = true;
+          voted = true;
+        }
+      }
+      if (voted) this.broadcastRoster();
+      return;
+    }
+    if (phase === "closed") return;
+    const inLobby = phase === "waiting";
+    if (inLobby && this.connectedCount === 0) this.fillFrom = 0;
+    else if (inLobby && !this.fillFrom) this.fillFrom = now + this.fillTiming.waitMs;
+    const step = this.fillStep();
+    if (!step) {
+      this.nextFillAt = 0;
+      return;
+    }
+    if (step.kind === "move") {
+      this.applyStep(step);
+      this.broadcastRoster();
+      return;
+    }
+    if (step.kind === "add" && inLobby) {
+      if (!this.autoStart || now < this.fillFrom) {
+        this.nextFillAt = 0;
+        return;
+      }
+    }
+    if (!this.nextFillAt) {
+      const t = this.fillTiming;
+      this.nextFillAt = now + (step.kind === "remove" ? between(t.leaveMinMs, t.leaveMaxMs) : inLobby ? between(t.arriveMinMs, t.arriveMaxMs) : between(t.joinMinMs, t.joinMaxMs));
+      return;
+    }
+    if (now < this.nextFillAt) return;
+    this.nextFillAt = 0;
+    this.applyStep(step);
+    this.broadcastRoster();
+  }
   // ── Match lifecycle ─────────────────────────────────────────────────────
   startMatch() {
+    if (this.fillBots) this.fillNow();
+    for (const seat of this.seats.values()) {
+      seat.brain = null;
+      seat.rematch = false;
+    }
     for (const c of this.clients.values()) {
       const p = this.world.players.get(c.user.userId);
       if (p) p.character = c.character;
@@ -17545,10 +18391,11 @@ var MatchRoom = class {
     this.matchStartedAtWall = Date.now();
     this.resultsSent = false;
     const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite, team: this.world.players.get(c.user.userId)?.team ?? null }));
-    this.services.recorder.matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, startedAt: /* @__PURE__ */ new Date(), players }).catch((e) => this.log.error("matchStarted failed", { err: e }));
-    this.services.analytics.server("match_started", { matchId: this.matchId, roomId: this.id, mapId: this.mapId, players: players.length, mode: this.config.mode });
+    const fill = this.seats.size;
+    this.services.recorder.matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, startedAt: /* @__PURE__ */ new Date(), players, fill }).catch((e) => this.log.error("matchStarted failed", { err: e }));
+    this.services.analytics.server("match_started", { matchId: this.matchId, roomId: this.id, mapId: this.mapId, players: players.length, fill, mode: this.config.mode });
     this.services.analytics.server("map_played", { matchId: this.matchId, mapId: this.mapId });
-    this.log.info("match started", { matchId: this.matchId, players: players.length, map: this.mapId, mode: this.config.mode });
+    this.log.info("match started", { matchId: this.matchId, players: players.length, fill, map: this.mapId, mode: this.config.mode });
     this.broadcastRoster();
   }
   toLobby(rematch) {
@@ -17562,8 +18409,12 @@ var MatchRoom = class {
       c.rematch = false;
       c.ready = this.autoStart || rematch;
     }
+    for (const seat of [...this.seats.values()]) {
+      seat.rematch = false;
+      if (!rematch && !this.isPrivate && Math.random() < 0.3) this.dropSeat(seat);
+    }
     this.broadcastRoster();
-    if (rematch && this.connectedCount >= this.config.minPlayers) this.startMatch();
+    if (rematch && this.connectedCount >= this.minToStart) this.startMatch();
   }
   finishResults(reason) {
     if (this.resultsSent || !this.matchId) return;
@@ -17572,10 +18423,18 @@ var MatchRoom = class {
     const durationMs = Math.max(0, this.world.time - this.world.matchStartedAt);
     const teams = isTeamMode(this.config.mode) ? this.world.teamResult() : void 0;
     this.flush();
-    this.broadcast({ type: "results", matchId: this.matchId, reason, durationMs, standings, mapId: this.mapId, mode: this.config.mode, ...teams ? { teams } : {} });
+    const shown = standings.map((s) => s.isBot ? { ...s, isBot: false } : s);
+    this.broadcast({ type: "results", matchId: this.matchId, reason, durationMs, standings: shown, mapId: this.mapId, mode: this.config.mode, ...teams ? { teams } : {} });
     const matchId = this.matchId;
-    const presentAtEnd = standings.filter((s) => this.clients.get(s.id)?.connected);
+    const presentAtEnd = standings.filter((s) => this.clients.get(s.id)?.connected || this.seats.has(s.id));
     const presentPlaces = rankPlaces(presentAtEnd);
+    const peopleAtEnd = presentAtEnd.filter((s) => !s.isBot).length;
+    const fillAtEnd = presentAtEnd.length - peopleAtEnd;
+    const now = this.clock();
+    for (const seat of this.seats.values()) {
+      seat.rematch = false;
+      seat.rematchAt = now + between(1500, 6e3);
+    }
     const participants = standings.filter((s) => !s.isBot && this.clients.has(s.id)).map((s) => {
       const c = this.clients.get(s.id);
       const presentIdx = presentAtEnd.findIndex((x) => x.id === s.id);
@@ -17598,7 +18457,7 @@ var MatchRoom = class {
         playtimeMs: Math.round(c.matchTimeMs)
       };
     });
-    this.services.analytics.server("match_completed", { matchId, mapId: this.mapId, durationMs, players: presentAtEnd.length, reason, mode: this.config.mode });
+    this.services.analytics.server("match_completed", { matchId, mapId: this.mapId, durationMs, players: peopleAtEnd, fill: fillAtEnd, reason, mode: this.config.mode });
     this.services.recorder.matchCompleted({
       matchId,
       roomId: this.id,
@@ -17611,6 +18470,8 @@ var MatchRoom = class {
       durationMs,
       endReason: reason,
       playersAtEnd: presentAtEnd.length,
+      peopleAtEnd,
+      fillAtEnd,
       participants
     }).then((personal) => {
       let levelChanged = false;
@@ -17630,12 +18491,17 @@ var MatchRoom = class {
     });
   }
   // ── Tick ────────────────────────────────────────────────────────────────
+  clock() {
+    return this.lastNow || Date.now();
+  }
   tick(now) {
     if (this.closed) return;
+    this.lastNow = now;
     const w = this.world;
+    if (this.fillBots || this.seats.size > 0) this.fillTick(now);
     if (w.phase === "waiting") {
       const connected = [...this.clients.values()].filter((c) => c.connected);
-      const enough = connected.length >= this.config.minPlayers;
+      const enough = connected.length > 0 && connected.length + this.seats.size >= this.config.minPlayers;
       const allReady = enough && connected.every((c) => c.ready);
       if (allReady) {
         if (!this.autoStartAt) this.autoStartAt = now + (this.autoStart ? AUTO_START_DELAY_MS : 600);
@@ -17644,6 +18510,16 @@ var MatchRoom = class {
           this.startMatch();
         }
       } else this.autoStartAt = 0;
+    }
+    if (this.seats.size > 0 && (w.phase === "countdown" || w.phase === "active")) {
+      const nav = navFor(this.mapId, w);
+      for (const seat of this.seats.values()) {
+        if (!seat.brain || seat.brainWorld !== w) {
+          seat.brain = new BotBrain(seat.id, w, nav, seat.difficulty, Math.floor(Math.random() * 2 ** 31));
+          seat.brainWorld = w;
+        }
+        w.applyInput(seat.id, seat.brain.nextInput());
+      }
     }
     for (const c of this.clients.values()) {
       if (!c.connected) continue;
@@ -17666,7 +18542,7 @@ var MatchRoom = class {
       }
     }
     if (w.phase === "finished" && w.phaseEndsAt && w.time >= w.phaseEndsAt) this.toLobby(false);
-    if (w.phase === "active" && this.connectedCount < 2) {
+    if (w.phase === "active" && this.connectedCount + this.seats.size < 2) {
       if (!this.soloSince) this.soloSince = now;
       else if (now - this.soloSince > SOLO_ABORT_MS) {
         this.soloSince = 0;
@@ -17723,18 +18599,24 @@ var MatchRoom = class {
       }
     }
     this.clients.clear();
+    this.seats.clear();
     this.log.info("room closed", { reason });
   }
   // ── Output helpers ──────────────────────────────────────────────────────
   roster() {
-    const players = [...this.clients.values()].map((c) => {
+    const finished = this.world.phase === "finished";
+    const order = (id) => {
+      const p = this.world.players.get(id);
+      return p ? p.joinedAt * 16 + p.slot : Number.MAX_SAFE_INTEGER;
+    };
+    const people = [...this.clients.values()].map((c) => {
       const p = this.world.players.get(c.user.userId);
       return {
         id: c.user.userId,
         slot: p?.slot ?? -1,
         name: c.user.displayName,
         character: c.character,
-        ready: this.world.phase === "finished" ? c.rematch : c.ready,
+        ready: finished ? c.rematch : c.ready,
         connected: c.connected,
         isHost: c.user.userId === this.hostId,
         isBot: false,
@@ -17744,7 +18626,36 @@ var MatchRoom = class {
         mods: c.gear.loadout.mods
       };
     });
-    return { type: "roster", players, hostId: this.hostId, mapId: this.mapId, phase: this.world.phase, inviteCode: this.inviteCode, isPrivate: this.isPrivate, maxPlayers: this.config.maxPlayers, mode: this.config.mode };
+    const filled = [...this.seats.values()].map((seat) => {
+      const p = this.world.players.get(seat.id);
+      return {
+        id: seat.id,
+        slot: p?.slot ?? -1,
+        name: seat.name,
+        character: seat.character,
+        ready: finished ? seat.rematch : true,
+        connected: true,
+        isHost: false,
+        isBot: false,
+        level: seat.level,
+        avatar: seat.avatar,
+        team: p?.team ?? null,
+        mods: {}
+      };
+    });
+    const players = [...people, ...filled].sort((a, b2) => order(a.id) - order(b2.id));
+    return {
+      type: "roster",
+      players,
+      hostId: this.hostId,
+      mapId: this.mapId,
+      phase: this.world.phase,
+      inviteCode: this.inviteCode,
+      isPrivate: this.isPrivate,
+      maxPlayers: this.config.maxPlayers,
+      mode: this.config.mode,
+      minToStart: this.minToStart
+    };
   }
   broadcastRoster() {
     this.broadcast(this.roster());
@@ -17759,8 +18670,13 @@ var MatchRoom = class {
   error(c, code, message) {
     this.send(c, { type: "error", code, message });
   }
+  /** For the admin dashboard: people and filled players counted separately. */
   info() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, fill: this.seats.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
+  }
+  /** For players: the lineup as they see it in the room. */
+  publicInfo() {
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
   }
   static protocolVersion = PROTOCOL_VERSION;
 };
@@ -17799,7 +18715,11 @@ var RoomManager = class {
     if (this.rooms.size >= this.opts.maxRooms) throw new Error("room limit reached");
     let id = newRoomId();
     while (this.rooms.has(id)) id = newRoomId();
-    const room = new MatchRoom({ id, mapId, isPrivate, hostUserId, inviteCode, mode, config: this.opts.config }, this.services, this.log);
+    const room = new MatchRoom(
+      { id, mapId, isPrivate, hostUserId, inviteCode, mode, config: this.opts.config, fillBots: this.opts.fillBots ?? false, ...this.opts.fillTiming ? { fillTiming: this.opts.fillTiming } : {} },
+      this.services,
+      this.log
+    );
     this.rooms.set(id, room);
     this.services.analytics.server("lobby_created", { roomId: id, mapId, isPrivate, mode }, { userId: hostUserId });
     return room;
@@ -17980,7 +18900,7 @@ var applied = await migrate(sql);
 if (applied.length) log.info("migrations applied", { applied });
 var persistence = await createPersistence({ sql, env, log });
 var services = persistence.services;
-var rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env) });
+var rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env), fillBots: env.MATCH_FILL_BOTS });
 var handler = createApp({ env, sql, log, services, rooms });
 var server = createServer((req, res) => {
   handler(req, res).catch((e) => log.error("fatal request error", { err: e }));

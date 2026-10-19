@@ -11,6 +11,9 @@
 //      build, checked against the World state (tests/e2e/gadgets.mjs)
 //   8. game modes online: a capture-the-flag room for an English and a Russian browser, mode switching
 //      in the lobby, flags in both HUDs, team results, Quick Match by mode (tests/e2e/modes.mjs)
+//   9. filled lineups: a second server with MATCH_FILL_BOTS=true — a room with friends started alone and
+//      Quick Match alone both play with 4, nobody marked (tests/e2e/fill.mjs). Stages 3–8 run with the
+//      fill switched off, so their two-person rooms stay exactly two people.
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
 // E2E_PROD=1 runs the prebuilt deploy/ bundle exactly as a host would (NODE_ENV=production, guest login,
 // RENDER_EXTERNAL_URL, TRUST_PROXY) instead of the development server.
@@ -60,6 +63,7 @@ const prodEnv = {
   STATIC_DIR: 'public',
   TELEGRAM_BOT_TOKEN: '',
   MATCH_DURATION_SEC: process.env.MATCH_DURATION_SEC ?? '40',
+  MATCH_FILL_BOTS: 'false',
   SESSION_SECRET: randomBytes(32).toString('base64'),
   LOG_LEVEL: 'warn',
   ...(process.env.E2E_ADMIN_USER ? { ADMIN_BOOTSTRAP_USERNAME: process.env.E2E_ADMIN_USER, ADMIN_BOOTSTRAP_PASSWORD: process.env.E2E_ADMIN_PASS ?? '' } : {}),
@@ -74,26 +78,37 @@ const env = prod ? prodEnv : {
   DEV_AUTH_ENABLED: 'true',
   STATIC_DIR: 'apps/web/dist',
   MATCH_DURATION_SEC: process.env.MATCH_DURATION_SEC ?? '40',
+  MATCH_FILL_BOTS: 'false',
   SESSION_SECRET: process.env.SESSION_SECRET ?? 'e2e-only-session-secret-0123456789abcdefghijklmnop',
   LOG_LEVEL: 'warn',
   ...(process.env.E2E_ADMIN_USER ? { ADMIN_BOOTSTRAP_USERNAME: process.env.E2E_ADMIN_USER, ADMIN_BOOTSTRAP_PASSWORD: process.env.E2E_ADMIN_PASS ?? '' } : {}),
 };
-const server = prod
-  ? spawn(process.execPath, ['server.js'], { env, cwd: 'deploy', stdio: ['ignore', 'inherit', 'inherit'] })
-  : spawn(process.execPath, ['apps/server/dist/server.js'], { env, stdio: ['ignore', 'inherit', 'inherit'] });
-if (prod) console.log('[e2e] production mode: deploy/server.js with guest login');
-let failed = false;
-try {
+const startServer = (e) =>
+  prod
+    ? spawn(process.execPath, ['server.js'], { env: e, cwd: 'deploy', stdio: ['ignore', 'inherit', 'inherit'] })
+    : spawn(process.execPath, ['apps/server/dist/server.js'], { env: e, stdio: ['ignore', 'inherit', 'inherit'] });
+const ready = async (url) => {
   for (let i = 0; ; i++) {
     try {
-      const r = await fetch(`${base}/api/ready`);
-      if (r.ok) break;
+      const r = await fetch(`${url}/api/ready`);
+      if (r.ok) return;
     } catch {
       /* not up yet */
     }
-    if (i > 60) throw new Error('server did not become ready');
+    if (i > 60) throw new Error(`server at ${url} did not become ready`);
     await new Promise((r) => setTimeout(r, 500));
   }
+};
+const server = startServer(env);
+// the same build and database with filled lineups switched on (the production default)
+const fillPort = port + 1;
+const fillBase = `http://localhost:${fillPort}`;
+let fillServer = null;
+if (prod) console.log('[e2e] production mode: deploy/server.js with guest login');
+let failed = false;
+try {
+  await ready(base);
+  fillServer = startServer({ ...env, PORT: String(fillPort), MATCH_FILL_BOTS: 'true', ...(prod ? { RENDER_EXTERNAL_URL: fillBase } : { PUBLIC_URL: fillBase }), ADMIN_BOOTSTRAP_USERNAME: '', ADMIN_BOOTSTRAP_PASSWORD: '' });
   console.log('\n[e2e] offline practice');
   const offline = spawnSync(process.execPath, ['tests/e2e/play.mjs', `${base}/?play=offline&map=factory&bots=3`, join(out, 'offline')], { stdio: 'inherit' });
   if (offline.status !== 0) failed = true;
@@ -114,11 +129,16 @@ try {
   console.log('\n[e2e] equipment: grenades, mines, C4, turret (demo build)');
   const gadgets = spawnSync(process.execPath, ['tests/e2e/gadgets.mjs', 'apps/web/dist-demo/blatkom89-demo.html', join(out, 'gadgets')], { stdio: 'inherit' });
   if (gadgets.status !== 0) failed = true;
+  console.log('\n[e2e] filled lineups (second server, MATCH_FILL_BOTS=true): one person always plays');
+  await ready(fillBase);
+  const fill = spawnSync(process.execPath, ['tests/e2e/fill.mjs', fillBase, join(out, 'fill')], { stdio: 'inherit' });
+  if (fill.status !== 0) failed = true;
 } catch (e) {
   console.error('[e2e]', e.message);
   failed = true;
 } finally {
   server.kill('SIGTERM');
+  fillServer?.kill('SIGTERM');
 }
 console.log(failed ? '\n[e2e] FAILED' : `\n[e2e] passed — screenshots in ${out}`);
 process.exit(failed ? 1 : 0);

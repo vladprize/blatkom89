@@ -70,6 +70,19 @@ export function renderLobby(o: {
   const me = s.players.find((p) => p.id === s.myId);
   const connected = s.players.filter((p) => p.connected).length;
   const allReady = s.players.filter((p) => p.connected).every((p) => p.ready);
+  const canStart = connected >= s.minToStart;
+  const note =
+    connected >= 2
+      ? allReady
+        ? t('Everyone’s ready — the match starts by itself.')
+        : t('The match starts when everyone is ready.')
+      : s.minToStart > 1
+        ? t('At least 2 players needed.')
+        : !s.isPrivate
+          ? t('Looking for players — the match starts by itself.')
+          : s.isHost
+            ? t('Start whenever you like — more players join at kick-off.')
+            : t('The host starts the match — more players join at kick-off.');
   const invite = s.inviteUrl;
   const teams = isTeamMode(s.mode);
   const copy = async () => {
@@ -141,9 +154,11 @@ export function renderLobby(o: {
         { class: 'row' },
         h('button', { class: 'btn grow', onclick: o.onCharacter }, t('Character: {name}', { name: charName(o.character) })),
         h('button', { class: `btn grow ${me?.ready ? '' : 'btn--red'}`, onclick: () => o.onReady(!me?.ready) }, me?.ready ? t('Not ready') : t('Ready')),
-        s.isHost ? h('button', { class: 'btn btn--red grow', disabled: connected < 2, onclick: o.onStart }, connected < 2 ? t('Waiting for players…') : allReady ? t('Start') : t('Start without waiting')) : null,
+        s.isHost
+          ? h('button', { class: 'btn btn--red grow', 'data-testid': 'lobby-start', disabled: !canStart, onclick: o.onStart }, !canStart ? t('Waiting for players…') : allReady || connected < 2 ? t('Start') : t('Start without waiting'))
+          : null,
       ),
-      h('div', { class: 'muted center' }, connected < 2 ? t('At least 2 players needed.') : allReady ? t('Everyone’s ready — the match starts by itself.') : t('The match starts when everyone is ready.')),
+      h('div', { class: 'muted center', 'data-testid': 'lobby-note' }, note),
     ),
   );
 }

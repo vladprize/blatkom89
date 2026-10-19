@@ -1,8 +1,10 @@
 /**
- * One multiplayer room: lobby + authoritative deathmatch simulation for 2–10 players, every man for
- * himself or two teams (red vs blue).
+ * One multiplayer room: lobby + authoritative simulation for up to 10 players, every man for himself
+ * or two teams (red vs blue, capture the flag, base capture).
  * Clients send inputs; the room runs the shared World at 60 Hz and broadcasts binary snapshots at
  * 30 Hz plus JSON control messages. Results are recorded once through MatchRecorder.
+ * Lineups too small for a good match are filled with players the room runs itself (sim/fill.ts):
+ * they look and are reported to clients exactly like people (`isBot` never leaves the server).
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';
@@ -27,8 +29,18 @@ import {
   isMapId,
   isTeamMode,
   rankPlaces,
+  NavGrid,
+  BotBrain,
+  FILL_RULES,
+  fillTarget,
+  fillPersona,
 } from '@blatkom/shared';
 import type {
+  AvatarId,
+  BotDifficulty,
+  FillTiming,
+  NickLang,
+  Team,
   CharacterId,
   ClientMessage,
   GameEvent,
@@ -55,6 +67,43 @@ export interface RoomOptions {
   autoStart?: boolean;
   /** Free-for-all (default) or teams; the host can switch it in the lobby. */
   mode?: GameMode;
+  /** Fill small lineups with players the room runs itself (off unless the server enables it). */
+  fillBots?: boolean;
+  /** Shorter fill timings (tests). */
+  fillTiming?: Partial<FillTiming>;
+}
+
+/** A player the room runs itself to fill the lineup (never labelled as such to clients). */
+interface FillSeat {
+  id: string;
+  name: string;
+  character: CharacterId;
+  level: number;
+  avatar: AvatarId | null;
+  difficulty: BotDifficulty;
+  addedAt: number;
+  /** The AI and the world it plays in (a new world — map or mode change — needs a new brain). */
+  brain: BotBrain | null;
+  brainWorld: World | null;
+  /** After a match: wants a rematch (from rematchAt on, like a person pressing the button). */
+  rematch: boolean;
+  rematchAt: number;
+}
+
+/** One change of the filled lineup: someone arrives, leaves, or (lobby) changes sides. */
+type FillStep = { kind: 'add'; team: Team | null } | { kind: 'remove'; seat: FillSeat } | { kind: 'move'; seat: FillSeat; team: Team };
+
+const between = (a: number, b: number) => a + Math.random() * Math.max(0, b - a);
+
+/** Navigation grids per map, shared by every room (built once from the static collision). */
+const NAV = new Map<MapId, NavGrid>();
+function navFor(mapId: MapId, world: World): NavGrid {
+  let nav = NAV.get(mapId);
+  if (!nav) {
+    nav = new NavGrid(world.collision);
+    NAV.set(mapId, nav);
+  }
+  return nav;
 }
 
 interface Client {
@@ -104,10 +153,20 @@ export class MatchRoom {
   private pendingShots: WorldEvent[] = [];
   private pendingEvents: GameEvent[] = [];
   private emptySince = Date.now();
+  /** The time of the latest tick (the room's clock between ticks; the wall clock before the first). */
+  private lastNow = 0;
   private autoStartAt = 0;
   private soloSince = 0;
   private resultsSent = false;
   private readonly autoStart: boolean;
+  private readonly fillBots: boolean;
+  /** Players the room runs itself, by id (they are in the World like everyone else). */
+  private readonly seats = new Map<string, FillSeat>();
+  private readonly fillTiming: FillTiming;
+  /** Quick Match lobby: players start arriving from this time on (0: nobody waiting yet). */
+  private fillFrom = 0;
+  /** When the next change of the filled lineup happens (0: none scheduled). */
+  private nextFillAt = 0;
   private readonly log: Logger;
 
   constructor(
@@ -121,6 +180,8 @@ export class MatchRoom {
     this.hostId = opts.hostUserId;
     this.inviteCode = opts.inviteCode ?? null;
     this.autoStart = opts.autoStart ?? !opts.isPrivate;
+    this.fillBots = opts.fillBots ?? false;
+    this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
     this.config = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? 'ffa' };
     this.log = log.child({ room: this.id });
     this.world = this.createWorld();
@@ -147,6 +208,16 @@ export class MatchRoom {
     let n = 0;
     for (const c of this.clients.values()) if (c.connected) n++;
     return n;
+  }
+
+  /** Everyone in the lineup as players see it: people plus the players the room filled in. */
+  get lineup(): number {
+    return Math.min(this.config.maxPlayers, this.clients.size + this.seats.size);
+  }
+
+  /** People the host needs to start: one when the room fills the lineup up itself. */
+  get minToStart(): number {
+    return this.fillBots ? 1 : this.config.minPlayers;
   }
 
   isJoinable(userId?: string): boolean {
@@ -195,6 +266,13 @@ export class MatchRoom {
       return 'resumed';
     }
     if (!this.isJoinable()) return this.world.phase === 'finished' || this.world.phase === 'closed' ? 'room_closed' : 'room_full';
+    // a person always gets a place: a filled player gives up theirs when the room is full
+    if (this.world.players.size >= this.config.maxPlayers && this.seats.size > 0) {
+      const seats = [...this.seats.values()];
+      const crowded: Team | null = isTeamMode(this.config.mode) ? (this.world.teamSize(0) >= this.world.teamSize(1) ? 0 : 1) : null;
+      const pool = crowded === null ? seats : seats.filter((x) => this.world.players.get(x.id)?.team === crowded);
+      this.dropSeat(this.leaver(pool.length ? pool : seats));
+    }
     const client: Client = {
       user,
       ws,
@@ -248,7 +326,7 @@ export class MatchRoom {
       if (c.ws !== ws) continue;
       c.ws = null;
       c.connected = false;
-      c.disconnectedAt = Date.now();
+      c.disconnectedAt = this.clock();
       c.queue = [];
       const p = this.world.players.get(c.user.userId);
       if (p) {
@@ -356,6 +434,16 @@ export class MatchRoom {
         if (this.world.phase !== 'waiting') return this.error(c, 'match_running', 'Teams are fixed once the match is on');
         const p = this.world.players.get(c.user.userId);
         if (!p || p.team === msg.team) return;
+        if (this.fillBots) {
+          // the room evens the sides out with its own players: only people are limited per side
+          let there = 0;
+          for (const x of this.clients.values()) if (x !== c && this.world.players.get(x.user.userId)?.team === msg.team) there++;
+          if (there + 1 > Math.floor(this.config.maxPlayers / 2)) return this.error(c, 'team_full', 'That team already has more players');
+          this.world.setTeam(c.user.userId, msg.team);
+          this.settleLobby();
+          this.broadcastRoster();
+          return;
+        }
         // the teams must stay even: at most one player more on either side
         const to = this.world.teamSize(msg.team) + 1;
         const from = this.world.teamSize(msg.team === 0 ? 1 : 0) - (p.team === null ? 0 : 1);
@@ -367,7 +455,7 @@ export class MatchRoom {
       case 'start':
         if (c.user.userId !== this.hostId) return this.error(c, 'not_host', 'Only the room’s host starts the match');
         if (this.world.phase !== 'waiting') return this.error(c, 'match_running', 'The match is already on');
-        if (this.connectedCount < this.config.minPlayers) return this.error(c, 'not_enough_players', `At least ${this.config.minPlayers} players needed`);
+        if (this.connectedCount < this.minToStart) return this.error(c, 'not_enough_players', `At least ${this.config.minPlayers} players needed`);
         this.startMatch();
         return;
       case 'loadout': {
@@ -431,8 +519,197 @@ export class MatchRoom {
     this.broadcastRoster();
   }
 
+  // ── Filling the lineup ──────────────────────────────────────────────────
+  /**
+   * How many players the room should add: in total (free-for-all) or per side (teams), so that the
+   * people present get a full match (FILL_RULES). Null when the room does not fill or nobody is there.
+   */
+  private fillWant(): { total: number } | { red: number; blue: number } | null {
+    if (!this.fillBots) return null;
+    let total = 0;
+    let red = 0;
+    let blue = 0;
+    for (const c of this.clients.values()) {
+      if (!c.connected) continue;
+      total++;
+      const team = this.world.players.get(c.user.userId)?.team;
+      if (team === 0) red++;
+      else if (team === 1) blue++;
+    }
+    if (total === 0) return null;
+    const target = fillTarget(this.config.mode, { total, red, blue }, this.config.maxPlayers);
+    if ('side' in target) return { red: Math.max(0, target.side - red), blue: Math.max(0, target.side - blue) };
+    return { total: Math.max(0, target.total - total) };
+  }
+
+  private hasFreeSlot(): boolean {
+    return this.world.players.size < this.config.maxPlayers;
+  }
+
+  /** Who leaves first: in a match the one doing worst (latest arrival on a tie), in the lobby the latest arrival. */
+  private leaver(list: FillSeat[]): FillSeat {
+    const inMatch = this.world.phase !== 'waiting';
+    const score = (x: FillSeat) => this.world.players.get(x.id)?.score ?? 0;
+    return [...list].sort((a, b) => (inMatch ? score(a) - score(b) : 0) || b.addedAt - a.addedAt)[0]!;
+  }
+
+  /** The next change towards the wanted lineup (null: it is right as it is). */
+  private fillStep(): FillStep | null {
+    const seats = [...this.seats.values()];
+    const want = this.fillWant();
+    // nobody connected right now (people about to reconnect): the lineup stays as it is
+    if (!want) return null;
+    if ('total' in want) {
+      if (seats.length > want.total) return { kind: 'remove', seat: this.leaver(seats) };
+      if (seats.length < want.total && this.hasFreeSlot()) return { kind: 'add', team: null };
+      return null;
+    }
+    const red = seats.filter((x) => this.world.players.get(x.id)?.team === 0);
+    const blue = seats.filter((x) => this.world.players.get(x.id)?.team !== 0);
+    const extraRed = red.length - want.red;
+    const extraBlue = blue.length - want.blue;
+    // in the lobby a player simply changes sides instead of leaving one and arriving on the other
+    if (this.world.phase === 'waiting') {
+      if (extraRed > 0 && extraBlue < 0) return { kind: 'move', seat: this.leaver(red), team: 1 };
+      if (extraBlue > 0 && extraRed < 0) return { kind: 'move', seat: this.leaver(blue), team: 0 };
+    }
+    if (extraRed > 0 || extraBlue > 0) return { kind: 'remove', seat: this.leaver(extraRed >= extraBlue ? red : blue) };
+    if ((extraRed < 0 || extraBlue < 0) && this.hasFreeSlot()) return { kind: 'add', team: extraRed <= extraBlue ? 0 : 1 };
+    return null;
+  }
+
+  /** A new player for the lineup: a name, level, avatar, character and gear like everyone else's. */
+  private addSeat(team: Team | null): FillSeat | null {
+    if (!this.hasFreeSlot()) return null;
+    let levels = 0;
+    let people = 0;
+    let cyrillic = false;
+    for (const c of this.clients.values()) {
+      if (!c.connected) continue;
+      people++;
+      levels += Math.max(1, c.user.level ?? 1);
+      if (/[а-яё]/i.test(c.user.displayName)) cyrillic = true;
+    }
+    const lang: NickLang = Math.random() < (cyrillic ? 0.8 : 0.45) ? 'ru' : 'en';
+    const taken = new Set<string>();
+    for (const p of this.world.players.values()) taken.add(p.name.toLowerCase());
+    const persona = fillPersona(Math.random, { lang, aroundLevel: people ? levels / people : 1, taken });
+    const id = randomUUID();
+    this.world.addPlayer(id, persona.name, persona.character, true, persona.loadout, team ?? undefined);
+    const seat: FillSeat = {
+      id,
+      name: persona.name,
+      character: persona.character,
+      level: persona.level,
+      avatar: persona.avatar,
+      difficulty: persona.difficulty,
+      addedAt: this.clock(),
+      brain: null,
+      brainWorld: null,
+      rematch: false,
+      rematchAt: 0,
+    };
+    this.seats.set(id, seat);
+    return seat;
+  }
+
+  private dropSeat(seat: FillSeat) {
+    this.seats.delete(seat.id);
+    this.world.removePlayer(seat.id);
+  }
+
+  private applyStep(step: FillStep) {
+    if (step.kind === 'add') this.addSeat(step.team);
+    else if (step.kind === 'remove') this.dropSeat(step.seat);
+    else this.world.setTeam(step.seat.id, step.team);
+  }
+
+  /** Brings the lineup to what it should be right away (the match is being started). */
+  private fillNow() {
+    for (let guard = 0; guard < 2 * this.config.maxPlayers + 4; guard++) {
+      const step = this.fillStep();
+      if (!step) return;
+      this.applyStep(step);
+    }
+  }
+
+  /** Lobby: sides are evened out at once (moves only); arrivals and departures keep their pace. */
+  private settleLobby() {
+    for (let guard = 0; guard < this.config.maxPlayers; guard++) {
+      const step = this.fillStep();
+      if (!step || step.kind !== 'move') return;
+      this.applyStep(step);
+    }
+  }
+
+  /**
+   * Keeps the filled lineup right, at a human pace: Quick Match lobbies wait FILL_RULES.waitMs for
+   * people, then players arrive one by one; rooms with friends fill up when the match is started;
+   * during a match empty places are taken (and places a person takes are given up) after a while.
+   */
+  private fillTick(now: number) {
+    const phase = this.world.phase;
+    if (this.clients.size === 0) {
+      // nobody left — not even someone about to reconnect
+      if (this.seats.size > 0) {
+        for (const seat of [...this.seats.values()]) this.dropSeat(seat);
+        this.broadcastRoster();
+      }
+      this.fillFrom = 0;
+      this.nextFillAt = 0;
+      return;
+    }
+    if (phase === 'finished') {
+      let voted = false;
+      for (const seat of this.seats.values()) {
+        if (!seat.rematch && seat.rematchAt && now >= seat.rematchAt) {
+          seat.rematch = true;
+          voted = true;
+        }
+      }
+      if (voted) this.broadcastRoster();
+      return;
+    }
+    if (phase === 'closed') return;
+    const inLobby = phase === 'waiting';
+    if (inLobby && this.connectedCount === 0) this.fillFrom = 0;
+    else if (inLobby && !this.fillFrom) this.fillFrom = now + this.fillTiming.waitMs;
+    const step = this.fillStep();
+    if (!step) {
+      this.nextFillAt = 0;
+      return;
+    }
+    if (step.kind === 'move') {
+      this.applyStep(step);
+      this.broadcastRoster();
+      return;
+    }
+    if (step.kind === 'add' && inLobby) {
+      // rooms with friends fill up at kick-off; Quick Match gives people a head start
+      if (!this.autoStart || now < this.fillFrom) {
+        this.nextFillAt = 0;
+        return;
+      }
+    }
+    if (!this.nextFillAt) {
+      const t = this.fillTiming;
+      this.nextFillAt = now + (step.kind === 'remove' ? between(t.leaveMinMs, t.leaveMaxMs) : inLobby ? between(t.arriveMinMs, t.arriveMaxMs) : between(t.joinMinMs, t.joinMaxMs));
+      return;
+    }
+    if (now < this.nextFillAt) return;
+    this.nextFillAt = 0;
+    this.applyStep(step);
+    this.broadcastRoster();
+  }
+
   // ── Match lifecycle ─────────────────────────────────────────────────────
   private startMatch() {
+    // the lineup fills up (and the sides even out) the moment the match is started
+    if (this.fillBots) this.fillNow();
+    for (const seat of this.seats.values()) {
+      seat.brain = null;
+      seat.rematch = false;
+    }
     for (const c of this.clients.values()) {
       const p = this.world.players.get(c.user.userId);
       if (p) p.character = c.character;
@@ -448,12 +725,13 @@ export class MatchRoom {
     this.matchStartedAtWall = Date.now();
     this.resultsSent = false;
     const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite, team: this.world.players.get(c.user.userId)?.team ?? null }));
+    const fill = this.seats.size;
     this.services.recorder
-      .matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, startedAt: new Date(), players })
+      .matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, startedAt: new Date(), players, fill })
       .catch((e: Error) => this.log.error('matchStarted failed', { err: e }));
-    this.services.analytics.server('match_started', { matchId: this.matchId, roomId: this.id, mapId: this.mapId, players: players.length, mode: this.config.mode });
+    this.services.analytics.server('match_started', { matchId: this.matchId, roomId: this.id, mapId: this.mapId, players: players.length, fill, mode: this.config.mode });
     this.services.analytics.server('map_played', { matchId: this.matchId, mapId: this.mapId });
-    this.log.info('match started', { matchId: this.matchId, players: players.length, map: this.mapId, mode: this.config.mode });
+    this.log.info('match started', { matchId: this.matchId, players: players.length, fill, map: this.mapId, mode: this.config.mode });
     this.broadcastRoster();
   }
 
@@ -468,8 +746,13 @@ export class MatchRoom {
       c.rematch = false;
       c.ready = this.autoStart || rematch;
     }
+    for (const seat of [...this.seats.values()]) {
+      seat.rematch = false;
+      // after a public match some players move on (others take their places later)
+      if (!rematch && !this.isPrivate && Math.random() < 0.3) this.dropSeat(seat);
+    }
     this.broadcastRoster();
-    if (rematch && this.connectedCount >= this.config.minPlayers) this.startMatch();
+    if (rematch && this.connectedCount >= this.minToStart) this.startMatch();
   }
 
   private finishResults(reason: 'time' | 'score' | 'aborted') {
@@ -480,10 +763,20 @@ export class MatchRoom {
     const teams = isTeamMode(this.config.mode) ? this.world.teamResult() : undefined;
     // deliver the deciding shot/kill events before the results screen
     this.flush();
-    this.broadcast({ type: 'results', matchId: this.matchId, reason, durationMs, standings, mapId: this.mapId, mode: this.config.mode, ...(teams ? { teams } : {}) });
+    // everyone is shown the same way: players the room filled in are not marked
+    const shown = standings.map((s) => (s.isBot ? { ...s, isBot: false } : s));
+    this.broadcast({ type: 'results', matchId: this.matchId, reason, durationMs, standings: shown, mapId: this.mapId, mode: this.config.mode, ...(teams ? { teams } : {}) });
     const matchId = this.matchId;
-    const presentAtEnd = standings.filter((s) => this.clients.get(s.id)?.connected);
+    // places count everyone who finished the match — filled players are opponents like anyone else
+    const presentAtEnd = standings.filter((s) => this.clients.get(s.id)?.connected || this.seats.has(s.id));
     const presentPlaces = rankPlaces(presentAtEnd);
+    const peopleAtEnd = presentAtEnd.filter((s) => !s.isBot).length;
+    const fillAtEnd = presentAtEnd.length - peopleAtEnd;
+    const now = this.clock();
+    for (const seat of this.seats.values()) {
+      seat.rematch = false;
+      seat.rematchAt = now + between(1500, 6000);
+    }
     const participants = standings
       .filter((s) => !s.isBot && this.clients.has(s.id))
       .map((s) => {
@@ -508,7 +801,7 @@ export class MatchRoom {
           playtimeMs: Math.round(c.matchTimeMs),
         };
       });
-    this.services.analytics.server('match_completed', { matchId, mapId: this.mapId, durationMs, players: presentAtEnd.length, reason, mode: this.config.mode });
+    this.services.analytics.server('match_completed', { matchId, mapId: this.mapId, durationMs, players: peopleAtEnd, fill: fillAtEnd, reason, mode: this.config.mode });
     this.services.recorder
       .matchCompleted({
         matchId,
@@ -522,6 +815,8 @@ export class MatchRoom {
         durationMs,
         endReason: reason,
         playersAtEnd: presentAtEnd.length,
+        peopleAtEnd,
+        fillAtEnd,
         participants,
       })
       .then((personal) => {
@@ -545,13 +840,21 @@ export class MatchRoom {
   }
 
   // ── Tick ────────────────────────────────────────────────────────────────
+  private clock(): number {
+    return this.lastNow || Date.now();
+  }
+
   tick(now: number): void {
     if (this.closed) return;
+    this.lastNow = now;
     const w = this.world;
+    // the filled part of the lineup (arrivals, departures, rematch votes)
+    if (this.fillBots || this.seats.size > 0) this.fillTick(now);
     // lobby automation
     if (w.phase === 'waiting') {
       const connected = [...this.clients.values()].filter((c) => c.connected);
-      const enough = connected.length >= this.config.minPlayers;
+      // filled players are always ready; a person has to be there
+      const enough = connected.length > 0 && connected.length + this.seats.size >= this.config.minPlayers;
       const allReady = enough && connected.every((c) => c.ready);
       if (allReady) {
         if (!this.autoStartAt) this.autoStartAt = now + (this.autoStart ? AUTO_START_DELAY_MS : 600);
@@ -560,6 +863,17 @@ export class MatchRoom {
           this.startMatch();
         }
       } else this.autoStartAt = 0;
+    }
+    // filled players: their AI produces one input per tick, exactly like a client
+    if (this.seats.size > 0 && (w.phase === 'countdown' || w.phase === 'active')) {
+      const nav = navFor(this.mapId, w);
+      for (const seat of this.seats.values()) {
+        if (!seat.brain || seat.brainWorld !== w) {
+          seat.brain = new BotBrain(seat.id, w, nav, seat.difficulty, Math.floor(Math.random() * 2 ** 31));
+          seat.brainWorld = w;
+        }
+        w.applyInput(seat.id, seat.brain.nextInput());
+      }
     }
     // inputs (token bucket: one input per server tick on average)
     for (const c of this.clients.values()) {
@@ -584,8 +898,8 @@ export class MatchRoom {
     }
     // finished → lobby
     if (w.phase === 'finished' && w.phaseEndsAt && w.time >= w.phaseEndsAt) this.toLobby(false);
-    // solo abort: everyone else left during a match
-    if (w.phase === 'active' && this.connectedCount < 2) {
+    // solo abort: everyone else left during a match (filled players keep a person company)
+    if (w.phase === 'active' && this.connectedCount + this.seats.size < 2) {
       if (!this.soloSince) this.soloSince = now;
       else if (now - this.soloSince > SOLO_ABORT_MS) {
         this.soloSince = 0;
@@ -648,19 +962,25 @@ export class MatchRoom {
       }
     }
     this.clients.clear();
+    this.seats.clear();
     this.log.info('room closed', { reason });
   }
 
   // ── Output helpers ──────────────────────────────────────────────────────
   roster(): ServerMessage {
-    const players: RosterEntry[] = [...this.clients.values()].map((c) => {
+    const finished = this.world.phase === 'finished';
+    const order = (id: string) => {
+      const p = this.world.players.get(id);
+      return p ? p.joinedAt * 16 + p.slot : Number.MAX_SAFE_INTEGER;
+    };
+    const people: RosterEntry[] = [...this.clients.values()].map((c) => {
       const p = this.world.players.get(c.user.userId);
       return {
         id: c.user.userId,
         slot: p?.slot ?? -1,
         name: c.user.displayName,
         character: c.character,
-        ready: this.world.phase === 'finished' ? c.rematch : c.ready,
+        ready: finished ? c.rematch : c.ready,
         connected: c.connected,
         isHost: c.user.userId === this.hostId,
         isBot: false,
@@ -670,7 +990,37 @@ export class MatchRoom {
         mods: c.gear.loadout.mods,
       };
     });
-    return { type: 'roster', players, hostId: this.hostId, mapId: this.mapId, phase: this.world.phase, inviteCode: this.inviteCode, isPrivate: this.isPrivate, maxPlayers: this.config.maxPlayers, mode: this.config.mode };
+    // players the room filled in look exactly like people (always ready; never the host)
+    const filled: RosterEntry[] = [...this.seats.values()].map((seat) => {
+      const p = this.world.players.get(seat.id);
+      return {
+        id: seat.id,
+        slot: p?.slot ?? -1,
+        name: seat.name,
+        character: seat.character,
+        ready: finished ? seat.rematch : true,
+        connected: true,
+        isHost: false,
+        isBot: false,
+        level: seat.level,
+        avatar: seat.avatar,
+        team: p?.team ?? null,
+        mods: {},
+      };
+    });
+    const players = [...people, ...filled].sort((a, b) => order(a.id) - order(b.id));
+    return {
+      type: 'roster',
+      players,
+      hostId: this.hostId,
+      mapId: this.mapId,
+      phase: this.world.phase,
+      inviteCode: this.inviteCode,
+      isPrivate: this.isPrivate,
+      maxPlayers: this.config.maxPlayers,
+      mode: this.config.mode,
+      minToStart: this.minToStart,
+    };
   }
 
   broadcastRoster(): void {
@@ -690,8 +1040,14 @@ export class MatchRoom {
     this.send(c, { type: 'error', code, message });
   }
 
+  /** For the admin dashboard: people and filled players counted separately. */
   info() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, fill: this.seats.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
+  }
+
+  /** For players: the lineup as they see it in the room. */
+  publicInfo() {
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
   }
 
   static protocolVersion = PROTOCOL_VERSION;

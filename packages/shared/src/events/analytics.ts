@@ -81,8 +81,9 @@ export const SERVER_EVENT_PROPS = {
   lobby_created: z.object({ roomId: z.string(), mapId: z.enum(MAP_IDS), isPrivate: z.boolean(), mode: z.enum(GAME_MODES).optional() }),
   lobby_joined: z.object({ roomId: z.string(), viaInvite: z.boolean() }),
   lobby_left: z.object({ roomId: z.string(), phase: z.string() }),
-  match_started: z.object({ matchId: z.string(), roomId: z.string(), mapId: z.enum(MAP_IDS), players: z.number().int(), mode: z.enum(GAME_MODES).optional() }),
-  match_completed: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS), durationMs: z.number().int(), players: z.number().int(), reason: z.string(), mode: z.enum(GAME_MODES).optional() }),
+  /** players: people; fill: players the server added to complete the lineup. */
+  match_started: z.object({ matchId: z.string(), roomId: z.string(), mapId: z.enum(MAP_IDS), players: z.number().int(), fill: z.number().int().optional(), mode: z.enum(GAME_MODES).optional() }),
+  match_completed: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS), durationMs: z.number().int(), players: z.number().int(), fill: z.number().int().optional(), reason: z.string(), mode: z.enum(GAME_MODES).optional() }),
   match_abandoned: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS), phase: z.string() }),
   map_played: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS) }),
   invite_created: z.object({ code: z.string(), roomId: z.string() }),

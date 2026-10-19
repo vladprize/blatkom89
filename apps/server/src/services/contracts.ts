@@ -29,7 +29,10 @@ export interface MatchStart {
   mode: GameMode;
   isPrivate: boolean;
   startedAt: Date;
+  /** People in the match (players the server filled in are never recorded individually). */
   players: Array<{ userId: string; character: CharacterId; viaInvite: boolean; team: Team | null }>;
+  /** Players the server added to complete the lineup. */
+  fill?: number;
 }
 
 export interface MatchParticipantResult {
@@ -65,8 +68,12 @@ export interface MatchCompletion {
   endedAt: Date;
   durationMs: number;
   endReason: 'time' | 'score' | 'aborted';
-  /** Number of human players present at the end (bots are never recorded). */
+  /** Everyone present at the end, filled players included (places and wins count them as opponents). */
   playersAtEnd: number;
+  /** People present at the end (default: playersAtEnd) — «played with friends» and the stored player count. */
+  peopleAtEnd?: number;
+  /** Players the server added to complete the lineup, present at the end (default 0). */
+  fillAtEnd?: number;
   participants: MatchParticipantResult[];
 }
 

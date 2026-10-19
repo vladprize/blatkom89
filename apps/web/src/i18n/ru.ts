@@ -171,6 +171,9 @@ export const RU: Record<string, string> = {
   'Avatar saved': 'Аватарка сохранена',
   'Could not save — try again.': 'Не сохранилось — попробуй ещё раз.',
   'Others see it next to your alias in the rooms.': 'Её видят рядом с твоей кличкой в комнатах.',
+  'Start whenever you like — more players join at kick-off.': 'Начинай, когда удобно, — к старту подтянутся ещё игроки.',
+  'The host starts the match — more players join at kick-off.': 'Матч начинает хозяин комнаты — к старту подтянутся ещё игроки.',
+  'Looking for players — the match starts by itself.': 'Собираем игроков — матч начнётся сам.',
   // ── HUD, connection, nickname, modes
   'Left stick — move': 'Левый стик — движение',
   'Right stick — aim and fire': 'Правый стик — прицел и огонь',

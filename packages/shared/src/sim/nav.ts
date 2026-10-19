@@ -7,6 +7,16 @@ export class NavGrid {
   readonly cols: number;
   readonly rows: number;
   readonly walkable: Uint8Array;
+  /** Walkable cells: a search that expands this many has seen everything reachable. */
+  readonly walkableCount: number;
+  /**
+   * A* scratch space, reused by every search (searches never overlap: the simulation is single-
+   * threaded). A cell's entries belong to the current search only when its stamp is that search's
+   * number, so nothing is allocated or cleared between searches — one grid serves every bot of every
+   * room on the map.
+   */
+  private scratch: { g: Float32Array; came: Int32Array; seen: Uint32Array; closed: Uint32Array; heap: MinHeap } | null = null;
+  private searchNo = 0;
 
   constructor(
     readonly world: CollisionWorld,
@@ -17,13 +27,17 @@ export class NavGrid {
     this.cols = Math.floor(world.width / cell);
     this.rows = Math.floor(world.height / cell);
     this.walkable = new Uint8Array(this.cols * this.rows);
+    let walkable = 0;
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
         const x = c * cell + cell / 2;
         const y = r * cell + cell / 2;
-        this.walkable[r * this.cols + c] = world.overlapsCircle(x, y, clearance) ? 0 : 1;
+        const ok = world.overlapsCircle(x, y, clearance) ? 0 : 1;
+        this.walkable[r * this.cols + c] = ok;
+        walkable += ok;
       }
     }
+    this.walkableCount = walkable;
   }
 
   index(x: number, y: number): number {
@@ -85,17 +99,26 @@ export class NavGrid {
     return seen;
   }
 
-  /** 8-connected A* returning world-space waypoints (simplified with line-of-walk smoothing). */
-  findPath(sx: number, sy: number, tx: number, ty: number, maxExpand = 6000): Array<{ x: number; y: number }> | null {
+  /**
+   * 8-connected A* returning world-space waypoints (simplified with line-of-walk smoothing); null when
+   * the goal can't be reached. By default the search may expand every walkable cell, so a reachable
+   * goal is always found, however long the way round.
+   */
+  findPath(sx: number, sy: number, tx: number, ty: number, maxExpand = this.walkableCount): Array<{ x: number; y: number }> | null {
     const start = this.nearestWalkable(sx, sy);
     const goal = this.nearestWalkable(tx, ty);
     if (start < 0 || goal < 0) return null;
     if (start === goal) return [{ x: tx, y: ty }];
     const n = this.walkable.length;
-    const g = new Float32Array(n).fill(Infinity);
-    const came = new Int32Array(n).fill(-1);
-    const closed = new Uint8Array(n);
-    const heap = new MinHeap();
+    if (!this.scratch) this.scratch = { g: new Float32Array(n), came: new Int32Array(n), seen: new Uint32Array(n), closed: new Uint32Array(n), heap: new MinHeap(1024) };
+    if (this.searchNo >= 0xfffffff0) {
+      this.scratch.seen.fill(0);
+      this.scratch.closed.fill(0);
+      this.searchNo = 0;
+    }
+    const run = ++this.searchNo;
+    const { g, came, seen, closed, heap } = this.scratch;
+    heap.clear();
     const gc = goal % this.cols;
     const gr = (goal / this.cols) | 0;
     const h = (i: number) => {
@@ -104,13 +127,15 @@ export class NavGrid {
       return Math.max(dc, dr) + 0.4142 * Math.min(dc, dr);
     };
     g[start] = 0;
+    came[start] = -1;
+    seen[start] = run;
     heap.push(start, h(start));
     let expanded = 0;
     while (heap.size > 0) {
       const cur = heap.pop();
       if (cur === goal) break;
-      if (closed[cur]) continue;
-      closed[cur] = 1;
+      if (closed[cur] === run) continue;
+      closed[cur] = run;
       if (++expanded > maxExpand) return null;
       const c = cur % this.cols;
       const r = (cur / this.cols) | 0;
@@ -121,18 +146,19 @@ export class NavGrid {
           const nr = r + dr;
           if (nc < 0 || nr < 0 || nc >= this.cols || nr >= this.rows) continue;
           const j = nr * this.cols + nc;
-          if (!this.walkable[j] || closed[j]) continue;
+          if (!this.walkable[j] || closed[j] === run) continue;
           if (dr && dc && (!this.walkable[r * this.cols + nc] || !this.walkable[nr * this.cols + c])) continue;
           const cost = g[cur]! + (dr && dc ? 1.4142 : 1);
-          if (cost < g[j]!) {
+          if (seen[j] !== run || cost < g[j]!) {
             g[j] = cost;
             came[j] = cur;
+            seen[j] = run;
             heap.push(j, cost + h(j));
           }
         }
       }
     }
-    if (came[goal] === -1) return null;
+    if (seen[goal] !== run) return null;
     const cells: number[] = [];
     for (let i = goal; i !== -1 && i !== start; i = came[i]!) cells.push(i);
     cells.reverse();
@@ -161,46 +187,66 @@ export class NavGrid {
   }
 }
 
+/** Binary min-heap of cell ids by key (typed arrays, grows as needed; the element moves, not swaps). */
 class MinHeap {
-  private ids: number[] = [];
-  private keys: number[] = [];
-  get size() {
-    return this.ids.length;
+  private ids: Int32Array;
+  private keys: Float64Array;
+  size = 0;
+  constructor(capacity: number) {
+    this.ids = new Int32Array(capacity);
+    this.keys = new Float64Array(capacity);
+  }
+  clear() {
+    this.size = 0;
   }
   push(id: number, key: number) {
-    this.ids.push(id);
-    this.keys.push(key);
-    let i = this.ids.length - 1;
+    if (this.size === this.ids.length) {
+      const ids = new Int32Array(this.ids.length * 2);
+      const keys = new Float64Array(this.keys.length * 2);
+      ids.set(this.ids);
+      keys.set(this.keys);
+      this.ids = ids;
+      this.keys = keys;
+    }
+    let i = this.size++;
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (this.keys[p]! <= this.keys[i]!) break;
-      this.swap(i, p);
+      if (this.keys[p]! <= key) break;
+      this.ids[i] = this.ids[p]!;
+      this.keys[i] = this.keys[p]!;
       i = p;
     }
+    this.ids[i] = id;
+    this.keys[i] = key;
   }
   pop(): number {
     const top = this.ids[0]!;
-    const lastId = this.ids.pop()!;
-    const lastKey = this.keys.pop()!;
-    if (this.ids.length > 0) {
-      this.ids[0] = lastId;
-      this.keys[0] = lastKey;
+    const n = --this.size;
+    if (n > 0) {
+      const id = this.ids[n]!;
+      const key = this.keys[n]!;
       let i = 0;
       for (;;) {
         const l = 2 * i + 1;
         const r = l + 1;
         let m = i;
-        if (l < this.ids.length && this.keys[l]! < this.keys[m]!) m = l;
-        if (r < this.ids.length && this.keys[r]! < this.keys[m]!) m = r;
+        let mk = key;
+        if (l < n && this.keys[l]! < mk) {
+          m = l;
+          mk = this.keys[l]!;
+        }
+        if (r < n && this.keys[r]! < mk) {
+          m = r;
+          mk = this.keys[r]!;
+        }
         if (m === i) break;
-        this.swap(i, m);
+        this.ids[i] = this.ids[m]!;
+        this.keys[i] = mk;
         i = m;
       }
+      this.ids[i] = id;
+      this.keys[i] = key;
     }
     return top;
-  }
-  private swap(a: number, b: number) {
-    [this.ids[a], this.ids[b]] = [this.ids[b]!, this.ids[a]!];
-    [this.keys[a], this.keys[b]] = [this.keys[b]!, this.keys[a]!];
   }
 }

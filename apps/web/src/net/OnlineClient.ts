@@ -27,6 +27,8 @@ export interface LobbyState {
   maxPlayers: number;
   /** The game mode (the host switches it). */
   mode: GameMode;
+  /** People the host needs to start (1 when the lineup fills up at kick-off). */
+  minToStart: number;
   /** The room's win limits (from the server's match rules). */
   limits?: { teamScoreLimit: number; captureLimit: number; baseScoreLimit: number };
 }
@@ -322,6 +324,7 @@ export class OnlineClient {
           isPrivate: m.isPrivate,
           maxPlayers: m.maxPlayers,
           mode: m.mode,
+          minToStart: m.minToStart ?? this.config?.minPlayers ?? 2,
           ...(this.config ? { limits: { teamScoreLimit: this.config.teamScoreLimit, captureLimit: this.config.captureLimit, baseScoreLimit: this.config.baseScoreLimit } } : {}),
         };
         if (this.session) this.session.setRoster(m.players);
