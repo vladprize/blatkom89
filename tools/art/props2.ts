@@ -527,11 +527,24 @@ export function propPrims2(type: string, w: number, h: number, variant = 0): Pri
       break;
     }
     case 'tent': {
-      const canvasMat: Material = { ramp: H('#2a2a1c', '#3e3e28', '#55553a', '#6c6c4c', '#84845e'), pattern: (c) => (Math.abs(c.lx) < 0.5 ? -1.2 : null) };
+      // variants: 0 field hospital (red cross), 1 army (plain, a stencilled star), 2 a pioneers' tourist tent
+      const v = variant % 3;
+      const cols = [
+        ['#2a2a1c', '#3e3e28', '#55553a', '#6c6c4c', '#84845e'],
+        ['#1e2414', '#2e361e', '#40492a', '#535e38', '#687446'],
+        ['#1a2a44', '#243c60', '#30507a', '#406894', '#5482ac'],
+      ][v]!;
+      const canvasMat: Material = { ramp: H(...cols), pattern: (c) => (Math.abs(c.lx) < 0.5 ? -1.2 : null) };
       // a pitched roof: two sloped boxes meeting at the ridge (x = 0)
       p.push(box([-hw / 2 + 0.5, 0, 16], [hw - 1, h - 1, 16], { ...canvasMat, pattern: (c) => (c.nz > 0.5 ? (c.lx > hw / 2 - 1.5 ? 1 : null) : null) }, 'left', 2));
       p.push(box([hw / 2 - 0.5, 0, 22], [hw - 1, h - 1, 22], canvasMat, 'right', 2));
-      p.push(cross(hw / 2, 0, 22.4, 8, '#c8261c', 'cross'));
+      if (v === 0) p.push(cross(hw / 2, 0, 22.4, 8, '#c8261c', 'cross'));
+      else if (v === 1) p.push({ k: 'poly', pts: Array.from({ length: 10 }, (_, i) => [hw / 2 + Math.cos(-Math.PI / 2 + (i * Math.PI) / 5) * (i % 2 ? 2.4 : 5.6), Math.sin(-Math.PI / 2 + (i * Math.PI) / 5) * (i % 2 ? 2.4 : 5.6)] as [number, number]), z: 22.4, mat: { ramp: H('#5a1410', '#8a1c16'), flat: true }, group: 'star' });
+      else {
+        // an orange fly-sheet stripe and guy ropes
+        p.push(box([hw / 2 - 0.5, 0, 22.3], [hw - 3, 3, 0.3], { ramp: H('#c85a14'), flat: true }, 'stripe', 0.1));
+        for (const sy of [-1, 1]) p.push(cap([0, sy * (hh - 1), 20], [0, sy * (hh + 3), 1], 0.3, { ramp: H('#8a8478', '#b8b2a4') }, 'rope' + sy));
+      }
       break;
     }
     case 'iv_stand':
@@ -570,6 +583,7 @@ function cross(x: number, y: number, z: number, r: number, col: string, group: s
 }
 
 export const PROP_VARIANTS2: Record<string, number> = {
+  tent: 3,
   shelf: 6,
   fridge_case: 3,
   counter: 4,

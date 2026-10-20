@@ -102,7 +102,8 @@ export type FloorKey =
   | 'tile_green'
   | 'tile_beige'
   | 'marble'
-  | 'paving';
+  | 'paving'
+  | 'cobble';
 
 export function floorTexture(kind: FloorKey): Img {
   const img = new Img(T, T);
@@ -336,11 +337,30 @@ export function floorTexture(kind: FloorKey): Img {
       stains(img, 246, 5, hex('#2a2822'), 8, 24, 0.4);
       break;
     }
+    case 'cobble': {
+      // basalt setts: 8×8-texel stones in staggered rows, rounded corners, a worn lit edge, each its own tone
+      fill((u, v) => {
+        const row = v >> 3;
+        const off = row % 2 ? 4 : 0;
+        const su = (u + off) % 8;
+        const sv = v % 8;
+        const stone = (((u + off) >> 3) % 32) * 37 + (row % 32) * 11;
+        if (su === 0 || sv === 0 || ((su === 1 || su === 7) && (sv === 1 || sv === 7))) return q(hex('#191817'), 1);
+        const hue = noise2(stone, 1, 251);
+        const base = hue < 0.33 ? hex('#4a4744') : hue < 0.66 ? hex('#43454a') : hex('#4d4740');
+        let f = 0.82 + noise2(stone, 0, 252) * 0.26 + (pfbm(u, v, T, 64, 253) - 0.5) * 0.2 + (noise2(u, v, 254) - 0.5) * 0.08;
+        if (su === 1 || sv === 1) f *= 1.12;
+        if (su === 7 || sv === 7) f *= 0.8;
+        return q(base, step(f, u, v, 5, 0.62, 1.2));
+      });
+      stains(img, 255, 6, hex('#242220'), 10, 26, 0.35);
+      break;
+    }
   }
   return img;
 }
 
-export type WallKey = 'brick' | 'concrete' | 'panel' | 'corrugated' | 'fence_concrete' | 'roof_flat' | 'fence_chain' | 'plaster';
+export type WallKey = 'brick' | 'concrete' | 'panel' | 'corrugated' | 'fence_concrete' | 'roof_flat' | 'fence_chain' | 'plaster' | 'fence_iron' | 'water' | 'kremlin' | 'granite' | 'roof_church';
 
 /** 128x128 tileable wall-top textures. */
 export function wallTexture(kind: WallKey): Img {
@@ -388,6 +408,50 @@ export function wallTexture(kind: WallKey): Img {
           // the top of a painted interior partition: cream plaster with a darker cap line
           const cap = v % 64 === 0 ? 0.7 : 1;
           c = q(hex('#8e8676'), step((0.88 + noise2(u, v, 151) * 0.1 + (pnoise(u / 12, v / 12, 11, 152) - 0.5) * 0.16) * cap, u, v, 5, 0.66, 1.18));
+          break;
+        }
+        case 'fence_iron': {
+          // a wrought-iron railing seen from above: square bars every 8 texels (transparent between them)
+          c = u % 8 < 3 ? q(hex('#2c3036'), step(0.94 + noise2(u >> 3, v >> 5, 161) * 0.22 - (u % 8 === 2 ? 0.18 : u % 8 === 0 ? -0.1 : 0), u, v, 5, 0.7, 1.2)) : [0, 0, 0, 0];
+          break;
+        }
+        case 'water': {
+          // dark lake water: two crossing swell bands, a little noise, rare moonlit glints (tileable; the renderer scrolls it)
+          const TAU = Math.PI * 2;
+          const w1 = Math.sin(TAU * ((3 * u + 2 * v) / S) + pnoise(u / 32, v / 32, 4, 171) * 2.4);
+          const w2 = Math.sin(TAU * ((-2 * u + 5 * v) / S) + pnoise(u / 32, v / 32, 4, 172) * 2.4);
+          const f = 0.86 + w1 * 0.07 + w2 * 0.05 + (pnoise(u / 16, v / 16, 8, 173) - 0.5) * 0.14;
+          c = q(hex('#1c3440'), step(f, u, v, 5, 0.66, 1.3));
+          if (w1 > 0.9 && w2 > 0.3 && noise2(u, v, 174) > 0.5) c = mix(c, hex('#8ab4c8'), 0.45);
+          break;
+        }
+        case 'kremlin': {
+          // the fortress wall's top: dark-red brick, small bond, pale lime mortar, soot patches
+          const row = v >> 2;
+          const off = row % 2 ? 4 : 0;
+          const mortar = v % 4 === 0 || (u + off) % 8 === 0;
+          const bk = (((u + off) >> 3) % 16) * 13 + row * 7;
+          c = mortar ? hex('#3c2620') : q(hex('#70261c'), step(0.82 + noise2(bk, 0, 181) * 0.3 + (pnoise(u / 16, v / 16, 8, 182) - 0.5) * 0.24 + (noise2(u, v, 183) - 0.5) * 0.08, u, v, 5, 0.7, 1.2));
+          if (pnoise(u / 32, v / 32, 4, 184) > 0.72) c = mix(c, hex('#2a1a16'), 0.35);
+          break;
+        }
+        case 'granite': {
+          // polished dark-red and black granite blocks with fine speckle
+          const bu = u >> 5;
+          const bv = v >> 4;
+          const seam = u % 32 === 0 || v % 16 === 0;
+          const base = (bu + bv) % 3 === 0 ? '#262228' : '#5a2a26';
+          const speck = noise2(u, v, 191) > 0.88 ? 0.28 : noise2(u, v, 192) < 0.1 ? -0.2 : 0;
+          c = seam ? hex('#141214') : q(hex(base), step(0.9 + noise2(bu * 7 + bv, 0, 193) * 0.16 + speck, u, v, 5, 0.7, 1.25));
+          break;
+        }
+        case 'roof_church': {
+          // a church roof of painted green sheet metal: standing seams, rust streaks, a darker ridge every 64 px
+          const seam = u % 8 === 0;
+          const ridge = v % 64 < 2;
+          const shade = seam ? 1.16 : u % 8 === 1 ? 0.8 : 0.94;
+          c = q(hex('#2e5a42'), step(shade * (0.9 + pnoise(u / 32, v / 32, 4, 201) * 0.2) * (ridge ? 0.7 : 1), u, v, 5, 0.66, 1.22));
+          if (pnoise(u / 8, v / 8, 16, 202) > 0.8 && noise2(u >> 3, 0, 203) > 0.4) c = mix(c, hex('#6a3c20'), 0.4);
           break;
         }
       }

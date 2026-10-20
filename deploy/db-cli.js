@@ -3190,12 +3190,34 @@ var PROP_DEFS = {
   stretcher: P(16, 36, "rect", "low", false, "Stretcher"),
   ambulance: P(36, 80, "rect", "high", true, "Ambulance", { inset: 1 }),
   tent: P(52, 52, "rect", "high", true, "Tent"),
-  iv_stand: P(8, 8, "none", "floor", false, "IV stand")
+  iv_stand: P(8, 8, "none", "floor", false, "IV stand"),
+  // v0.23: the cemetery, the square and the pioneer camp (shared: flagpole)
+  flagpole: P(30, 10, "circle", "high", false, "Flagpole", { radius: 2 }),
+  grave: P(16, 8, "rect", "low", true, "Gravestone"),
+  grave_mound: P(16, 26, "none", "floor", false, "Grave"),
+  tomb: P(20, 34, "rect", "low", true, "Tomb"),
+  wreath: P(14, 14, "none", "floor", false, "Wreath"),
+  mourner: P(24, 24, "rect", "high", true, "Statue"),
+  memorial: P(44, 44, "rect", "high", true, "Memorial", { inset: 2 }),
+  dome: P(48, 48, "none", "high", false, "Dome"),
+  dome_small: P(28, 28, "none", "high", false, "Dome"),
+  spire: P(56, 56, "none", "high", false, "Tower roof"),
+  btr: P(40, 92, "rect", "high", true, "Armoured carrier", { inset: 1 }),
+  hedgehog: P(20, 20, "rect", "low", false, "Anti-tank hedgehog", { inset: 3 }),
+  barrier: P(44, 6, "rect", "low", false, "Barrier"),
+  campfire: P(30, 30, "circle", "low", false, "Campfire", { radius: 9 }),
+  watchtower: P(36, 36, "rect", "high", true, "Watchtower", { inset: 4 }),
+  goal: P(12, 44, "rect", "low", false, "Goal", { inset: 1 }),
+  boat: P(18, 44, "rect", "low", false, "Boat", { inset: 2 }),
+  bunk_bed: P(18, 38, "rect", "low", false, "Bunk bed"),
+  long_table: P(70, 26, "rect", "low", false, "Dining table", { inset: 1 }),
+  bugler: P(26, 26, "rect", "high", true, "Pioneer statue"),
+  rock: P(34, 26, "circle", "low", true, "Rock", { radius: 11 })
 };
 var PROP_TYPES = Object.keys(PROP_DEFS);
 
 // packages/shared/src/maps/types.ts
-var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital"];
+var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp"];
 
 // packages/shared/src/sim/math.ts
 var TAU = Math.PI * 2;
@@ -7261,7 +7283,7 @@ var coerce = {
 var NEVER = INVALID;
 
 // packages/shared/src/net/protocol.ts
-var PROTOCOL_VERSION = 7;
+var PROTOCOL_VERSION = 8;
 var CHAT_RULES = Object.freeze({ maxLength: 140, maxRaw: 400, burst: 4, refillMs: 2500, repeatMs: 4e3 });
 var roomId = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 var ClientMessageSchema = external_exports.discriminatedUnion("type", [

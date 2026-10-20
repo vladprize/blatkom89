@@ -99,6 +99,9 @@ const MAP_BLURB_EN: Record<MapId, string> = {
   dk: 'The auditorium, the stage, dressing rooms, the billiard room and the foyer.',
   gastronom: 'Aisles of shelves, counters, the warehouse and the loading dock.',
   hospital: 'Wards, the operating theatre, X-ray and one long corridor.',
+  cemetery: 'Gravel alleys between railed plots, a domed chapel and the crypt. Railings let bullets through, headstones don’t.',
+  square: 'The fortress wall, the many-domed cathedral, the granite tribune. Lorries, carriers and barricades on the cobbles.',
+  camp: 'Cabins, the dining hall, the club, a campfire ring and a lake with a jetty. Water stops you, not bullets.',
 };
 
 export function mapBlurb(id: MapId): string {

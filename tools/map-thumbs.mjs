@@ -27,7 +27,7 @@ page.on('pageerror', (e) => console.log('pageerror', e.message));
 await page.goto(pathToFileURL(file).href);
 await page.waitForFunction(() => !!window.__blatkom?.app, null, { timeout: 60000 });
 await page.evaluate(() => localStorage.setItem('blatkom89.tutorial.v1', '1'));
-const maps = await page.evaluate(() => window.__blatkom.mapOrder ?? ['factory', 'stroyka', 'dk', 'gastronom', 'hospital', 'garages', 'yard']);
+const maps = await page.evaluate(() => window.__blatkom.mapOrder ?? ['factory', 'stroyka', 'dk', 'gastronom', 'hospital', 'cemetery', 'square', 'camp', 'garages', 'yard']);
 for (const mapId of only.length ? only : maps) {
   await page.evaluate((mapId) => window.__blatkom.app.startPractice({ mapId, bots: 1, difficulty: 'easy' }), mapId);
   await page.waitForFunction(() => window.__blatkom?.game?.scene.getScene('game')?.session?.phase?.() === 'active', null, { timeout: 60000 });

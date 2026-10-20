@@ -52,6 +52,9 @@ export const MAP_NAMES: Record<string, string> = {
   dk: 'Дом культуры',
   gastronom: 'Гастроном',
   hospital: 'Больница №3',
+  cemetery: 'Кладбище',
+  square: 'Красная площадь',
+  camp: 'Пионерлагерь',
 };
 export const CHARACTER_NAMES: Record<string, string> = {
   petya: 'Петя «Комендант»',

@@ -12170,6 +12170,441 @@ function buildHospitalMap() {
   return b2.build();
 }
 
+// packages/shared/src/maps/cemetery.ts
+function buildCemeteryMap() {
+  const W = 1500;
+  const H = 1e3;
+  const CANDLE = 16752704;
+  const LAMP = 16760944;
+  const MOON = 10139880;
+  const CRYPT = 16724e3;
+  const b2 = new MapBuilder(
+    "cemetery",
+    "Old Cemetery",
+    "Everyone ends up here \u2014 some sooner than others",
+    "Gravel alleys between fenced family plots, a domed chapel in the middle and a crypt in the south. Railings stop you but not bullets; headstones stop both.",
+    W,
+    H,
+    "dirt"
+  ).ambient(1710120, 0.4).minimap("#33302a");
+  const plot = (x, y, w, h, gap, graves) => {
+    b2.floor("grass", x + 3, y + 3, w - 6, h - 6);
+    const g = 26;
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    b2.hwall("fence_iron", x, x + w, y, 3, gap === "n" ? [[cx - g / 2, cx + g / 2]] : []);
+    b2.hwall("fence_iron", x, x + w, y + h - 3, 3, gap === "s" ? [[cx - g / 2, cx + g / 2]] : []);
+    b2.vwall("fence_iron", x, y + 3, y + h - 3, 3, gap === "w" ? [[cy - g / 2, cy + g / 2]] : []);
+    b2.vwall("fence_iron", x + w - 3, y + 3, y + h - 3, 3, gap === "e" ? [[cy - g / 2, cy + g / 2]] : []);
+    const rot = gap === "n" ? 180 : gap === "e" ? 270 : gap === "w" ? 90 : 0;
+    const [fx, fy] = rot === 0 ? [0, 17] : rot === 180 ? [0, -17] : rot === 90 ? [-17, 0] : [17, 0];
+    for (const [gx, gy, v] of graves) {
+      if (v >= 4) {
+        b2.prop("tomb", x + gx, y + gy, rot, v % 4);
+        continue;
+      }
+      b2.prop("grave", x + gx, y + gy, rot, v);
+      b2.prop("grave_mound", x + gx + fx, y + gy + fy, rot, (gx + gy + v) % 3);
+    }
+  };
+  b2.floor("gravel", 700, 0, 100, 330).floor("gravel", 0, 560, W, 70).floor("gravel", 150, 200, 1200, 40).floor("gravel", 150, 830, 1200, 40).floor("gravel", 150, 200, 40, 670).floor("gravel", 1310, 200, 40, 670).floor("gravel", 460, 200, 40, 670).floor("gravel", 1e3, 200, 40, 670).floor("gravel", 700, 500, 100, 330).floor("paving", 640, 300, 220, 30).floor("paving", 1060, 180, 100, 100).floor("paving", 340, 180, 100, 100);
+  b2.hwall("fence_iron", 0, W, 0, 4, [[700, 800]]).hwall("fence_concrete", 0, W, H - 14, 14).vwall("fence_iron", 0, 4, H - 14, 4).vwall("fence_iron", W - 4, 4, H - 14, 4);
+  b2.wall("concrete", 680, 0, 20, 22).wall("concrete", 800, 0, 20, 22);
+  b2.decal({ kind: "line", x: 700, y: 6, w: 100, h: 6, color: "#16181c", alpha: 0.95, layer: "roof" }).decal({ kind: "star", x: 750, y: 9, r: 7, color: "#c8261c", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 750, y: 34, text: "\u0412\u0415\u0427\u041D\u0410\u042F \u041F\u0410\u041C\u042F\u0422\u042C", size: 8, color: "#a8a08e", alpha: 0.75 });
+  b2.light(690, 26, 120, LAMP, 0.7, { fixture: "lamp" }).light(810, 26, 120, LAMP, 0.7, { fixture: "lamp" });
+  b2.wall("roof_flat", 230, 24, 130, 90, "lodge");
+  b2.decal({ kind: "text", x: 295, y: 69, text: "\u0421\u0422\u041E\u0420\u041E\u0416", size: 9, color: "#c8b48a", alpha: 0.7, layer: "roof" });
+  b2.prop("truck", 120, 120, 90, 0).prop("barrel_rust", 380, 40).prop("barrel_rust", 392, 56).prop("crate_wood", 400, 100);
+  b2.light(300, 122, 110, LAMP, 0.75, { fixture: "window", flicker: "soft" });
+  b2.wall("roof_garage", 1140, 24, 200, 96, "shed");
+  b2.decal({ kind: "star", x: 1240, y: 72, r: 22, color: "#7a1612", alpha: 0.6, layer: "roof" });
+  b2.prop("wheelbarrow", 1370, 70, 90).prop("crate_wood", 1110, 50).prop("crate_wood", 1110, 70).prop("cable_reel", 1400, 130);
+  b2.light(1240, 128, 110, LAMP, 0.7, { fixture: "window" });
+  b2.wall("roof_church", 670, 340, 160, 160, "chapel");
+  b2.prop("dome", 750, 410, 0, 1);
+  b2.decal({ kind: "stairs", x: 708, y: 500, w: 84, h: 40 });
+  b2.prop("column", 692, 516).prop("column", 808, 516);
+  b2.light(750, 520, 150, CRYPT, 0.75, { fixture: "none", flicker: "soft" }).light(750, 470, 70, CANDLE, 0.8, { fixture: "none" });
+  b2.prop("mourner", 652, 410).prop("mourner", 848, 410).prop("mourner", 652, 280).prop("mourner", 848, 280);
+  b2.wall("roof_church", 210, 400, 110, 120, "chapel_w").wall("roof_church", 1180, 400, 110, 120, "chapel_e");
+  b2.prop("dome_small", 265, 440, 0, 0).prop("dome_small", 1235, 440, 0, 0);
+  b2.decal({ kind: "stairs", x: 235, y: 520, w: 60, h: 30 }).decal({ kind: "stairs", x: 1205, y: 520, w: 60, h: 30 });
+  b2.light(265, 540, 120, CRYPT, 0.6, { fixture: "none", flicker: "soft" }).light(1235, 540, 120, CRYPT, 0.6, { fixture: "none", flicker: "soft" });
+  b2.prop("memorial", 1110, 230).prop("planter", 390, 230);
+  b2.light(1110, 252, 120, 16751152, 0.9, { fixture: "none", flicker: "soft" });
+  b2.vwall("concrete", 680, 690, 800, 16).vwall("concrete", 804, 690, 800, 16).hwall("concrete", 680, 820, 784, 16);
+  b2.floor("concrete_dirty", 696, 690, 108, 94);
+  b2.decal({ kind: "stairs", x: 712, y: 712, w: 76, h: 66 }).decal({ kind: "stain", x: 750, y: 700, r: 14, color: "#5a0a08", alpha: 0.6, seed: 4 });
+  b2.light(750, 764, 130, CRYPT, 0.95, { fixture: "none", flicker: "soft" });
+  b2.prop("mourner", 650, 712).prop("mourner", 850, 712);
+  const north = [
+    [22, 42, 0],
+    [50, 42, 4],
+    [78, 42, 2]
+  ];
+  plot(240, 250, 100, 70, "s", [
+    [24, 22, 1],
+    [52, 22, 0],
+    [78, 22, 3]
+  ]);
+  plot(1160, 250, 100, 70, "s", [
+    [24, 22, 3],
+    [52, 22, 0],
+    [78, 22, 1]
+  ]);
+  plot(520, 240, 110, 80, "s", north);
+  plot(870, 240, 110, 80, "s", north);
+  plot(340, 400, 100, 120, "e", [
+    [26, 24, 4],
+    [26, 60, 0],
+    [26, 92, 1]
+  ]);
+  plot(1060, 400, 100, 120, "w", [
+    [74, 24, 4],
+    [74, 60, 0],
+    [74, 92, 1]
+  ]);
+  plot(520, 380, 110, 120, "s", [
+    [28, 30, 2],
+    [56, 30, 0],
+    [84, 30, 3],
+    [40, 80, 4]
+  ]);
+  plot(870, 380, 110, 120, "s", [
+    [28, 30, 3],
+    [56, 30, 0],
+    [84, 30, 2],
+    [70, 80, 4]
+  ]);
+  plot(240, 680, 120, 90, "n", [
+    [26, 56, 0],
+    [60, 56, 4],
+    [94, 56, 1]
+  ]);
+  plot(1140, 680, 120, 90, "n", [
+    [26, 56, 1],
+    [60, 56, 4],
+    [94, 56, 0]
+  ]);
+  plot(520, 680, 110, 90, "w", [
+    [70, 22, 2],
+    [70, 66, 0]
+  ]);
+  plot(870, 680, 110, 90, "e", [
+    [40, 22, 2],
+    [40, 66, 0]
+  ]);
+  b2.prop("wreath", 300, 790).prop("wreath", 1200, 790).prop("wreath", 575, 340).prop("wreath", 925, 340);
+  for (const [x, y, v] of [
+    [60, 260, 0],
+    [90, 260, 3],
+    [60, 340, 1],
+    [90, 340, 0],
+    [60, 420, 2],
+    [1440, 260, 0],
+    [1410, 260, 3],
+    [1440, 340, 1],
+    [1410, 340, 0],
+    [1440, 420, 2]
+  ]) {
+    b2.prop("grave", x, y, 0, v);
+    b2.prop("grave_mound", x, y + 17, 0, (x + v) % 3);
+  }
+  b2.wall("fence_concrete", 40, 660, 110, 10).wall("fence_concrete", 1350, 660, 110, 10);
+  b2.prop("car_wreck", 300, 920, 90, 0).prop("barrel_rust", 40, 840).prop("barrel_rust", 54, 856).prop("crate_wood", 420, 940);
+  b2.prop("car_volga", 1200, 920, 90, 0).prop("barrel_blue", 1460, 840).prop("barrel_blue", 1446, 856).prop("crate_wood", 1080, 940);
+  b2.prop("bench", 600, 540).prop("bench", 900, 540).prop("bench", 420, 860).prop("bench", 1080, 860);
+  b2.tree(80, 130, 60, 1).tree(1420, 130, 60, 2).tree(110, 500, 56, 3).tree(1390, 500, 56, 4).tree(420, 330, 48, 5).tree(1080, 330, 48, 6).tree(600, 900, 56, 7).tree(900, 900, 56, 8).tree(560, 120, 52, 9).tree(940, 120, 52, 10).tree(60, 960, 50, 11).tree(1440, 960, 50, 12);
+  b2.overhead({ kind: "bush", x: 380, y: 620, w: 60, h: 30, seed: 3 }).overhead({ kind: "bush", x: 1060, y: 620, w: 60, h: 30, seed: 4 }).overhead({ kind: "bush", x: 200, y: 950, w: 70, h: 30, seed: 5 }).overhead({ kind: "bush", x: 1230, y: 950, w: 70, h: 30, seed: 6 });
+  for (const [x, y] of [
+    [690, 150],
+    [810, 150],
+    [430, 610],
+    [1070, 610],
+    [180, 860],
+    [1320, 860],
+    [180, 210],
+    [1320, 210]
+  ]) {
+    b2.prop("lamp_post", x, y);
+    b2.light(x, y + 8, 150, LAMP, 0.75, { fixture: "street", flicker: x === 430 || x === 1320 ? "broken" : "soft" });
+  }
+  for (const [x, y] of [
+    [292, 296],
+    [1208, 296],
+    [575, 300],
+    [925, 300],
+    [300, 742],
+    [1200, 742],
+    [592, 712],
+    [908, 712]
+  ])
+    b2.light(x, y, 60, CANDLE, 0.7, { fixture: "none", flicker: "soft" });
+  b2.light(750, 600, 260, MOON, 0.35, { fixture: "none" });
+  b2.decal({ kind: "stain", x: 760, y: 120, r: 12, color: "#5a0a08", alpha: 0.5, seed: 1 }).decal({ kind: "stain", x: 470, y: 600, r: 10, color: "#5a0a08", alpha: 0.5, seed: 2 }).decal({ kind: "stain", x: 1030, y: 600, r: 10, color: "#5a0a08", alpha: 0.5, seed: 3 });
+  b2.spawn(110, 900, -45).spawn(1390, 900, -135).spawn(712, 50, 90).spawn(788, 50, 90).spawn(60, 600, 0).spawn(1440, 600, 180).spawn(250, 160, 45).spawn(1250, 160, 135).spawn(420, 790, -45).spawn(1080, 790, -135).spawn(560, 600, 0).spawn(940, 600, 180).spawn(170, 380, 0).spawn(1330, 380, 180);
+  b2.pickup("obrez", 480, 300, 16e3).pickup("obrez", 1020, 300, 16e3).pickup("avtomat", 750, 250, 2e4).pickup("avtomat", 750, 860, 2e4).pickup("obrez", 170, 700, 16e3).pickup("obrez", 1330, 700, 16e3).pickup("avtomat", 480, 760, 2e4).pickup("avtomat", 1020, 760, 2e4);
+  b2.medkit(750, 740, 2e4).medkit(110, 300, 2e4).medkit(1390, 300, 2e4).medkit(300, 600, 22e3).medkit(1200, 600, 22e3);
+  b2.supply(750, 595).supply(330, 860).supply(1170, 860).supply(480, 470).supply(1020, 470).supply(750, 180);
+  b2.flagStand(0, 80, 760).flagStand(1, 1420, 760);
+  b2.base(300, 595).base(750, 595).base(1200, 595);
+  return b2.build();
+}
+
+// packages/shared/src/maps/square.ts
+function buildSquareMap() {
+  const W = 1500;
+  const H = 1e3;
+  const SODIUM = 16756810;
+  const RED = 16726566;
+  const WARM = 16764810;
+  const COLD = 12375295;
+  const b2 = new MapBuilder(
+    "square",
+    "Red Square",
+    "The country\u2019s main square \u2014 tonight it belongs to the district",
+    "The fortress wall, the many-domed cathedral and the granite tribune; army lorries, armoured carriers and barricades all over the cobbles. Wide open ground between solid cover.",
+    W,
+    H,
+    "cobble"
+  ).ambient(2365988, 0.46).minimap("#3a2e2a");
+  b2.wall("kremlin", 0, 0, W, 110, "kremlin");
+  b2.wall("kremlin", 680, 0, 140, 170, "tower_c").wall("kremlin", 190, 0, 100, 140, "tower_w").wall("kremlin", 1210, 0, 100, 140, "tower_e");
+  b2.prop("spire", 750, 80).prop("spire", 240, 66).prop("spire", 1260, 66);
+  b2.decal({ kind: "line", x: 722, y: 120, w: 56, h: 50, color: "#14100e", alpha: 0.95, layer: "roof" }).decal({ kind: "star", x: 750, y: 138, r: 12, color: "#d8262a", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 750, y: 160, text: "1989", size: 7, color: "#e8c060", alpha: 0.9, layer: "roof" });
+  for (let x = 6; x < W; x += 22) {
+    if (x > 674 && x < 826 || x > 184 && x < 296 || x > 1204 && x < 1316) continue;
+    b2.decal({ kind: "line", x, y: 102, w: 12, h: 8, color: "#5a120e", alpha: 0.95, layer: "roof" });
+  }
+  b2.floor("grass", 0, 110, W, 60);
+  for (const x of [80, 140, 350, 420, 490, 560, 620, 880, 940, 1010, 1080, 1150, 1360, 1420]) b2.tree(x, 140, 40, x);
+  for (const x of [330, 520, 980, 1170]) b2.prop("flagpole", x, 182, 0, 0);
+  b2.light(750, 190, 200, RED, 0.85, { fixture: "none" }).light(240, 160, 140, SODIUM, 0.7, { fixture: "street" }).light(1260, 160, 140, SODIUM, 0.7, { fixture: "street" });
+  b2.wall("brick", 0, 210, 170, 170, "museum").wall("brick", 0, 600, 170, 160, "museum_s");
+  b2.prop("spire", 34, 236).prop("spire", 136, 236);
+  b2.decal({ kind: "text", x: 85, y: 300, text: "\u041C\u0423\u0417\u0415\u0419", size: 12, color: "#e8d0a0", alpha: 0.7, layer: "roof" });
+  b2.floor("asphalt", 0, 380, 200, 220);
+  b2.decal({ kind: "stairs", x: 172, y: 430, w: 28, h: 120 });
+  b2.light(190, 470, 160, WARM, 0.8, { fixture: "street" });
+  b2.wall("roof_church", 1180, 260, 230, 280, "cathedral");
+  b2.prop("dome", 1295, 400, 0, 1).prop("dome_small", 1220, 300, 0, 2).prop("dome_small", 1370, 300, 0, 3).prop("dome_small", 1220, 500, 0, 4).prop("dome_small", 1370, 500, 0, 5).prop("dome_small", 1295, 300, 0, 3).prop("dome_small", 1295, 500, 0, 2).prop("dome_small", 1220, 400, 0, 5).prop("dome_small", 1370, 400, 0, 4);
+  b2.floor("marble", 1160, 240, 270, 320);
+  b2.light(1295, 250, 160, WARM, 0.8, { fixture: "none" }).light(1295, 560, 160, WARM, 0.8, { fixture: "none" });
+  b2.wall("granite", 680, 380, 140, 120, "tribune");
+  b2.decal({ kind: "line", x: 694, y: 394, w: 112, h: 92, color: "#2a1414", alpha: 0.55, layer: "roof" }).decal({ kind: "line", x: 712, y: 412, w: 76, h: 56, color: "#3e1c1a", alpha: 0.6, layer: "roof" }).decal({ kind: "star", x: 750, y: 440, r: 11, color: "#c8261c", alpha: 0.9, layer: "roof" });
+  b2.decal({ kind: "stairs", x: 712, y: 500, w: 76, h: 30 });
+  for (const sx of [0, 1]) {
+    const x0 = sx ? 840 : 540;
+    b2.wall("fence_concrete", x0, 390, 120, 10);
+    b2.prop("bench_row", x0 + 60, 420).prop("bench_row", x0 + 60, 446).prop("bench_row", x0 + 60, 472);
+    for (let i = 0; i < 4; i++) b2.prop("flagpole", x0 + 15 + i * 30, 376, 0, i % 3);
+  }
+  b2.light(600, 430, 140, RED, 0.6, { fixture: "none" }).light(900, 430, 140, RED, 0.6, { fixture: "none" }).light(750, 520, 150, WARM, 0.7, { fixture: "none" });
+  b2.floor("marble", 680, 640, 140, 120);
+  b2.decal({ kind: "stairs", x: 690, y: 760, w: 120, h: 26 });
+  b2.prop("memorial", 750, 690);
+  for (const [x, y] of [
+    [690, 650],
+    [810, 650],
+    [690, 750],
+    [810, 750]
+  ])
+    b2.prop("flagpole", x, y, 0, 1);
+  b2.prop("barrier", 620, 640, 90).prop("barrier", 880, 640, 90).prop("barrier", 620, 760, 90).prop("barrier", 880, 760, 90);
+  b2.light(750, 712, 180, 16751152, 1, { fixture: "none", flicker: "soft" });
+  b2.prop("truck", 330, 250, 90, 1).prop("btr", 580, 260, 90).prop("btr", 920, 260, 270).prop("truck", 1080, 600, 270, 1).prop("btr", 420, 620, 90).prop("truck", 270, 820, 90, 0).prop("btr", 1180, 820, 270).prop("tent", 300, 460, 0, 1).prop("tent", 370, 460, 0, 1).prop("tent", 1110, 700, 0, 0).prop("crate_green", 450, 470).prop("crate_green", 450, 486).prop("crate_green", 1040, 700).prop("crate_green", 1040, 716).prop("sandbags", 690, 244).prop("sandbags", 810, 244).prop("sandbags", 480, 360).prop("sandbags", 1020, 360).prop("sandbags", 530, 780).prop("sandbags", 970, 780).prop("hedgehog", 560, 560).prop("hedgehog", 940, 560).prop("hedgehog", 250, 380).prop("hedgehog", 1250, 640).prop("hedgehog", 640, 860).prop("hedgehog", 860, 860).prop("barrier", 470, 540).prop("barrier", 1030, 540).prop("produce_stall", 1100, 470, 0, 1).prop("kiosk", 400, 760, 90).prop("kiosk", 1430, 760, 270);
+  for (let i = 0; i < 6; i++) {
+    b2.decal({ kind: "line", x: 222 + i * 12, y: 600, w: 7, h: 56, color: "#d8d4c8", alpha: 0.55 });
+    b2.decal({ kind: "line", x: 1220 + i * 12, y: 600, w: 7, h: 56, color: "#d8d4c8", alpha: 0.55 });
+  }
+  b2.wall("roof_flat", 0, 890, 650, 110, "arcade_w").wall("roof_flat", 850, 890, 650, 110, "arcade_e");
+  for (let x = 30; x < 640; x += 80) b2.decal({ kind: "line", x, y: 920, w: 50, h: 52, color: "#2c4a5a", alpha: 0.55, layer: "roof" });
+  for (let x = 880; x < 1490; x += 80) b2.decal({ kind: "line", x, y: 920, w: 50, h: 52, color: "#2c4a5a", alpha: 0.55, layer: "roof" });
+  b2.floor("asphalt", 0, 840, W, 50).floor("asphalt", 650, 890, 200, 110);
+  b2.decal({ kind: "stairs", x: 680, y: 920, w: 140, h: 70 });
+  for (const x of [180, 520, 980, 1320]) {
+    b2.prop("lamp_post", x, 870);
+    b2.light(x, 878, 170, SODIUM, 0.8, { fixture: "street", flicker: x === 520 ? "broken" : "soft" });
+  }
+  for (const [x, y] of [
+    [250, 560],
+    [1250, 560],
+    [560, 330],
+    [940, 330],
+    [520, 700],
+    [980, 700]
+  ]) {
+    b2.prop("lamp_post", x, y);
+    b2.light(x, y + 8, 160, SODIUM, 0.75, { fixture: "street" });
+  }
+  b2.light(400, 300, 180, COLD, 0.35, { fixture: "none" }).light(1100, 300, 180, COLD, 0.35, { fixture: "none" });
+  b2.decal({ kind: "stain", x: 760, y: 600, r: 14, color: "#5a0a08", alpha: 0.55, seed: 7 }).decal({ kind: "stain", x: 420, y: 700, r: 10, color: "#5a0a08", alpha: 0.5, seed: 8 }).decal({ kind: "stain", x: 1080, y: 420, r: 10, color: "#5a0a08", alpha: 0.5, seed: 9 });
+  b2.spawn(100, 470, 0).spawn(1450, 600, 180).spawn(714, 200, 90).spawn(786, 200, 90).spawn(250, 190, 45).spawn(1250, 190, 135).spawn(330, 560, 0).spawn(1170, 640, 180).spawn(120, 800, -45).spawn(1380, 800, -135).spawn(560, 840, -60).spawn(940, 840, -120).spawn(470, 200, 60).spawn(1450, 200, 120);
+  b2.pickup("avtomat", 750, 590, 2e4).pickup("obrez", 420, 380, 16e3).pickup("obrez", 1080, 380, 16e3).pickup("avtomat", 300, 700, 2e4).pickup("avtomat", 1200, 720, 2e4).pickup("obrez", 750, 850, 16e3).pickup("obrez", 220, 690, 16e3).pickup("obrez", 1440, 680, 16e3);
+  b2.medkit(750, 300, 2e4).medkit(200, 360, 22e3).medkit(1440, 240, 22e3).medkit(360, 860, 2e4).medkit(1140, 860, 2e4);
+  b2.supply(750, 590).supply(330, 380).supply(1100, 380).supply(560, 680).supply(940, 680).supply(750, 850);
+  b2.flagStand(0, 80, 540).flagStand(1, 1440, 680);
+  b2.base(330, 560).base(750, 585).base(1170, 640);
+  return b2.build();
+}
+
+// packages/shared/src/maps/camp.ts
+function buildCampMap() {
+  const W = 1500;
+  const H = 1e3;
+  const WARM = 16764810;
+  const SODIUM = 16756810;
+  const FIRE = 16747050;
+  const MOON = 11060464;
+  const PALE = 13168856;
+  const b2 = new MapBuilder(
+    "camp",
+    "Pioneer Camp",
+    "Be prepared! \u2014 Always prepared!",
+    "Wooden cabins, the dining hall and the club round the parade square, a campfire ring and a football pitch, and a lake with a jetty. Fights indoors and across open lawns.",
+    W,
+    H,
+    "grass"
+  ).ambient(1450032, 0.42).minimap("#2c3a2a");
+  b2.floor("dirt", 700, 0, 100, 640).floor("dirt", 60, 290, 1380, 40).floor("dirt", 60, 490, 1380, 40).floor("dirt", 60, 290, 40, 500).floor("dirt", 1400, 290, 40, 500).floor("dirt", 580, 290, 40, 380).floor("dirt", 880, 290, 40, 380).floor("sand", 0, 820, W, 90).floor("asphalt", 640, 170, 220, 210);
+  b2.wall("water", 0, 900, 840, 100).wall("water", 840, 900, 40, 50).wall("water", 960, 900, 40, 50).wall("water", 1e3, 900, 500, 100).wall("water", 840, 990, 160, 10);
+  b2.floor("wood", 880, 850, 80, 140).floor("wood", 840, 950, 160, 40);
+  b2.prop("boat", 800, 950, 0, 0).prop("boat", 1040, 950, 0, 1).prop("boat", 1100, 935, 90, 2).prop("boat", 300, 930, 90, 0);
+  b2.prop("rock", 120, 890, 0, 0).prop("rock", 200, 905, 0, 1).prop("rock", 1360, 890, 0, 2).prop("rock", 1440, 905, 0, 0);
+  for (const x of [870, 970]) {
+    b2.prop("lamp_post", x, 860);
+    b2.light(x, 868, 150, SODIUM, 0.75, { fixture: "street", flicker: x === 970 ? "broken" : "soft" });
+  }
+  b2.light(750, 960, 300, MOON, 0.4, { fixture: "none" });
+  b2.hwall("fence_chain", 0, W, 0, 4, [[700, 800]]).vwall("fence_chain", 0, 4, 900, 4).vwall("fence_chain", W - 4, 4, 900, 4);
+  b2.wall("brick", 684, 0, 16, 26).wall("brick", 800, 0, 16, 26);
+  b2.decal({ kind: "line", x: 680, y: 8, w: 140, h: 16, color: "#d9c7a3", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 750, y: 16, text: "\u041F\u0418\u041E\u041D\u0415\u0420\u041B\u0410\u0413\u0415\u0420\u042C \xAB\u0417\u0412\u0401\u0417\u0414\u041E\u0427\u041A\u0410\xBB", size: 7, color: "#9e2a22", alpha: 0.95, layer: "roof" }).decal({ kind: "star", x: 750, y: 38, r: 8, color: "#c8261c", alpha: 0.9 });
+  b2.prop("bugler", 660, 60, 0, 0).prop("bugler", 840, 60, 0, 1);
+  b2.light(700, 40, 130, WARM, 0.75, { fixture: "lamp" }).light(800, 40, 130, WARM, 0.75, { fixture: "lamp" });
+  b2.room("plaster", 260, 80, 320, 190, 10, [
+    { side: "s", at: 140, width: 40 },
+    { side: "e", at: 70, width: 40 },
+    { side: "w", at: 70, width: 40 }
+  ], "tile_beige");
+  b2.prop("long_table", 360, 135).prop("long_table", 480, 135).prop("long_table", 360, 205).prop("long_table", 480, 205);
+  b2.prop("counter", 300, 100).prop("crate_wood", 285, 245).prop("soda_machine", 556, 100);
+  b2.decal({ kind: "line", x: 360, y: 82, w: 120, h: 10, color: "#2a4a3a", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 420, y: 87, text: "\u0421\u0422\u041E\u041B\u041E\u0412\u0410\u042F", size: 7, color: "#e8dcc0", alpha: 0.95, layer: "roof" });
+  b2.light(360, 170, 130, WARM, 0.75, { fixture: "lamp", flicker: "soft" }).light(490, 170, 130, WARM, 0.7, { fixture: "lamp" });
+  b2.room("plaster", 920, 80, 320, 190, 10, [
+    { side: "s", at: 140, width: 40 },
+    { side: "w", at: 70, width: 40 },
+    { side: "e", at: 70, width: 40 }
+  ], "parquet");
+  b2.floor("wood", 930, 90, 300, 50);
+  b2.prop("curtain", 1020, 96).prop("curtain", 1140, 96).prop("stage_speaker", 950, 120).prop("stage_speaker", 1210, 120);
+  b2.prop("theater_seats", 1030, 175).prop("theater_seats", 1130, 175).prop("theater_seats", 1030, 205).prop("theater_seats", 1130, 205).prop("theater_seats", 1030, 235).prop("theater_seats", 1130, 235);
+  b2.decal({ kind: "star", x: 1080, y: 112, r: 14, color: "#c8261c", alpha: 0.85 }).decal({ kind: "line", x: 1020, y: 82, w: 120, h: 10, color: "#7a1612", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 1080, y: 87, text: "\u041A\u041B\u0423\u0411", size: 7, color: "#e8dcc0", alpha: 0.95, layer: "roof" });
+  b2.light(1080, 140, 150, 16730682, 0.75, { fixture: "none", flicker: "soft" }).light(1080, 230, 120, WARM, 0.6, { fixture: "lamp" });
+  b2.prop("bugler", 750, 260, 0, 0);
+  for (const [x, y] of [
+    [670, 190],
+    [830, 190],
+    [670, 340],
+    [830, 340]
+  ])
+    b2.prop("flagpole", x, y, 0, 1);
+  b2.prop("planter", 690, 270).prop("planter", 810, 270);
+  b2.light(750, 300, 170, WARM, 0.75, { fixture: "none" });
+  const cabin = (x, n, doorSide) => {
+    b2.room("plaster", x, 340, 170, 140, 8, [
+      { side: "n", at: 65, width: 40 },
+      { side: "s", at: 65, width: 40 },
+      { side: doorSide, at: 50, width: 36 }
+    ], "wood");
+    for (const [dx, dy] of [
+      [24, 40],
+      [46, 40],
+      [124, 40],
+      [146, 40],
+      [24, 106],
+      [146, 106]
+    ])
+      b2.prop("bunk_bed", x + dx, 340 + dy);
+    b2.decal({ kind: "line", x: x + 45, y: 341, w: 80, h: 6, color: "#d9c7a3", alpha: 0.9, layer: "roof" }).decal({ kind: "text", x: x + 85, y: 344, text: `\u041A\u041E\u0420\u041F\u0423\u0421 ${n}`, size: 5, color: "#5a1612", alpha: 0.95, layer: "roof" });
+    b2.light(x + 85, 410, 100, PALE, 0.55, { fixture: "lamp", flicker: n === 3 ? "broken" : "none" });
+  };
+  cabin(110, 1, "e");
+  cabin(400, 2, "w");
+  cabin(930, 3, "e");
+  cabin(1220, 4, "w");
+  b2.room("plaster", 660, 540, 180, 100, 8, [
+    { side: "n", at: 70, width: 40 },
+    { side: "w", at: 30, width: 36 },
+    { side: "e", at: 30, width: 36 }
+  ], "tile_white");
+  b2.prop("hospital_bed", 705, 618, 90).prop("hospital_bed", 795, 618, 90).prop("med_cabinet", 700, 556).prop("med_screen", 750, 618);
+  b2.decal({ kind: "cross", x: 750, y: 595, r: 9, color: "#c8312a", alpha: 0.85 }).decal({ kind: "line", x: 700, y: 542, w: 100, h: 6, color: "#d9c7a3", alpha: 0.9, layer: "roof" }).decal({ kind: "text", x: 750, y: 545, text: "\u041C\u0415\u0414\u041F\u0423\u041D\u041A\u0422", size: 5, color: "#9e2a22", alpha: 0.95, layer: "roof" });
+  b2.light(750, 590, 110, 14217471, 0.7, { fixture: "lamp" });
+  b2.floor("dirt", 650, 660, 200, 150);
+  b2.prop("campfire", 750, 735);
+  for (const [x, y, r] of [
+    [750, 680, 0],
+    [750, 790, 0],
+    [680, 735, 90],
+    [820, 735, 90]
+  ])
+    b2.prop("bench", x, y, r);
+  b2.light(750, 735, 260, FIRE, 1.1, { fixture: "none", flicker: "soft" });
+  b2.floor("grass", 980, 560, 360, 220);
+  b2.decal({ kind: "dashrect", x: 990, y: 570, w: 340, h: 200, color: "#d8d4c8", alpha: 0.5 }).decal({ kind: "line", x: 1159, y: 570, w: 2, h: 200, color: "#d8d4c8", alpha: 0.5 }).decal({ kind: "star", x: 1160, y: 670, r: 26, color: "#a8261c", alpha: 0.45 });
+  b2.prop("goal", 996, 670, 0).prop("goal", 1324, 670, 180);
+  b2.prop("bench", 1100, 548).prop("bench", 1220, 548).prop("bench", 1100, 792).prop("bench", 1220, 792);
+  b2.light(1160, 670, 220, SODIUM, 0.55, { fixture: "none" });
+  b2.wall("roof_garage", 330, 570, 110, 60, "shed");
+  b2.prop("tent", 260, 700, 0, 2).prop("tent", 440, 740, 0, 1).prop("crate_green", 340, 660).prop("crate_green", 360, 660).prop("watchtower", 150, 760);
+  b2.prop("flagpole", 470, 560, 0, 0).prop("flagpole", 500, 560, 0, 2);
+  b2.light(150, 760, 160, WARM, 0.7, { fixture: "lamp", flicker: "soft" });
+  b2.prop("watchtower", 1350, 760).prop("ambulance", 1440, 500, 0, 1).prop("crate_wood", 1290, 820).prop("crate_wood", 1310, 820).prop("tent", 1060, 830, 0, 2);
+  b2.light(1350, 760, 160, WARM, 0.7, { fixture: "lamp" });
+  for (const [x, y, s] of [
+    [40, 60, 70],
+    [140, 40, 64],
+    [230, 40, 60],
+    [610, 60, 56],
+    [890, 60, 56],
+    [1290, 40, 60],
+    [1380, 50, 64],
+    [1460, 70, 70],
+    [40, 220, 60],
+    [1460, 220, 60],
+    [620, 470, 50],
+    [880, 470, 50],
+    [40, 820, 60],
+    [560, 790, 56],
+    [940, 790, 56],
+    [1460, 820, 60],
+    [210, 560, 52],
+    [1290, 520, 52]
+  ])
+    b2.tree(x, y, s, x + y);
+  for (const [x, y] of [
+    [640, 160],
+    [860, 160],
+    [80, 300],
+    [1420, 300],
+    [600, 520],
+    [900, 520],
+    [80, 520],
+    [1420, 520]
+  ]) {
+    b2.prop("lamp_post", x, y);
+    b2.light(x, y + 8, 150, SODIUM, 0.75, { fixture: "street", flicker: x === 900 ? "broken" : "soft" });
+  }
+  b2.decal({ kind: "stain", x: 750, y: 470, r: 12, color: "#5a0a08", alpha: 0.5, seed: 11 }).decal({ kind: "stain", x: 330, y: 300, r: 10, color: "#5a0a08", alpha: 0.5, seed: 12 }).decal({ kind: "stain", x: 1170, y: 300, r: 10, color: "#5a0a08", alpha: 0.5, seed: 13 });
+  b2.spawn(90, 680, 0).spawn(1410, 680, 180).spawn(712, 60, 90).spawn(788, 60, 90).spawn(80, 150, 45).spawn(1420, 150, 135).spawn(200, 300, 0).spawn(1300, 300, 180).spawn(340, 860, -45).spawn(1160, 860, -135).spawn(530, 600, 0).spawn(970, 600, 180).spawn(600, 220, 45).spawn(900, 220, 135);
+  b2.pickup("obrez", 420, 230, 16e3).pickup("obrez", 1080, 230, 16e3).pickup("avtomat", 195, 410, 2e4).pickup("avtomat", 1305, 410, 2e4).pickup("obrez", 485, 410, 16e3).pickup("obrez", 1015, 410, 16e3).pickup("avtomat", 750, 830, 2e4).pickup("avtomat", 750, 140, 2e4);
+  b2.medkit(750, 585, 18e3).medkit(300, 740, 22e3).medkit(1200, 740, 22e3).medkit(300, 120, 22e3).medkit(1170, 120, 22e3);
+  b2.supply(750, 505).supply(330, 510).supply(1170, 510).supply(240, 820).supply(1260, 820).supply(750, 380);
+  b2.flagStand(0, 90, 600).flagStand(1, 1410, 600);
+  b2.base(330, 510).base(750, 505).base(1170, 510);
+  return b2.build();
+}
+
 // packages/shared/src/maps/props.ts
 var P = (w, h, shape, layer, blocksShot, label, extra = {}) => ({ w, h, shape, layer, blocksMove: shape !== "none", blocksShot: shape !== "none" && blocksShot, label, ...extra });
 var PROP_DEFS = {
@@ -12271,7 +12706,29 @@ var PROP_DEFS = {
   stretcher: P(16, 36, "rect", "low", false, "Stretcher"),
   ambulance: P(36, 80, "rect", "high", true, "Ambulance", { inset: 1 }),
   tent: P(52, 52, "rect", "high", true, "Tent"),
-  iv_stand: P(8, 8, "none", "floor", false, "IV stand")
+  iv_stand: P(8, 8, "none", "floor", false, "IV stand"),
+  // v0.23: the cemetery, the square and the pioneer camp (shared: flagpole)
+  flagpole: P(30, 10, "circle", "high", false, "Flagpole", { radius: 2 }),
+  grave: P(16, 8, "rect", "low", true, "Gravestone"),
+  grave_mound: P(16, 26, "none", "floor", false, "Grave"),
+  tomb: P(20, 34, "rect", "low", true, "Tomb"),
+  wreath: P(14, 14, "none", "floor", false, "Wreath"),
+  mourner: P(24, 24, "rect", "high", true, "Statue"),
+  memorial: P(44, 44, "rect", "high", true, "Memorial", { inset: 2 }),
+  dome: P(48, 48, "none", "high", false, "Dome"),
+  dome_small: P(28, 28, "none", "high", false, "Dome"),
+  spire: P(56, 56, "none", "high", false, "Tower roof"),
+  btr: P(40, 92, "rect", "high", true, "Armoured carrier", { inset: 1 }),
+  hedgehog: P(20, 20, "rect", "low", false, "Anti-tank hedgehog", { inset: 3 }),
+  barrier: P(44, 6, "rect", "low", false, "Barrier"),
+  campfire: P(30, 30, "circle", "low", false, "Campfire", { radius: 9 }),
+  watchtower: P(36, 36, "rect", "high", true, "Watchtower", { inset: 4 }),
+  goal: P(12, 44, "rect", "low", false, "Goal", { inset: 1 }),
+  boat: P(18, 44, "rect", "low", false, "Boat", { inset: 2 }),
+  bunk_bed: P(18, 38, "rect", "low", false, "Bunk bed"),
+  long_table: P(70, 26, "rect", "low", false, "Dining table", { inset: 1 }),
+  bugler: P(26, 26, "rect", "high", true, "Pioneer statue"),
+  rock: P(34, 26, "circle", "low", true, "Rock", { radius: 11 })
 };
 var PROP_TYPES = Object.keys(PROP_DEFS);
 
@@ -12294,7 +12751,7 @@ var CollisionWorld = class {
     this.width = map.width;
     this.height = map.height;
     for (const w of map.walls) {
-      const shootThrough = w.style === "fence_chain";
+      const shootThrough = w.style === "fence_chain" || w.style === "fence_iron" || w.style === "water";
       this.addRect(w.x, w.y, w.w, w.h, true, !shootThrough, "wall");
     }
     for (const p of map.props) {
@@ -12554,7 +13011,7 @@ function rayCircle(ox, oy, dx, dy, cx, cy, r) {
 }
 
 // packages/shared/src/maps/types.ts
-var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital"];
+var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp"];
 
 // packages/shared/src/maps/index.ts
 var builders2 = {
@@ -12564,7 +13021,10 @@ var builders2 = {
   stroyka: buildStroykaMap,
   dk: buildDkMap,
   gastronom: buildGastronomMap,
-  hospital: buildHospitalMap
+  hospital: buildHospitalMap,
+  cemetery: buildCemeteryMap,
+  square: buildSquareMap,
+  camp: buildCampMap
 };
 var mapCache = /* @__PURE__ */ new Map();
 var collisionCache = /* @__PURE__ */ new Map();
@@ -12587,7 +13047,7 @@ function getCollision(id) {
 function isMapId(v) {
   return typeof v === "string" && MAP_IDS.includes(v);
 }
-var MAP_ORDER = ["factory", "stroyka", "dk", "gastronom", "hospital", "garages", "yard"];
+var MAP_ORDER = ["factory", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp", "garages", "yard"];
 
 // packages/shared/src/sim/math.ts
 var TAU = Math.PI * 2;
@@ -14954,7 +15414,7 @@ function encodeSnapshot(src) {
 }
 
 // packages/shared/src/net/protocol.ts
-var PROTOCOL_VERSION = 7;
+var PROTOCOL_VERSION = 8;
 var CHAT_RULES = Object.freeze({ maxLength: 140, maxRaw: 400, burst: 4, refillMs: 2500, repeatMs: 4e3 });
 function cleanChat(raw) {
   const s = raw.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ").replace(new RegExp("(\\p{M}{2})\\p{M}+", "gu"), "$1").replace(/\s+/g, " ").trim();

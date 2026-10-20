@@ -48,7 +48,7 @@ export class CollisionWorld {
     this.width = map.width;
     this.height = map.height;
     for (const w of map.walls) {
-      const shootThrough = w.style === 'fence_chain';
+      const shootThrough = w.style === 'fence_chain' || w.style === 'fence_iron' || w.style === 'water';
       this.addRect(w.x, w.y, w.w, w.h, true, !shootThrough, 'wall');
     }
     for (const p of map.props) {

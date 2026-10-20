@@ -293,7 +293,8 @@ export class HudScene extends Phaser.Scene {
       const fp = propFootprint(d, p.rot);
       g.fillStyle(d.layer === 'high' ? 0x1e1b18 : 0x5c564c, 1).fillRect(2 + (p.x - fp.w / 2) * s, 2 + (p.y - fp.h / 2) * s, Math.max(1, fp.w * s), Math.max(1, fp.h * s));
     }
-    for (const w of m.walls) g.fillStyle(w.style === 'fence_chain' ? 0x7a7e84 : 0x151210, 1).fillRect(2 + w.x * s, 2 + w.y * s, Math.max(1, w.w * s), Math.max(1, w.h * s));
+    const MINI: Partial<Record<string, number>> = { fence_chain: 0x7a7e84, fence_iron: 0x5c6068, water: 0x1e4456 };
+    for (const w of m.walls) g.fillStyle(MINI[w.style] ?? 0x151210, 1).fillRect(2 + w.x * s, 2 + w.y * s, Math.max(1, w.w * s), Math.max(1, w.h * s));
     g.lineStyle(1, 0xd9c7a3, 0.5).strokeRect(0.5, 0.5, this.mmW + 3, this.mmH + 3);
     this.mm.draw(g, 0, 0);
     g.destroy();

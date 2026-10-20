@@ -10,7 +10,30 @@ import { D } from './depth.js';
 import { paintedText, paintedArrow, hazardStripes, paintedStar, stain, hopscotch, manhole, solidRect, laundry, clutterSheet, stairsDecal, dashedRect, paintedCross, craneJib, CRANE_TAIL } from './paint.js';
 import type { ClutterFrame } from './paint.js';
 
-const PROP_VARIANTS: Record<string, number> = { garage: 5, container: 4, car_zhiguli: 5, car_volga: 4, garage_shell: 3, shelf: 6, fridge_case: 3, counter: 4, coat_rack: 2, ambulance: 3, produce_stall: 3 };
+// keep in sync with tools/art PROP_VARIANTS (props.ts, props2.ts, props3.ts)
+const PROP_VARIANTS: Record<string, number> = {
+  garage: 5,
+  container: 4,
+  car_zhiguli: 5,
+  car_volga: 4,
+  garage_shell: 3,
+  shelf: 6,
+  fridge_case: 3,
+  counter: 4,
+  coat_rack: 2,
+  ambulance: 3,
+  produce_stall: 3,
+  tent: 3,
+  flagpole: 3,
+  grave: 4,
+  grave_mound: 3,
+  tomb: 2,
+  dome: 6,
+  dome_small: 6,
+  boat: 3,
+  bugler: 2,
+  rock: 3,
+};
 const TEX_SCALE = 0.5;
 
 type ClutterSet = { area: number; frames: Array<[ClutterFrame, number]> };
@@ -38,6 +61,7 @@ const CLUTTER: Record<FloorType, ClutterSet | null> = {
   tile_beige: { area: 3000, frames: [['paper_0', 3], ['paper_1', 2], ['news_0', 1], ['card_0', 1.5], ['can_0', 1], ['bottle_0', 0.5], ['leaf_0', 0.3]] },
   marble: { ...INDOOR, area: 5200 },
   paving: { ...STREET, area: 2600 },
+  cobble: { ...STREET, area: 2800 },
 };
 
 interface Cullable {
@@ -72,6 +96,8 @@ export class MapRenderer {
   private decalId = 0;
   private readonly cullables: Cullable[] = [];
   private lastCull: { x: number; y: number; w: number; h: number } | null = null;
+  /** Lake/river surfaces: drifted slowly in animate(). */
+  private readonly water: Array<{ t: Phaser.GameObjects.TileSprite; x0: number; y0: number }> = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -105,6 +131,18 @@ export class MapRenderer {
     const x1 = view.right + m;
     const y1 = view.bottom + m;
     for (const c of this.cullables) c.o.setVisible(c.b.right >= x0 && c.b.x <= x1 && c.b.bottom >= y0 && c.b.y <= y1);
+  }
+
+  /** Cheap per-frame animation of the static map (the water drifts). */
+  animate(timeMs: number): void {
+    if (!this.water.length) return;
+    const dx = timeMs * 0.0016;
+    const dy = Math.sin(timeMs / 2600) * 3;
+    for (const w of this.water) {
+      if (!w.t.visible) continue;
+      w.t.tilePositionX = w.x0 + dx;
+      w.t.tilePositionY = w.y0 + dy;
+    }
   }
 
   /** Deterministic litter scattered over floors (papers, butts, bolts, debris, leaves…). */
@@ -215,7 +253,7 @@ export class MapRenderer {
         }
         case 'star': {
           const key = paintedStar(this.scene, this.nextKey('star'), d.r, d.color, seed);
-          this.scene.add.image(d.x, d.y, key).setScale(TEX_SCALE).setAlpha(d.alpha ?? 0.8).setDepth(D.DECAL);
+          this.scene.add.image(d.x, d.y, key).setScale(TEX_SCALE).setAlpha(d.alpha ?? 0.8).setDepth(d.layer === 'roof' ? D.ROOF_DECAL : D.DECAL);
           break;
         }
         case 'line': {
@@ -294,11 +332,22 @@ export class MapRenderer {
   private buildWalls() {
     const shadows = this.scene.add.graphics().setDepth(D.WALL_SHADOW);
     const edges = this.scene.add.graphics().setDepth(D.WALL + 0.5);
+    const shore = this.scene.add.graphics().setDepth(D.FLOOR_OVER + 0.3);
     for (const [i, w] of this.map.walls.entries()) {
+      if (w.style === 'water') {
+        this.waterRect(w, shore);
+        continue;
+      }
+      if (w.style === 'fence_iron') {
+        shadows.fillStyle(0x000000, 0.22).fillRect(w.x + 2, w.y + 2.4, w.w, w.h);
+        this.ironFence(w, edges);
+        continue;
+      }
       const thin = w.style === 'fence_chain';
       if (!thin) {
-        const off = w.style === 'roof_flat' ? 10 : w.style === 'fence_concrete' ? 3 : 5;
-        shadows.fillStyle(0x000000, w.style === 'roof_flat' ? 0.5 : 0.42);
+        const tall = w.style === 'roof_flat' || w.style === 'roof_church' || w.style === 'kremlin';
+        const off = tall ? 10 : w.style === 'fence_concrete' ? 3 : 5;
+        shadows.fillStyle(0x000000, tall ? 0.5 : 0.42);
         shadows.fillRect(w.x + off, w.y + off * 1.2, w.w, w.h);
       }
       if (w.style === 'fence_chain') {
@@ -312,6 +361,7 @@ export class MapRenderer {
       edges.fillStyle(0x000000, 0.35).fillRect(w.x, w.y + w.h - 1, w.w, 1).fillRect(w.x + w.w - 1, w.y, 1, w.h);
       edges.lineStyle(1, 0x0b0908, 0.9).strokeRect(w.x - 0.5, w.y - 0.5, w.w + 1, w.h + 1);
       if (w.style === 'roof_flat') this.roofDetails(w, i, edges);
+      if (w.style === 'roof_church') this.hipRoof(w, edges);
       if (w.style === 'fence_concrete') {
         const vertical = w.h > w.w;
         const len = vertical ? w.h : w.w;
@@ -322,6 +372,92 @@ export class MapRenderer {
         }
       }
     }
+  }
+
+  /** A wrought-iron railing: bars (rotated for vertical runs), a top rail and square posts with finials. */
+  private ironFence(w: WallRect, g: Phaser.GameObjects.Graphics) {
+    const vertical = w.h > w.w;
+    const len = vertical ? w.h : w.w;
+    const thick = vertical ? w.w : w.h;
+    const bars = this.scene.add.tileSprite(w.x + w.w / 2, w.y + w.h / 2, len, thick + 2, 'wall_fence_iron');
+    bars.setTileScale(TEX_SCALE, TEX_SCALE).setDepth(D.WALL);
+    if (vertical) bars.setRotation(Math.PI / 2);
+    g.lineStyle(1, 0x3c4048, 1);
+    if (vertical) g.lineBetween(w.x + w.w / 2, w.y, w.x + w.w / 2, w.y + w.h);
+    else g.lineBetween(w.x, w.y + w.h / 2, w.x + w.w, w.y + w.h / 2);
+    const step = len / Math.max(1, Math.round(len / 26));
+    for (let s = 0; s <= len + 0.5; s += step) {
+      const px = vertical ? w.x + w.w / 2 : w.x + Math.min(s, len);
+      const py = vertical ? w.y + Math.min(s, len) : w.y + w.h / 2;
+      g.fillStyle(0x121418, 1).fillRect(px - 2.5, py - 2.5, 5, 5);
+      g.fillStyle(0x6a707a, 1).fillRect(px - 1, py - 1, 2, 2);
+    }
+  }
+
+  /**
+   * Water (a lake, a river): blocks movement, not bullets. Drawn just above the floors so boats and
+   * jetties sit on it; the texture is world-aligned (no seams between pieces) and drifts in animate().
+   * A pale foam line marks the shore wherever the neighbour is not water.
+   */
+  private waterRect(w: WallRect, g: Phaser.GameObjects.Graphics) {
+    const t = this.scene.add.tileSprite(w.x, w.y, w.w, w.h, 'wall_water').setOrigin(0, 0).setDepth(D.FLOOR_OVER + 0.2);
+    t.setTileScale(TEX_SCALE, TEX_SCALE);
+    const x0 = w.x / TEX_SCALE;
+    const y0 = w.y / TEX_SCALE;
+    t.tilePositionX = x0;
+    t.tilePositionY = y0;
+    this.water.push({ t, x0, y0 });
+    const wet = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= this.map.width || y >= this.map.height) return true;
+      return this.map.walls.some((o) => o.style === 'water' && x >= o.x && x < o.x + o.w && y >= o.y && y < o.y + o.h);
+    };
+    const S = 4;
+    // north/south edges
+    for (const [y, out, band] of [
+      [w.y, w.y - 1, w.y],
+      [w.y + w.h, w.y + w.h, w.y + w.h - 2],
+    ] as const)
+      for (let x = w.x; x < w.x + w.w; x += S) {
+        if (wet(x + S / 2, out)) continue;
+        g.fillStyle(0x0a0e10, 0.35).fillRect(x, y - (band === w.y ? 0 : 3), S, 3);
+        g.fillStyle(0xa8c8d0, 0.35 + ((x * 7) % 5) * 0.04).fillRect(x, band, S, 1.5);
+      }
+    // west/east edges
+    for (const [x, out, band] of [
+      [w.x, w.x - 1, w.x],
+      [w.x + w.w, w.x + w.w, w.x + w.w - 2],
+    ] as const)
+      for (let y = w.y; y < w.y + w.h; y += S) {
+        if (wet(out, y + S / 2)) continue;
+        g.fillStyle(0x0a0e10, 0.35).fillRect(x - (band === w.x ? 0 : 3), y, 3, S);
+        g.fillStyle(0xa8c8d0, 0.35 + ((y * 7) % 5) * 0.04).fillRect(band, y, 1.5, S);
+      }
+  }
+
+  /** A hipped roof: four slopes shaded for light from the north-west, with dark hips and a ridge. */
+  private hipRoof(w: WallRect, g: Phaser.GameObjects.Graphics) {
+    const { x, y } = w;
+    const W = w.w;
+    const H = w.h;
+    const horiz = W >= H;
+    const r = (horiz ? H : W) / 2;
+    const A = { x: x + r, y: y + r };
+    const B = horiz ? { x: x + W - r, y: y + r } : { x: x + r, y: y + H - r };
+    const P = (px: number, py: number) => new Phaser.Geom.Point(px, py);
+    const north = horiz ? [P(x, y), P(x + W, y), P(B.x, B.y), P(A.x, A.y)] : [P(x, y), P(x + W, y), P(A.x, A.y)];
+    const south = horiz ? [P(x, y + H), P(x + W, y + H), P(B.x, B.y), P(A.x, A.y)] : [P(x, y + H), P(x + W, y + H), P(B.x, B.y)];
+    const west = horiz ? [P(x, y), P(x, y + H), P(A.x, A.y)] : [P(x, y), P(x, y + H), P(B.x, B.y), P(A.x, A.y)];
+    const east = horiz ? [P(x + W, y), P(x + W, y + H), P(B.x, B.y)] : [P(x + W, y), P(x + W, y + H), P(B.x, B.y), P(A.x, A.y)];
+    g.fillStyle(0xffffff, 0.1).fillPoints(north, true);
+    g.fillStyle(0xffffff, 0.04).fillPoints(west, true);
+    g.fillStyle(0x000000, 0.16).fillPoints(south, true);
+    g.fillStyle(0x000000, 0.26).fillPoints(east, true);
+    g.lineStyle(2, 0x0e1a12, 0.6);
+    g.lineBetween(x + 1, y + 1, A.x, A.y).lineBetween(x + 1, y + H - 1, horiz ? A.x : B.x, horiz ? A.y : B.y);
+    g.lineBetween(x + W - 1, y + 1, horiz ? B.x : A.x, horiz ? B.y : A.y).lineBetween(x + W - 1, y + H - 1, B.x, B.y);
+    if (A.x !== B.x || A.y !== B.y) g.lineBetween(A.x, A.y, B.x, B.y);
+    g.lineStyle(1, 0x8ac8a0, 0.25);
+    if (A.x !== B.x || A.y !== B.y) g.lineBetween(A.x - 1, A.y - 1, B.x - 1, B.y - 1);
   }
 
   private chainFence(w: WallRect, g: Phaser.GameObjects.Graphics) {

@@ -2,7 +2,7 @@
 
 ## 1. Reference images
 
-The product owner supplied 22 reference images. They are kept unchanged in `references/` and are
+The product owner supplied 39 reference images (22 at the start, the rest during v0.22–v0.23). They are kept unchanged in `references/` and are
 **not** used as game screens:
 
 | File | Used for |
@@ -14,6 +14,7 @@ The product owner supplied 22 reference images. They are kept unchanged in `refe
 | `08…16-*.png`, `18-oryol-pendos.png` (character sheets) | The ten Arsenal characters — Karlych «Informant» (crow), Sonka «Temptress» (snake), Zhora «Businessman» (shark), Tolyan «Techie» (monitor lizard), Lyova «Mercenary» (leopard), Batya «The Roof» (elephant), Gosha «Liaison» (parrot), Slavik «Fence» (lobster), Vityok «Madman» (piranha), Garik «Pendos» (eagle): silhouettes, clothes, palettes, lore; their «ПОРТРЕТ В ИГРЕ» panels become the in-game portraits |
 | `27…36-*.png` (character sheets, v0.23) | Ten more characters — a cat, a pigeon, a cockroach, a rat, a lion, a buffalo, a rhino, a gorilla, a pig and a fox: silhouettes, clothes, palettes and the portrait panels as above; hero art for the dressing room is cropped by `tools/extract-heroes.py`. Their names were written for the game (Murka «The Tipster», Sizy «The Chemist», Prusak «The Underground Man», Sery «The Gym Rat», Arkadich «The Shadow Tycoon», Bugai «The Bouncer», Rogov «The Old Lag», Samson «The Foreman», Borka «The Runaway», Alisa «The Con Artist»); the sheets' working titles are not used (one of them is a comic-book trademark). The top-down rigs are in `tools/art/characters3.ts` |
 | `17-arsenal.png` | The weapon list of the Arsenal (pistols, melee, SMGs, shotguns, rifles, snipers, launchers) — modelled as original top-down sprites, with real-gun brand names avoided where needed (Deagle, P92, S-12K) |
+| `37-map-kladbishche.png`, `38-map-krasnaya-ploshchad.png`, `39-map-pionerlager.png` (v0.23) | Layouts of Old Cemetery, Red Square and Pioneer Camp — rebuilt in the map format (`packages/shared/src/maps/cemetery.ts`, `square.ts`, `camp.ts`) with the routes, buildings and landmarks of the plans. No real people anywhere: the clock tower and the tribune carry a red star, the tribune has no name, the statues are a mourner, a bugler and a drummer, the camp («Звёздочка») is made up. New art: iron railings, lake water (drifting, with a shoreline), the fortress-wall brick, granite, green church roofs drawn hipped, cobblestones; 22 props in `tools/art/props3.ts` (headstones and flowerbeds, tombs, wreaths, mourners, the memorial with the eternal flame, onion domes in six colourings, tower spires, armoured carriers, hedgehogs, barriers, flagpoles, the campfire, watchtowers, goals, boats, bunk beds, dining tables, pioneer statues, rocks) and three tents (field hospital, army, tourist) |
 | `19-map-stroyka.png` … `22-map-bolnica.png` | Layouts of Construction Site, House of Culture, Gastronom and City Hospital No. 3: rooms, doors, routes and landmarks were rebuilt one-to-one in the map format (`packages/shared/src/maps/*.ts`) |
 
 **Language.** The player-facing game is English with a Soviet accent (talons, deficit goods, Dossier,

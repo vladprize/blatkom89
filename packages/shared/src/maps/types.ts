@@ -1,7 +1,7 @@
 import type { WeaponId } from '../game-rules/weapons.js';
 import type { PropType } from './props.js';
 
-export const MAP_IDS = ['factory', 'garages', 'yard', 'stroyka', 'dk', 'gastronom', 'hospital'] as const;
+export const MAP_IDS = ['factory', 'garages', 'yard', 'stroyka', 'dk', 'gastronom', 'hospital', 'cemetery', 'square', 'camp'] as const;
 export type MapId = (typeof MAP_IDS)[number];
 
 export type FloorType =
@@ -23,7 +23,8 @@ export type FloorType =
   | 'tile_green'
   | 'tile_beige'
   | 'marble'
-  | 'paving';
+  | 'paving'
+  | 'cobble';
 
 export type WallStyle =
   | 'brick'
@@ -35,7 +36,17 @@ export type WallStyle =
   | 'roof_flat'
   | 'roof_garage'
   | 'roof_booth'
-  | 'plaster';
+  | 'plaster'
+  /** Cemetery railings: stop you, not bullets (like the chain-link fence). */
+  | 'fence_iron'
+  /** Open water (the camp's lake): stops you, not bullets; drawn as water, no wall. */
+  | 'water'
+  /** The fortress wall of the square: red brick with merlons. */
+  | 'kremlin'
+  /** Polished dark-red granite (the tribune). */
+  | 'granite'
+  /** A tiled church roof (no roof clutter on it). */
+  | 'roof_church';
 
 export interface Rect {
   x: number;
@@ -82,7 +93,7 @@ export type DecalPlacement =
   | { kind: 'arrow'; x: number; y: number; w: number; h: number; angle: number; color: string; text?: string; alpha?: number }
   | { kind: 'hazard'; x: number; y: number; w: number; h: number; alpha?: number }
   | { kind: 'stain'; x: number; y: number; r: number; color: string; alpha?: number; seed?: number }
-  | { kind: 'star'; x: number; y: number; r: number; color: string; alpha?: number }
+  | { kind: 'star'; x: number; y: number; r: number; color: string; alpha?: number; layer?: 'floor' | 'roof' }
   | { kind: 'line'; x: number; y: number; w: number; h: number; color: string; alpha?: number; layer?: 'floor' | 'roof' }
   | { kind: 'hopscotch'; x: number; y: number; angle?: number }
   | { kind: 'manhole'; x: number; y: number }

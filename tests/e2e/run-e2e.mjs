@@ -136,6 +136,9 @@ try {
   console.log('\n[e2e] the roster: 24 characters, the ten new ones in the files and in practice');
   const roster = spawnSync(process.execPath, ['tests/e2e/roster.mjs', base, join(out, 'roster')], { stdio: 'inherit' });
   if (roster.status !== 0) failed = true;
+  console.log('\n[e2e] the three new maps: the picker in Russian, the cemetery, the square and the pioneer camp in practice');
+  const maps = spawnSync(process.execPath, ['tests/e2e/maps.mjs', base, join(out, 'maps')], { stdio: 'inherit' });
+  if (maps.status !== 0) failed = true;
   console.log('\n[e2e] game modes online (capture the flag, base capture; English and Russian)');
   const modes = spawnSync(process.execPath, ['tests/e2e/modes.mjs', base, join(out, 'modes')], { stdio: 'inherit' });
   if (modes.status !== 0) failed = true;

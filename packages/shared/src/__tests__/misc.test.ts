@@ -112,6 +112,24 @@ test('maps: spawn selection avoids visible opponents', () => {
   }
 });
 
+test('maps: water and iron railings stop movement but not bullets; headstones stop both', () => {
+  // the lake in the pioneer camp (y 900–1000), straight down from the sand at x 500
+  const camp = getCollision('camp');
+  assert.equal(camp.raycast(500, 860, 0, 1, 120, 'shot'), null, 'a bullet flies over the water');
+  const swim = camp.raycast(500, 860, 0, 1, 120, 'move');
+  assert.ok(swim && Math.abs(860 + swim.t - 900) < 1, 'nobody walks into the lake');
+  assert.ok(camp.overlapsCircle(500, 930, PLAYER_RADIUS));
+  // a family plot in the cemetery: the railing at y 250, headstones at (264|292, 272)
+  const cem = getCollision('cemetery');
+  assert.equal(cem.raycast(280, 230, 0, 1, 40, 'shot'), null, 'a bullet passes the railing between two headstones');
+  const fence = cem.raycast(280, 230, 0, 1, 40, 'move');
+  assert.ok(fence && Math.abs(230 + fence.t - 250) < 1, 'the railing stops a walker');
+  const stone = cem.raycast(292, 230, 0, 1, 60, 'shot');
+  assert.ok(stone && Math.abs(230 + stone.t - 268) < 1, 'a headstone stops the bullet');
+  // the fortress wall on the square is solid
+  assert.ok(getCollision('square').raycast(400, 200, 0, -1, 150, 'shot'));
+});
+
 test('progression: xp, levels and achievements', () => {
   assert.equal(totalXpForLevel(1), 0);
   assert.equal(levelForXp(0).level, 1);

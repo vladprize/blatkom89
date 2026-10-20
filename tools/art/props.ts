@@ -7,6 +7,7 @@ import type { RGBA } from './lib/raster.js';
 import type { Material, Prim, V3, PatternCtx } from './lib/model.js';
 import { MAT } from './characters.js';
 import { propPrims2, PROP_VARIANTS2 } from './props2.js';
+import { propPrims3, PROP_VARIANTS3 } from './props3.js';
 
 export const H = (...c: string[]): RGBA[] => c.map((x) => hex(x));
 
@@ -343,7 +344,7 @@ export function propPrims(type: string, w: number, h: number, variant = 0): Prim
       p.push(cap([0, 0, 12], [5, 0, 10], 1, M.steelDark, 'spout'));
       break;
     default: {
-      const more = propPrims2(type, w, h, variant);
+      const more = propPrims2(type, w, h, variant) ?? propPrims3(type, w, h, variant);
       if (more) return more;
       p.push(box([0, 0, 8], [w - 1, h - 1, 8], { ramp: H('#ff00ff') }, 'missing'));
     }
@@ -358,4 +359,5 @@ export const PROP_VARIANTS: Record<string, number> = {
   car_volga: 4,
   garage_shell: 3,
   ...PROP_VARIANTS2,
+  ...PROP_VARIANTS3,
 };

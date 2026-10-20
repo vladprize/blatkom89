@@ -254,6 +254,7 @@ export class GameScene extends Phaser.Scene {
       this.mapView.updateOverhead(me.x, me.y, dt);
     }
     this.mapView.cull(this.cameras.main.worldView);
+    this.mapView.animate(time);
     this.adaptQuality(nowMs);
     // crosshair (desktop)
     const pointer = this.input.activePointer;

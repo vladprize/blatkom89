@@ -25,8 +25,9 @@ export const FLOOR_KEYS = [
   'tile_beige',
   'marble',
   'paving',
+  'cobble',
 ] as const;
-export const WALL_KEYS = ['brick', 'concrete', 'panel', 'corrugated', 'fence_concrete', 'roof_flat', 'fence_chain', 'plaster'] as const;
+export const WALL_KEYS = ['brick', 'concrete', 'panel', 'corrugated', 'fence_concrete', 'roof_flat', 'fence_chain', 'plaster', 'fence_iron', 'water', 'kremlin', 'granite', 'roof_church'] as const;
 
 /** Torso animations per pose class (paper doll: the weapon is a separate sprite, see CharacterView). */
 export const TORSO_ANIMS: Record<WeaponPose, ReadonlyArray<readonly [string, number]>> = POSE_ANIMS;
