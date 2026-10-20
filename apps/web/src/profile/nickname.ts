@@ -3,8 +3,9 @@
  * (first launch, and «✎» in the menu/profile). Validation is the shared `displayNameSchema`,
  * the same one the server applies to PATCH /api/me.
  */
-import { displayNameSchema } from '@blatkom/shared';
-import { h, toast } from '../ui/dom.js';
+import { displayNameSchema, sameAlias } from '@blatkom/shared';
+import type { NameCheckResponse } from '@blatkom/shared';
+import { h, fill, toast } from '../ui/dom.js';
 import { sfx } from '../game/audio/Sfx.js';
 import { randomNickname } from './nickname-words.js';
 import { t } from '../i18n/index.js';
@@ -24,17 +25,69 @@ export interface NicknameDialogOptions {
   cancelLabel?: string;
   /** Called once when the dialog goes away (saved or cancelled). */
   onClose?: () => void;
+  /** Online: aliases are unique — checks one as it is typed and offers free variants. */
+  check?: (name: string) => Promise<NameCheckResponse>;
 }
 
 /** Opens the nickname dialog on top of `root`; returns a function that closes it. */
 export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions): () => void {
   const input = h('input', { class: 'input input--big', value: o.initial, maxlength: '24', autocomplete: 'off', autocapitalize: 'words', spellcheck: 'false', 'aria-label': t('Alias') }) as HTMLInputElement;
   const error = h('div', { class: 'muted', style: 'min-height:18px;font-size:14px;color:#e07a6a' });
+  // online: «✓ free» or «taken — try: …» with free variants to tap
+  const hint = h('div', { class: 'namehint', 'data-testid': 'name-hint', 'aria-live': 'polite' });
+  let checkTimer: ReturnType<typeof setTimeout> | null = null;
+  let checkSeq = 0;
+  const showTaken = (r: NameCheckResponse) => {
+    fill(
+      hint,
+      h('span', { class: 'namehint__bad' }, t('«{name}» is taken.', { name: r.name })),
+      r.suggestions.length ? h('span', { class: 'muted' }, ' ', t('Free:')) : null,
+      ...r.suggestions.map((sug) =>
+        h(
+          'button',
+          {
+            class: 'chip',
+            'data-testid': 'name-suggestion',
+            onclick: () => {
+              input.value = sug;
+              hint.replaceChildren(h('span', { class: 'namehint__ok' }, t('✓ free')));
+              error.textContent = '';
+              input.focus();
+            },
+          },
+          sug,
+        ),
+      ),
+    );
+  };
+  const runCheck = (name: string) => {
+    const check = o.check;
+    if (!check) return;
+    const seq = ++checkSeq;
+    void check(name)
+      .then((r) => {
+        if (seq !== checkSeq || closed || !sameAlias(input.value, r.name)) return;
+        if (r.available) hint.replaceChildren(h('span', { class: 'namehint__ok' }, t('✓ free')));
+        else showTaken(r);
+      })
+      .catch(() => {
+        if (seq === checkSeq) hint.replaceChildren();
+      });
+  };
+  const scheduleCheck = () => {
+    if (!o.check) return;
+    if (checkTimer) clearTimeout(checkTimer);
+    hint.replaceChildren();
+    const parsed = displayNameSchema.safeParse(input.value);
+    if (!parsed.success) return;
+    checkTimer = setTimeout(() => runCheck(parsed.data), 350);
+  };
   let busy = false;
   let closed = false;
   const close = () => {
     if (closed) return;
     closed = true;
+    if (checkTimer) clearTimeout(checkTimer);
     overlay.remove();
     document.removeEventListener('keydown', onKey, true);
     o.onClose?.();
@@ -54,7 +107,11 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
       sfx.play('click');
       close();
     } catch (e) {
-      toast(e instanceof Error && e.message ? apiErrorText(e) : t('Couldn’t save it'));
+      // taken meanwhile (or never checked): show the free variants right here
+      if (o.check && e && typeof e === 'object' && (e as { code?: string }).code === 'name_taken') {
+        error.textContent = '';
+        runCheck(parsed.data);
+      } else toast(e instanceof Error && e.message ? apiErrorText(e) : t('Couldn’t save it'));
     } finally {
       busy = false;
       saveBtn.removeAttribute('disabled');
@@ -70,7 +127,10 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
       o.onCancel();
     }
   };
-  input.addEventListener('input', () => (error.textContent = ''));
+  input.addEventListener('input', () => {
+    error.textContent = '';
+    scheduleCheck();
+  });
   const saveBtn = h('button', { class: 'btn btn--red grow', onclick: () => void save() }, t('Done'));
   const overlay = h(
     'div',
@@ -83,6 +143,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
       h('div', { class: 'muted', style: 'font-size:15px' }, o.note ?? t('Rivals see your alias — above your character, on the scoreboard and in the results. You can change it in the profile.')),
       input,
       error,
+      o.check ? hint : null,
       h(
         'div',
         { class: 'row' },
@@ -93,6 +154,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
             onclick: () => {
               input.value = randomNickname();
               error.textContent = '';
+              scheduleCheck();
               sfx.play('click');
             },
           },
@@ -117,6 +179,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
   );
   document.addEventListener('keydown', onKey, true);
   root.append(overlay);
+  scheduleCheck();
   setTimeout(() => {
     input.focus();
     input.select();

@@ -5,6 +5,7 @@
 import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, WeaponId } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { GameConnection } from './GameConnection.js';
+import { SocialClient } from './SocialClient.js';
 import { OnlineSession } from '../game/session/OnlineSession.js';
 import type { ResultsData } from '../game/session/types.js';
 import { tg, telegramUserName } from '../telegram/tg.js';
@@ -55,6 +56,10 @@ const KEEPALIVE_MS = 4 * 60_000;
 export class OnlineClient {
   readonly api = new Api();
   profile: PublicProfile | null = null;
+  /** Friends, presence, private messages, invitations (opened once signed in). */
+  readonly social = new SocialClient(this.api, () => this.profile?.id ?? null);
+  /** Friends invited from the current room (id → when), so the lobby shows «Invited ✓». */
+  readonly invited = new Map<string, number>();
   /** Wallet, owned items and loadout (refreshed after purchases and matches). */
   inventory: Inventory | null = null;
   /** Called when the stored email session has expired and the player has to sign in again. */
@@ -130,6 +135,7 @@ export class OnlineClient {
     storageSet(TOKEN_KEY, null);
     storageSet(DEVICE_KEY, null);
     storageSet(EMAIL_MODE_KEY, null);
+    this.social.stop();
     this.api.token = null;
     this.profile = null;
     this.inventory = null;
@@ -211,6 +217,12 @@ export class OnlineClient {
   private setToken(token: string) {
     this.api.token = token;
     analytics.setToken(token);
+    this.social.start(token);
+  }
+
+  /** The room this browser is connected to (lobby or match). */
+  currentRoomId(): string | null {
+    return this.conn ? this.roomId : null;
   }
 
   async refreshProfile(): Promise<PublicProfile> {
@@ -265,6 +277,7 @@ export class OnlineClient {
     await this.ensureAuth();
     this.closeConn();
     this.roomId = roomId;
+    this.invited.clear();
     const conn = new GameConnection(
       {
         onMessage: (m) => this.onMessage(m),
@@ -406,5 +419,6 @@ export class OnlineClient {
     this.session = null;
     this.roomId = null;
     this.lobby = null;
+    this.invited.clear();
   }
 }

@@ -22,6 +22,11 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Attrs | 
   return el;
 }
 
+/** Replaces an element's children, skipping null/false like h() does. */
+export function fill(el: Element, ...children: Child[]): void {
+  el.replaceChildren(...children.filter((c): c is Node | string | number => c !== null && c !== undefined && c !== false).map((c) => (c instanceof Node ? c : String(c))));
+}
+
 export function toast(text: string): void {
   const t = h('div', { class: 'toast', role: 'status' }, text);
   document.body.append(t);

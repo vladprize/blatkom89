@@ -103,7 +103,7 @@ proxy_read_timeout 1h;`) and set `TRUST_PROXY=true` so rate limits see real clie
 | Data retention | daily purge job inside the server (periods in [PRIVACY.md](PRIVACY.md)) |
 | Update | `git pull && docker compose up -d --build app` — the restart closes running rooms (those matches are recorded as abandoned and players return to the menu), so deploy when few matches are running |
 | Rollback | keep the previous image tag (`docker tag blatkom89:latest blatkom89:prev` before building) and `docker compose up -d` with it; migrations are forward-only and additive, so the previous version keeps working with the newer schema |
-| Scale | one process handles hundreds of rooms; vertical scaling first. Several processes need sticky routing by room id (not included) |
+| Scale | one process handles hundreds of rooms; vertical scaling first. Several processes need sticky routing by room id and a shared bus for the social hub (presence, live messages and invitations live in the process) — neither is included |
 
 ## 5. Backups and recovery
 

@@ -3,7 +3,7 @@
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
 import { CHARACTER_IDS, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, isCharacterId, isGameMode, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
-import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
@@ -31,6 +31,9 @@ import { MODE_ORDER, modeIcon, modeName, modeRules, modeSub } from '../ui/modes.
 import { renderArsenal, characterPriceNote, amount, heroImg } from '../ui/screens/shop.js';
 import type { ArsenalTab, TryOn } from '../ui/screens/shop.js';
 import { renderAccountPanel, openEmailLogin, openPasswordReset } from '../ui/screens/account.js';
+import { renderFriends, renderTop, friendsInvitePanel, showInviteCard, friendsSub } from '../ui/screens/social.js';
+import type { SocialSignal } from '../net/SocialClient.js';
+import { needsWelcome, openWelcome } from '../ui/screens/welcome.js';
 import { sfx } from '../game/audio/Sfx.js';
 import { music } from '../game/audio/Music.js';
 import { t, count, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
@@ -40,7 +43,7 @@ import { apiErrorText } from '../net/errors.js';
 /** Room capacity shown in the menu. */
 const MAX_ROOM_PLAYERS = DEFAULT_MATCH_CONFIG.maxPlayers;
 
-type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
+type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'social' | 'top' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
 
 /** Profile id whose nickname has been confirmed in the first-launch dialog (online build). */
 const NICK_CONFIRMED_KEY = 'blatkom89.nick-confirmed.v1';
@@ -75,6 +78,34 @@ function speakerIcon(on: boolean): SVGSVGElement {
   return svg;
 }
 
+/** Pictograms of the menu's Friends (two heads) and Top-100 (a podium) buttons, inline SVG. */
+function socialIcon(kind: 'friends' | 'top'): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 32 32');
+  svg.setAttribute('width', '30');
+  svg.setAttribute('height', '30');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('class', 'stile__ico');
+  const shape = (tag: string, attrs: Record<string, string>) => {
+    const el = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    svg.append(el);
+  };
+  if (kind === 'friends') {
+    shape('circle', { cx: '11', cy: '10', r: '5', fill: 'currentColor' });
+    shape('path', { d: 'M2 27c0-6 4-10 9-10s9 4 9 10z', fill: 'currentColor' });
+    shape('circle', { cx: '22', cy: '11', r: '4', fill: 'currentColor', opacity: '.65' });
+    shape('path', { d: 'M17 18.5c1.4-.9 3-1.5 5-1.5 4.4 0 8 3.6 8 9h-8c0-3-1.8-5.8-5-7.5z', fill: 'currentColor', opacity: '.65' });
+  } else {
+    shape('rect', { x: '12', y: '9', width: '8', height: '19', fill: 'currentColor' });
+    shape('rect', { x: '3', y: '15', width: '8', height: '13', fill: 'currentColor', opacity: '.75' });
+    shape('rect', { x: '21', y: '19', width: '8', height: '9', fill: 'currentColor', opacity: '.55' });
+    shape('path', { d: 'M16 1.5l1.6 3.3 3.6.5-2.6 2.5.6 3.6-3.2-1.7-3.2 1.7.6-3.6-2.6-2.5 3.6-.5z', fill: '#d8a93c' });
+  }
+  return svg;
+}
+
 export class App {
   private host!: GameHost;
   private readonly root = document.getElementById('ui')!;
@@ -94,6 +125,14 @@ export class App {
   /** Last lobby state and results (to redraw them after a language switch). */
   private lastLobby: LobbyState | null = null;
   private lastResults: ResultsData | null = null;
+  /** The account window (guests in a browser) is open: the alias dialog waits for it. */
+  private welcomeClose: (() => void) | null = null;
+  /** «Play» with a friend: the room is being created; invite them once we are in its lobby. */
+  private pendingInvite: FriendEntry | null = null;
+  /** The Top-100 tab last looked at. */
+  private topBy: LeaderboardBy = 'rating';
+  private socialTiles: HTMLElement | null = null;
+  private inviteCards = new Map<string, () => void>();
 
   constructor() {
     const saved = storageGet('blatkom89.character');
@@ -112,6 +151,8 @@ export class App {
       case 'characters':
       case 'practice':
       case 'friends':
+      case 'social':
+      case 'top':
       case 'profile':
       case 'settings':
       case 'arsenal':
@@ -166,11 +207,12 @@ export class App {
       this.online.onEmailSessionExpired = (email) =>
         openEmailLogin(this.root, this.online!, { email, note: t('This account’s session has expired — please sign in again.'), onDone: () => this.afterAccountSwitch() });
       this.online.pingVisit();
+      this.online.social.on((e) => this.onSocial(e));
       void this.online
         .ensureAuth()
         .then(() => {
           this.refreshStrip();
-          this.maybeAskNickname();
+          this.maybeWelcome();
           void this.online!.loadInventory().then(() => this.refreshStrip()).catch(() => {});
         })
         .catch(() => {});
@@ -299,6 +341,10 @@ export class App {
         return this.showPractice(push);
       case 'friends':
         return this.showFriends(push);
+      case 'social':
+        return this.showSocial(push);
+      case 'top':
+        return this.showTop(push);
       case 'profile':
         return this.showProfile(push);
       case 'settings':
@@ -353,6 +399,7 @@ export class App {
               h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, t('Play with Friends'), h('span', { class: 'sub' }, t('a room by invitation'))),
               h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, t('Practice'), h('span', { class: 'sub' }, t('against bots, no internet needed'))),
               h('button', { class: 'btn', onclick: () => this.showSettings() }, t('Settings'), h('span', { class: 'sub' }, t('picture, sound, controls, language'))),
+              this.online ? (this.socialTiles = this.socialRow()) : null,
               onlineNote,
             ),
             h(
@@ -380,7 +427,8 @@ export class App {
       ),
     );
     this.render(menu);
-    this.maybeAskNickname();
+    this.maybeWelcome();
+    this.showPendingInvites();
   }
 
   /** Top-right corner of the menu: language and music switches. */
@@ -478,6 +526,50 @@ export class App {
     );
   }
 
+  /** Under the tiles: Friends (who is online, unread messages and requests) and the Top-100. */
+  private socialRow(): HTMLElement {
+    const social = this.online!.social;
+    const badge = social.badge();
+    return h(
+      'div',
+      { class: 'stiles' },
+      h(
+        'button',
+        { class: 'stile', 'data-testid': 'menu-friends', onclick: () => this.showSocial() },
+        socialIcon('friends'),
+        h('span', { class: 'stile__txt' }, h('b', null, t('Friends')), h('small', null, friendsSub(social))),
+        badge > 0 ? h('span', { class: 'nbadge stile__badge', 'data-testid': 'friends-badge', 'aria-label': t('{n} new', { n: badge }) }, String(badge)) : null,
+      ),
+      h('button', { class: 'stile', 'data-testid': 'menu-top', onclick: () => this.showTop() }, socialIcon('top'), h('span', { class: 'stile__txt' }, h('b', null, t('Top-100')), h('small', null, t('rating · level · eliminations')))),
+    );
+  }
+
+  private refreshSocialTiles() {
+    if (!this.socialTiles?.isConnected || !this.online) return;
+    const next = this.socialRow();
+    this.socialTiles.replaceWith(next);
+    this.socialTiles = next;
+  }
+
+  /** Online alias checks for the alias dialog (aliases are unique). */
+  private nameCheck(): ((name: string) => Promise<NameCheckResponse>) | undefined {
+    const online = this.online;
+    return online ? (name) => online.api.checkName(name) : undefined;
+  }
+
+  /** A guest in a browser: offer to register an email first, then the alias dialog. */
+  private maybeWelcome() {
+    if (this.screen !== 'menu' || this.welcomeClose || this.nickClose) return;
+    const online = this.online;
+    if (!online || !needsWelcome(online, inTelegram())) return this.maybeAskNickname();
+    this.welcomeClose = openWelcome(this.root, online, (outcome) => {
+      this.welcomeClose = null;
+      if (outcome === 'signed_in') return this.afterAccountSwitch();
+      this.refreshStrip();
+      this.maybeAskNickname();
+    });
+  }
+
   private refreshStrip() {
     if (!this.stripEl?.isConnected) return;
     const next = this.profileTile();
@@ -487,7 +579,7 @@ export class App {
 
   /** First launch: ask for a nickname (demo: before the first profile exists; online: new players). */
   private maybeAskNickname() {
-    if (this.screen !== 'menu' || this.nickClose) return;
+    if (this.screen !== 'menu' || this.nickClose || this.welcomeClose) return;
     if (!this.online) {
       if (this.localProfile) return;
       this.nickClose = openNicknameDialog(this.root, {
@@ -506,6 +598,7 @@ export class App {
       onCancel: () => storageSet(NICK_CONFIRMED_KEY, p.id),
       cancelLabel: t('Keep it as is'),
       onClose: () => (this.nickClose = null),
+      check: this.nameCheck(),
     });
   }
 
@@ -525,6 +618,7 @@ export class App {
           this.nickClose = null;
           resolve();
         },
+        check: this.nameCheck(),
       });
     });
   }
@@ -540,6 +634,7 @@ export class App {
       },
       onCancel: () => {},
       onClose: () => (this.nickClose = null),
+      check: this.nameCheck(),
     });
   }
 
@@ -986,6 +1081,110 @@ export class App {
     this.render(h('div', { class: 'screen screen--dim' }, content));
   }
 
+  // ── friends and the Top-100 ─────────────────────────────────────────────
+  private showSocial(push = true) {
+    const online = this.online;
+    if (!online) return;
+    this.go('social', push);
+    this.render(
+      h(
+        'div',
+        { class: 'screen screen--dim' },
+        h('div', { class: 'wrap' }, this.topbar(t('Friends')), renderFriends({ online, root: this.root, onPlayWith: (f) => void this.playWith(f), onTop: () => this.showTop() })),
+      ),
+    );
+  }
+
+  private showTop(push = true) {
+    const online = this.online;
+    if (!online) return;
+    this.go('top', push);
+    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar(t('Top-100')), renderTop({ online, by: this.topBy, onBy: (b) => (this.topBy = b) }))));
+  }
+
+  /** «Play» with a friend: a private room in the last mode; they are invited once we are inside. */
+  private async playWith(f: FriendEntry) {
+    if (!this.online) return;
+    this.pendingInvite = f;
+    this.go('loading');
+    this.render(this.loading(t('Creating the room…')));
+    try {
+      await this.online.createRoom('factory', this.onlineCharacter(), this.savedMode());
+    } catch (e) {
+      this.pendingInvite = null;
+      this.showError(apiErrorText(e));
+    }
+  }
+
+  /** Live news from friends: invitations, requests, messages. */
+  private onSocial(e: SocialSignal) {
+    if (e.type === 'changed') return this.refreshSocialTiles();
+    if (!this.online) return;
+    const inGame = this.screen === 'game';
+    switch (e.type) {
+      case 'invite':
+        if (this.online.currentRoomId() === e.invite.roomId) return;
+        this.showInvite(e.invite);
+        return;
+      case 'friend_request':
+        if (!inGame) toast(t('{name} wants to be your friend — see Friends', { name: e.from.name }));
+        return;
+      case 'friend_accepted':
+        if (!inGame) toast(t('{name} accepted your friend request', { name: e.friend.name }));
+        return;
+      case 'dm': {
+        const me = this.online.profile?.id;
+        if (e.message.from === me || this.online.social.openChat === e.message.from || inGame) return;
+        const text = e.message.text.length > 60 ? `${e.message.text.slice(0, 60)}…` : e.message.text;
+        toast(`✉ ${e.from.name}: ${text}`);
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  private showInvite(inv: RoomInviteEvent) {
+    const online = this.online;
+    if (!online) return;
+    this.inviteCards.get(inv.roomId)?.();
+    const close = showInviteCard({
+      invite: inv,
+      inMatch: this.screen === 'game' || this.screen === 'lobby',
+      onJoin: () => {
+        this.inviteCards.delete(inv.roomId);
+        online.social.dropInvite(inv.roomId);
+        void this.joinInvitedRoom(inv.roomId);
+      },
+      onDismiss: () => {
+        this.inviteCards.delete(inv.roomId);
+        online.social.dropInvite(inv.roomId);
+      },
+    });
+    this.inviteCards.set(inv.roomId, close);
+  }
+
+  /** Invitations that arrived while the match was on, once back in the menu. */
+  private showPendingInvites() {
+    if (!this.online) return;
+    for (const inv of this.online.social.liveInvites()) if (!this.inviteCards.has(inv.roomId)) this.showInvite(inv);
+  }
+
+  private async joinInvitedRoom(roomId: string) {
+    const online = this.online;
+    if (!online) return;
+    if (online.currentRoomId()) await online.leave();
+    this.endSession();
+    this.go('loading');
+    this.render(this.loading(t('Entering the room…')));
+    try {
+      await this.ensureNicknameBeforeJoin();
+      await online.joinRoom(roomId, this.onlineCharacter());
+    } catch (e) {
+      this.showError(apiErrorText(e));
+    }
+  }
+
   private joinInvite(code: string) {
     if (!this.online) return;
     this.go('join');
@@ -1021,9 +1220,23 @@ export class App {
       this.go('lobby', false);
     }
     music.setWanted(true);
+    const online = this.online;
+    if (online && this.pendingInvite) {
+      const f = this.pendingInvite;
+      this.pendingInvite = null;
+      void online.api
+        .inviteFriend(f.id, s.roomId)
+        .then((r) => {
+          online.invited.set(f.id, Date.now());
+          toast(r.delivered ? t('Invitation sent to {name}', { name: f.name }) : t('{name} is offline — the invitation won’t reach them', { name: f.name }));
+          if (this.screen === 'lobby' && this.lastLobby) this.onLobby(this.lastLobby);
+        })
+        .catch((e) => toast(apiErrorText(e)));
+    }
     this.render(
       renderLobby({
         state: s,
+        extra: online ? friendsInvitePanel({ online, roomId: s.roomId, inRoom: (id) => s.players.some((p) => p.id === id), onFriends: () => this.showSocial() }) : null,
         character: this.onlineCharacter(),
         onReady: (r) => this.online?.setReady(r),
         onStart: () => this.online?.startMatch(),

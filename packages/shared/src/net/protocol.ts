@@ -98,6 +98,9 @@ export interface PersonalResult {
   /** Tokens earned in this match (spent in the shop on weapons, characters, modifications and equipment). */
   tokensGained?: number;
   totalTokens?: number;
+  /** Rating change in this match and the rating after it (the Top-100 table). */
+  ratingDelta?: number;
+  rating?: number;
 }
 
 export type ServerMessage =

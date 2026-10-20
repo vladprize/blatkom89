@@ -1,5 +1,5 @@
 /** Player profile queries for /api/me (profile, history, achievements, deletion). */
-import { ACHIEVEMENTS, ACHIEVEMENT_IDS, isAvatarId, levelForXp } from '@blatkom/shared';
+import { ACHIEVEMENTS, ACHIEVEMENT_IDS, isAvatarId, levelForXp, nameKey } from '@blatkom/shared';
 import type { AchievementId, AchievementStatus, AvatarId, CharacterId, MapId, MatchHistoryEntry, PublicProfile } from '@blatkom/shared';
 import type { Sql } from '../database/db.js';
 
@@ -25,6 +25,7 @@ interface ProfileRow {
   tokens: number;
   diamonds: number;
   email: string | null;
+  rating: number;
 }
 
 export function toPublicProfile(r: ProfileRow): PublicProfile {
@@ -53,6 +54,7 @@ export function toPublicProfile(r: ProfileRow): PublicProfile {
     tokens: r.tokens,
     diamonds: r.diamonds,
     email: r.email,
+    rating: r.rating,
   };
 }
 
@@ -68,7 +70,8 @@ export class ProfileRepo {
              COALESCE(p.assists, 0) AS assists,
              COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
-             p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email
+             p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email,
+             COALESCE(p.rating, 1000) AS rating
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
       WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
     return rows[0] ? toPublicProfile(rows[0]) : null;
@@ -76,7 +79,7 @@ export class ProfileRepo {
 
   async update(userId: string, patch: { displayName?: string | undefined; preferredCharacter?: CharacterId | undefined; avatar?: AvatarId | null | undefined }): Promise<void> {
     await this.sql.begin(async (tx) => {
-      if (patch.displayName !== undefined) await tx`UPDATE users SET display_name = ${patch.displayName} WHERE id = ${userId}`;
+      if (patch.displayName !== undefined) await tx`UPDATE users SET display_name = ${patch.displayName}, name_key = ${nameKey(patch.displayName)} WHERE id = ${userId}`;
       if (patch.preferredCharacter !== undefined) {
         await tx`INSERT INTO profiles (user_id, preferred_character) VALUES (${userId}, ${patch.preferredCharacter})
                  ON CONFLICT (user_id) DO UPDATE SET preferred_character = EXCLUDED.preferred_character, updated_at = now()`;
@@ -90,10 +93,10 @@ export class ProfileRepo {
 
   async history(userId: string, limit: number): Promise<MatchHistoryEntry[]> {
     const rows = await this.sql<
-      Array<{ match_id: string; map_id: MapId; character: CharacterId; ended_at: Date | null; started_at: Date; duration_ms: number | null; place: number | null; players: number; kills: number; assists: number; deaths: number; xp_awarded: number; won: boolean }>
+      Array<{ match_id: string; map_id: MapId; character: CharacterId; ended_at: Date | null; started_at: Date; duration_ms: number | null; place: number | null; players: number; kills: number; assists: number; deaths: number; xp_awarded: number; won: boolean; rating_delta: number }>
     >`
       SELECT mp.match_id, m.map_id, mp.character, m.ended_at, m.started_at, m.duration_ms, mp.place, m.player_count + m.bot_count AS players,
-             mp.kills, mp.assists, mp.deaths, mp.xp_awarded, mp.won
+             mp.kills, mp.assists, mp.deaths, mp.xp_awarded, mp.won, mp.rating_delta
       FROM match_participants mp JOIN matches m ON m.id = mp.match_id
       WHERE mp.user_id = ${userId} AND m.status = 'completed'
       ORDER BY m.ended_at DESC NULLS LAST
@@ -112,6 +115,7 @@ export class ProfileRepo {
       deaths: r.deaths,
       xpGained: r.xp_awarded,
       won: r.won,
+      ratingDelta: r.rating_delta,
     }));
   }
 

@@ -20,6 +20,15 @@ import type {
   ModId,
   ShopKind,
   WeaponId,
+  FriendsResponse,
+  FriendEntry,
+  FriendRequestResult,
+  PlayerCard,
+  DirectMessage,
+  MessagesResponse,
+  LeaderboardBy,
+  LeaderboardResponse,
+  NameCheckResponse,
 } from '@blatkom/shared';
 import { platform } from '../telegram/tg.js';
 import { VERSION } from '../app/config.js';
@@ -147,5 +156,40 @@ export class Api {
   }
   invite(code: string) {
     return this.req<InviteInfo>('GET', `/api/invites/${encodeURIComponent(code)}`);
+  }
+  // ── aliases, friends, messages, Top-100 ─────────────────────────────────
+  /** Is an alias free (and a few free variants when it is not)? */
+  checkName(name: string) {
+    return this.req<NameCheckResponse>('GET', `/api/names/check?name=${encodeURIComponent(name)}`);
+  }
+  friends() {
+    return this.req<FriendsResponse>('GET', '/api/friends');
+  }
+  /** A friend request by alias; when they had asked me first, we are friends at once. */
+  friendRequest(name: string) {
+    return this.req<{ result: FriendRequestResult; player: PlayerCard; friend?: FriendEntry }>('POST', '/api/friends/request', { name });
+  }
+  acceptFriend(id: string) {
+    return this.req<{ friend: FriendEntry | null }>('POST', `/api/friends/${encodeURIComponent(id)}/accept`, {});
+  }
+  /** Declines or cancels a request, or ends a friendship. */
+  removeFriend(id: string) {
+    return this.req<{ ok: true }>('DELETE', `/api/friends/${encodeURIComponent(id)}`);
+  }
+  messages(id: string, before?: number) {
+    return this.req<MessagesResponse>('GET', `/api/messages/${encodeURIComponent(id)}${before ? `?before=${before}` : ''}`);
+  }
+  sendMessage(id: string, text: string) {
+    return this.req<{ message: DirectMessage }>('POST', `/api/messages/${encodeURIComponent(id)}`, { text });
+  }
+  readMessages(id: string) {
+    return this.req<{ upTo: number }>('POST', `/api/messages/${encodeURIComponent(id)}/read`, {});
+  }
+  /** Invites a friend to the room I am in (delivered: the friend has the game open). */
+  inviteFriend(id: string, roomId: string) {
+    return this.req<{ delivered: boolean }>('POST', `/api/friends/${encodeURIComponent(id)}/invite`, { roomId });
+  }
+  leaderboard(by: LeaderboardBy) {
+    return this.req<LeaderboardResponse>('GET', `/api/leaderboard?by=${by}`);
   }
 }

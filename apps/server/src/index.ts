@@ -7,6 +7,7 @@ import { migrate } from './database/migrate.js';
 import { createApp } from './app.js';
 import { RoomManager } from './rooms/RoomManager.js';
 import { attachGateway } from './rooms/gateway.js';
+import { SocialHub } from './social/hub.js';
 import { createPersistence } from './services/persistence.js';
 
 const env = loadEnv();
@@ -19,7 +20,9 @@ if (applied.length) log.info('migrations applied', { applied });
 const persistence = await createPersistence({ sql, env, log });
 const services = persistence.services;
 const rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env), fillBots: env.MATCH_FILL_BOTS });
-const handler = createApp({ env, sql, log, services, rooms });
+const social = new SocialHub(rooms, log);
+rooms.onPresence((userId) => void social.announce(userId));
+const handler = createApp({ env, sql, log, services, rooms, social });
 const server = createServer((req, res) => {
   handler(req, res).catch((e: Error) => log.error('fatal request error', { err: e }));
 });
@@ -28,9 +31,10 @@ server.requestTimeout = 30_000;
 attachGateway(server, rooms, services, log, {
   allowedOrigins: env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean),
   publicUrl: env.PUBLIC_URL,
-  maxConnectionsPerIp: 24,
+  // a game socket and a social socket per app window: 24 players behind one address, as before v0.23
+  maxConnectionsPerIp: 48,
   trustProxy: env.TRUST_PROXY,
-});
+}, social);
 rooms.start();
 server.listen(env.PORT, env.HOST, () => log.info('listening', { host: env.HOST, port: env.PORT, publicUrl: env.PUBLIC_URL, devAuth: env.DEV_AUTH_ENABLED }));
 

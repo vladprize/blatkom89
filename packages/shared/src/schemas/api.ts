@@ -163,6 +163,8 @@ export interface PublicProfile {
   diamonds: number;
   /** Email sign-in is set up (the account can be restored on another device). */
   email: string | null;
+  /** Rating (the Top-100 table; starts at 1000). */
+  rating: number;
 }
 
 export interface AuthResponse {
@@ -207,6 +209,8 @@ export interface MatchHistoryEntry {
   deaths: number;
   xpGained: number;
   won: boolean;
+  /** Rating change in this match. */
+  ratingDelta: number;
 }
 
 export interface AchievementStatus {

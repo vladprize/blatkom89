@@ -476,3 +476,83 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .dossier__stamp { position: absolute; right: -6px; bottom: 28px; transform: rotate(-9deg); font-family: Oswald, sans-serif; font-weight: 700; letter-spacing: .08em; font-size: 15px; padding: 3px 10px; color: #c8312a; border: 3px solid #c8312a; background: rgba(232,220,192,.82); }
 .dossier__hero--locked .dossier__stamp { color: #4a4440; border-color: #4a4440; }
 .dossier__text { min-width: 0; }
+
+/* ── v0.23 social: menu buttons, friends, private messages, Top-100, invitations, account window ── */
+.stiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stile { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 62px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 4px 0 rgba(0,0,0,.35); color: var(--beige); font: inherit; text-align: left; cursor: pointer; transition: transform .06s, border-color .15s; }
+.stile:hover { border-color: var(--tape); }
+.stile:active { transform: translateY(2px); }
+.stile:focus-visible { outline: 2px solid var(--tape); outline-offset: 2px; }
+.stile__ico { flex: none; color: var(--tape); }
+.stile__txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.stile__txt b { font-family: Oswald, sans-serif; font-weight: 600; font-size: 18px; letter-spacing: .06em; text-transform: uppercase; line-height: 1.1; }
+.stile__txt small { font-size: 12px; color: var(--muted); line-height: 1.15; }
+.stile__badge { position: absolute; top: -8px; right: -6px; }
+.nbadge { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--red); color: #fff4e4; font-family: Oswald, sans-serif; font-size: 13px; font-weight: 600; line-height: 1; box-shadow: 0 0 0 2px #0d0b0a; }
+.friend { gap: 10px; }
+.friend .btn--small { flex: none; }
+.friend--offline .friend__ava img { filter: grayscale(.85) brightness(.75); }
+.friend__ava { position: relative; flex: none; display: block; }
+.friend__name { font-family: Oswald, sans-serif; font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.friend__status { font-family: 'PT Sans Narrow', sans-serif; font-size: 14px; }
+.sdot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #6b6256; vertical-align: middle; }
+.friend__ava .sdot { position: absolute; right: -1px; bottom: -1px; width: 13px; height: 13px; box-shadow: 0 0 0 2px var(--panel-2); }
+.sdot--online { background: #7cc36a; }
+.sdot--lobby { background: var(--gold); }
+.sdot--match { background: #e0483c; }
+.myalias { font-family: Oswald, sans-serif; color: var(--beige); font-weight: 600; }
+.chat { width: min(560px, 100%); height: min(640px, calc(100vh - 32px)); gap: 8px; }
+.chat__head { display: flex; align-items: center; gap: 10px; }
+.chat__name { font-family: Oswald, sans-serif; font-size: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat__status { font-size: 14px; }
+.chat__log { flex: 1; min-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: #0f0d0b; border: 1px solid var(--line); overscroll-behavior: contain; }
+.chat__more { align-self: center; }
+.chat__empty { margin: auto; text-align: center; }
+.chat__foot { display: flex; gap: 8px; align-items: flex-end; }
+.chat__input { resize: none; min-height: 46px; max-height: 120px; font-size: 17px; }
+.chat__remove { align-self: center; font-size: 13px; color: var(--muted); }
+.msg { align-self: flex-start; max-width: 82%; background: var(--panel-2); border: 1px solid var(--line); padding: 6px 10px 4px; }
+.msg--me { align-self: flex-end; background: #3a1714; border-color: #6a2a20; }
+.msg__text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 17px; line-height: 1.3; }
+.msg__time { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; }
+.toptable td { vertical-align: middle; }
+.toptable th.sorted, .toptable td.sorted { color: var(--tape); font-weight: 600; }
+.toptable tr.top1 .toprank-cell { color: var(--gold); font-weight: 700; }
+.toptable tr.top2 .toprank-cell { color: #cfc6b4; font-weight: 700; }
+.toptable tr.top3 .toprank-cell { color: #c58a55; font-weight: 700; }
+.topname { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.topname .ava { width: 30px; height: 30px; }
+.topname span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.topadd { min-height: 32px; padding: 6px 10px; font-size: 16px; }
+.toprank { font-family: Oswald, sans-serif; font-weight: 700; font-size: 34px; color: var(--tape); min-width: 70px; }
+.ratingline { font-family: Oswald, sans-serif; font-size: 17px; }
+.up { color: #9fd08a; }
+.down { color: #e07a6a; }
+.invitecard { position: fixed; z-index: 70; top: calc(10px + var(--safe-top, 0px)); left: 50%; transform: translateX(-50%); width: min(520px, calc(100% - 24px)); display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-color: var(--tape); animation: invite-in .25s ease-out; }
+.invitecard b { font-family: Oswald, sans-serif; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invitecard .muted { font-size: 14px; }
+@keyframes invite-in { from { transform: translate(-50%, -20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+.namehint { min-height: 20px; font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.namehint__ok { color: #9fd08a; }
+.namehint__bad { color: #e07a6a; }
+.chip { font: inherit; font-size: 14px; color: var(--beige); background: var(--panel-2); border: 1px solid var(--line); padding: 4px 9px; cursor: pointer; }
+.chip:hover { border-color: var(--tape); }
+.welcome .btn { width: 100%; }
+@media (max-width: 520px) {
+  .stile { min-height: 56px; padding: 8px 10px; }
+  .stile__txt b { font-size: 16px; }
+  .friend { flex-wrap: wrap; }
+  .friend .n { flex: 1 1 140px; }
+  .topname span { max-width: 120px; }
+  .toptable { font-size: 15px; }
+  .toptable td, .toptable th { padding: 6px 5px; }
+}
+.menu__play .stiles { flex: none; }
+.menu__play .stile { background: var(--panel-2); box-shadow: none; min-height: 54px; }
+.addfriend .input { flex: 1 1 220px; width: auto; min-width: 0; }
+.addfriend .btn { flex: none; white-space: nowrap; }
+.invitecard b { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.2; }
+@media (max-width: 520px) {
+  .toptable .c-wins, .toptable .num.c-rating:not(.sorted), .toptable .num.c-level:not(.sorted), .toptable .num.c-kills:not(.sorted) { display: none; }
+  .toptable .sorted { color: var(--beige); }
+}

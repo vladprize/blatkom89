@@ -26,6 +26,8 @@ export const RETENTION_DAYS = {
   passwordResets: 7,
   /** Anonymous visitor funnel: visitor_days by day, visitors by their last visit. */
   visitors: 400,
+  /** Direct messages between friends, by created_at. */
+  directMessages: 180,
 } as const;
 
 export type RetentionDays = { [K in keyof typeof RETENTION_DAYS]: number };
@@ -57,6 +59,7 @@ export async function purgeExpired(sql: Sql, now = new Date(), days: RetentionDa
   const resets = cutoff(days.passwordResets);
   const visitorDay = cutoff(days.visitors).toISOString().slice(0, 10);
   const visitors = cutoff(days.visitors);
+  const messages = cutoff(days.directMessages);
   return {
     analyticsEvents: await batched(
       async () => (await sql`DELETE FROM analytics_events WHERE ctid IN (SELECT ctid FROM analytics_events WHERE occurred_at < ${events} LIMIT ${BATCH})`).count,
@@ -82,6 +85,9 @@ export async function purgeExpired(sql: Sql, now = new Date(), days: RetentionDa
       async () =>
         (await sql`DELETE FROM visitor_days WHERE ctid IN (SELECT ctid FROM visitor_days WHERE day < ${visitorDay}::date LIMIT ${BATCH})`).count +
         (await sql`DELETE FROM visitors WHERE ctid IN (SELECT ctid FROM visitors WHERE last_seen_at < ${visitors} LIMIT ${BATCH})`).count,
+    ),
+    directMessages: await batched(
+      async () => (await sql`DELETE FROM direct_messages WHERE ctid IN (SELECT ctid FROM direct_messages WHERE created_at < ${messages} LIMIT ${BATCH})`).count,
     ),
   };
 }

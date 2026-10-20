@@ -7,7 +7,7 @@
  *   4. mark the match completed + results_processed_at
  * Concurrent duplicate calls serialize on the match row lock, so XP is awarded exactly once.
  */
-import { ACHIEVEMENTS, ACHIEVEMENT_IDS, applyMatchProgress, tokensForMatch } from '@blatkom/shared';
+import { ACHIEVEMENTS, ACHIEVEMENT_IDS, RATING_RULES, applyMatchProgress, ratingDelta, tokensForMatch } from '@blatkom/shared';
 import type { AchievementId, PersonalResult } from '@blatkom/shared';
 import type postgres from 'postgres';
 import type { Sql } from '../database/db.js';
@@ -76,8 +76,8 @@ export class PgMatchRecorder implements MatchRecorder {
       const out = new Map<string, PersonalResult>();
       for (const p of participants) {
         await tx`INSERT INTO profiles (user_id) VALUES (${p.userId}) ON CONFLICT DO NOTHING`;
-        const [prof] = await tx<Array<{ xp: number; level: number; matches_completed: number; wins: number; current_win_streak: number; best_win_streak: number }>>`
-          SELECT xp, level, matches_completed, wins, current_win_streak, best_win_streak FROM profiles WHERE user_id = ${p.userId} FOR UPDATE`;
+        const [prof] = await tx<Array<{ xp: number; level: number; matches_completed: number; wins: number; current_win_streak: number; best_win_streak: number; rating: number }>>`
+          SELECT xp, level, matches_completed, wins, current_win_streak, best_win_streak, rating FROM profiles WHERE user_id = ${p.userId} FOR UPDATE`;
         // friends are people: players the server filled in don't count
         const withFriends = m.isPrivate && p.viaInvite && people >= 2;
         const sharedPlace = p.completed && m.participants.some((o) => o.userId !== p.userId && o.completed && o.place === p.place);
@@ -86,8 +86,11 @@ export class PgMatchRecorder implements MatchRecorder {
         const prev = { xp: prof!.xp, level: prof!.level, matchesCompleted: prof!.matches_completed, wins: prof!.wins, currentWinStreak: prof!.current_win_streak };
         const { won, lost, streak, unlocked, xpGained: xp, totalXp, level } = applyMatchProgress(prev, perf, new Set(ownedRows.map((r) => r.achievement_id)));
         const tokens = tokensForMatch(perf);
+        const rating = Math.max(RATING_RULES.floor, prof!.rating + ratingDelta(perf));
+        const rDelta = rating - prof!.rating;
         await tx`
           UPDATE profiles SET
+            rating = ${rating},
             xp = ${totalXp},
             level = ${level},
             matches_played = matches_played + 1,
@@ -108,14 +111,14 @@ export class PgMatchRecorder implements MatchRecorder {
         }
         const totalTokens = await awardMatchTokens(tx, p.userId, m.matchId, tokens);
         await tx`
-          INSERT INTO match_participants (match_id, user_id, character, team, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, tokens_awarded, joined_at, left_at)
-          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.team}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${tokens}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
+          INSERT INTO match_participants (match_id, user_id, character, team, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, tokens_awarded, rating_delta, joined_at, left_at)
+          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.team}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${tokens}, ${rDelta}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
           ON CONFLICT (match_id, user_id) DO UPDATE SET
             character = EXCLUDED.character, team = EXCLUDED.team, place = EXCLUDED.place, kills = EXCLUDED.kills, assists = EXCLUDED.assists, deaths = EXCLUDED.deaths,
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
-            tokens_awarded = EXCLUDED.tokens_awarded, left_at = EXCLUDED.left_at`;
-        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof!.level, newAchievements: unlocked, tokensGained: tokens, totalTokens });
+            tokens_awarded = EXCLUDED.tokens_awarded, rating_delta = EXCLUDED.rating_delta, left_at = EXCLUDED.left_at`;
+        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof!.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating });
       }
       await tx`
         UPDATE matches SET status = 'completed', ended_at = ${m.endedAt}, duration_ms = ${Math.max(0, Math.round(m.durationMs))},
@@ -128,8 +131,8 @@ export class PgMatchRecorder implements MatchRecorder {
   private async readResults(tx: Tx, matchId: string, userIds: string[]): Promise<Map<string, PersonalResult>> {
     const out = new Map<string, PersonalResult>();
     if (userIds.length === 0) return out;
-    const rows = await tx<Array<{ user_id: string; xp_awarded: number; tokens_awarded: number; xp: number; level: number; tokens: number }>>`
-      SELECT mp.user_id, mp.xp_awarded, mp.tokens_awarded, p.xp, p.level, p.tokens
+    const rows = await tx<Array<{ user_id: string; xp_awarded: number; tokens_awarded: number; rating_delta: number; xp: number; level: number; tokens: number; rating: number }>>`
+      SELECT mp.user_id, mp.xp_awarded, mp.tokens_awarded, mp.rating_delta, p.xp, p.level, p.tokens, p.rating
       FROM match_participants mp JOIN profiles p ON p.user_id = mp.user_id
       WHERE mp.match_id = ${matchId} AND mp.user_id IN ${tx(userIds)}`;
     const ach = await tx<Array<{ user_id: string; achievement_id: AchievementId }>>`
@@ -143,6 +146,8 @@ export class PgMatchRecorder implements MatchRecorder {
         newAchievements: ach.filter((a) => a.user_id === r.user_id).map((a) => a.achievement_id),
         tokensGained: r.tokens_awarded,
         totalTokens: r.tokens,
+        ratingDelta: r.rating_delta,
+        rating: r.rating,
       });
     }
     return out;

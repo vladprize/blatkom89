@@ -13,6 +13,8 @@ import type { Sql } from '../database/db.js';
 import type { Env } from '../config/env.js';
 import { createApp, ROUTE_MODULES } from '../app.js';
 import { RoomManager } from '../rooms/RoomManager.js';
+import { attachGateway } from '../rooms/gateway.js';
+import { SocialHub } from '../social/hub.js';
 import { silentLogger } from '../logging/logger.js';
 import { createPersistence } from '../services/persistence.js';
 import type { Persistence } from '../services/persistence.js';
@@ -88,7 +90,10 @@ export interface TestApp {
   env: Env;
   persistence: Persistence;
   rooms: RoomManager;
+  social: SocialHub;
   base: string;
+  /** ws://… — `/ws` (rooms) and `/ws/social` are attached. */
+  wsBase: string;
   server: Server;
   close(): Promise<void>;
 }
@@ -98,18 +103,28 @@ export async function startTestApp(envOverrides: Partial<Env> = {}): Promise<Tes
   const env = testEnv(envOverrides);
   const persistence = await createPersistence({ sql: db.sql, env, log: silentLogger });
   const rooms = new RoomManager(persistence.services, silentLogger, { maxRooms: 10, fillBots: env.MATCH_FILL_BOTS });
-  const handler = createApp({ env, sql: db.sql, log: silentLogger, services: persistence.services, rooms }, ROUTE_MODULES);
+  const social = new SocialHub(rooms, silentLogger);
+  rooms.onPresence((userId) => void social.announce(userId));
+  const handler = createApp({ env, sql: db.sql, log: silentLogger, services: persistence.services, rooms, social }, ROUTE_MODULES);
   const server = createServer((req, res) => void handler(req, res));
+  const wss = attachGateway(server, rooms, persistence.services, silentLogger, { allowedOrigins: [], publicUrl: env.PUBLIC_URL, maxConnectionsPerIp: 64, trustProxy: false }, social);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const port = (server.address() as AddressInfo).port;
+  const base = `http://127.0.0.1:${port}`;
+  rooms.start();
   return {
     db,
     env,
     persistence,
     rooms,
+    social,
     base,
+    wsBase: `ws://127.0.0.1:${port}`,
     server,
     async close() {
+      social.closeAll();
+      for (const c of wss.clients) c.terminate();
+      wss.close();
       rooms.stop();
       await persistence.close?.();
       await new Promise<void>((resolve) => server.close(() => resolve()));

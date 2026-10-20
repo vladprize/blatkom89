@@ -4,7 +4,7 @@
  * server recorder (`applyMatchProgress`), so a level means the same in both builds. Pure functions;
  * persistence is in localStore.ts. The online build never uses this — there the server owns progress.
  */
-import { ACHIEVEMENT_IDS, ACHIEVEMENTS, applyMatchProgress, displayNameSchema, isAvatarId, isCharacterId, isMapId, levelForXp } from '@blatkom/shared';
+import { ACHIEVEMENT_IDS, ACHIEVEMENTS, applyMatchProgress, displayNameSchema, isAvatarId, isCharacterId, isMapId, levelForXp, RATING_RULES } from '@blatkom/shared';
 import type { AchievementId, AchievementStatus, AvatarId, CharacterId, MapId, MatchHistoryEntry, PersonalResult, PublicProfile, Standing, TeamResultSummary } from '@blatkom/shared';
 
 export const LOCAL_HISTORY_MAX = 20;
@@ -242,8 +242,10 @@ export function localProfileView(p: LocalProfile, preferredCharacter: CharacterI
       tokens: 0,
       diamonds: 0,
       email: null,
+      // the rating moves only in online matches
+      rating: RATING_RULES.start,
     },
-    history: p.history.map((h) => ({ ...h })),
+    history: p.history.map((h) => ({ ...h, ratingDelta: 0 })),
     achievements: ACHIEVEMENT_IDS.map((id) => ({ id, title: ACHIEVEMENTS[id].title, description: ACHIEVEMENTS[id].description, unlockedAt: p.achievements[id] ?? null })),
   };
 }

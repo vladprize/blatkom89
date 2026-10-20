@@ -59,10 +59,11 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 | `rooms/` | `RoomManager` (shared 60 Hz loop, quick match, limits), `MatchRoom` (lobby, phases, input queues, snapshots, results; filled lineups — players the room runs with `BotBrain`, shown to clients exactly like people, docs/NETCODE.md §2a), `gateway` (WS upgrade, origin/IP limits, hello authentication) |
 | `auth/` | Telegram `initData` HMAC validation, guest login (HMAC of a browser secret), email + password (scrypt) with reset tokens, dev login (non-production only), opaque random session tokens (only an HMAC-SHA-256 of the token is stored) |
 | `economy/`, `payments/` | wallet, purchases, modifications, cases and loadouts with a ledger (row locks, one transaction per change); Stripe / NOWPayments checkouts and verified webhooks, credit-once, refunds ([ECONOMY.md](ECONOMY.md)) |
-| `profiles/`, `progression/` | profile reads/updates, idempotent match recorder (XP, levels, wins/streaks, achievements) |
+| `profiles/`, `progression/` | profile reads/updates, idempotent match recorder (XP, levels, rating, wins/streaks, achievements) |
+| `social/`, `api/social.ts` | friends (requests, acceptance), private messages between friends, invitations to a room, the Top-100; `SocialHub` holds the social WebSockets (`/ws/social`): presence (online / lobby / match from `RoomManager.roomOf`) and live events; unique aliases in `auth/names.ts` |
 | `analytics/` | event ingestion with UUID dedupe, buffered server events, sanitised error log, metrics (DAU/WAU/MAU, D1/D7, charts), retention purge |
 | `admin/` | admin auth (scrypt, HttpOnly cookie + CSRF), roles, audit log, dashboard API, CSV export with formula-injection protection, CLI |
-| `database/` | `postgres` driver (parameterised tagged templates only), forward-only SQL migrations |
+| `database/` | `postgres` driver (parameterised tagged templates only), forward-only SQL migrations; `codeSteps.ts` for the few that need application code in the same transaction (010: alias keys, replayed ratings) |
 | `services/` | contracts between rooms and persistence; PostgreSQL and in-memory implementations |
 
 ### apps/web
@@ -70,9 +71,9 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 |---|---|
 | `app/App.ts` | screens: menu (play column; character card, «Dossier» profile tile and the Arsenal tile; language and music switches), character select with the personal file, practice setup (map tiles, mode, 1–9 bots), Quick Match mode chooser, friends (create/join), lobby (team columns in team modes), game, results, profile, settings, credits, errors; first-launch nickname dialog |
 | `i18n/` | English (source strings) and Russian (`ru.ts`, `ru-content.ts` for characters, weapons, maps…): `t()`, Russian plurals, language detection (Telegram → browser → English), switching at run time |
-| `ui/` | DOM helpers, screens (Arsenal with the dressing room, lobby, results, settings, account, profile), map pickers with thumbnails, mode switch and pictograms, the in-game «doll» preview, `fit.ts` (texts that shrink to fit: aliases, map captions), `avatars.ts` (profile avatars and the picker) |
+| `ui/` | DOM helpers, screens (Arsenal with the dressing room, lobby, results, settings, account, profile, `social.ts` — Friends, conversations, Top-100, the lobby's invite panel, invitation cards; `welcome.ts` — the account window of a guest), map pickers with thumbnails, mode switch and pictograms, the in-game «doll» preview, `fit.ts` (texts that shrink to fit: aliases, map captions), `avatars.ts` (profile avatars and the picker) |
 | `profile/` | nickname dialog and suggestions; the demo build's browser-only profile (`localProfile.ts` pure rules + `localStore.ts` localStorage) — the online build always uses the server profile |
-| `net/` | REST client, `GameConnection` (WS, reconnect with backoff, ping), `OnlineClient` (auth, rooms, lobby state) |
+| `net/` | REST client, `GameConnection` (WS, reconnect with backoff, ping), `OnlineClient` (auth, rooms, lobby state), `SocialClient` (the social socket and the friends store: presence, unread counts, requests, invitations) |
 | `game/session/` | `OfflineSession` (local World + bots), `OnlineSession` (prediction, reconciliation, interpolation, delayed remote events) — both expose the same `GameSession` interface to the scenes |
 | `game/scenes/` | `BootScene` (loading), `GameScene` (fixed-step loop, camera, events → feedback), `HudScene` (HUD, touch controls, scoreboard), `PreviewScene` (animated map behind menus) |
 | `game/render/` | map renderer (tiles, decals, litter, props, walls, overhead layer, culling), lighting (light map, fixtures, objective light pools), effects, character views (team rings and name colours), equipment, flags and bases (`ObjectiveView`), VHS post-process |
@@ -83,7 +84,7 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 | `admin/` | the `/admin` dashboard (separate entry, never loaded by players) |
 
 ## 3. Data model (PostgreSQL)
-Migrations: `apps/server/src/database/migrations/` (`001_init.sql` … `006_team_matches.sql`: assists, guest auth, economy and email, team modes — `matches.mode` (`ffa`/`teams`/`ctf`/`bases`), `matches.winner_team`, `match_participants.team`).
+Migrations: `apps/server/src/database/migrations/` (`001_init.sql` … `010_social.sql`: assists, guest auth, economy and email, team modes — `matches.mode` (`ffa`/`teams`/`ctf`/`bases`), `matches.winner_team`, `match_participants.team`; avatars; filled lineups; v0.23 unlocks; social — `users.name_key` (unique alias key), `profiles.rating`, `match_participants.rating_delta`, `friendships`, `direct_messages`).
 
 `users` (internal UUID, Telegram id unique, display name, language) · `profiles` (level, XP, matches,
 wins, losses, kills, deaths, playtime, streaks, preferred character) · `sessions` (token hash, expiry,
@@ -91,7 +92,8 @@ platform) · `user_daily_activity` (UTC day per user — DAU/retention) · `matc
 end reason, `results_processed_at`) · `match_participants` (place, kills, deaths, score, damage, won,
 XP awarded) · `achievements` / `player_achievements` · `invitations` (code → room, expiry, open count) ·
 `analytics_events` (UUID PK = dedupe) · `app_errors` · `admin_users` / `admin_sessions` /
-`admin_audit_log`. Canonical vs derived data and every metric definition: [ANALYTICS.md](ANALYTICS.md).
+`admin_audit_log` · `friendships` (a pending request is one row, an accepted friendship two) ·
+`direct_messages` (between friends, 180 days). Canonical vs derived data and every metric definition: [ANALYTICS.md](ANALYTICS.md).
 
 ## 4. Deliberate deviations from the suggested stack
 

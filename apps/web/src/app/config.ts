@@ -14,6 +14,11 @@ export function wsUrl(): string {
   return `${proto}//${location.host}/ws`;
 }
 
+/** Friends' presence, messages and invitations. */
+export function socialWsUrl(): string {
+  return `${wsUrl()}/social`;
+}
+
 /** Internal render resolution: the short side of the screen shows VIEW_SHORT world px. */
 export const VIEW_SHORT_WORLD = 250;
 export const TEXELS_PER_WORLD_PX = 2;

@@ -9,12 +9,14 @@ import type { Logger } from './logging/logger.js';
 import type { Sql } from './database/db.js';
 import type { Services } from './services/contracts.js';
 import type { RoomManager } from './rooms/RoomManager.js';
+import type { SocialHub } from './social/hub.js';
 import { registerRoomRoutes } from './api/rooms.js';
 import { registerAuthRoutes } from './api/auth.js';
 import { registerProfileRoutes } from './api/profile.js';
 import { registerEventRoutes } from './api/events.js';
 import { registerAdminRoutes } from './admin/routes.js';
 import { registerShopRoutes } from './api/shop.js';
+import { registerSocialRoutes } from './api/social.js';
 
 export interface AppDeps {
   env: Env;
@@ -22,11 +24,13 @@ export interface AppDeps {
   log: Logger;
   services: Services;
   rooms: RoomManager;
+  /** Presence and live social events (`/ws/social`); routes make their own when absent (tests). */
+  social?: SocialHub;
 }
 
 export type RouteModule = (router: Router, deps: AppDeps) => void;
 
-export const ROUTE_MODULES: RouteModule[] = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerAdminRoutes];
+export const ROUTE_MODULES: RouteModule[] = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerAdminRoutes];
 
 export function createApp(deps: AppDeps, modules: RouteModule[] = ROUTE_MODULES) {
   const router = new Router();

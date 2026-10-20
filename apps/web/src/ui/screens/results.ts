@@ -9,6 +9,9 @@ import { modeName } from '../modes.js';
 
 const teamLabel = (team: Team) => (team === 0 ? t('RED TEAM') : t('BLUE TEAM'));
 
+/** +16 / −16 / ±0 */
+export const signed = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '±0');
+
 /** «4 eliminations × 5 = 20 · 1 assist × 2 = 2 · finished +5» — how the match talons were counted. */
 function talonBreakdown(me: Standing | undefined, gained: number): string | null {
   if (!me) return null;
@@ -55,6 +58,17 @@ export function renderResults(o: {
       h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, h('div', { class: 'lvlbadge' }, h('small', null, t('LVL')), String(personal.level)), h('div', { class: 'h1 grow' }, `+${personal.xpGained} XP`)),
       h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
       h('div', { class: 'muted' }, personal.leveledUp ? t('Promoted — level {n}!', { n: personal.level }) : lvl.nextLevelCost > 0 ? t('{a} / {b} to level {n}', { a: lvl.intoLevel, b: lvl.nextLevelCost, n: personal.level + 1 }) : t('Top level')),
+      personal.rating !== undefined
+        ? h(
+            'div',
+            { class: 'ratingline', 'data-testid': 'rating-line' },
+            t('Rating'),
+            ' ',
+            h('b', null, String(personal.rating)),
+            ' ',
+            h('span', { class: (personal.ratingDelta ?? 0) > 0 ? 'up' : (personal.ratingDelta ?? 0) < 0 ? 'down' : 'muted' }, signed(personal.ratingDelta ?? 0)),
+          )
+        : null,
       personal.tokensGained !== undefined
         ? h(
             'div',

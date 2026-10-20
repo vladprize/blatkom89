@@ -23,6 +23,9 @@ const check = (ok, what) => {
   console.log(ok ? '✔' : '✖', what);
 };
 
+// aliases are unique (v0.23): every run brings its own
+const RUN = Math.random().toString(36).slice(2, 5);
+
 async function player(name, character, lang) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: lang === 'ru' ? 'ru-RU' : 'en-GB' });
   await ctx.addInitScript(
@@ -31,6 +34,8 @@ async function player(name, character, lang) {
         localStorage.setItem('blatkom89.character', c);
         localStorage.setItem('blatkom89.lang.v1', l);
         localStorage.setItem('blatkom89.tutorial.v1', '1');
+        // the account window of a guest (tested in online.mjs and social.mjs)
+        localStorage.setItem('blatkom89.welcome.v1', String(Date.now()));
       } catch {}
     },
     [character, lang],
@@ -83,7 +88,7 @@ try {
   await A.page.goto(base + '/');
   await pressPlay(A.page);
   check(await A.page.evaluate(() => window.__blatkom.music.playing()), 'A: «▶ Play» on the start screen starts the menu music');
-  await nickname(A, 'Flag Bearer');
+  await nickname(A, `Flag Bearer ${RUN}`);
   await A.page.getByTestId('menu-nick').waitFor({ timeout: 20000 });
   // A picks an avatar in the menu (saved on the server): B will see it in the lobby
   await A.page.locator('[data-testid=profile-strip] [data-testid=avatar-button]').click();
@@ -96,7 +101,7 @@ try {
   check(/^[A-Za-z0-9]{6,16}$/.test(code), `A created a capture-the-flag room (invite ${code})`);
   await B.page.goto(`${base}/?invite=${encodeURIComponent(code)}`);
   await pressPlay(B.page);
-  await nickname(B, 'Перехватчик');
+  await nickname(B, `Перехватчик ${RUN}`);
   await A.page.getByText(/Players 2\//).waitFor({ timeout: 90000 });
   await B.page.getByText(/Игроки 2\//).waitFor({ timeout: 90000 });
   check((await A.page.locator('.teamcol').count()) === 2 && (await B.page.locator('.teamcol').count()) === 2, 'both lobbies show the red and blue columns');

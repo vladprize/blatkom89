@@ -18,7 +18,7 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
 ## 2. Connection lifecycle
 
 1. `POST /api/rooms` (create, private → invite code) or `POST /api/rooms/quick` → `roomId`.
-2. WebSocket `GET /ws` (same origin; foreign `Origin` → 403; ≤24 sockets per IP; 4 KB max frame).
+2. WebSocket `GET /ws` (same origin; foreign `Origin` → 403; ≤48 sockets per IP — a game and a social socket per app window; 4 KB max frame).
 3. First message must be JSON `hello {protocol, token, roomId, character, clientVersion}` within 8 s
    (`PROTOCOL_VERSION` = 6: v2 assists and supply drops, v3 loadouts, rockets, medkits, v4 the arsenal,
    modifications and equipment, v5 ten players and team matches, v6 capture the flag and base capture;
@@ -41,6 +41,22 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
    database transaction commits, and the `roster` is re-broadcast with the levels just earned (nameplates
    and the Tab table in a rematch show the current level). `rematch` votes restart the room with a new
    match id.
+
+### 2b. The social socket (`/ws/social`, v0.23)
+
+A second, light WebSocket per app window carries friends' news; game rooms are untouched by it.
+1. `GET /ws/social` (same origin and per-IP limits as `/ws`); the first message must be
+   `{"type":"auth","token":…}` within 8 s (the REST session token) — then `ready {userId, unread, incoming}`.
+   Up to 6 windows per player (the oldest is closed with 4409); a bad token closes with 4401.
+2. Server → client JSON events: `presence {userId, status}` (`online`, `lobby` — in a room's lobby or on its
+   results, `match`, `offline`; offline is announced 2.5 s after the last window closes, so a reload does
+   not flicker), `friend_request`, `friend_accepted`, `friend_removed`, `dm {message, from}` (also to the
+   sender's other windows), `dm_read {by, upTo}`, `invite {from, roomId, mode, mapId, isPrivate, at}`,
+   `pong`. The client sends only `auth` and `ping` (every 30 s; 75 s of silence → reconnect with backoff).
+3. Everything that changes data goes through REST (`/api/friends…`, `/api/messages/:id…`,
+   `/api/friends/:id/invite`, `/api/leaderboard`); the socket only announces it. Presence comes from the
+   room manager (`roomOf`), so it costs nothing per tick. One server process holds the whole presence map
+   (see DEPLOYMENT.md before running several).
 
 ### 2a. Filled lineups
 

@@ -1,6 +1,7 @@
-/** Player profile, history, achievements and account deletion. */
-import { UpdateProfileRequest } from '@blatkom/shared';
-import type { AchievementsResponse, MatchHistoryResponse } from '@blatkom/shared';
+/** Player profile, history, achievements, alias checks and account deletion. */
+import { UpdateProfileRequest, displayNameSchema } from '@blatkom/shared';
+import type { AchievementsResponse, MatchHistoryResponse, NameCheckResponse } from '@blatkom/shared';
+import { isNameConflict, isNameFree, suggestNames } from '../auth/names.js';
 import type { RouteModule } from '../app.js';
 import { HttpError } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
@@ -10,6 +11,7 @@ import { pgContext } from '../services/persistence.js';
 export const registerProfileRoutes: RouteModule = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
   const writeLimiter = new RateLimiter(10, 10 / 60);
+  const nameLimiter = new RateLimiter(30, 30 / 60);
   const pg = () => {
     if (!deps.sql) throw new HttpError(503, 'persistence_unavailable', 'The service is temporarily unavailable');
     return pgContext(deps.sql, deps.env, deps.log);
@@ -29,9 +31,28 @@ export const registerProfileRoutes: RouteModule = (router, deps) => {
       const inv = await pg().economy.inventory(user.userId);
       if (!inv.characters.includes(body.preferredCharacter)) throw new HttpError(409, 'not_owned', 'This character isn’t unlocked yet');
     }
-    await pg().profiles.update(user.userId, body);
+    // aliases are unique (any letter case); changing the case of your own is fine
+    if (body.displayName !== undefined && deps.sql && !(await isNameFree(deps.sql, body.displayName, user.userId))) throw new HttpError(409, 'name_taken', 'This alias is taken — pick another');
+    try {
+      await pg().profiles.update(user.userId, body);
+    } catch (e) {
+      if (isNameConflict(e)) throw new HttpError(409, 'name_taken', 'This alias is taken — pick another');
+      throw e;
+    }
     const profile = await pg().profiles.get(user.userId);
     ctx.json(200, profile);
+  });
+
+  /** Is an alias free? With a few free variants when it is not (the alias dialog checks as you type). */
+  router.get('/api/names/check', auth, rateLimit(nameLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
+    const user = currentUser(ctx);
+    const parsed = displayNameSchema.safeParse(ctx.query.get('name') ?? '');
+    if (!parsed.success) throw new HttpError(400, 'bad_name', 'A name may contain letters, digits, spaces and _ . -');
+    if (!deps.sql) throw new HttpError(503, 'persistence_unavailable', 'The service is temporarily unavailable');
+    const name = parsed.data;
+    const available = await isNameFree(deps.sql, name, user.userId);
+    const res: NameCheckResponse = { name, available, suggestions: available ? [] : await suggestNames(deps.sql, name) };
+    ctx.json(200, res);
   });
 
   router.get('/api/me/history', auth, async (ctx) => {

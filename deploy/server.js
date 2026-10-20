@@ -10013,323 +10013,6 @@ function createDb(url, opts = {}) {
 // apps/server/src/database/migrate.ts
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-var DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL("./migrations/", import.meta.url));
-var LOCK_ID = 891989;
-function listFiles(dir) {
-  return readdirSync(dir).filter((f) => /^\d{3}_[a-z0-9_]+\.sql$/.test(f)).sort();
-}
-async function ensureLedger(sql2) {
-  await sql2`CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`;
-}
-async function migrate(sql2, dir = DEFAULT_MIGRATIONS_DIR) {
-  await ensureLedger(sql2);
-  const done = [];
-  await sql2.begin(async (tx) => {
-    await tx`SELECT pg_advisory_xact_lock(${LOCK_ID})`;
-    const rows = await tx`SELECT version FROM schema_migrations`;
-    const applied2 = new Set(rows.map((r) => r.version));
-    for (const file of listFiles(dir)) {
-      if (applied2.has(file)) continue;
-      await tx.unsafe(readFileSync(`${dir}/${file}`, "utf8"));
-      await tx`INSERT INTO schema_migrations (version) VALUES (${file})`;
-      done.push(file);
-    }
-  });
-  return done;
-}
-
-// apps/server/src/app.ts
-import { randomUUID as randomUUID2 } from "node:crypto";
-
-// apps/server/src/http/router.ts
-var HttpError = class extends Error {
-  constructor(status, code, message, headers = {}) {
-    super(message);
-    this.status = status;
-    this.code = code;
-    this.headers = headers;
-  }
-  status;
-  code;
-  headers;
-};
-var Router = class {
-  routes = [];
-  add(method, path, ...handlers) {
-    this.routes.push({ method, parts: path.split("/").filter(Boolean), handlers });
-    return this;
-  }
-  get(path, ...h) {
-    return this.add("GET", path, ...h);
-  }
-  post(path, ...h) {
-    return this.add("POST", path, ...h);
-  }
-  patch(path, ...h) {
-    return this.add("PATCH", path, ...h);
-  }
-  delete(path, ...h) {
-    return this.add("DELETE", path, ...h);
-  }
-  match(method, path) {
-    const segs = path.split("/").filter(Boolean);
-    let methodMismatch = false;
-    for (const r of this.routes) {
-      if (r.parts.length !== segs.length) continue;
-      const params = {};
-      let ok = true;
-      for (let i = 0; i < segs.length; i++) {
-        const p = r.parts[i];
-        if (p.startsWith(":")) params[p.slice(1)] = decodeURIComponent(segs[i]);
-        else if (p !== segs[i]) {
-          ok = false;
-          break;
-        }
-      }
-      if (!ok) continue;
-      if (r.method !== method && !(method === "HEAD" && r.method === "GET")) {
-        methodMismatch = true;
-        continue;
-      }
-      return { route: r, params };
-    }
-    if (methodMismatch) throw new HttpError(405, "method_not_allowed", "Method not allowed");
-    return null;
-  }
-  /** Returns true when a route handled the request. */
-  async handle(ctx) {
-    const m = this.match(ctx.method, ctx.path);
-    if (!m) return false;
-    ctx.params = m.params;
-    for (const h of m.route.handlers) {
-      await h(ctx);
-      if (ctx.res.writableEnded) break;
-    }
-    if (!ctx.res.writableEnded) ctx.json(204, null);
-    return true;
-  }
-};
-function parseCookies(header) {
-  const out = {};
-  if (!header) return out;
-  for (const part of header.split(";")) {
-    const i = part.indexOf("=");
-    if (i < 0) continue;
-    const k = part.slice(0, i).trim();
-    const v = part.slice(i + 1).trim();
-    if (k) {
-      try {
-        out[k] = decodeURIComponent(v);
-      } catch {
-        out[k] = v;
-      }
-    }
-  }
-  return out;
-}
-function serializeCookie(name, value, opts) {
-  let s = `${name}=${encodeURIComponent(value)}; Path=${opts.path ?? "/"}`;
-  if (opts.maxAge !== void 0) s += `; Max-Age=${Math.floor(opts.maxAge)}`;
-  if (opts.httpOnly !== false) s += "; HttpOnly";
-  if (opts.secure) s += "; Secure";
-  s += `; SameSite=${opts.sameSite ?? "Strict"}`;
-  return s;
-}
-async function readBody(req, limit) {
-  const declared = Number(req.headers["content-length"] ?? "0");
-  if (declared > limit) throw new HttpError(413, "payload_too_large", "Payload too large");
-  const chunks = [];
-  let size2 = 0;
-  for await (const chunk of req) {
-    size2 += chunk.length;
-    if (size2 > limit) throw new HttpError(413, "payload_too_large", "Payload too large");
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
-}
-function createCtx(req, res, opts) {
-  const url = new URL(req.url ?? "/", "http://localhost");
-  const fwd = opts.trustProxy ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim() : "";
-  const ip = fwd || req.socket.remoteAddress || "unknown";
-  const ctx = {
-    req,
-    res,
-    method: (req.method ?? "GET").toUpperCase(),
-    path: url.pathname,
-    query: url.searchParams,
-    params: {},
-    ip,
-    cookies: parseCookies(req.headers.cookie),
-    state: {},
-    requestId: opts.requestId,
-    async body(schema, limitBytes = 64 * 1024) {
-      const ct = String(req.headers["content-type"] ?? "");
-      if (!ct.includes("application/json")) throw new HttpError(415, "unsupported_media_type", "Expected application/json");
-      const raw = await readBody(req, limitBytes);
-      let data;
-      try {
-        data = raw.length ? JSON.parse(raw.toString("utf8")) : {};
-      } catch {
-        throw new HttpError(400, "bad_json", "Malformed JSON");
-      }
-      const parsed = schema.safeParse(data);
-      if (!parsed.success) {
-        const msg = parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; ");
-        throw new HttpError(400, "validation_error", msg);
-      }
-      return parsed.data;
-    },
-    json(status, data, headers = {}) {
-      if (res.writableEnded) return;
-      const body = status === 204 ? "" : JSON.stringify(data);
-      res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers });
-      res.end(body);
-    },
-    send(status, body, contentType, headers = {}) {
-      if (res.writableEnded) return;
-      res.writeHead(status, { "content-type": contentType, ...headers });
-      res.end(body);
-    }
-  };
-  return ctx;
-}
-
-// apps/server/src/http/static.ts
-import { createReadStream, statSync } from "node:fs";
-import { extname, join, normalize, resolve, sep } from "node:path";
-var TYPES = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
-  ".woff": "font/woff",
-  ".mp3": "audio/mpeg",
-  ".woff2": "font/woff2",
-  ".txt": "text/plain; charset=utf-8",
-  ".webmanifest": "application/manifest+json"
-};
-function securityHeaders(isHtml) {
-  const h = {
-    "x-content-type-options": "nosniff",
-    "referrer-policy": "strict-origin-when-cross-origin",
-    "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=()",
-    "cross-origin-opener-policy": "same-origin-allow-popups"
-  };
-  if (isHtml) {
-    h["content-security-policy"] = [
-      "default-src 'self'",
-      "script-src 'self' https://telegram.org",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
-      "font-src 'self'",
-      "connect-src 'self' ws: wss:",
-      "media-src 'self' blob:",
-      "worker-src 'self' blob:",
-      "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org",
-      "base-uri 'self'",
-      "form-action 'self'"
-    ].join("; ");
-  }
-  return h;
-}
-function serveStatic(root) {
-  const base2 = resolve(root);
-  return (ctx) => {
-    if (ctx.method !== "GET" && ctx.method !== "HEAD") return false;
-    let rel = decodeURIComponent(ctx.path);
-    if (rel.endsWith("/")) rel += "index.html";
-    const file = normalize(join(base2, rel));
-    if (!file.startsWith(base2 + sep) && file !== base2) return false;
-    let target = file;
-    let st;
-    try {
-      st = statSync(target);
-      if (st.isDirectory()) {
-        target = join(target, "index.html");
-        st = statSync(target);
-      }
-    } catch {
-      if (extname(rel)) return false;
-      target = join(base2, rel.startsWith("/admin") ? "admin.html" : "index.html");
-      try {
-        st = statSync(target);
-      } catch {
-        return false;
-      }
-    }
-    const ext = extname(target).toLowerCase();
-    const type = TYPES[ext] ?? "application/octet-stream";
-    const immutable = /-[A-Z0-9]{8}\.(js|css|woff2?|png)$/.test(target) || /[?&]v=[0-9a-f]{6,}/.test(ctx.req.url ?? "");
-    const etag = `W/"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
-    const isAdmin = target.endsWith(`${sep}admin.html`);
-    const headers = {
-      "content-type": type,
-      "cache-control": ext === ".html" ? isAdmin ? "no-store" : "no-cache" : immutable ? "public, max-age=31536000, immutable" : "public, max-age=300, must-revalidate",
-      etag,
-      ...securityHeaders(ext === ".html")
-    };
-    if (isAdmin) {
-      headers["content-security-policy"] = headers["content-security-policy"].replace(/frame-ancestors [^;]+/, "frame-ancestors 'none'");
-      headers["x-frame-options"] = "DENY";
-    }
-    if (ctx.req.headers["if-none-match"] === etag) {
-      ctx.res.writeHead(304, headers);
-      ctx.res.end();
-      return true;
-    }
-    headers["accept-ranges"] = "bytes";
-    const range = parseRange(ctx.req.headers.range, st.size);
-    if (range === "invalid") {
-      ctx.res.writeHead(416, { ...headers, "content-range": `bytes */${st.size}` });
-      ctx.res.end();
-      return true;
-    }
-    if (range) {
-      headers["content-range"] = `bytes ${range.start}-${range.end}/${st.size}`;
-      headers["content-length"] = String(range.end - range.start + 1);
-      ctx.res.writeHead(206, headers);
-      if (ctx.method === "HEAD") {
-        ctx.res.end();
-        return true;
-      }
-      createReadStream(target, { start: range.start, end: range.end }).pipe(ctx.res);
-      return true;
-    }
-    headers["content-length"] = String(st.size);
-    ctx.res.writeHead(200, headers);
-    if (ctx.method === "HEAD") {
-      ctx.res.end();
-      return true;
-    }
-    createReadStream(target).pipe(ctx.res);
-    return true;
-  };
-}
-function parseRange(header, size2) {
-  if (!header) return null;
-  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
-  if (!m) return null;
-  const [, a, b2] = m;
-  if (a === "" && b2 === "") return "invalid";
-  let start;
-  let end;
-  if (a === "") {
-    const n = Number(b2);
-    if (n === 0) return "invalid";
-    start = Math.max(0, size2 - n);
-    end = size2 - 1;
-  } else {
-    start = Number(a);
-    end = b2 === "" ? size2 - 1 : Math.min(Number(b2), size2 - 1);
-  }
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size2) return "invalid";
-  return { start, end };
-}
 
 // packages/shared/src/constants/game.ts
 var TICK_RATE = 60;
@@ -10647,6 +10330,40 @@ function fillNickname(rnd, lang) {
   if (rnd() < 0.5) return randomNickname(rnd, lang);
   const name = lang === "ru" ? `${pickFrom(rnd, CASUAL_RU)}${pickFrom(rnd, SUFFIX_RU)}` : `${pickFrom(rnd, CASUAL_EN)}${pickFrom(rnd, SUFFIX_EN)}`;
   return name.trim();
+}
+
+// packages/shared/src/game-rules/aliases.ts
+var LOOKALIKES = Object.freeze({
+  \u0430: "a",
+  \u0432: "b",
+  \u0435: "e",
+  \u0451: "e",
+  \u043A: "k",
+  \u043C: "m",
+  \u043D: "h",
+  \u043E: "o",
+  \u0440: "p",
+  \u0441: "c",
+  \u0442: "t",
+  \u0443: "y",
+  \u0445: "x",
+  \u0456: "i",
+  \u0458: "j",
+  \u0455: "s",
+  "\u0501": "d",
+  "\u051B": "q",
+  "\u051D": "w",
+  "\u2019": "'"
+});
+function nameKey(name) {
+  const s = name.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+  let out = "";
+  for (const ch of s) out += LOOKALIKES[ch] ?? ch;
+  return out;
+}
+function numberedAlias(base2, n) {
+  const tail = ` ${n}`;
+  return base2.slice(0, MAX_NAME_LENGTH - tail.length).trimEnd() + tail;
 }
 
 // packages/shared/src/game-rules/weapons.ts
@@ -11261,6 +10978,14 @@ function rankPlaces(sorted) {
     places.push(prev && prev.score === s.score && prev.kills === s.kills && prev.deaths === s.deaths ? places[i - 1] : i + 1);
   });
   return places;
+}
+var RATING_RULES = Object.freeze({ start: 1e3, k: 32, team: 16, leaver: -16, floor: 0 });
+function ratingDelta(p) {
+  if (!p.completed) return RATING_RULES.leaver;
+  if (p.teamOutcome) return p.teamOutcome === "win" ? RATING_RULES.team : p.teamOutcome === "loss" ? -RATING_RULES.team : 0;
+  if (p.playersAtEnd < 2) return 0;
+  const score = Math.min(1, Math.max(0, (p.playersAtEnd - p.place) / (p.playersAtEnd - 1)));
+  return Math.round(RATING_RULES.k * (score - 0.5));
 }
 function xpForMatch(p) {
   if (!p.completed) return 0;
@@ -15127,6 +14852,421 @@ var AdminGrantRequest = external_exports.object({
   note: external_exports.string().trim().min(3).max(120)
 }).strict();
 
+// packages/shared/src/schemas/social.ts
+var FriendRequestBody = external_exports.object({ name: displayNameSchema }).strict();
+var MAX_FRIENDS = 200;
+var MAX_PENDING_REQUESTS = 50;
+var DM_MAX_LENGTH = 500;
+var DirectMessageBody = external_exports.object({
+  text: external_exports.string().transform((s) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim()).pipe(external_exports.string().min(1).max(DM_MAX_LENGTH))
+}).strict();
+var InviteFriendBody = external_exports.object({ roomId: external_exports.string().regex(/^[A-Za-z0-9]{6,16}$/) }).strict();
+var SocialClientMessage = external_exports.discriminatedUnion("type", [
+  external_exports.object({ type: external_exports.literal("auth"), token: external_exports.string().min(16).max(256) }).strict(),
+  external_exports.object({ type: external_exports.literal("ping"), t: external_exports.number().finite() }).strict()
+]);
+var LEADERBOARD_BY = ["rating", "level", "kills"];
+var LEADERBOARD_SIZE = 100;
+
+// apps/server/src/database/codeSteps.ts
+async function uniqueAliases(tx) {
+  const rows = await tx`
+    SELECT id, display_name, deleted_at IS NULL AS living FROM users ORDER BY created_at, id`;
+  const taken = /* @__PURE__ */ new Set();
+  const final = /* @__PURE__ */ new Map();
+  const later = [];
+  for (const r of rows) {
+    const key = nameKey(r.display_name);
+    if (!r.living) final.set(r.id, { name: r.display_name, key });
+    else if (taken.has(key)) later.push(r);
+    else {
+      taken.add(key);
+      final.set(r.id, { name: r.display_name, key });
+    }
+  }
+  for (const r of later) {
+    let name = r.display_name;
+    let key = nameKey(name);
+    for (let n = 2; taken.has(key); n++) {
+      name = numberedAlias(r.display_name, n);
+      key = nameKey(name);
+    }
+    taken.add(key);
+    final.set(r.id, { name, key });
+  }
+  const ids = [...final.keys()];
+  const names = ids.map((id) => final.get(id).name);
+  const keys = ids.map((id) => final.get(id).key);
+  for (let i = 0; i < ids.length; i += 500) {
+    await tx`
+      UPDATE users u SET display_name = v.name, name_key = v.key
+      FROM unnest(${tx.array(ids.slice(i, i + 500))}::uuid[], ${tx.array(names.slice(i, i + 500))}::text[], ${tx.array(keys.slice(i, i + 500))}::text[]) AS v(id, name, key)
+      WHERE u.id = v.id`;
+  }
+  await tx`CREATE UNIQUE INDEX IF NOT EXISTS users_name_key_unique ON users (name_key) WHERE deleted_at IS NULL`;
+}
+async function replayRatings(tx) {
+  const rows = await tx`
+    SELECT mp.match_id, mp.user_id, mp.place, mp.completed, mp.team, m.mode, m.winner_team, (m.player_count + m.bot_count)::int AS players
+    FROM match_participants mp JOIN matches m ON m.id = mp.match_id
+    WHERE m.results_processed_at IS NOT NULL
+    ORDER BY m.ended_at NULLS LAST, m.results_processed_at, m.id, mp.user_id`;
+  const rating = /* @__PURE__ */ new Map();
+  const matchIds = [];
+  const userIds = [];
+  const deltas = [];
+  for (const r of rows) {
+    const teamOutcome = r.mode !== "ffa" && r.team !== null ? r.winner_team === null ? "draw" : r.winner_team === r.team ? "win" : "loss" : void 0;
+    const d = ratingDelta({ place: r.place ?? r.players, playersAtEnd: r.players, completed: r.completed, ...teamOutcome ? { teamOutcome } : {} });
+    const before = rating.get(r.user_id) ?? RATING_RULES.start;
+    const after = Math.max(RATING_RULES.floor, before + d);
+    rating.set(r.user_id, after);
+    matchIds.push(r.match_id);
+    userIds.push(r.user_id);
+    deltas.push(after - before);
+  }
+  for (let i = 0; i < matchIds.length; i += 1e3) {
+    await tx`
+      UPDATE match_participants mp SET rating_delta = v.d
+      FROM unnest(${tx.array(matchIds.slice(i, i + 1e3))}::uuid[], ${tx.array(userIds.slice(i, i + 1e3))}::uuid[], ${tx.array(deltas.slice(i, i + 1e3))}::int[]) AS v(m, u, d)
+      WHERE mp.match_id = v.m AND mp.user_id = v.u`;
+  }
+  const users = [...rating.keys()];
+  for (let i = 0; i < users.length; i += 1e3) {
+    const part = users.slice(i, i + 1e3);
+    await tx`
+      UPDATE profiles p SET rating = v.r
+      FROM unnest(${tx.array(part)}::uuid[], ${tx.array(part.map((u) => rating.get(u)))}::int[]) AS v(u, r)
+      WHERE p.user_id = v.u`;
+  }
+}
+var CODE_STEPS = Object.freeze({
+  "010_social.sql": async (tx) => {
+    await uniqueAliases(tx);
+    await replayRatings(tx);
+  }
+});
+
+// apps/server/src/database/migrate.ts
+var DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL("./migrations/", import.meta.url));
+var LOCK_ID = 891989;
+function listFiles(dir) {
+  return readdirSync(dir).filter((f) => /^\d{3}_[a-z0-9_]+\.sql$/.test(f)).sort();
+}
+async function ensureLedger(sql2) {
+  await sql2`CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`;
+}
+async function migrate(sql2, dir = DEFAULT_MIGRATIONS_DIR) {
+  await ensureLedger(sql2);
+  const done = [];
+  await sql2.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(${LOCK_ID})`;
+    const rows = await tx`SELECT version FROM schema_migrations`;
+    const applied2 = new Set(rows.map((r) => r.version));
+    for (const file of listFiles(dir)) {
+      if (applied2.has(file)) continue;
+      await tx.unsafe(readFileSync(`${dir}/${file}`, "utf8"));
+      await CODE_STEPS[file]?.(tx);
+      await tx`INSERT INTO schema_migrations (version) VALUES (${file})`;
+      done.push(file);
+    }
+  });
+  return done;
+}
+
+// apps/server/src/app.ts
+import { randomUUID as randomUUID2 } from "node:crypto";
+
+// apps/server/src/http/router.ts
+var HttpError = class extends Error {
+  constructor(status, code, message, headers = {}) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.headers = headers;
+  }
+  status;
+  code;
+  headers;
+};
+var Router = class {
+  routes = [];
+  add(method, path, ...handlers) {
+    this.routes.push({ method, parts: path.split("/").filter(Boolean), handlers });
+    return this;
+  }
+  get(path, ...h) {
+    return this.add("GET", path, ...h);
+  }
+  post(path, ...h) {
+    return this.add("POST", path, ...h);
+  }
+  patch(path, ...h) {
+    return this.add("PATCH", path, ...h);
+  }
+  delete(path, ...h) {
+    return this.add("DELETE", path, ...h);
+  }
+  match(method, path) {
+    const segs = path.split("/").filter(Boolean);
+    let methodMismatch = false;
+    for (const r of this.routes) {
+      if (r.parts.length !== segs.length) continue;
+      const params = {};
+      let ok = true;
+      for (let i = 0; i < segs.length; i++) {
+        const p = r.parts[i];
+        if (p.startsWith(":")) params[p.slice(1)] = decodeURIComponent(segs[i]);
+        else if (p !== segs[i]) {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok) continue;
+      if (r.method !== method && !(method === "HEAD" && r.method === "GET")) {
+        methodMismatch = true;
+        continue;
+      }
+      return { route: r, params };
+    }
+    if (methodMismatch) throw new HttpError(405, "method_not_allowed", "Method not allowed");
+    return null;
+  }
+  /** Returns true when a route handled the request. */
+  async handle(ctx) {
+    const m = this.match(ctx.method, ctx.path);
+    if (!m) return false;
+    ctx.params = m.params;
+    for (const h of m.route.handlers) {
+      await h(ctx);
+      if (ctx.res.writableEnded) break;
+    }
+    if (!ctx.res.writableEnded) ctx.json(204, null);
+    return true;
+  }
+};
+function parseCookies(header) {
+  const out = {};
+  if (!header) return out;
+  for (const part of header.split(";")) {
+    const i = part.indexOf("=");
+    if (i < 0) continue;
+    const k = part.slice(0, i).trim();
+    const v = part.slice(i + 1).trim();
+    if (k) {
+      try {
+        out[k] = decodeURIComponent(v);
+      } catch {
+        out[k] = v;
+      }
+    }
+  }
+  return out;
+}
+function serializeCookie(name, value, opts) {
+  let s = `${name}=${encodeURIComponent(value)}; Path=${opts.path ?? "/"}`;
+  if (opts.maxAge !== void 0) s += `; Max-Age=${Math.floor(opts.maxAge)}`;
+  if (opts.httpOnly !== false) s += "; HttpOnly";
+  if (opts.secure) s += "; Secure";
+  s += `; SameSite=${opts.sameSite ?? "Strict"}`;
+  return s;
+}
+async function readBody(req, limit) {
+  const declared = Number(req.headers["content-length"] ?? "0");
+  if (declared > limit) throw new HttpError(413, "payload_too_large", "Payload too large");
+  const chunks = [];
+  let size2 = 0;
+  for await (const chunk of req) {
+    size2 += chunk.length;
+    if (size2 > limit) throw new HttpError(413, "payload_too_large", "Payload too large");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+function createCtx(req, res, opts) {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const fwd = opts.trustProxy ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim() : "";
+  const ip = fwd || req.socket.remoteAddress || "unknown";
+  const ctx = {
+    req,
+    res,
+    method: (req.method ?? "GET").toUpperCase(),
+    path: url.pathname,
+    query: url.searchParams,
+    params: {},
+    ip,
+    cookies: parseCookies(req.headers.cookie),
+    state: {},
+    requestId: opts.requestId,
+    async body(schema, limitBytes = 64 * 1024) {
+      const ct = String(req.headers["content-type"] ?? "");
+      if (!ct.includes("application/json")) throw new HttpError(415, "unsupported_media_type", "Expected application/json");
+      const raw = await readBody(req, limitBytes);
+      let data;
+      try {
+        data = raw.length ? JSON.parse(raw.toString("utf8")) : {};
+      } catch {
+        throw new HttpError(400, "bad_json", "Malformed JSON");
+      }
+      const parsed = schema.safeParse(data);
+      if (!parsed.success) {
+        const msg = parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; ");
+        throw new HttpError(400, "validation_error", msg);
+      }
+      return parsed.data;
+    },
+    json(status, data, headers = {}) {
+      if (res.writableEnded) return;
+      const body = status === 204 ? "" : JSON.stringify(data);
+      res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers });
+      res.end(body);
+    },
+    send(status, body, contentType, headers = {}) {
+      if (res.writableEnded) return;
+      res.writeHead(status, { "content-type": contentType, ...headers });
+      res.end(body);
+    }
+  };
+  return ctx;
+}
+
+// apps/server/src/http/static.ts
+import { createReadStream, statSync } from "node:fs";
+import { extname, join, normalize, resolve, sep } from "node:path";
+var TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".mp3": "audio/mpeg",
+  ".woff2": "font/woff2",
+  ".txt": "text/plain; charset=utf-8",
+  ".webmanifest": "application/manifest+json"
+};
+function securityHeaders(isHtml) {
+  const h = {
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=()",
+    "cross-origin-opener-policy": "same-origin-allow-popups"
+  };
+  if (isHtml) {
+    h["content-security-policy"] = [
+      "default-src 'self'",
+      "script-src 'self' https://telegram.org",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "font-src 'self'",
+      "connect-src 'self' ws: wss:",
+      "media-src 'self' blob:",
+      "worker-src 'self' blob:",
+      "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org",
+      "base-uri 'self'",
+      "form-action 'self'"
+    ].join("; ");
+  }
+  return h;
+}
+function serveStatic(root) {
+  const base2 = resolve(root);
+  return (ctx) => {
+    if (ctx.method !== "GET" && ctx.method !== "HEAD") return false;
+    let rel = decodeURIComponent(ctx.path);
+    if (rel.endsWith("/")) rel += "index.html";
+    const file = normalize(join(base2, rel));
+    if (!file.startsWith(base2 + sep) && file !== base2) return false;
+    let target = file;
+    let st;
+    try {
+      st = statSync(target);
+      if (st.isDirectory()) {
+        target = join(target, "index.html");
+        st = statSync(target);
+      }
+    } catch {
+      if (extname(rel)) return false;
+      target = join(base2, rel.startsWith("/admin") ? "admin.html" : "index.html");
+      try {
+        st = statSync(target);
+      } catch {
+        return false;
+      }
+    }
+    const ext = extname(target).toLowerCase();
+    const type = TYPES[ext] ?? "application/octet-stream";
+    const immutable = /-[A-Z0-9]{8}\.(js|css|woff2?|png)$/.test(target) || /[?&]v=[0-9a-f]{6,}/.test(ctx.req.url ?? "");
+    const etag = `W/"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
+    const isAdmin = target.endsWith(`${sep}admin.html`);
+    const headers = {
+      "content-type": type,
+      "cache-control": ext === ".html" ? isAdmin ? "no-store" : "no-cache" : immutable ? "public, max-age=31536000, immutable" : "public, max-age=300, must-revalidate",
+      etag,
+      ...securityHeaders(ext === ".html")
+    };
+    if (isAdmin) {
+      headers["content-security-policy"] = headers["content-security-policy"].replace(/frame-ancestors [^;]+/, "frame-ancestors 'none'");
+      headers["x-frame-options"] = "DENY";
+    }
+    if (ctx.req.headers["if-none-match"] === etag) {
+      ctx.res.writeHead(304, headers);
+      ctx.res.end();
+      return true;
+    }
+    headers["accept-ranges"] = "bytes";
+    const range = parseRange(ctx.req.headers.range, st.size);
+    if (range === "invalid") {
+      ctx.res.writeHead(416, { ...headers, "content-range": `bytes */${st.size}` });
+      ctx.res.end();
+      return true;
+    }
+    if (range) {
+      headers["content-range"] = `bytes ${range.start}-${range.end}/${st.size}`;
+      headers["content-length"] = String(range.end - range.start + 1);
+      ctx.res.writeHead(206, headers);
+      if (ctx.method === "HEAD") {
+        ctx.res.end();
+        return true;
+      }
+      createReadStream(target, { start: range.start, end: range.end }).pipe(ctx.res);
+      return true;
+    }
+    headers["content-length"] = String(st.size);
+    ctx.res.writeHead(200, headers);
+    if (ctx.method === "HEAD") {
+      ctx.res.end();
+      return true;
+    }
+    createReadStream(target).pipe(ctx.res);
+    return true;
+  };
+}
+function parseRange(header, size2) {
+  if (!header) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m) return null;
+  const [, a, b2] = m;
+  if (a === "" && b2 === "") return "invalid";
+  let start;
+  let end;
+  if (a === "") {
+    const n = Number(b2);
+    if (n === 0) return "invalid";
+    start = Math.max(0, size2 - n);
+    end = size2 - 1;
+  } else {
+    start = Number(a);
+    end = b2 === "" ? size2 - 1 : Math.min(Number(b2), size2 - 1);
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size2) return "invalid";
+  return { start, end };
+}
+
 // apps/server/src/http/auth.ts
 function bearerToken(ctx) {
   const h = String(ctx.req.headers.authorization ?? "");
@@ -15345,25 +15485,75 @@ var ActivityTracker = class {
   }
 };
 
+// apps/server/src/auth/names.ts
+function isNameConflict(e) {
+  const err = e;
+  return !!err && err.code === "23505" && (err.constraint_name ?? err.constraint ?? "").includes("name_key");
+}
+async function isNameFree(sql2, name, exceptUserId) {
+  const key = nameKey(name);
+  const rows = exceptUserId ? await sql2`SELECT id FROM users WHERE name_key = ${key} AND deleted_at IS NULL AND id <> ${exceptUserId} LIMIT 1` : await sql2`SELECT id FROM users WHERE name_key = ${key} AND deleted_at IS NULL LIMIT 1`;
+  return rows.length === 0;
+}
+async function freeName(sql2, base2) {
+  if (await isNameFree(sql2, base2)) return base2;
+  const prefix = nameKey(base2.slice(0, MAX_NAME_LENGTH - 5)).replace(/[\\%_]/g, (c) => `\\${c}`) + "%";
+  const used = new Set((await sql2`SELECT name_key AS k FROM users WHERE name_key LIKE ${prefix} AND deleted_at IS NULL`).map((r) => r.k));
+  for (let n = 2; n < 1e3; n++) {
+    const candidate = numberedAlias(base2, n);
+    if (!used.has(nameKey(candidate)) && await isNameFree(sql2, candidate)) return candidate;
+  }
+  return numberedAlias(base2, 1e3 + Math.floor(Math.random() * 9e3));
+}
+async function suggestNames(sql2, base2, count = 3) {
+  const out = [];
+  const tries = [
+    ...[89, 777, 1989, 7].map((n) => `${base2.slice(0, MAX_NAME_LENGTH - String(n).length - 1)}_${n}`),
+    ...Array.from({ length: 6 }, () => numberedAlias(base2, 2 + Math.floor(Math.random() * 98)))
+  ];
+  for (const c of tries) {
+    if (out.length >= count) break;
+    if (out.some((x) => nameKey(x) === nameKey(c))) continue;
+    if (await isNameFree(sql2, c)) out.push(c);
+  }
+  return out;
+}
+
 // apps/server/src/auth/users.ts
 var UserRepo = class {
   constructor(sql2) {
     this.sql = sql2;
   }
   sql;
+  /**
+   * Creates the account (with the first free variant of `name`: aliases are unique) or touches the
+   * existing one, whose alias never changes here. A concurrent sign-up taking the same alias between
+   * the check and the insert only costs a retry.
+   */
+  async upsert(name, insert) {
+    for (let attempt = 0; ; attempt++) {
+      const candidate = await freeName(this.sql, name);
+      try {
+        const row = (await insert(candidate))[0];
+        if (row.inserted) await this.sql`INSERT INTO profiles (user_id) VALUES (${row.id}) ON CONFLICT DO NOTHING`;
+        return { userId: row.id, isNew: row.inserted, displayName: row.display_name };
+      } catch (e) {
+        if (!isNameConflict(e) || attempt >= 4) throw e;
+      }
+    }
+  }
   async upsertTelegram(tg, platform2) {
-    const name = displayNameFromTelegram(tg);
-    const rows = await this.sql`
-      INSERT INTO users (telegram_id, display_name, language_code, platform)
-      VALUES (${String(tg.id)}::bigint, ${name}, ${tg.languageCode}, ${platform2})
-      ON CONFLICT (telegram_id) DO UPDATE
-        SET language_code = EXCLUDED.language_code,
-            platform = COALESCE(EXCLUDED.platform, users.platform),
-            last_seen_at = now()
-      RETURNING id, (xmax = 0) AS inserted, display_name`;
-    const row = rows[0];
-    if (row.inserted) await this.sql`INSERT INTO profiles (user_id) VALUES (${row.id}) ON CONFLICT DO NOTHING`;
-    return { userId: row.id, isNew: row.inserted, displayName: row.display_name };
+    return this.upsert(
+      displayNameFromTelegram(tg),
+      (name) => this.sql`
+        INSERT INTO users (telegram_id, display_name, name_key, language_code, platform)
+        VALUES (${String(tg.id)}::bigint, ${name}, ${nameKey(name)}, ${tg.languageCode}, ${platform2})
+        ON CONFLICT (telegram_id) DO UPDATE
+          SET language_code = EXCLUDED.language_code,
+              platform = COALESCE(EXCLUDED.platform, users.platform),
+              last_seen_at = now()
+        RETURNING id, (xmax = 0) AS inserted, display_name`
+    );
   }
   /** Guest player of the public website, keyed by an HMAC of the browser's device secret. The name is set only on creation. */
   async findGuest(deviceKey) {
@@ -15371,29 +15561,29 @@ var UserRepo = class {
     return rows[0]?.id ?? null;
   }
   async upsertGuest(deviceKey, name, platform2) {
-    const rows = await this.sql`
-      INSERT INTO users (dev_device_id, display_name, platform)
-      VALUES (${deviceKey}, ${name}, ${platform2})
-      ON CONFLICT (dev_device_id) DO UPDATE
-        SET platform = COALESCE(EXCLUDED.platform, users.platform),
-            last_seen_at = now()
-      RETURNING id, (xmax = 0) AS inserted, display_name`;
-    const row = rows[0];
-    if (row.inserted) await this.sql`INSERT INTO profiles (user_id) VALUES (${row.id}) ON CONFLICT DO NOTHING`;
-    return { userId: row.id, isNew: row.inserted, displayName: row.display_name };
+    return this.upsert(
+      name,
+      (n) => this.sql`
+        INSERT INTO users (dev_device_id, display_name, name_key, platform)
+        VALUES (${deviceKey}, ${n}, ${nameKey(n)}, ${platform2})
+        ON CONFLICT (dev_device_id) DO UPDATE
+          SET platform = COALESCE(EXCLUDED.platform, users.platform),
+              last_seen_at = now()
+        RETURNING id, (xmax = 0) AS inserted, display_name`
+    );
   }
+  /** Developer sign-in (tests, local play): like a guest; a taken name gets a number. */
   async upsertDev(deviceId, name, platform2) {
-    const rows = await this.sql`
-      INSERT INTO users (dev_device_id, display_name, platform)
-      VALUES (${deviceId}, ${name}, ${platform2})
-      ON CONFLICT (dev_device_id) DO UPDATE
-        SET display_name = EXCLUDED.display_name,
-            platform = COALESCE(EXCLUDED.platform, users.platform),
-            last_seen_at = now()
-      RETURNING id, (xmax = 0) AS inserted, display_name`;
-    const row = rows[0];
-    if (row.inserted) await this.sql`INSERT INTO profiles (user_id) VALUES (${row.id}) ON CONFLICT DO NOTHING`;
-    return { userId: row.id, isNew: row.inserted, displayName: row.display_name };
+    return this.upsert(
+      name,
+      (n) => this.sql`
+        INSERT INTO users (dev_device_id, display_name, name_key, platform)
+        VALUES (${deviceId}, ${n}, ${nameKey(n)}, ${platform2})
+        ON CONFLICT (dev_device_id) DO UPDATE
+          SET platform = COALESCE(EXCLUDED.platform, users.platform),
+              last_seen_at = now()
+        RETURNING id, (xmax = 0) AS inserted, display_name`
+    );
   }
 };
 
@@ -15499,7 +15689,8 @@ function toPublicProfile(r) {
     avatar: isAvatarId(r.avatar) ? r.avatar : null,
     tokens: r.tokens,
     diamonds: r.diamonds,
-    email: r.email
+    email: r.email,
+    rating: r.rating
   };
 }
 var ProfileRepo = class {
@@ -15516,14 +15707,15 @@ var ProfileRepo = class {
              COALESCE(p.assists, 0) AS assists,
              COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
-             p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email
+             p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email,
+             COALESCE(p.rating, 1000) AS rating
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
       WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
     return rows[0] ? toPublicProfile(rows[0]) : null;
   }
   async update(userId, patch) {
     await this.sql.begin(async (tx) => {
-      if (patch.displayName !== void 0) await tx`UPDATE users SET display_name = ${patch.displayName} WHERE id = ${userId}`;
+      if (patch.displayName !== void 0) await tx`UPDATE users SET display_name = ${patch.displayName}, name_key = ${nameKey(patch.displayName)} WHERE id = ${userId}`;
       if (patch.preferredCharacter !== void 0) {
         await tx`INSERT INTO profiles (user_id, preferred_character) VALUES (${userId}, ${patch.preferredCharacter})
                  ON CONFLICT (user_id) DO UPDATE SET preferred_character = EXCLUDED.preferred_character, updated_at = now()`;
@@ -15537,7 +15729,7 @@ var ProfileRepo = class {
   async history(userId, limit) {
     const rows = await this.sql`
       SELECT mp.match_id, m.map_id, mp.character, m.ended_at, m.started_at, m.duration_ms, mp.place, m.player_count + m.bot_count AS players,
-             mp.kills, mp.assists, mp.deaths, mp.xp_awarded, mp.won
+             mp.kills, mp.assists, mp.deaths, mp.xp_awarded, mp.won, mp.rating_delta
       FROM match_participants mp JOIN matches m ON m.id = mp.match_id
       WHERE mp.user_id = ${userId} AND m.status = 'completed'
       ORDER BY m.ended_at DESC NULLS LAST
@@ -15555,7 +15747,8 @@ var ProfileRepo = class {
       assists: r.assists,
       deaths: r.deaths,
       xpGained: r.xp_awarded,
-      won: r.won
+      won: r.won,
+      ratingDelta: r.rating_delta
     }));
   }
   async achievements(userId) {
@@ -15806,7 +15999,7 @@ var PgMatchRecorder = class {
       for (const p of participants) {
         await tx`INSERT INTO profiles (user_id) VALUES (${p.userId}) ON CONFLICT DO NOTHING`;
         const [prof] = await tx`
-          SELECT xp, level, matches_completed, wins, current_win_streak, best_win_streak FROM profiles WHERE user_id = ${p.userId} FOR UPDATE`;
+          SELECT xp, level, matches_completed, wins, current_win_streak, best_win_streak, rating FROM profiles WHERE user_id = ${p.userId} FOR UPDATE`;
         const withFriends = m.isPrivate && p.viaInvite && people >= 2;
         const sharedPlace = p.completed && m.participants.some((o) => o.userId !== p.userId && o.completed && o.place === p.place);
         const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends, sharedPlace, ...p.teamOutcome ? { teamOutcome: p.teamOutcome } : {}, objectives: p.objectives ?? 0 };
@@ -15814,8 +16007,11 @@ var PgMatchRecorder = class {
         const prev = { xp: prof.xp, level: prof.level, matchesCompleted: prof.matches_completed, wins: prof.wins, currentWinStreak: prof.current_win_streak };
         const { won, lost, streak, unlocked, xpGained: xp, totalXp, level } = applyMatchProgress(prev, perf, new Set(ownedRows.map((r) => r.achievement_id)));
         const tokens = tokensForMatch(perf);
+        const rating = Math.max(RATING_RULES.floor, prof.rating + ratingDelta(perf));
+        const rDelta = rating - prof.rating;
         await tx`
           UPDATE profiles SET
+            rating = ${rating},
             xp = ${totalXp},
             level = ${level},
             matches_played = matches_played + 1,
@@ -15836,14 +16032,14 @@ var PgMatchRecorder = class {
         }
         const totalTokens = await awardMatchTokens(tx, p.userId, m.matchId, tokens);
         await tx`
-          INSERT INTO match_participants (match_id, user_id, character, team, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, tokens_awarded, joined_at, left_at)
-          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.team}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${tokens}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
+          INSERT INTO match_participants (match_id, user_id, character, team, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, tokens_awarded, rating_delta, joined_at, left_at)
+          VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.team}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${tokens}, ${rDelta}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
           ON CONFLICT (match_id, user_id) DO UPDATE SET
             character = EXCLUDED.character, team = EXCLUDED.team, place = EXCLUDED.place, kills = EXCLUDED.kills, assists = EXCLUDED.assists, deaths = EXCLUDED.deaths,
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
-            tokens_awarded = EXCLUDED.tokens_awarded, left_at = EXCLUDED.left_at`;
-        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof.level, newAchievements: unlocked, tokensGained: tokens, totalTokens });
+            tokens_awarded = EXCLUDED.tokens_awarded, rating_delta = EXCLUDED.rating_delta, left_at = EXCLUDED.left_at`;
+        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating });
       }
       await tx`
         UPDATE matches SET status = 'completed', ended_at = ${m.endedAt}, duration_ms = ${Math.max(0, Math.round(m.durationMs))},
@@ -15856,7 +16052,7 @@ var PgMatchRecorder = class {
     const out = /* @__PURE__ */ new Map();
     if (userIds.length === 0) return out;
     const rows = await tx`
-      SELECT mp.user_id, mp.xp_awarded, mp.tokens_awarded, p.xp, p.level, p.tokens
+      SELECT mp.user_id, mp.xp_awarded, mp.tokens_awarded, mp.rating_delta, p.xp, p.level, p.tokens, p.rating
       FROM match_participants mp JOIN profiles p ON p.user_id = mp.user_id
       WHERE mp.match_id = ${matchId} AND mp.user_id IN ${tx(userIds)}`;
     const ach = await tx`
@@ -15869,7 +16065,9 @@ var PgMatchRecorder = class {
         leveledUp: false,
         newAchievements: ach.filter((a) => a.user_id === r.user_id).map((a) => a.achievement_id),
         tokensGained: r.tokens_awarded,
-        totalTokens: r.tokens
+        totalTokens: r.tokens,
+        ratingDelta: r.rating_delta,
+        rating: r.rating
       });
     }
     return out;
@@ -16214,7 +16412,9 @@ var RETENTION_DAYS = {
   /** Password-reset links (valid for an hour), counted from expiry. */
   passwordResets: 7,
   /** Anonymous visitor funnel: visitor_days by day, visitors by their last visit. */
-  visitors: 400
+  visitors: 400,
+  /** Direct messages between friends, by created_at. */
+  directMessages: 180
 };
 var BATCH = 5e3;
 var DAY_MS = 864e5;
@@ -16239,6 +16439,7 @@ async function purgeExpired(sql2, now = /* @__PURE__ */ new Date(), days = RETEN
   const resets = cutoff(days.passwordResets);
   const visitorDay = cutoff(days.visitors).toISOString().slice(0, 10);
   const visitors = cutoff(days.visitors);
+  const messages2 = cutoff(days.directMessages);
   return {
     analyticsEvents: await batched(
       async () => (await sql2`DELETE FROM analytics_events WHERE ctid IN (SELECT ctid FROM analytics_events WHERE occurred_at < ${events} LIMIT ${BATCH})`).count
@@ -16260,6 +16461,9 @@ async function purgeExpired(sql2, now = /* @__PURE__ */ new Date(), days = RETEN
     passwordResets: await batched(async () => (await sql2`DELETE FROM password_resets WHERE ctid IN (SELECT ctid FROM password_resets WHERE expires_at < ${resets} LIMIT ${BATCH})`).count),
     visitors: await batched(
       async () => (await sql2`DELETE FROM visitor_days WHERE ctid IN (SELECT ctid FROM visitor_days WHERE day < ${visitorDay}::date LIMIT ${BATCH})`).count + (await sql2`DELETE FROM visitors WHERE ctid IN (SELECT ctid FROM visitors WHERE last_seen_at < ${visitors} LIMIT ${BATCH})`).count
+    ),
+    directMessages: await batched(
+      async () => (await sql2`DELETE FROM direct_messages WHERE ctid IN (SELECT ctid FROM direct_messages WHERE created_at < ${messages2} LIMIT ${BATCH})`).count
     )
   };
 }
@@ -16857,6 +17061,7 @@ var registerAuthRoutes = (router, deps) => {
 var registerProfileRoutes = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
   const writeLimiter = new RateLimiter(10, 10 / 60);
+  const nameLimiter = new RateLimiter(30, 30 / 60);
   const pg = () => {
     if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
     return pgContext(deps.sql, deps.env, deps.log);
@@ -16874,9 +17079,25 @@ var registerProfileRoutes = (router, deps) => {
       const inv = await pg().economy.inventory(user.userId);
       if (!inv.characters.includes(body.preferredCharacter)) throw new HttpError(409, "not_owned", "This character isn\u2019t unlocked yet");
     }
-    await pg().profiles.update(user.userId, body);
+    if (body.displayName !== void 0 && deps.sql && !await isNameFree(deps.sql, body.displayName, user.userId)) throw new HttpError(409, "name_taken", "This alias is taken \u2014 pick another");
+    try {
+      await pg().profiles.update(user.userId, body);
+    } catch (e) {
+      if (isNameConflict(e)) throw new HttpError(409, "name_taken", "This alias is taken \u2014 pick another");
+      throw e;
+    }
     const profile = await pg().profiles.get(user.userId);
     ctx.json(200, profile);
+  });
+  router.get("/api/names/check", auth, rateLimit(nameLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
+    const user = currentUser(ctx);
+    const parsed = displayNameSchema.safeParse(ctx.query.get("name") ?? "");
+    if (!parsed.success) throw new HttpError(400, "bad_name", "A name may contain letters, digits, spaces and _ . -");
+    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
+    const name = parsed.data;
+    const available = await isNameFree(deps.sql, name, user.userId);
+    const res = { name, available, suggestions: available ? [] : await suggestNames(deps.sql, name) };
+    ctx.json(200, res);
   });
   router.get("/api/me/history", auth, async (ctx) => {
     const user = currentUser(ctx);
@@ -17779,8 +18000,431 @@ var registerShopRoutes = (router, deps) => {
   });
 };
 
+// apps/server/src/social/repo.ts
+function toCard(r) {
+  return {
+    id: r.id,
+    name: r.display_name,
+    avatar: isAvatarId(r.avatar) ? r.avatar : null,
+    character: r.preferred_character && isCharacterId(r.preferred_character) ? r.preferred_character : null,
+    level: r.level ?? 1
+  };
+}
+function toMessage(r) {
+  return { id: Number(r.id), from: r.sender_id, to: r.recipient_id, text: r.body, at: r.created_at.toISOString(), read: r.read_at !== null };
+}
+var SocialRepo = class {
+  constructor(sql2) {
+    this.sql = sql2;
+  }
+  sql;
+  async card(userId) {
+    const rows = await this.sql`
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level
+      FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
+    return rows[0] ? toCard(rows[0]) : null;
+  }
+  async friendIds(userId) {
+    const rows = await this.sql`SELECT friend_id FROM friendships WHERE user_id = ${userId} AND status = 'accepted'`;
+    return rows.map((r) => r.friend_id);
+  }
+  async areFriends(a, b2) {
+    const rows = await this.sql`SELECT 1 FROM friendships WHERE user_id = ${a} AND friend_id = ${b2} AND status = 'accepted'`;
+    return rows.length > 0;
+  }
+  /** Friends (without presence — the hub adds it), incoming and outgoing requests. */
+  async lists(userId) {
+    const friends = await this.sql`
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.last_seen_at,
+             (SELECT count(*)::int FROM direct_messages d WHERE d.recipient_id = ${userId} AND d.sender_id = u.id AND d.read_at IS NULL) AS unread
+      FROM friendships f JOIN users u ON u.id = f.friend_id LEFT JOIN profiles p ON p.user_id = u.id
+      WHERE f.user_id = ${userId} AND f.status = 'accepted' AND u.deleted_at IS NULL
+      ORDER BY u.name_key`;
+    const incoming = await this.sql`
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, f.created_at
+      FROM friendships f JOIN users u ON u.id = f.user_id LEFT JOIN profiles p ON p.user_id = u.id
+      WHERE f.friend_id = ${userId} AND f.status = 'pending' AND u.deleted_at IS NULL
+      ORDER BY f.created_at DESC`;
+    const outgoing = await this.sql`
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, f.created_at
+      FROM friendships f JOIN users u ON u.id = f.friend_id LEFT JOIN profiles p ON p.user_id = u.id
+      WHERE f.user_id = ${userId} AND f.status = 'pending' AND u.deleted_at IS NULL
+      ORDER BY f.created_at DESC`;
+    return {
+      friends: friends.map((r) => ({ ...toCard(r), lastSeenAt: r.last_seen_at.toISOString(), unread: r.unread })),
+      incoming: incoming.map((r) => ({ ...toCard(r), createdAt: r.created_at.toISOString() })),
+      outgoing: outgoing.map((r) => ({ ...toCard(r), createdAt: r.created_at.toISOString() }))
+    };
+  }
+  /** A friend request by alias; a request the other player already sent me is accepted instead. */
+  async request(userId, name) {
+    return this.sql.begin(async (tx) => {
+      const target = await tx`
+        SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level
+        FROM users u LEFT JOIN profiles p ON p.user_id = u.id
+        WHERE u.name_key = ${nameKey(name)} AND u.deleted_at IS NULL`;
+      const t = target[0];
+      if (!t) return { outcome: "not_found", other: null };
+      const other = toCard(t);
+      if (t.id === userId) return { outcome: "self", other };
+      const [first, second] = [userId, t.id].sort();
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${first + ":" + second}))`;
+      const rows = await tx`
+        SELECT user_id, friend_id, status FROM friendships
+        WHERE (user_id = ${userId} AND friend_id = ${t.id}) OR (user_id = ${t.id} AND friend_id = ${userId})`;
+      if (rows.some((r) => r.status === "accepted")) return { outcome: "already_friends", other };
+      if (rows.some((r) => r.user_id === userId)) return { outcome: "already_sent", other };
+      const [counts] = await tx`
+        SELECT count(*) FILTER (WHERE status = 'accepted')::int AS friends, count(*) FILTER (WHERE status = 'pending')::int AS pending
+        FROM friendships WHERE user_id = ${userId}`;
+      if (counts.friends >= MAX_FRIENDS) return { outcome: "too_many", other };
+      if (rows.some((r) => r.user_id === t.id)) {
+        await tx`UPDATE friendships SET status = 'accepted', accepted_at = now() WHERE user_id = ${t.id} AND friend_id = ${userId}`;
+        await tx`INSERT INTO friendships (user_id, friend_id, status, accepted_at) VALUES (${userId}, ${t.id}, 'accepted', now())`;
+        return { outcome: "accepted", other };
+      }
+      if (counts.pending >= MAX_PENDING_REQUESTS) return { outcome: "too_many", other };
+      await tx`INSERT INTO friendships (user_id, friend_id, status) VALUES (${userId}, ${t.id}, 'pending')`;
+      return { outcome: "sent", other };
+    });
+  }
+  /** Accept a request from `fromId` (false: there is none). */
+  async accept(userId, fromId) {
+    return this.sql.begin(async (tx) => {
+      const [first, second] = [userId, fromId].sort();
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${first + ":" + second}))`;
+      const updated = await tx`UPDATE friendships SET status = 'accepted', accepted_at = now() WHERE user_id = ${fromId} AND friend_id = ${userId} AND status = 'pending' RETURNING user_id`;
+      if (updated.length === 0) return false;
+      await tx`INSERT INTO friendships (user_id, friend_id, status, accepted_at) VALUES (${userId}, ${fromId}, 'accepted', now())
+               ON CONFLICT (user_id, friend_id) DO UPDATE SET status = 'accepted', accepted_at = now()`;
+      return true;
+    });
+  }
+  /** Declines, cancels or ends a friendship — whatever there is between the two (false: nothing). */
+  async remove(userId, otherId) {
+    const rows = await this.sql`
+      DELETE FROM friendships WHERE (user_id = ${userId} AND friend_id = ${otherId}) OR (user_id = ${otherId} AND friend_id = ${userId})
+      RETURNING user_id`;
+    return rows.length > 0;
+  }
+  // ── direct messages ───────────────────────────────────────────────────
+  async send(from, to, text) {
+    const rows = await this.sql`
+      INSERT INTO direct_messages (sender_id, recipient_id, body) VALUES (${from}, ${to}, ${text})
+      RETURNING id, sender_id, recipient_id, body, created_at, read_at`;
+    return toMessage(rows[0]);
+  }
+  /** The conversation with a friend, newest last; `before`: older than this message id. */
+  async conversation(userId, friendId, before, limit = 50) {
+    const lo = userId < friendId ? userId : friendId;
+    const hi = userId < friendId ? friendId : userId;
+    const rows = await this.sql`
+      SELECT id, sender_id, recipient_id, body, created_at, read_at FROM direct_messages
+      WHERE LEAST(sender_id, recipient_id) = ${lo} AND GREATEST(sender_id, recipient_id) = ${hi}
+        ${before ? this.sql`AND id < ${before}` : this.sql``}
+      ORDER BY id DESC LIMIT ${limit + 1}`;
+    const more = rows.length > limit;
+    return { messages: rows.slice(0, limit).reverse().map(toMessage), more };
+  }
+  /** Marks a friend's messages to me as read; the newest id marked (0: nothing new). */
+  async markRead(userId, friendId) {
+    const rows = await this.sql`
+      UPDATE direct_messages SET read_at = now() WHERE recipient_id = ${userId} AND sender_id = ${friendId} AND read_at IS NULL RETURNING id`;
+    return rows.reduce((m, r) => Math.max(m, Number(r.id)), 0);
+  }
+  async counts(userId) {
+    const [r] = await this.sql`
+      SELECT (SELECT count(*)::int FROM direct_messages WHERE recipient_id = ${userId} AND read_at IS NULL) AS unread,
+             (SELECT count(*)::int FROM friendships WHERE friend_id = ${userId} AND status = 'pending') AS incoming`;
+    return r;
+  }
+  // ── leaderboard ──────────────────────────────────────────────────────
+  /**
+   * The table's order: by rating, level (experience) or eliminations; ties go to the other measure,
+   * then to the older account — so every place is distinct and stable.
+   */
+  order(by) {
+    return by === "rating" ? this.sql`p.rating DESC, p.xp DESC, u.created_at, u.id` : by === "level" ? this.sql`p.xp DESC, p.rating DESC, u.created_at, u.id` : this.sql`p.kills DESC, p.rating DESC, u.created_at, u.id`;
+  }
+  /** The top players (with at least one finished match). */
+  async leaderboard(by, limit = LEADERBOARD_SIZE) {
+    const order = this.order(by);
+    const rows = await this.sql`
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, row_number() OVER (ORDER BY ${order}) AS rank,
+             p.rating, p.kills, p.wins, p.matches_completed AS matches
+      FROM profiles p JOIN users u ON u.id = p.user_id
+      WHERE p.matches_completed > 0 AND u.deleted_at IS NULL
+      ORDER BY ${order}
+      LIMIT ${limit}`;
+    return rows.map((r) => ({ ...toCard(r), rank: Number(r.rank), rating: r.rating, kills: r.kills, wins: r.wins, matches: r.matches }));
+  }
+  /** One player's line with their place (null without a finished match). */
+  async standing(by, userId) {
+    const rows = await this.sql`
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, p.rating, p.kills, p.wins, p.matches_completed AS matches, p.xp, u.created_at
+      FROM profiles p JOIN users u ON u.id = p.user_id
+      WHERE p.user_id = ${userId} AND p.matches_completed > 0 AND u.deleted_at IS NULL`;
+    const me = rows[0];
+    if (!me) return null;
+    const [a, b2] = by === "rating" ? [me.rating, me.xp] : by === "level" ? [me.xp, me.rating] : [me.kills, me.rating];
+    const key = by === "rating" ? this.sql`(-p.rating, -p.xp, u.created_at, u.id)` : by === "level" ? this.sql`(-p.xp, -p.rating, u.created_at, u.id)` : this.sql`(-p.kills, -p.rating, u.created_at, u.id)`;
+    const [c] = await this.sql`
+      SELECT count(*)::int AS n FROM profiles p JOIN users u ON u.id = p.user_id
+      WHERE p.matches_completed > 0 AND u.deleted_at IS NULL
+        AND ${key} < (${-a}::int, ${-b2}::int, ${me.created_at}::timestamptz, ${me.id}::uuid)`;
+    return { ...toCard(me), rank: c.n + 1, rating: me.rating, kills: me.kills, wins: me.wins, matches: me.matches };
+  }
+};
+
+// apps/server/src/social/hub.ts
+var SOCIAL_CLOSE = { UNAUTHORIZED: 4401, REPLACED: 4409, POLICY: 1008 };
+var MAX_SOCKETS_PER_USER = 6;
+var SocialHub = class {
+  constructor(rooms2, log2) {
+    this.rooms = rooms2;
+    this.log = log2;
+  }
+  rooms;
+  log;
+  sockets = /* @__PURE__ */ new Map();
+  store = null;
+  /** The database side (absent in tests without PostgreSQL: presence still works, friends don't). */
+  attachStore(store) {
+    this.store = store;
+  }
+  isOnline(userId) {
+    return (this.sockets.get(userId)?.size ?? 0) > 0;
+  }
+  status(userId) {
+    const room = this.rooms.roomOf(userId);
+    if (room) return room.phase === "waiting" || room.phase === "finished" ? "lobby" : "match";
+    return this.isOnline(userId) ? "online" : "offline";
+  }
+  /** Pushes an event to every open window of a player; false when none is open. */
+  push(userId, event) {
+    const set = this.sockets.get(userId);
+    if (!set || set.size === 0) return false;
+    const data = JSON.stringify(event);
+    for (const ws of set) if (ws.readyState === 1) ws.send(data);
+    return true;
+  }
+  /** Tells a player's online friends where they are now. */
+  async announce(userId) {
+    if (!this.store) return;
+    const status = this.status(userId);
+    try {
+      for (const f of await this.store.friendIds(userId)) this.push(f, { type: "presence", userId, status });
+    } catch (e) {
+      this.log.warn("presence announce failed", { err: e });
+    }
+  }
+  /** A freshly upgraded `/ws/social` socket: the first message must be `auth` within 8 s. */
+  accept(ws, sessions) {
+    let userId = null;
+    const timer2 = setTimeout(() => {
+      if (!userId) ws.close(SOCIAL_CLOSE.UNAUTHORIZED, "auth timeout");
+    }, 8e3);
+    ws.on("error", () => {
+    });
+    ws.on("message", (data, isBinary) => {
+      if (isBinary) return ws.close(SOCIAL_CLOSE.POLICY, "binary");
+      let msg;
+      try {
+        const parsed = SocialClientMessage.safeParse(JSON.parse(String(data)));
+        if (!parsed.success) return ws.close(SOCIAL_CLOSE.POLICY, "bad message");
+        msg = parsed.data;
+      } catch {
+        return ws.close(SOCIAL_CLOSE.POLICY, "bad json");
+      }
+      if (msg.type === "ping") {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: "pong", t: msg.t }));
+        return;
+      }
+      if (userId) return;
+      const token = msg.token;
+      void sessions.verify(token).then(async (user) => {
+        if (!user) return ws.close(SOCIAL_CLOSE.UNAUTHORIZED, "unauthorized");
+        if (ws.readyState !== 1) return;
+        clearTimeout(timer2);
+        userId = user.userId;
+        let set = this.sockets.get(userId);
+        if (!set) this.sockets.set(userId, set = /* @__PURE__ */ new Set());
+        if (set.size >= MAX_SOCKETS_PER_USER) {
+          const oldest = set.values().next().value;
+          set.delete(oldest);
+          oldest.close(SOCIAL_CLOSE.REPLACED, "too many windows");
+        }
+        const first = set.size === 0;
+        set.add(ws);
+        const counts = this.store ? await this.store.counts(userId).catch(() => ({ unread: 0, incoming: 0 })) : { unread: 0, incoming: 0 };
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: "ready", userId, ...counts }));
+        if (first) void this.announce(userId);
+        void this.store?.touch?.(userId).catch(() => {
+        });
+      }).catch(() => ws.close(SOCIAL_CLOSE.UNAUTHORIZED, "unauthorized"));
+    });
+    ws.on("close", () => {
+      clearTimeout(timer2);
+      if (!userId) return;
+      const set = this.sockets.get(userId);
+      if (!set) return;
+      set.delete(ws);
+      if (set.size === 0) {
+        this.sockets.delete(userId);
+        const id = userId;
+        void this.store?.touch?.(id).catch(() => {
+        });
+        setTimeout(() => {
+          if (!this.isOnline(id)) void this.announce(id);
+        }, 2500);
+      }
+    });
+  }
+  /** Online players (for tests and the admin). */
+  onlineCount() {
+    return this.sockets.size;
+  }
+  closeAll() {
+    for (const set of this.sockets.values()) for (const ws of set) ws.close(1001, "shutdown");
+    this.sockets.clear();
+  }
+};
+
+// apps/server/src/api/social.ts
+var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var LEADERBOARD_CACHE_MS = 3e4;
+var registerSocialRoutes = (router, deps) => {
+  const auth = requireUser(deps.services.sessions);
+  const hub = deps.social ?? new SocialHub(deps.rooms, deps.log);
+  const byUser = (ctx) => currentUser(ctx).userId;
+  const requestLimiter = new RateLimiter(20, 20 / 60);
+  const messageLimiter = new RateLimiter(30, 30 / 60);
+  const inviteLimiter = new RateLimiter(10, 10 / 60);
+  const readLimiter = new RateLimiter(120, 2);
+  const repo = () => {
+    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
+    return new SocialRepo(deps.sql);
+  };
+  if (deps.sql) {
+    const store = new SocialRepo(deps.sql);
+    const sql2 = deps.sql;
+    hub.attachStore({ friendIds: (id) => store.friendIds(id), counts: (id) => store.counts(id), touch: async (id) => void await sql2`UPDATE users SET last_seen_at = now() WHERE id = ${id}` });
+  }
+  const param = (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID.test(id)) throw new HttpError(400, "bad_id", "Invalid player id");
+    return id;
+  };
+  const withPresence = (f) => ({ ...f, status: hub.status(f.id) });
+  router.get("/api/friends", auth, rateLimit(readLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const l = await repo().lists(me.userId);
+    const res = { friends: l.friends.map(withPresence), incoming: l.incoming, outgoing: l.outgoing };
+    ctx.json(200, res);
+  });
+  router.post("/api/friends/request", auth, rateLimit(requestLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const body = await ctx.body(FriendRequestBody, 2 * 1024);
+    const r = repo();
+    const { outcome, other } = await r.request(me.userId, body.name);
+    switch (outcome) {
+      case "not_found":
+        throw new HttpError(404, "player_not_found", "No player with that alias");
+      case "self":
+        throw new HttpError(400, "self", "That\u2019s your own alias");
+      case "already_friends":
+        throw new HttpError(409, "already_friends", "You are already friends");
+      case "already_sent":
+        throw new HttpError(409, "already_sent", "The request has already been sent");
+      case "too_many":
+        throw new HttpError(409, "too_many_friends", "Too many friends or requests \u2014 remove some first");
+    }
+    const mine = await r.card(me.userId);
+    if (outcome === "sent") {
+      hub.push(other.id, { type: "friend_request", from: { ...mine, createdAt: (/* @__PURE__ */ new Date()).toISOString() } });
+      return ctx.json(200, { result: "sent", player: other });
+    }
+    hub.push(other.id, { type: "friend_accepted", friend: { ...mine, status: hub.status(me.userId), lastSeenAt: (/* @__PURE__ */ new Date()).toISOString(), unread: 0 } });
+    void hub.announce(me.userId);
+    ctx.json(200, { result: "accepted", player: other, friend: { ...other, status: hub.status(other.id), lastSeenAt: null, unread: 0 } });
+  });
+  router.post("/api/friends/:id/accept", auth, rateLimit(requestLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const from = param(ctx);
+    const r = repo();
+    if (!await r.accept(me.userId, from)) throw new HttpError(404, "request_not_found", "This request no longer exists");
+    const mine = await r.card(me.userId);
+    const theirs = await r.card(from);
+    hub.push(from, { type: "friend_accepted", friend: { ...mine, status: hub.status(me.userId), lastSeenAt: (/* @__PURE__ */ new Date()).toISOString(), unread: 0 } });
+    ctx.json(200, { friend: theirs ? { ...theirs, status: hub.status(from), lastSeenAt: null, unread: 0 } : null });
+  });
+  router.delete("/api/friends/:id", auth, rateLimit(requestLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const other = param(ctx);
+    if (!await repo().remove(me.userId, other)) throw new HttpError(404, "request_not_found", "This request no longer exists");
+    hub.push(other, { type: "friend_removed", userId: me.userId });
+    ctx.json(200, { ok: true });
+  });
+  router.get("/api/messages/:id", auth, rateLimit(readLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const friend = param(ctx);
+    const r = repo();
+    if (!await r.areFriends(me.userId, friend)) throw new HttpError(403, "not_friends", "You can only write to your friends");
+    const before = Number(ctx.query.get("before") ?? 0);
+    const res = await r.conversation(me.userId, friend, Number.isSafeInteger(before) && before > 0 ? before : null);
+    ctx.json(200, res);
+  });
+  router.post("/api/messages/:id", auth, rateLimit(messageLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const friend = param(ctx);
+    const body = await ctx.body(DirectMessageBody, 4 * 1024);
+    const r = repo();
+    if (!await r.areFriends(me.userId, friend)) throw new HttpError(403, "not_friends", "You can only write to your friends");
+    const message = await r.send(me.userId, friend, body.text);
+    const from = await r.card(me.userId);
+    hub.push(friend, { type: "dm", message, from });
+    hub.push(me.userId, { type: "dm", message, from });
+    ctx.json(200, { message });
+  });
+  router.post("/api/messages/:id/read", auth, rateLimit(readLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const friend = param(ctx);
+    const upTo = await repo().markRead(me.userId, friend);
+    if (upTo > 0) hub.push(friend, { type: "dm_read", by: me.userId, upTo });
+    ctx.json(200, { upTo });
+  });
+  router.post("/api/friends/:id/invite", auth, rateLimit(inviteLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const friend = param(ctx);
+    const body = await ctx.body(InviteFriendBody, 1024);
+    const r = repo();
+    if (!await r.areFriends(me.userId, friend)) throw new HttpError(403, "not_friends", "You can only invite your friends");
+    const room = deps.rooms.get(body.roomId);
+    if (!room || !room.hasPerson(me.userId)) throw new HttpError(409, "not_in_room", "Invite from the room you are in");
+    if (room.hasPerson(friend)) throw new HttpError(409, "already_in_room", "Your friend is already in this room");
+    const from = await r.card(me.userId);
+    const delivered = hub.push(friend, { type: "invite", invite: { from, roomId: room.id, mode: room.mode, mapId: room.mapId, isPrivate: room.isPrivate, at: (/* @__PURE__ */ new Date()).toISOString() } });
+    deps.services.analytics.server("invite_created", { code: "friend", roomId: room.id }, me);
+    ctx.json(200, { delivered });
+  });
+  const cache = /* @__PURE__ */ new Map();
+  router.get("/api/leaderboard", auth, rateLimit(readLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const raw = ctx.query.get("by") ?? "rating";
+    const by = LEADERBOARD_BY.includes(raw) ? raw : "rating";
+    const r = repo();
+    let hit = cache.get(by);
+    if (!hit || Date.now() - hit.at > LEADERBOARD_CACHE_MS) {
+      hit = { at: Date.now(), entries: await r.leaderboard(by) };
+      cache.set(by, hit);
+    }
+    const res = { by, entries: hit.entries, me: await r.standing(by, me.userId), updatedAt: new Date(hit.at).toISOString() };
+    ctx.json(200, res);
+  });
+};
+
 // apps/server/src/app.ts
-var ROUTE_MODULES = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerAdminRoutes];
+var ROUTE_MODULES = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerAdminRoutes];
 function createApp(deps, modules = ROUTE_MODULES) {
   const router = new Router();
   const startedAt = Date.now();
@@ -17869,6 +18513,8 @@ var MatchRoom = class {
     this.autoStart = opts.autoStart ?? !opts.isPrivate;
     this.fillBots = opts.fillBots ?? false;
     this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
+    this.onPresence = opts.onPresence ?? (() => {
+    });
     this.config = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? "ffa" };
     this.log = log2.child({ room: this.id });
     this.world = this.createWorld();
@@ -17900,6 +18546,7 @@ var MatchRoom = class {
   /** Players the room runs itself, by id (they are in the World like everyone else). */
   seats = /* @__PURE__ */ new Map();
   fillTiming;
+  onPresence;
   /** Quick Match lobby: players start arriving from this time on (0: nobody waiting yet). */
   fillFrom = 0;
   /** When the next change of the filled lineup happens (0: none scheduled). */
@@ -17926,6 +18573,10 @@ var MatchRoom = class {
   /** Everyone in the lineup as players see it: people plus the players the room filled in. */
   get lineup() {
     return Math.min(this.config.maxPlayers, this.clients.size + this.seats.size);
+  }
+  /** A person connected to this room right now. */
+  hasPerson(userId) {
+    return this.clients.get(userId)?.connected === true;
   }
   /** People the host needs to start: one when the room fills the lineup up itself. */
   get minToStart() {
@@ -17970,6 +18621,7 @@ var MatchRoom = class {
       this.send(existing, this.welcome(existing, true));
       this.broadcastRoster();
       this.services.analytics.server("lobby_joined", { roomId: this.id, viaInvite: existing.viaInvite, resumed: true }, user);
+      this.onPresence(user.userId);
       return "resumed";
     }
     if (!this.isJoinable()) return this.world.phase === "finished" || this.world.phase === "closed" ? "room_closed" : "room_full";
@@ -18007,6 +18659,7 @@ var MatchRoom = class {
     this.broadcastRoster();
     this.services.analytics.server("lobby_joined", { roomId: this.id, viaInvite }, user);
     this.log.info("player joined", { user: user.userId, players: this.clients.size });
+    this.onPresence(user.userId);
     return "ok";
   }
   welcome(c, resumed) {
@@ -18042,6 +18695,7 @@ var MatchRoom = class {
       }
       if (this.world.phase === "waiting") this.removeClient(c, "left");
       else this.broadcastRoster();
+      this.onPresence(c.user.userId);
       return;
     }
   }
@@ -18542,7 +19196,12 @@ var MatchRoom = class {
       if (e.t === "shot" || e.t === "melee") this.pendingShots.push(e);
       else {
         this.pendingEvents.push(e);
-        if (e.t === "phase") this.broadcastRoster();
+        if (e.t === "phase") {
+          this.broadcastRoster();
+          if (e.phase === "ready" || e.phase === "finished") {
+            for (const c of this.clients.values()) if (c.connected) this.onPresence(c.user.userId);
+          }
+        }
         if (e.t === "matchEnd") this.finishResults(e.reason);
       }
     }
@@ -18706,6 +19365,7 @@ var RoomManager = class {
   rooms = /* @__PURE__ */ new Map();
   timer = null;
   nextTickAt = 0;
+  presence = null;
   count() {
     return this.rooms.size;
   }
@@ -18716,12 +19376,31 @@ var RoomManager = class {
   list() {
     return [...this.rooms.values()].filter((r) => !r.closed);
   }
+  /** The room a person is connected to (if any). */
+  roomOf(userId) {
+    for (const r of this.rooms.values()) if (!r.closed && r.hasPerson(userId)) return r;
+    return void 0;
+  }
+  onPresence(listener) {
+    this.presence = listener;
+  }
   create(mapId, isPrivate, hostUserId, inviteCode = null, mode = "ffa") {
     if (this.rooms.size >= this.opts.maxRooms) throw new Error("room limit reached");
     let id = newRoomId();
     while (this.rooms.has(id)) id = newRoomId();
     const room = new MatchRoom(
-      { id, mapId, isPrivate, hostUserId, inviteCode, mode, config: this.opts.config, fillBots: this.opts.fillBots ?? false, ...this.opts.fillTiming ? { fillTiming: this.opts.fillTiming } : {} },
+      {
+        id,
+        mapId,
+        isPrivate,
+        hostUserId,
+        inviteCode,
+        mode,
+        config: this.opts.config,
+        fillBots: this.opts.fillBots ?? false,
+        ...this.opts.fillTiming ? { fillTiming: this.opts.fillTiming } : {},
+        onPresence: (userId) => this.presence?.(userId)
+      },
       this.services,
       this.log
     );
@@ -18783,7 +19462,7 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // apps/server/src/rooms/gateway.ts
-function attachGateway(server2, rooms2, services2, log2, opts) {
+function attachGateway(server2, rooms2, services2, log2, opts, social2) {
   const wss = new import_websocket_server.default({ noServer: true, maxPayload: 4096, perMessageDeflate: false });
   const alive = /* @__PURE__ */ new WeakMap();
   const perIp = /* @__PURE__ */ new Map();
@@ -18791,7 +19470,8 @@ function attachGateway(server2, rooms2, services2, log2, opts) {
   const allowed = /* @__PURE__ */ new Set([selfOrigin, ...opts.allowedOrigins]);
   server2.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "/", "http://x");
-    if (url.pathname !== "/ws") {
+    const isSocial = url.pathname === "/ws/social" && !!social2;
+    if (url.pathname !== "/ws" && !isSocial) {
       socket.destroy();
       return;
     }
@@ -18819,7 +19499,8 @@ function attachGateway(server2, rooms2, services2, log2, opts) {
         if (left <= 0) perIp.delete(ip);
         else perIp.set(ip, left);
       });
-      handleSocket(ws);
+      if (isSocial) social2.accept(ws, services2.sessions);
+      else handleSocket(ws);
     });
   });
   function handleSocket(ws) {
@@ -18906,7 +19587,9 @@ if (applied.length) log.info("migrations applied", { applied });
 var persistence = await createPersistence({ sql, env, log });
 var services = persistence.services;
 var rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env), fillBots: env.MATCH_FILL_BOTS });
-var handler = createApp({ env, sql, log, services, rooms });
+var social = new SocialHub(rooms, log);
+rooms.onPresence((userId) => void social.announce(userId));
+var handler = createApp({ env, sql, log, services, rooms, social });
 var server = createServer((req, res) => {
   handler(req, res).catch((e) => log.error("fatal request error", { err: e }));
 });
@@ -18915,9 +19598,10 @@ server.requestTimeout = 3e4;
 attachGateway(server, rooms, services, log, {
   allowedOrigins: env.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
   publicUrl: env.PUBLIC_URL,
-  maxConnectionsPerIp: 24,
+  // a game socket and a social socket per app window: 24 players behind one address, as before v0.23
+  maxConnectionsPerIp: 48,
   trustProxy: env.TRUST_PROXY
-});
+}, social);
 rooms.start();
 server.listen(env.PORT, env.HOST, () => log.info("listening", { host: env.HOST, port: env.PORT, publicUrl: env.PUBLIC_URL, devAuth: env.DEV_AUTH_ENABLED }));
 var stopping = false;

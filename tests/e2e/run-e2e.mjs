@@ -14,6 +14,9 @@
 //   9. filled lineups: a second server with MATCH_FILL_BOTS=true — a room with friends started alone and
 //      Quick Match alone both play with 4, nobody marked (tests/e2e/fill.mjs). Stages 3–8 run with the
 //      fill switched off, so their two-person rooms stay exactly two people.
+//  10. social (v0.23): the account window of a guest, unique aliases, a friend request by alias, private
+//      messages with read receipts, «Play» → a live invitation joined from its card, the Top-100
+//      (tests/e2e/social.mjs)
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
 // E2E_PROD=1 runs the prebuilt deploy/ bundle exactly as a host would (NODE_ENV=production, guest login,
 // RENDER_EXTERNAL_URL, TRUST_PROXY) instead of the development server.
@@ -120,6 +123,9 @@ try {
   if (process.env.E2E_ADMIN_USER) args.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
   const online = spawnSync(process.execPath, args, { stdio: 'inherit' });
   if (online.status !== 0) failed = true;
+  console.log('\n[e2e] friends, private messages, invitations, Top-100 (two browsers)');
+  const social = spawnSync(process.execPath, ['tests/e2e/social.mjs', base, join(out, 'social')], { stdio: 'inherit' });
+  if (social.status !== 0) failed = true;
   console.log('\n[e2e] game modes online (capture the flag, base capture; English and Russian)');
   const modes = spawnSync(process.execPath, ['tests/e2e/modes.mjs', base, join(out, 'modes')], { stdio: 'inherit' });
   if (modes.status !== 0) failed = true;

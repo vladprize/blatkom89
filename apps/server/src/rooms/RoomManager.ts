@@ -14,6 +14,9 @@ export interface RoomManagerOptions {
   fillTiming?: Partial<FillTiming>;
 }
 
+/** Someone's place in the rooms changed (joined, left, a match started or ended): friends are told. */
+export type PresenceListener = (userId: string) => void;
+
 const ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 
 export function newRoomId(len = 10): string {
@@ -27,6 +30,7 @@ export class RoomManager {
   private readonly rooms = new Map<string, MatchRoom>();
   private timer: NodeJS.Timeout | null = null;
   private nextTickAt = 0;
+  private presence: PresenceListener | null = null;
 
   constructor(
     private readonly services: Services,
@@ -47,12 +51,33 @@ export class RoomManager {
     return [...this.rooms.values()].filter((r) => !r.closed);
   }
 
+  /** The room a person is connected to (if any). */
+  roomOf(userId: string): MatchRoom | undefined {
+    for (const r of this.rooms.values()) if (!r.closed && r.hasPerson(userId)) return r;
+    return undefined;
+  }
+
+  onPresence(listener: PresenceListener | null): void {
+    this.presence = listener;
+  }
+
   create(mapId: MapId, isPrivate: boolean, hostUserId: string | null, inviteCode: string | null = null, mode: GameMode = 'ffa'): MatchRoom {
     if (this.rooms.size >= this.opts.maxRooms) throw new Error('room limit reached');
     let id = newRoomId();
     while (this.rooms.has(id)) id = newRoomId();
     const room = new MatchRoom(
-      { id, mapId, isPrivate, hostUserId, inviteCode, mode, config: this.opts.config, fillBots: this.opts.fillBots ?? false, ...(this.opts.fillTiming ? { fillTiming: this.opts.fillTiming } : {}) },
+      {
+        id,
+        mapId,
+        isPrivate,
+        hostUserId,
+        inviteCode,
+        mode,
+        config: this.opts.config,
+        fillBots: this.opts.fillBots ?? false,
+        ...(this.opts.fillTiming ? { fillTiming: this.opts.fillTiming } : {}),
+        onPresence: (userId) => this.presence?.(userId),
+      },
       this.services,
       this.log,
     );

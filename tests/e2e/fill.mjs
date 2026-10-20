@@ -24,12 +24,17 @@ const check = (ok, what) => {
 // «bot», «bots», «бот», «боты», «ботов»… as words (not «работает»)
 const MARKED = /\bbots?\b|(^|[^а-яё])бот(а|у|ом|е|ы|ов|ам|ами|ах)?(?![а-яё])/i;
 
+// aliases are unique (v0.23): every run brings its own
+const RUN = Math.random().toString(36).slice(2, 5);
+
 async function player(name, lang) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: lang === 'ru' ? 'ru-RU' : 'en-GB' });
   await ctx.addInitScript((l) => {
     try {
       localStorage.setItem('blatkom89.lang.v1', l);
       localStorage.setItem('blatkom89.tutorial.v1', '1');
+        // the account window of a guest (tested in online.mjs and social.mjs)
+        localStorage.setItem('blatkom89.welcome.v1', String(Date.now()));
     } catch {}
   }, lang);
   const page = await ctx.newPage();
@@ -89,7 +94,7 @@ try {
   // ── A: a room with friends, started alone ───────────────────────────────
   await A.page.goto(base + '/');
   await pressPlay(A.page);
-  await nickname(A, 'Lone Ranger');
+  await nickname(A, `Lone Ranger ${RUN}`);
   await A.page.getByRole('button', { name: /Play with Friends/ }).click({ timeout: 30000 });
   await A.page.getByRole('button', { name: 'Create a room' }).click();
   await A.page.locator('.code').waitFor({ timeout: 20000 });
@@ -105,7 +110,7 @@ try {
   const la = await lineup(A.page);
   check(la.roster.length === 4 && la.inGame.length === 4, `the match runs with 4 players (${la.roster.map((p) => p.name).join(', ')})`);
   check([...la.roster, ...la.inGame].every((p) => p.isBot === false) && !la.roster.some((p) => MARKED.test(p.name)), 'nobody is marked in the roster or the match');
-  check(la.roster.filter((p) => p.host).length === 1 && la.roster.find((p) => p.host)?.name === 'Lone Ranger', 'the person who made the room is its only host');
+  check(la.roster.filter((p) => p.host).length === 1 && la.roster.find((p) => p.host)?.name === `Lone Ranger ${RUN}`, 'the person who made the room is its only host');
   await A.page.screenshot({ path: `${outDir}/fill_match_A.png` });
   await A.page.keyboard.down('Tab');
   await A.page.waitForTimeout(400);
@@ -115,7 +120,7 @@ try {
   // ── B: Quick Match alone ────────────────────────────────────────────────
   await B.page.goto(base + '/');
   await pressPlay(B.page);
-  await nickname(B, 'Одиночка');
+  await nickname(B, `Одиночка ${RUN}`);
   await B.page.getByRole('button', { name: /Быстрый матч/ }).click({ timeout: 30000 });
   await B.page.locator('.quickmode[data-mode="ffa"]').click();
   await B.page.getByText(/Игроки 1\//).waitFor({ timeout: 30000 });

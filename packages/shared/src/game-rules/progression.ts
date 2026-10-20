@@ -78,6 +78,21 @@ export function rankPlaces<T extends { score: number; kills: number; deaths: num
   return places;
 }
 
+/**
+ * Rating (the Top-100 «Rating» table): everyone starts at 1000. Free-for-all: up to ±16 by place among
+ * everyone present at the end (1st of 4: +16, 2nd +5, 3rd −5, 4th −16); team modes: a win +16, a loss
+ * −16, a draw 0; leaving before the end counts as −16. Never below 0.
+ */
+export const RATING_RULES = Object.freeze({ start: 1000, k: 32, team: 16, leaver: -16, floor: 0 });
+
+export function ratingDelta(p: Pick<MatchPerformance, 'place' | 'playersAtEnd' | 'completed' | 'teamOutcome'>): number {
+  if (!p.completed) return RATING_RULES.leaver;
+  if (p.teamOutcome) return p.teamOutcome === 'win' ? RATING_RULES.team : p.teamOutcome === 'loss' ? -RATING_RULES.team : 0;
+  if (p.playersAtEnd < 2) return 0;
+  const score = Math.min(1, Math.max(0, (p.playersAtEnd - p.place) / (p.playersAtEnd - 1)));
+  return Math.round(RATING_RULES.k * (score - 0.5));
+}
+
 export function xpForMatch(p: MatchPerformance): number {
   if (!p.completed) return 0;
   let xp = XP_RULES.completion + XP_RULES.perKill * p.kills + XP_RULES.perAssist * (p.assists ?? 0) + XP_RULES.perObjective * (p.objectives ?? 0);

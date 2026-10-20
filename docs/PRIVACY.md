@@ -12,7 +12,7 @@
 
 ## Part 1 — Privacy policy (player-facing text)
 
-**BLATKOM ’89 — privacy policy.** Revised 19 October 2026.
+**BLATKOM ’89 — privacy policy.** Revised 20 October 2026.
 
 **In short.** The game is free to play; purchases are optional and there are no ads. We keep only
 what the game, your profile and its statistics need. We never get your phone number, and we don’t
@@ -42,12 +42,14 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
 6. **Technical data:** platform type, game version, sign-in times, the days you played, session lengths,
    app events (launch, connection errors, reconnects) and error reports (passwords, tokens, email
    addresses and long identifiers are removed before saving).
-7. **Visit statistics:** a random visitor identifier created by your browser, first/last visit, days
+7. **Friends and messages:** your friend list and friend requests; private messages with friends (text,
+   time, read or not) — deleted 180 days after sending, and at once with the profile.
+8. **Visit statistics:** a random visitor identifier created by your browser, first/last visit, days
    with visits, platform type and the domain of the site you came from — to count how many visitors
    become players; linked to your profile once you sign in.
-8. **IP address:** used to handle requests and to protect against abuse; not stored in the profile
+9. **IP address:** used to handle requests and to protect against abuse; not stored in the profile
    database; may appear in the server’s technical logs for a limited time.
-9. **On your device:** session key, settings and the random identifiers above. No ad or third-party
+10. **On your device:** session key, settings and the random identifiers above. No ad or third-party
    tracking. The server-less demo keeps its alias, XP and statistics only in that browser.
 
 ### 3. Why
@@ -56,7 +58,10 @@ in-game currency; to deliver what you bought; for the profile, statistics and ma
 and fix bugs and protect against abuse; and for aggregated statistics to make the game better.
 
 ### 4. Who sees the data
-Other players see your in-game name, avatar, character and results. Administrators work with the statistics
+Other players see your in-game name, avatar, character and results. Anyone who knows your in-game name
+can send you a friend request; friends see whether you are online, in a lobby or in a match; only you and
+the friend you write to see your private messages. Players with at least one finished online match are
+listed in the public Top-100 (name, avatar, level, rating, eliminations, wins). Administrators work with the statistics
 panel; every sign-in, look at a player’s card, balance adjustment, password-reset link and export is
 audited. Data is shared only with the hosting provider, the payment provider you choose when you buy,
 and the email provider when you ask for a password reset. Telegram processes data under its own rules.
@@ -68,6 +73,8 @@ and the email provider when you ask for a password reset. Telegram processes dat
 | Email address and password hash | until you delete the profile |
 | Usage events and days active | up to 400 days |
 | Visit statistics | 400 days after the last visit |
+| Private messages with friends | 180 days |
+| Friend list and requests | until removed by you or the friend, or the profile is deleted |
 | Error reports | 90 days |
 | Sign-in session records | 90 days after the session ends |
 | Password-reset links | valid 1 hour, deleted 7 days later |
@@ -93,12 +100,14 @@ When this policy changes, we update the revision date.
 
 | Table | Personal fields | Purpose | Retention |
 |---|---|---|---|
-| `users` | `telegram_id`, `display_name`, `language_code`, `platform`, `dev_device_id` (dev mode, or `g1:` + HMAC of a guest browser secret), `email`, `password_hash` (scrypt), `email_linked_at`, `created_at`, `last_seen_at` | identity, display, sign-in, analytics | until account deletion |
+| `users` | `telegram_id`, `display_name` (+ `name_key`, its case-folded form for uniqueness), `language_code`, `platform`, `dev_device_id` (dev mode, or `g1:` + HMAC of a guest browser secret), `email`, `password_hash` (scrypt), `email_linked_at`, `created_at`, `last_seen_at` | identity, display, sign-in, analytics | until account deletion |
 | `currency_ledger`, `user_items`, `weapon_mods`, `case_openings` | balance changes (with admin id for grants), owned items, modifications, case draws | economy, support | until account deletion (cascade) |
 | `payments` | `user_id` (SET NULL on deletion), provider and its reference, pack, amount, status, times | accounting, crediting diamonds once | **[accounting retention period]** — not purged automatically |
 | `password_resets` | HMAC of the one-time token, user id, who created it (`email`/`admin`) | password reset | 7 days after expiry; immediately on account deletion |
 | `visitors`, `visitor_days` | random browser id, first/last visit, platform, referring domain, `user_id` (SET NULL on deletion) | visitor funnel | 400 days after the last visit |
-| `profiles` | counters, XP/level, streaks, preferred character, avatar id | progression | until account deletion (cascade) |
+| `profiles` | counters, XP/level, rating, streaks, preferred character, avatar id | progression, Top-100 | until account deletion (cascade) |
+| `friendships` | pairs of user ids, request/accept times | friends, presence | until removed; immediately on account deletion (cascade) |
+| `direct_messages` | sender, recipient, text (≤ 500 chars), sent/read times | private messages between friends | 180 days; immediately on account deletion (cascade) |
 | `sessions` | `token_hash` (HMAC of the token, never the token), `method`, `platform`, `client_version`, timestamps | authentication | 90 days after expiry/revocation; immediately on account deletion |
 | `user_daily_activity` | (user, UTC day) | DAU/WAU/MAU, retention | 400 days; immediately on account deletion |
 | `match_participants` | per-match stats of a player | history, profile, admin | until account deletion (cascade) |
@@ -138,13 +147,14 @@ update the table in Part 1 §5.
 1. revokes all of the player's sessions;
 2. `DELETE FROM users WHERE id = …` — cascades to `profiles`, `sessions`, `user_daily_activity`,
    `match_participants`, `player_achievements`, `currency_ledger`, `user_items`, `weapon_mods`,
-   `case_openings`, `password_resets`; sets `user_id`/`session_id`/`created_by` to `NULL` in
+   `case_openings`, `password_resets`, `friendships`, `direct_messages`; sets `user_id`/`session_id`/`created_by` to `NULL` in
    `analytics_events`, `app_errors`, `invitations`, `payments`, `visitors`;
 3. leaves only unlinked rows: anonymous events/errors (purged by the retention job) and `matches`
    rows without player references. Admin audit entries may still contain the former internal UUID,
    which no longer resolves to anything.
 
-Covered by `auth/auth.api.test.ts` («account deletion removes the user and personal data»).
+Covered by `auth/auth.api.test.ts` («account deletion removes the user and personal data») and
+`social/social.test.ts` (friendships and messages).
 
 **Operator-assisted** (player has no access, or a written request):
 

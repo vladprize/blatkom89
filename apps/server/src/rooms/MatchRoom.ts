@@ -71,6 +71,8 @@ export interface RoomOptions {
   fillBots?: boolean;
   /** Shorter fill timings (tests). */
   fillTiming?: Partial<FillTiming>;
+  /** A person's place changed (joined, left, a match started or ended): their friends are told. */
+  onPresence?: (userId: string) => void;
 }
 
 /** A player the room runs itself to fill the lineup (never labelled as such to clients). */
@@ -163,6 +165,7 @@ export class MatchRoom {
   /** Players the room runs itself, by id (they are in the World like everyone else). */
   private readonly seats = new Map<string, FillSeat>();
   private readonly fillTiming: FillTiming;
+  private readonly onPresence: (userId: string) => void;
   /** Quick Match lobby: players start arriving from this time on (0: nobody waiting yet). */
   private fillFrom = 0;
   /** When the next change of the filled lineup happens (0: none scheduled). */
@@ -182,6 +185,7 @@ export class MatchRoom {
     this.autoStart = opts.autoStart ?? !opts.isPrivate;
     this.fillBots = opts.fillBots ?? false;
     this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
+    this.onPresence = opts.onPresence ?? (() => {});
     this.config = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? 'ffa' };
     this.log = log.child({ room: this.id });
     this.world = this.createWorld();
@@ -213,6 +217,11 @@ export class MatchRoom {
   /** Everyone in the lineup as players see it: people plus the players the room filled in. */
   get lineup(): number {
     return Math.min(this.config.maxPlayers, this.clients.size + this.seats.size);
+  }
+
+  /** A person connected to this room right now. */
+  hasPerson(userId: string): boolean {
+    return this.clients.get(userId)?.connected === true;
   }
 
   /** People the host needs to start: one when the room fills the lineup up itself. */
@@ -263,6 +272,7 @@ export class MatchRoom {
       this.send(existing, this.welcome(existing, true));
       this.broadcastRoster();
       this.services.analytics.server('lobby_joined', { roomId: this.id, viaInvite: existing.viaInvite, resumed: true }, user);
+      this.onPresence(user.userId);
       return 'resumed';
     }
     if (!this.isJoinable()) return this.world.phase === 'finished' || this.world.phase === 'closed' ? 'room_closed' : 'room_full';
@@ -301,6 +311,7 @@ export class MatchRoom {
     this.broadcastRoster();
     this.services.analytics.server('lobby_joined', { roomId: this.id, viaInvite }, user);
     this.log.info('player joined', { user: user.userId, players: this.clients.size });
+    this.onPresence(user.userId);
     return 'ok';
   }
 
@@ -339,6 +350,7 @@ export class MatchRoom {
       }
       if (this.world.phase === 'waiting') this.removeClient(c, 'left');
       else this.broadcastRoster();
+      this.onPresence(c.user.userId);
       return;
     }
   }
@@ -892,7 +904,11 @@ export class MatchRoom {
       if (e.t === 'shot' || e.t === 'melee') this.pendingShots.push(e);
       else {
         this.pendingEvents.push(e as GameEvent);
-        if (e.t === 'phase') this.broadcastRoster();
+        if (e.t === 'phase') {
+          this.broadcastRoster();
+          // friends see «in a match» / «in the lobby»
+          if (e.phase === 'ready' || e.phase === 'finished') for (const c of this.clients.values()) if (c.connected) this.onPresence(c.user.userId);
+        }
         if (e.t === 'matchEnd') this.finishResults(e.reason);
       }
     }

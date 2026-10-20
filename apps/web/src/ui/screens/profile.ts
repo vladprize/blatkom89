@@ -7,6 +7,7 @@ import type { AchievementStatus, MatchHistoryEntry, PublicProfile } from '@blatk
 import type { OnlineClient } from '../../net/OnlineClient.js';
 import { t, num } from '../../i18n/index.js';
 import { achievementText, charName, mapName } from '../../i18n/content.js';
+import { signed } from './results.js';
 
 export interface ProfileData {
   profile: PublicProfile;
@@ -58,6 +59,7 @@ export function renderProfileView(d: ProfileData, o: { local: boolean; onRename:
       h(
         'div',
         { class: 'stats', style: 'margin-top:6px' },
+        o.local ? null : stat(p.rating, t('rating')),
         stat(p.matchesPlayed, t('matches')),
         stat(p.wins, t('wins')),
         stat(p.losses, t('losses')),
@@ -93,7 +95,7 @@ export function renderProfileView(d: ProfileData, o: { local: boolean; onRename:
             h(
               'table',
               { class: 'table' },
-              h('thead', null, h('tr', null, h('th', null, t('Map')), h('th', null, t('Character')), h('th', { class: 'num' }, t('Place')), h('th', { class: 'num' }, t('Elim')), h('th', { class: 'num' }, t('Ast')), h('th', { class: 'num' }, t('Dth')), h('th', { class: 'num' }, 'XP'), h('th', { class: 'num' }, t('Time')))),
+              h('thead', null, h('tr', null, h('th', null, t('Map')), h('th', null, t('Character')), h('th', { class: 'num' }, t('Place')), h('th', { class: 'num' }, t('Elim')), h('th', { class: 'num' }, t('Ast')), h('th', { class: 'num' }, t('Dth')), h('th', { class: 'num' }, 'XP'), o.local ? null : h('th', { class: 'num' }, t('Rtg')), h('th', { class: 'num' }, t('Time')))),
               h(
                 'tbody',
                 null,
@@ -108,6 +110,7 @@ export function renderProfileView(d: ProfileData, o: { local: boolean; onRename:
                     h('td', { class: 'num' }, String(m.assists)),
                     h('td', { class: 'num' }, String(m.deaths)),
                     h('td', { class: 'num' }, `+${m.xpGained}`),
+                    o.local ? null : h('td', { class: `num ${m.ratingDelta > 0 ? 'up' : m.ratingDelta < 0 ? 'down' : ''}` }, signed(m.ratingDelta)),
                     h('td', { class: 'num' }, fmtDuration(m.durationMs)),
                   ),
                 ),

@@ -1,6 +1,7 @@
 /**
- * WebSocket gateway: upgrades `/ws`, enforces origin & connection limits, authenticates the first
- * `hello` message and hands the socket to its room.
+ * WebSocket gateway: upgrades `/ws` (a room) and `/ws/social` (presence, messages, invitations),
+ * enforces origin & connection limits, authenticates the first message and hands the socket to its
+ * room or to the social hub.
  */
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
@@ -10,6 +11,7 @@ import { ClientMessageSchema, WS_CLOSE, PROTOCOL_VERSION } from '@blatkom/shared
 import type { RoomManager } from './RoomManager.js';
 import type { Services } from '../services/contracts.js';
 import type { Logger } from '../logging/logger.js';
+import type { SocialHub } from '../social/hub.js';
 
 export interface GatewayOptions {
   allowedOrigins: string[];
@@ -18,7 +20,7 @@ export interface GatewayOptions {
   trustProxy: boolean;
 }
 
-export function attachGateway(server: Server, rooms: RoomManager, services: Services, log: Logger, opts: GatewayOptions): WebSocketServer {
+export function attachGateway(server: Server, rooms: RoomManager, services: Services, log: Logger, opts: GatewayOptions, social?: SocialHub): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false });
   const alive = new WeakMap<WebSocket, boolean>();
   const perIp = new Map<string, number>();
@@ -27,7 +29,8 @@ export function attachGateway(server: Server, rooms: RoomManager, services: Serv
 
   server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     const url = new URL(req.url ?? '/', 'http://x');
-    if (url.pathname !== '/ws') {
+    const isSocial = url.pathname === '/ws/social' && !!social;
+    if (url.pathname !== '/ws' && !isSocial) {
       socket.destroy();
       return;
     }
@@ -55,7 +58,8 @@ export function attachGateway(server: Server, rooms: RoomManager, services: Serv
         if (left <= 0) perIp.delete(ip);
         else perIp.set(ip, left);
       });
-      handleSocket(ws);
+      if (isSocial) social!.accept(ws, services.sessions);
+      else handleSocket(ws);
     });
   });
 

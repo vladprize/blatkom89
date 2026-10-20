@@ -65,6 +65,8 @@ export function renderLobby(o: {
   onCharacter: () => void;
   onLeave: () => void;
   inTelegram: boolean;
+  /** Online: the «invite friends» panel (under the players). */
+  extra?: HTMLElement | null;
 }): HTMLElement {
   const s = o.state;
   const me = s.players.find((p) => p.id === s.myId);
@@ -134,6 +136,8 @@ export function renderLobby(o: {
             ),
           )
         : null,
+      // a private room: inviting friends comes right after the link; a public one: under the players
+      s.isPrivate ? (o.extra ?? null) : null,
       h(
         'div',
         { class: 'panel col' },
@@ -142,6 +146,7 @@ export function renderLobby(o: {
         h('div', { class: 'muted', 'data-testid': 'mode-rules' }, modeRules(s.mode, s.limits)),
       ),
       h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Players {n}/{max}', { n: connected, max: s.maxPlayers })), players),
+      s.isPrivate ? null : (o.extra ?? null),
       h(
         'div',
         { class: 'panel col' },

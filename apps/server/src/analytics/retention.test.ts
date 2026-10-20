@@ -58,8 +58,15 @@ test('retention: purges only rows past their retention period and is idempotent'
   await sql`INSERT INTO visitors (visitor_id, first_seen_at, last_seen_at) VALUES ('old-visitor-000000', ${daysAgo(500)}, ${daysAgo(RETENTION_DAYS.visitors + 1)}), ('new-visitor-000000', ${daysAgo(500)}, ${daysAgo(2)})`;
   await sql`INSERT INTO visitor_days (visitor_id, day) VALUES ('old-visitor-000000', ${day(RETENTION_DAYS.visitors + 1)}::date), ('new-visitor-000000', ${day(RETENTION_DAYS.visitors + 5)}::date), ('new-visitor-000000', ${day(2)}::date)`;
 
+  // Direct messages: one beyond retention, one recent.
+  const [friend] = await sql<Array<{ id: string }>>`INSERT INTO users (dev_device_id, display_name) VALUES ('retention-dev-2', 'Pen Pal') RETURNING id`;
+  await sql`INSERT INTO direct_messages (sender_id, recipient_id, body, created_at)
+            VALUES (${userId}, ${friend!.id}, 'old', ${daysAgo(RETENTION_DAYS.directMessages + 1)}), (${friend!.id}, ${userId}, 'new', ${daysAgo(3)})`;
+
   const r = await purgeExpired(sql, NOW);
-  assert.deepEqual(r, { analyticsEvents: 1, dailyActivity: 1, appErrors: 1, sessions: 2, adminSessions: 1, invitations: 1, adminAudit: 1, passwordResets: 1, visitors: 3 });
+  assert.deepEqual(r, { analyticsEvents: 1, dailyActivity: 1, appErrors: 1, sessions: 2, adminSessions: 1, invitations: 1, adminAudit: 1, passwordResets: 1, visitors: 3, directMessages: 1 });
+  const dms = await sql<Array<{ body: string }>>`SELECT body FROM direct_messages`;
+  assert.deepEqual(dms.map((m) => m.body), ['new']);
 
   const ids = await sql<Array<{ id: string }>>`SELECT id FROM analytics_events`;
   assert.deepEqual(ids.map((x) => x.id), [newEvent]);
@@ -79,7 +86,7 @@ test('retention: purges only rows past their retention period and is idempotent'
   assert.equal(usr!.n, 1);
 
   const again = await purgeExpired(sql, NOW);
-  assert.deepEqual(again, { analyticsEvents: 0, dailyActivity: 0, appErrors: 0, sessions: 0, adminSessions: 0, invitations: 0, adminAudit: 0, passwordResets: 0, visitors: 0 });
+  assert.deepEqual(again, { analyticsEvents: 0, dailyActivity: 0, appErrors: 0, sessions: 0, adminSessions: 0, invitations: 0, adminAudit: 0, passwordResets: 0, visitors: 0, directMessages: 0 });
 });
 
 test('retention: large backlogs are deleted in batches', async () => {

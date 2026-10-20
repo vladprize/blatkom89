@@ -1,6 +1,6 @@
 /** In-memory implementations of the service contracts (tests and local experiments). */
 import { randomBytes } from 'node:crypto';
-import { DEFAULT_LOADOUT, FREE_CHARACTERS, levelForXp, tokensForMatch, xpForMatch } from '@blatkom/shared';
+import { DEFAULT_LOADOUT, FREE_CHARACTERS, RATING_RULES, levelForXp, ratingDelta, tokensForMatch, xpForMatch } from '@blatkom/shared';
 import type { CharacterId, Loadout, PersonalResult } from '@blatkom/shared';
 import type { Analytics, AuthedUser, Economy, InviteRegistry, MatchCompletion, MatchRecorder, MatchStart, PlayerGear, Services, SessionVerifier } from './contracts.js';
 
@@ -22,6 +22,7 @@ export class MemoryRecorder implements MatchRecorder {
   readonly abandoned: string[] = [];
   readonly xp = new Map<string, number>();
   readonly tokens = new Map<string, number>();
+  readonly ratings = new Map<string, number>();
   async matchStarted(m: MatchStart) {
     this.started.push(m);
   }
@@ -37,7 +38,10 @@ export class MemoryRecorder implements MatchRecorder {
       const tok = first ? tokensForMatch(perf) : 0;
       const totalTokens = (this.tokens.get(p.userId) ?? 0) + tok;
       this.tokens.set(p.userId, totalTokens);
-      out.set(p.userId, { xpGained: gained, totalXp: total, level: levelForXp(total).level, leveledUp: false, newAchievements: [], tokensGained: tok, totalTokens });
+      const before = this.ratings.get(p.userId) ?? RATING_RULES.start;
+      const rating = first ? Math.max(RATING_RULES.floor, before + ratingDelta(perf)) : before;
+      this.ratings.set(p.userId, rating);
+      out.set(p.userId, { xpGained: gained, totalXp: total, level: levelForXp(total).level, leveledUp: false, newAchievements: [], tokensGained: tok, totalTokens, ratingDelta: rating - before, rating });
     }
     return out;
   }

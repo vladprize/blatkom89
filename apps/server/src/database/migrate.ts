@@ -1,7 +1,11 @@
-/** Forward-only SQL migrations with an advisory lock and a schema_migrations ledger. */
+/**
+ * Forward-only SQL migrations with an advisory lock and a schema_migrations ledger. A migration that
+ * needs application code has a step in codeSteps.ts, run right after its SQL in the same transaction.
+ */
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Sql } from './db.js';
+import { CODE_STEPS } from './codeSteps.js';
 
 export const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL('./migrations/', import.meta.url));
 const LOCK_ID = 891989;
@@ -38,6 +42,7 @@ export async function migrate(sql: Sql, dir = DEFAULT_MIGRATIONS_DIR): Promise<s
     for (const file of listFiles(dir)) {
       if (applied.has(file)) continue;
       await tx.unsafe(readFileSync(`${dir}/${file}`, 'utf8'));
+      await CODE_STEPS[file]?.(tx);
       await tx`INSERT INTO schema_migrations (version) VALUES (${file})`;
       done.push(file);
     }

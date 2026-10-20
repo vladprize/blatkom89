@@ -68,9 +68,15 @@ process.on('uncaughtException', async (e) => {
 });
 
 // ── nickname (first launch) ───────────────────────────────────────────────
-const NICK_A = 'Courtyard Commandant';
+// aliases are unique (v0.23): every run brings its own
+const RUN = Math.random().toString(36).slice(2, 5);
+const NICK_A = `Courtyard Commandant ${RUN}`;
 await A.page.goto(base + '/');
 await pressPlay(A.page);
+// a guest in a browser is first offered to register an email; A carries on as a guest
+await A.page.getByTestId('welcome').waitFor({ timeout: 60000 });
+await A.page.getByTestId('welcome-guest').click();
+step('A was offered to keep the progress with an email and chose «Continue as guest»');
 const nickInput = A.page.getByRole('textbox', { name: 'Alias' });
 await nickInput.waitFor({ timeout: 60000 });
 await nickInput.fill(NICK_A);
@@ -88,7 +94,7 @@ step(`A created a private room, invite code ${code}`);
 await B.page.goto(`${base}/?invite=${encodeURIComponent(code)}`);
 await pressPlay(B.page);
 // a new player who opens an invite link picks a nickname before entering the room
-const NICK_B = 'Night Owl';
+const NICK_B = `Night Owl ${RUN}`;
 const nickInputB = B.page.getByRole('textbox', { name: 'Alias' });
 await nickInputB.waitFor({ timeout: 60000 });
 await nickInputB.fill(NICK_B);
