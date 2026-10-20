@@ -10040,7 +10040,34 @@ var MAX_INPUTS_PER_MESSAGE = 8;
 var MAX_NAME_LENGTH = 24;
 
 // packages/shared/src/game-rules/characters.ts
-var CHARACTER_IDS = ["petya", "valuta", "uchastkovy", "mihalych", "vorona", "zmeya", "varan", "popugay", "piranya", "akula", "oryol", "leopard", "slon", "lobster"];
+var CHARACTER_IDS = [
+  "petya",
+  "valuta",
+  // for level + talons
+  "uchastkovy",
+  "mihalych",
+  "vorona",
+  "zmeya",
+  "varan",
+  "popugay",
+  "golub",
+  "tarakan",
+  "krysa",
+  "svinya",
+  "buyvol",
+  // for diamonds
+  "piranya",
+  "akula",
+  "oryol",
+  "leopard",
+  "slon",
+  "lobster",
+  "koshka",
+  "lisa",
+  "nosorog",
+  "gorilla",
+  "lev"
+];
 var CHARACTER_BASE_STATS = Object.freeze({ maxHp: 100, speed: 1, radius: 10 });
 var CHARACTERS = {
   petya: {
@@ -10270,6 +10297,168 @@ var CHARACTERS = {
     tier: "premium",
     accent: "#c8402a",
     tag: "Slavik"
+  },
+  // (v0.23: art of the next ten characters — references/27…36, supplied by the product owner; names,
+  //  nicknames and texts written for the game, the sheets' abilities are not implemented)
+  golub: {
+    id: "golub",
+    name: "Sizy",
+    nickname: "The Chemist",
+    species: "Pigeon",
+    role: "Reconnaissance, sabotage, poisoned zones. Spreads chaos and gets in the enemy\u2019s way.",
+    personality: "Crazy and unpredictable. Sees what others don\u2019t. Talks in scraps of sentences and strange hints.",
+    quote: "Where I fly over, only smoke and pigeons are left.",
+    district: "Derelict Sites / Dump",
+    business: "Sabotage, reconnaissance, poisoned zones",
+    weaponsNote: "SMGs, shotguns, grenades, toxic mixtures",
+    lore: "Sizy grew up on the roof of the chemical works and has glowed in the dark ever since \u2014 at least his left eye has. The pockets of his vest hold jars of green muck to his own recipe, a radiation badge sits on his chest, and his head is full of plans nobody understands, himself included. Wherever the Chemist has been, it smells of sulphur for a long time and nobody wants to stay.",
+    tier: "progress",
+    accent: "#7fbf3a",
+    tag: "Sizy"
+  },
+  tarakan: {
+    id: "tarakan",
+    name: "Prusak",
+    nickname: "The Underground Man",
+    species: "Cockroach",
+    role: "Survival, covert jobs, finding supplies. Always turns up where nobody expects him.",
+    personality: "Sly and tough, adapts to anything. Sees opportunities where others see rubbish.",
+    quote: "Every district has cracks. The question is who finds them.",
+    district: "Basements / Garages",
+    business: "Scouting, scrounging, sabotage, survival",
+    weaponsNote: "SMGs, shotguns, home-made guns, traps",
+    lore: "They dusted Prusak with poison, evicted him and walled him up in the boiler-house basement \u2014 and every time he came back livelier than before. He knows every basement, heating duct and crawl space in the district; his rucksack holds whatever might come in handy, from sugar to spare parts. He doesn\u2019t take his dark glasses off even at night. They say he will outlive us all, and the district too.",
+    tier: "progress",
+    accent: "#9a5a24",
+    tag: "Prusak"
+  },
+  krysa: {
+    id: "krysa",
+    name: "Sery",
+    nickname: "The Gym Rat",
+    species: "Rat",
+    role: "Heavy assault. Breaks, crushes and holds the district. Goes in first and survives longest.",
+    personality: "Aggressive, unpredictable, strong. Doesn\u2019t talk much \u2014 lets his actions speak.",
+    quote: "The harder you press, the cleaner the district.",
+    district: "Dump / Industrial Zone",
+    business: "Muscle jobs, taking positions, clean-ups",
+    weaponsNote: "Shotguns, SMGs, heavy weapons, bat",
+    lore: "Sery pumped iron in a basement gym on barbells made of tractor axles and washed his workouts down with water from the chemical works\u2019 settling tank. The muscles grew, the fur thinned, and here and there glowing green slime came through \u2014 Sery thinks it is just being in shape. He doesn\u2019t explain much: first he takes the door off, then he asks who lived there.",
+    tier: "progress",
+    accent: "#b52a2a",
+    tag: "Sery"
+  },
+  svinya: {
+    id: "svinya",
+    name: "Borka",
+    nickname: "The Runaway",
+    species: "Pig",
+    role: "Former livestock. Escaped from the slaughterhouse. Now takes revenge on everyone in uniform.",
+    personality: "Angry, ruthless, impulsive. Charges straight in. Isn\u2019t afraid of pain.",
+    quote: "Better to croak free than on the hook.",
+    district: "Slaughterhouse / Industrial Zone",
+    business: "Revenge, destruction, freedom",
+    weaponsNote: "Shotguns, axe, chain, pistols",
+    lore: "Borka\u2019s ear tag still says 89 \u2014 that is how the meat plant registered him. The night before \xABdispatch\xBB he snapped his chain, broke down the gates of Slaughterhouse No. 3 and has been on the run ever since. Scars, tusks and a length of chain round his neck are all they left him. Borka forgives nobody in uniform and spares nobody, himself included.",
+    tier: "progress",
+    accent: "#d0645a",
+    tag: "Borka"
+  },
+  buyvol: {
+    id: "buyvol",
+    name: "Bugai",
+    nickname: "The Bouncer",
+    species: "Buffalo",
+    role: "Breakthroughs and holding ground by force. Smashes cover, knocks enemies back, takes a lot of punishment.",
+    personality: "Stern, a little slow, but unstoppable. Always moves forward. Respects strength and loyalty. Says little, but to the point.",
+    quote: "If there\u2019s a wall, it needs knocking down.",
+    district: "Dump / Industrial Zone",
+    business: "Muscle clean-ups, security, knocking down barriers, heavy jobs",
+    weaponsNote: "Machine guns, shotguns, grenade launchers, fists",
+    lore: "For ten years Bugai stood on the door of the Kosmos restaurant and never let in a single man without a tie. The restaurant closed, the habit stayed: now he \xABstands on the door\xBB of the whole industrial zone. Horns, a gold chain with a dollar sign and a cigar \u2014 a calling card nobody needs to see twice.",
+    tier: "progress",
+    accent: "#a4241e",
+    tag: "Bugai"
+  },
+  koshka: {
+    id: "koshka",
+    name: "Murka",
+    nickname: "The Tipster",
+    species: "Cat",
+    role: "Knows how to strike a deal, gather information and get what others can\u2019t reach.",
+    personality: "Smart, sly, charming. Uses her looks as a weapon. Always plays one move ahead.",
+    quote: "In this district connections decide everything\u2026 plus a little attention.",
+    district: "Night Market / Bar",
+    business: "Information, connections, access",
+    weaponsNote: "Pistols, SMGs, knife",
+    lore: "Every barman and every black marketeer at the night market knows Murka. She hears everything said at the next table and remembers who owes whom. A tipster: she\u2019ll tell you where the goods are, when the watchman leaves and who has the warehouse keys \u2014 for a cut, of course. One smile, one drag on her cigarette, and you won\u2019t notice how you told her too much.",
+    tier: "premium",
+    accent: "#8e1f2c",
+    tag: "Murka"
+  },
+  lisa: {
+    id: "lisa",
+    name: "Alisa",
+    nickname: "The Con Artist",
+    species: "Fox",
+    role: "Distracts, manipulates, controls her turf. Works with charisma and speed.",
+    personality: "Cunning, confident, cool-headed. Always knows how to get what she wants. Don\u2019t underestimate her.",
+    quote: "Beauty is a weapon too.",
+    district: "Centre / Clubs / Market",
+    business: "Scouting, influence, contacts, quick jobs",
+    weaponsNote: "Pistols, SMGs, knives",
+    lore: "Alisa sold one co-op owner the fountain on the square, another a \xABCzech\xBB furniture set made of chipboard, and a third his own IOU that he had given her in the first place. The clubs know her under five names, the police under six. Fur coat thrown open, a gold heart on her neck and a smile after which you had better check your pockets.",
+    tier: "premium",
+    accent: "#e0702a",
+    tag: "Alisa"
+  },
+  nosorog: {
+    id: "nosorog",
+    name: "Rogov",
+    nickname: "The Old Lag",
+    species: "Rhino",
+    role: "Breakthroughs, close combat, smashing cover. Moves like a tank and breaks everything in his path.",
+    personality: "Hard, laconic, dangerous. Respects strength and the code. Prison made him angrier. Always goes forward, never backs down.",
+    quote: "Walls fall too.",
+    district: "Prison / Industrial Zone",
+    business: "Muscle clean-ups, storming strongholds, collecting debts, security",
+    weaponsNote: "Spiked bat, shotguns, grenade launchers, fists",
+    lore: "Rogov served three terms and walked out still in his orange prison overalls \u2014 says he got used to them. Crowns are tattooed on his hide, and round his neck hangs the chain of the handcuffs he broke himself. He talks little and only by the code. If Rogov is charging, step aside: walls fall too, he has checked.",
+    tier: "premium",
+    accent: "#e0601c",
+    tag: "Rogov"
+  },
+  gorilla: {
+    id: "gorilla",
+    name: "Samson",
+    nickname: "The Foreman",
+    species: "Gorilla",
+    role: "Head-on assault, brute force, holding ground. Breaks defences, smashes cover, takes out key targets.",
+    personality: "Stern, domineering, calm \u2014 but explodes when someone touches his people. Always goes in first. Never backs down.",
+    quote: "Strength decides where words fail.",
+    district: "Market / Garages",
+    business: "Muscle clean-ups, protection, collecting debts",
+    weaponsNote: "Machine guns, shotguns, fists, grenades",
+    lore: "Samson is the foreman of the central market\u2019s porters and of all its crew. He lifts a crate of watermelons with one hand and a debtor with two fingers. At the market his word is law: the stallholders bring him pies, the co-op owners bring envelopes. Calm as long as nobody touches his own; if they do, the whole crew comes out.",
+    tier: "premium",
+    accent: "#9c1c22",
+    tag: "Samson"
+  },
+  lev: {
+    id: "lev",
+    name: "Arkadich",
+    nickname: "The Shadow Tycoon",
+    species: "Lion",
+    role: "Controls the profitable districts, money and supplies. Looks after his own. Settles things with money and force.",
+    personality: "Confident, commanding, cold-blooded. Always a step ahead. Knows how to negotiate \u2014 and how to lean on people when needed.",
+    quote: "The district feeds those who can count.",
+    district: "Centre / Business Quarter",
+    business: "Finance, control, supplies, exclusive orders",
+    weaponsNote: "Golden rifle, pistols, grenades",
+    lore: "Officially Arkadich is the modest head of a consumer-goods workshop. Unofficially his underground workshops dress half the city: \xABMontana\xBB jeans, jackets, bobble hats. A fur coat on his shoulders, gold on his neck, a cigar in his teeth \u2014 and not a single piece of paper anyone could produce against him. Arkadich never raises his voice: why would he, when everyone listens anyway?",
+    tier: "premium",
+    accent: "#d4a237",
+    tag: "Arkadich"
   }
 };
 function isCharacterId(v) {
@@ -10828,20 +11017,31 @@ var WEAPON_PRICES = {
   rpg: { currency: "diamonds", amount: 499, level: 1 }
 };
 var CHARACTER_PRICES = {
-  // six for experience (level) + tokens
+  // for experience (level) + tokens
   uchastkovy: { currency: "tokens", amount: 150, level: 1 },
   mihalych: { currency: "tokens", amount: 200, level: 2 },
   vorona: { currency: "tokens", amount: 300, level: 3 },
   zmeya: { currency: "tokens", amount: 400, level: 5 },
   varan: { currency: "tokens", amount: 550, level: 7 },
   popugay: { currency: "tokens", amount: 700, level: 9 },
-  // six for diamonds
+  // v0.23: five more for talons, higher up the ladder
+  golub: { currency: "tokens", amount: 800, level: 10 },
+  tarakan: { currency: "tokens", amount: 900, level: 11 },
+  krysa: { currency: "tokens", amount: 1e3, level: 12 },
+  svinya: { currency: "tokens", amount: 1100, level: 13 },
+  buyvol: { currency: "tokens", amount: 1250, level: 15 },
+  // for diamonds
   piranya: { currency: "diamonds", amount: 199, level: 1 },
   leopard: { currency: "diamonds", amount: 299, level: 1 },
   lobster: { currency: "diamonds", amount: 299, level: 1 },
   akula: { currency: "diamonds", amount: 399, level: 1 },
   oryol: { currency: "diamonds", amount: 399, level: 1 },
-  slon: { currency: "diamonds", amount: 499, level: 1 }
+  slon: { currency: "diamonds", amount: 499, level: 1 },
+  koshka: { currency: "diamonds", amount: 299, level: 1 },
+  lisa: { currency: "diamonds", amount: 399, level: 1 },
+  nosorog: { currency: "diamonds", amount: 399, level: 1 },
+  gorilla: { currency: "diamonds", amount: 499, level: 1 },
+  lev: { currency: "diamonds", amount: 499, level: 1 }
 };
 var FREE_GADGETS = ["f1"];
 var GADGET_PRICES = {
@@ -14754,7 +14954,7 @@ function encodeSnapshot(src) {
 }
 
 // packages/shared/src/net/protocol.ts
-var PROTOCOL_VERSION = 6;
+var PROTOCOL_VERSION = 7;
 var CHAT_RULES = Object.freeze({ maxLength: 140, maxRaw: 400, burst: 4, refillMs: 2500, repeatMs: 4e3 });
 function cleanChat(raw) {
   const s = raw.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ").replace(new RegExp("(\\p{M}{2})\\p{M}+", "gu"), "$1").replace(/\s+/g, " ").trim();

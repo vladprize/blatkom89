@@ -22,6 +22,13 @@ const SMOKERS: Partial<Record<CharacterId, { f: number; s: number }>> = {
   slon: { f: 9.5, s: -4.7 },
   lobster: { f: 9.1, s: 4.0 },
   popugay: { f: 8.9, s: 4.5 },
+  koshka: { f: 7.8, s: -3.5 },
+  golub: { f: 8.1, s: 3.2 },
+  tarakan: { f: 7.9, s: 3.6 },
+  lev: { f: 9.8, s: 4.4 },
+  buyvol: { f: 10.6, s: -4.7 },
+  nosorog: { f: 11.0, s: 5.3 },
+  gorilla: { f: 11.2, s: -5.1 },
 };
 const LOCAL_TAG = '#f2e6c8';
 const ENEMY_TAG = '#ffffff';

@@ -68,6 +68,16 @@ export const CHARACTER_NAMES: Record<string, string> = {
   leopard: 'Лёва «Наёмник»',
   slon: 'Батя «Крыша»',
   lobster: 'Славик «Барыга»',
+  golub: 'Сизый «Химик»',
+  tarakan: 'Прусак «Подпольщик»',
+  krysa: 'Серый «Качок»',
+  svinya: 'Борька «Беглый»',
+  buyvol: 'Бугай «Вышибала»',
+  koshka: 'Мурка «Наводчица»',
+  lisa: 'Алиса «Аферистка»',
+  nosorog: 'Рогов «Сиделец»',
+  gorilla: 'Самсон «Бригадир»',
+  lev: 'Аркадич «Цеховик»',
 };
 /** The game itself is in English; the dashboard names things the way the owner's sheets do. */
 export const WEAPON_NAMES: Record<string, string> = {

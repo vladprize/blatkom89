@@ -1,6 +1,6 @@
 /**
  * Top-down character rigs. The first four follow the reference sheets in /references (03–06); the
- * ten shop characters live in characters2.ts. Models face +x; y+ is the character's right side; z is up.
+ * ten shop characters live in characters2.ts, the ten of v0.23 in characters3.ts. Models face +x; y+ is the character's right side; z is up.
  */
 import { hex } from './lib/raster.js';
 import type { RGBA } from './lib/raster.js';
@@ -10,6 +10,7 @@ import { MAT } from './materials.js';
 export { MAT };
 import type { PoseClass } from './weapons.js';
 import { EXTRA_RIGS } from './characters2.js';
+import { V023_RIGS } from './characters3.js';
 import type { CharacterId } from '../../packages/shared/src/game-rules/characters.js';
 
 export type CharId = CharacterId;
@@ -340,7 +341,7 @@ const mihalych: Rig = {
 
 petya.toes = true;
 
-export const RIGS: Record<CharId, Rig> = { petya, valuta, uchastkovy, mihalych, ...EXTRA_RIGS };
+export const RIGS: Record<CharId, Rig> = { petya, valuta, uchastkovy, mihalych, ...EXTRA_RIGS, ...V023_RIGS };
 
 // ── Pose construction ────────────────────────────────────────────────────────
 

@@ -8,17 +8,16 @@ import type { RGBA } from './lib/raster.js';
 import type { Material, Prim, V3, PatternCtx } from './lib/model.js';
 import { MAT } from './materials.js';
 import type { Rig, PoseOffsets } from './characters.js';
-import type { CharacterId } from '../../packages/shared/src/game-rules/characters.js';
 
 const H = (...c: string[]): RGBA[] => c.map((x) => hex(x));
 
 /** z of an ellipsoid's top surface at offset (dx, dy) from its centre, plus `lift`. */
-function surf(c: V3, r: V3, dx: number, dy: number, lift = 0): number {
+export function surf(c: V3, r: V3, dx: number, dy: number, lift = 0): number {
   const t = 1 - (dx / r[0]) ** 2 - (dy / r[1]) ** 2;
   return c[2] + r[2] * Math.sqrt(Math.max(0, t)) + lift;
 }
 
-const scales = (base: RGBA[], step = 1.2, light?: RGBA): Material => ({
+export const scales = (base: RGBA[], step = 1.2, light?: RGBA): Material => ({
   ramp: base,
   pattern: (c: PatternCtx) => {
     const u = c.x * step + (Math.floor(c.y * step) % 2) * 0.5;
@@ -30,31 +29,31 @@ const scales = (base: RGBA[], step = 1.2, light?: RGBA): Material => ({
   },
 });
 
-const fur = (ramp: RGBA[]): Material => ({ ramp, dither: true });
+export const fur = (ramp: RGBA[]): Material => ({ ramp, dither: true });
 
 // ── shared outfit pieces ────────────────────────────────────────────────────
-const WHITE = hex('#ece6da');
-const WHITE_SH = hex('#a9a296');
-const SHADES: Material = { ramp: H('#040506', '#0a0c10', '#141820', '#202634'), spec: { color: hex('#9aaccc'), power: 18, threshold: 0.82 } };
+export const WHITE = hex('#ece6da');
+export const WHITE_SH = hex('#a9a296');
+export const SHADES: Material = { ramp: H('#040506', '#0a0c10', '#141820', '#202634'), spec: { color: hex('#9aaccc'), power: 18, threshold: 0.82 } };
 const CHAIN: Material = { ...MAT.gold, pattern: (c) => (Math.floor(c.t * 3) % 2 ? 0.7 : null) };
 const BLACK_CLOTH = H('#08080a', '#121215', '#1d1d22', '#2b2b32', '#3e3e48');
 
 /** Two white stripes over each shoulder (tracksuit), running front to back. */
-const shoulderStripes = (c: PatternCtx, from = 6.0): RGBA | null => {
+export const shoulderStripes = (c: PatternCtx, from = 6.0): RGBA | null => {
   const ay = Math.abs(c.ly);
   if ((ay > from && ay < from + 1.0) || (ay > from + 1.8 && ay < from + 2.8)) return c.nz > 0.5 ? WHITE : WHITE_SH;
   return null;
 };
 /** A white stripe down each side of a tracksuit sleeve (capsule lateral coordinate). */
-const sleeveStripes = (c: PatternCtx): RGBA | number | null => {
+export const sleeveStripes = (c: PatternCtx): RGBA | number | null => {
   const s = Math.abs(c.s);
   return s > 0.35 && s < 1.0 ? WHITE : s >= 1.0 && s < 1.25 ? -1 : null;
 };
 /** White side stripe on tracksuit trousers. */
-const legStripe = (c: PatternCtx): RGBA | null => (Math.abs(c.s) > 1.0 && Math.abs(c.s) < 1.5 ? WHITE : null);
+export const legStripe = (c: PatternCtx): RGBA | null => (Math.abs(c.s) > 1.0 && Math.abs(c.s) < 1.5 ? WHITE : null);
 
 /** Gold chain around the front of the neck with a pendant on the chest. */
-function goldChain(p: Prim[], o: PoseOffsets, rx = 5.4, ry = 5.7, z = 13.6, pendant = 1.2, cx = 0.6) {
+export function goldChain(p: Prim[], o: PoseOffsets, rx = 5.4, ry = 5.7, z = 13.6, pendant = 1.2, cx = 0.6) {
   const N = 12;
   for (let i = 0; i < N; i++) {
     const a0 = -1.8 + (3.6 * i) / N;
@@ -67,7 +66,7 @@ function goldChain(p: Prim[], o: PoseOffsets, rx = 5.4, ry = 5.7, z = 13.6, pend
 }
 
 /** Sunglasses pushed up onto the crown (dx: offset along the head, spread: lens distance from the midline). */
-function shadesOnHead(p: Prim[], hc: V3, hr: V3, dx: number, spread: number, lens = 1.35, frame: Material = MAT.gold) {
+export function shadesOnHead(p: Prim[], hc: V3, hr: V3, dx: number, spread: number, lens = 1.35, frame: Material = MAT.gold) {
   for (const s of [-1, 1]) {
     const z = surf(hc, hr, dx, s * spread, 0.35);
     p.push({ k: 'ell', c: [hc[0] + dx, hc[1] + s * spread, z], r: [lens * 0.9, lens * 1.12, 0.5], mat: SHADES, group: 'shades' });
@@ -82,7 +81,7 @@ function shadesOnHead(p: Prim[], hc: V3, hr: V3, dx: number, spread: number, len
 }
 
 /** Sunglasses worn over the eyes (front of the head). */
-function shadesOnEyes(p: Prim[], hc: V3, hr: V3, dx: number, spread: number, lens = 1.3) {
+export function shadesOnEyes(p: Prim[], hc: V3, hr: V3, dx: number, spread: number, lens = 1.3) {
   for (const s of [-1, 1]) {
     const z = surf(hc, hr, dx, s * spread, 0.25);
     p.push({ k: 'ell', c: [hc[0] + dx, hc[1] + s * spread, z], r: [lens * 0.8, lens * 1.1, 0.55], mat: SHADES, group: 'shades' });
@@ -113,7 +112,7 @@ function goggles(p: Prim[], hc: V3, hr: V3, dx: number, spread: number, lens: nu
 }
 
 /** Cigar (or cigarette) from `a` along direction (dx, dy), with a glowing tip. */
-function cigar(p: Prim[], a: V3, dx: number, dy: number, len = 3.6, r = 0.75, mat: Material = { ramp: H('#2a1408', '#4a2610', '#6a3a1a', '#8a5226') }) {
+export function cigar(p: Prim[], a: V3, dx: number, dy: number, len = 3.6, r = 0.75, mat: Material = { ramp: H('#2a1408', '#4a2610', '#6a3a1a', '#8a5226') }) {
   const l = Math.hypot(dx, dy) || 1;
   const b: V3 = [a[0] + (dx / l) * len, a[1] + (dy / l) * len, a[2]];
   p.push({ k: 'cap', a, b, r, mat, group: 'cigar' });
@@ -121,7 +120,7 @@ function cigar(p: Prim[], a: V3, dx: number, dy: number, len = 3.6, r = 0.75, ma
 }
 
 /** Backpack on the back with two shoulder straps. */
-function backpack(p: Prim[], o: PoseOffsets, rig: { torsoC: V3; torsoR: V3 }, mat: Material, strap: Material, size: V3 = [2.4, 4.8, 3.0]) {
+export function backpack(p: Prim[], o: PoseOffsets, rig: { torsoC: V3; torsoR: V3 }, mat: Material, strap: Material, size: V3 = [2.4, 4.8, 3.0]) {
   const x = rig.torsoC[0] - rig.torsoR[0] + 0.6;
   const z = rig.torsoC[2] + 1.6;
   p.push({ k: 'box', c: [x + o.dx, o.dy, z + o.dz], h: size, yaw: o.yaw, mat, group: 'pack', bevel: 1.0 });
@@ -133,7 +132,7 @@ function backpack(p: Prim[], o: PoseOffsets, rig: { torsoC: V3; torsoR: V3 }, ma
 }
 
 /** Pouches of a tactical vest on the front of the shoulders (visible around the head from above). */
-function pouches(p: Prim[], o: PoseOffsets, rig: { torsoC: V3; torsoR: V3 }, mat: Material, spots: Array<[number, number]>) {
+export function pouches(p: Prim[], o: PoseOffsets, rig: { torsoC: V3; torsoR: V3 }, mat: Material, spots: Array<[number, number]>) {
   for (const [x, y] of spots) {
     const z = surf(rig.torsoC, rig.torsoR, x - rig.torsoC[0], y, -0.2);
     p.push({ k: 'box', c: [x + o.dx, y + o.dy, z + o.dz], h: [1.05, 1.15, 0.9], yaw: o.yaw, mat, group: 'pouch', bevel: 0.35 });
@@ -228,7 +227,7 @@ const pythonSkin: Material = {
     return u - Math.floor(u) < 0.14 ? -1 : null;
   },
 };
-const TRACK_RED = H('#3a080c', '#68101a', '#9a1a24', '#c4282c', '#e2483e');
+export const TRACK_RED = H('#3a080c', '#68101a', '#9a1a24', '#c4282c', '#e2483e');
 const zmeya: Rig = {
   id: 'zmeya',
   torsoC: [-0.2, 0, 8.3],
@@ -372,7 +371,7 @@ const macawHead: Material = {
     return null;
   },
 };
-const VEST_OLIVE = H('#1c2010', '#2e341a', '#444c28', '#5c6636', '#76824a');
+export const VEST_OLIVE = H('#1c2010', '#2e341a', '#444c28', '#5c6636', '#76824a');
 const popugay: Rig = {
   id: 'popugay',
   torsoC: [-0.2, 0, 8.3],
@@ -611,7 +610,7 @@ const leoSpots = (base: RGBA[]): Material => ({
   },
 });
 const BROWN_LEATHER: Material = { ramp: H('#120a06', '#21130b', '#331e12', '#482c1b', '#603d26'), spec: { color: hex('#d0a888'), power: 10, threshold: 0.74 } };
-const SHEARLING: Material = { ramp: H('#6a5438', '#8e7652', '#b29a72', '#d2bc94', '#e8d6b2'), dither: true };
+export const SHEARLING: Material = { ramp: H('#6a5438', '#8e7652', '#b29a72', '#d2bc94', '#e8d6b2'), dither: true };
 const leopard: Rig = {
   id: 'leopard',
   torsoC: [-0.2, 0, 8.4],
@@ -857,6 +856,6 @@ const oryol: Rig = {
   },
 };
 
-export const EXTRA_RIGS: Record<Exclude<CharacterId, 'petya' | 'valuta' | 'uchastkovy' | 'mihalych'>, Rig> = { vorona, zmeya, varan, popugay, piranya, akula, oryol, leopard, slon, lobster };
+export const EXTRA_RIGS: Record<'vorona' | 'zmeya' | 'varan' | 'popugay' | 'piranya' | 'akula' | 'oryol' | 'leopard' | 'slon' | 'lobster', Rig> = { vorona, zmeya, varan, popugay, piranya, akula, oryol, leopard, slon, lobster };
 
 export type { PoseOffsets };

@@ -32,6 +32,17 @@ DETECT = {
     'popugay': '14-popugay-svyaznoy.png',
     'lobster': '15-lobster-baryga.png',
     'piranya': '16-piranya-bezumec.png',
+    # v0.23
+    'koshka': '27-koshka-murka.png',
+    'golub': '28-golub-sizy.png',
+    'tarakan': '29-tarakan-prusak.png',
+    'krysa': '30-krysa-sery.png',
+    'lev': '31-lev-arkadich.png',
+    'buyvol': '32-buyvol-bugai.png',
+    'nosorog': '33-nosorog-rogov.png',
+    'gorilla': '34-gorilla-samson.png',
+    'svinya': '35-svinya-borka.png',
+    'lisa': '36-lisa-alisa.png',
 }
 # Sheets whose portrait panel has a different layout: explicit square inside the frame.
 MANUAL = {

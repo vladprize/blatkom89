@@ -47,12 +47,14 @@ Prices (`WEAPON_PRICES`, `CHARACTER_PRICES`, `GADGET_PRICES`, `MOD_PRICES`):
 | MP5, S-12K | 299 💎 |
 | M4A1, G36, M249 | 399 💎 |
 | SVD, AWM, RPG-7 | 499 💎 |
-| Characters for level + talons (six): Uchastkovy (lvl 1), Mikhalych (2), Karlych (3), Sonka (5), Tolyan (7), Gosha (9) | 150 / 200 / 300 / 400 / 550 / 700 talons |
-| Characters for diamonds (six): Vityok / Lyova, Slavik / Zhora, Garik «Pendos» / Batya | 199 / 299 / 399 / 499 💎 |
+| Characters for level + talons (eleven): Uchastkovy (lvl 1), Mikhalych (2), Karlych (3), Sonka (5), Tolyan (7), Gosha (9); v0.23: Sizy (10), Prusak (11), Sery (12), Borka (13), Bugai (15) | 150 / 200 / 300 / 400 / 550 / 700 talons; 800 / 900 / 1000 / 1100 / 1250 talons |
+| Characters for diamonds (eleven): Vityok / Lyova, Slavik / Zhora, Garik «Pendos» / Batya; v0.23: Murka / Alisa, Rogov / Samson, Arkadich | 199 / 299 / 399 / 499 💎; 299 / 399 / 399 / 499 / 499 💎 |
 | Equipment: smoke / flashbang (lvl 2) / Molotov (lvl 4) / mine (lvl 6) / C4 (lvl 8) / turret (lvl 12) | 100 / 150 / 250 / 300 / 350 / 450 talons |
 | Modifications, per weapon: red dot, laser / grip / silencer, extended mag / scope | 100 / 120 / 150 / 200 talons |
 
-Weapons for diamonds (10) slightly outnumber those for talons (9); characters are split evenly (6 / 6).
+Weapons for diamonds (10) slightly outnumber those for talons (9); characters are split evenly (11 / 11; the
+ten of v0.23 are default prices — five for talons higher up the level ladder, five for diamonds — until the
+owner names others).
 
 Principles:
 

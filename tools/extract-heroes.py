@@ -30,6 +30,17 @@ SHEETS = {
     'lobster': ('15-lobster-baryga.png', (8, 136, 338, 576)),
     'piranya': ('16-piranya-bezumec.png', (8, 136, 338, 576)),
     'oryol': ('18-oryol-pendos.png', (70, 136, 400, 576)),
+    # v0.23
+    'koshka': ('27-koshka-murka.png', (8, 124, 338, 564)),
+    'golub': ('28-golub-sizy.png', (8, 136, 338, 576)),
+    'tarakan': ('29-tarakan-prusak.png', (8, 130, 338, 570)),
+    'krysa': ('30-krysa-sery.png', (8, 136, 338, 576)),
+    'lev': ('31-lev-arkadich.png', (8, 136, 338, 576)),
+    'buyvol': ('32-buyvol-bugai.png', (8, 136, 338, 576)),
+    'nosorog': ('33-nosorog-rogov.png', (8, 136, 338, 576)),
+    'gorilla': ('34-gorilla-samson.png', (8, 136, 338, 576)),
+    'svinya': ('35-svinya-borka.png', (8, 136, 338, 576)),
+    'lisa': ('36-lisa-alisa.png', (8, 112, 338, 552)),
 }
 
 

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
-import { CASE_PRICE, CASE_TABLE, CHARACTER_PRICES, DEFAULT_LOADOUT, FINISHES, FREE_CHARACTERS, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, PROTOCOL_VERSION, SKIN_CASE_PRICE, WEAPON_PRICES, parseSkin, skinId, tokensForMatch } from '@blatkom/shared';
+import { CASE_PRICE, CASE_TABLE, CHARACTER_IDS, CHARACTER_PRICES, DEFAULT_LOADOUT, FINISHES, FREE_CHARACTERS, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, PROTOCOL_VERSION, SKIN_CASE_PRICE, WEAPON_PRICES, parseSkin, skinId, tokensForMatch } from '@blatkom/shared';
 import { WebSocket } from 'ws';
 import { startTestApp, api, devLogin, TEST_BOT_TOKEN } from '../admin/testkit.js';
 import { signInitData } from '../auth/telegram.js';
@@ -471,11 +471,15 @@ test('funnel: anonymous visits are recorded and linked to the account created fr
   }
 });
 
-test('economy v0.23: two free characters, six for talons and six for diamonds; a free kit of three weapons; more weapons for diamonds than for talons', () => {
+test('economy v0.23: two free characters, eleven for talons and eleven for diamonds; a free kit of three weapons; more weapons for diamonds than for talons', () => {
   assert.deepEqual([...FREE_CHARACTERS].sort(), ['petya', 'valuta']);
   const chars = Object.values(CHARACTER_PRICES);
-  assert.equal(chars.filter((p) => p!.currency === 'tokens').length, 6);
-  assert.equal(chars.filter((p) => p!.currency === 'diamonds').length, 6);
+  assert.equal(chars.filter((p) => p!.currency === 'tokens').length, 11);
+  assert.equal(chars.filter((p) => p!.currency === 'diamonds').length, 11);
+  // every character but the free two has a price; the talon ladder climbs with the level
+  assert.deepEqual(CHARACTER_IDS.filter((c) => !CHARACTER_PRICES[c] && !FREE_CHARACTERS.includes(c)), []);
+  const ladder = CHARACTER_IDS.map((c) => CHARACTER_PRICES[c]).filter((p) => p?.currency === 'tokens');
+  for (let i = 1; i < ladder.length; i++) assert.ok(ladder[i]!.amount > ladder[i - 1]!.amount && ladder[i]!.level >= ladder[i - 1]!.level, `talon ladder step ${i}`);
   assert.deepEqual([...FREE_WEAPONS].sort(), ['avtomat', 'montirovka', 'pistol']);
   const weapons = Object.values(WEAPON_PRICES);
   const forTokens = weapons.filter((p) => p!.currency === 'tokens').length;

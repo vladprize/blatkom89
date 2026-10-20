@@ -19,7 +19,7 @@ import type { AchievementId } from '../game-rules/progression.js';
  * v5: up to 10 players, team matches (red vs blue): team in roster and snapshots, team scores.
  * v6: capture the flag and base capture: flags and bases in snapshots, objective events.
  */
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 
 /** Room chat: a line is at most `maxLength` characters; `burst` lines at once, then one per `refillMs`. */
 export const CHAT_RULES = Object.freeze({ maxLength: 140, maxRaw: 400, burst: 4, refillMs: 2500, repeatMs: 4000 });

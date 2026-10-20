@@ -20,9 +20,10 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
 1. `POST /api/rooms` (create, private → invite code) or `POST /api/rooms/quick` → `roomId`.
 2. WebSocket `GET /ws` (same origin; foreign `Origin` → 403; ≤48 sockets per IP — a game and a social socket per app window; 4 KB max frame).
 3. First message must be JSON `hello {protocol, token, roomId, character, clientVersion}` within 8 s
-   (`PROTOCOL_VERSION` = 6: v2 assists and supply drops, v3 loadouts, rockets, medkits, v4 the arsenal,
-   modifications and equipment, v5 ten players and team matches, v6 capture the flag and base capture;
-   older clients get `version_mismatch`).
+   (`PROTOCOL_VERSION` = 7: v2 assists and supply drops, v3 loadouts, rockets, medkits, v4 the arsenal,
+   modifications and equipment, v5 ten players and team matches, v6 capture the flag and base capture,
+   v7 ten more characters (an older client could not draw them) and the room chat;
+   older clients get `version_mismatch` and are asked to reload).
    The session token is verified exactly like the REST bearer token. Wrong protocol → `error
    version_mismatch` + close 1008; bad token → 4001; unknown room → 4004; full → 4005; finished → 4010.
 4. Server replies `welcome {playerId, slot, mode, config, serverTime, tick, resumed}` and broadcasts

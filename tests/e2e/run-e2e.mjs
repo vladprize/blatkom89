@@ -19,6 +19,8 @@
 //      (tests/e2e/social.mjs)
 //  11. weapon skins (v0.23): the skin case opened in the Arsenal, the reveal, the dressing room's
 //      picker, the skin on the weapon in hand and on the HUD icon in practice (tests/e2e/skins.mjs)
+//  12. the roster (v0.23): 24 characters with portraits, the ten new ones' personal files and prices,
+//      practice as a new character, all ten sprite atlases loaded (tests/e2e/roster.mjs)
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
 // E2E_PROD=1 runs the prebuilt deploy/ bundle exactly as a host would (NODE_ENV=production, guest login,
 // RENDER_EXTERNAL_URL, TRUST_PROXY) instead of the development server.
@@ -131,6 +133,9 @@ try {
   console.log('\n[e2e] weapon skins: the skin case, the dressing room, a skin in practice');
   const skins = spawnSync(process.execPath, ['tests/e2e/skins.mjs', base, join(out, 'skins')], { stdio: 'inherit' });
   if (skins.status !== 0) failed = true;
+  console.log('\n[e2e] the roster: 24 characters, the ten new ones in the files and in practice');
+  const roster = spawnSync(process.execPath, ['tests/e2e/roster.mjs', base, join(out, 'roster')], { stdio: 'inherit' });
+  if (roster.status !== 0) failed = true;
   console.log('\n[e2e] game modes online (capture the flag, base capture; English and Russian)');
   const modes = spawnSync(process.execPath, ['tests/e2e/modes.mjs', base, join(out, 'modes')], { stdio: 'inherit' });
   if (modes.status !== 0) failed = true;

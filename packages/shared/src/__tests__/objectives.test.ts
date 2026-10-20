@@ -84,7 +84,7 @@ test('modes: four modes, all but free-for-all are team modes; the score limit fo
   assert.equal(teamScoreLimitFor({ ...DEFAULT_MATCH_CONFIG, mode: 'bases' }), DEFAULT_MATCH_CONFIG.baseScoreLimit);
   assert.equal(teamScoreLimitFor({ ...DEFAULT_MATCH_CONFIG, mode: 'teams' }), DEFAULT_MATCH_CONFIG.teamScoreLimit);
   assert.equal(teamScoreLimitFor({ ...DEFAULT_MATCH_CONFIG, mode: 'ffa' }), 0);
-  assert.equal(PROTOCOL_VERSION, 6);
+  assert.ok(PROTOCOL_VERSION >= 6, "objective modes came with protocol 6");
   for (const mode of GAME_MODES) assert.ok(ClientMessageSchema.safeParse({ type: 'mode', mode }).success);
 });
 

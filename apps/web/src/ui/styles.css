@@ -172,8 +172,9 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .charcard .name { font-family: Oswald, sans-serif; font-weight: 700; font-size: 24px; text-transform: uppercase; }
 .charcard .nick { font-family: Oswald, sans-serif; color: var(--red); text-transform: uppercase; letter-spacing: .06em; }
 
-.chars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
-@media (max-width: 900px) { .chars { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+/* 24 characters: 3 full rows of 8, 4 rows of 6 on tablets, 6 rows of 4 on phones */
+.chars { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 900px) { .chars { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .chars { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; } }
 .chars button { background: var(--panel); border: 2px solid var(--line); padding: 4px; cursor: pointer; color: var(--beige); font-family: Oswald, sans-serif; text-transform: uppercase; display: flex; flex-direction: column; gap: 4px; align-items: center; font-size: 13px; letter-spacing: .02em; min-width: 0; }
 .chars button > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

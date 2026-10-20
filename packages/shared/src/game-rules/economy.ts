@@ -63,20 +63,31 @@ export const WEAPON_PRICES: Readonly<Partial<Record<WeaponId, ShopPrice>>> = {
 };
 
 export const CHARACTER_PRICES: Readonly<Partial<Record<CharacterId, ShopPrice>>> = {
-  // six for experience (level) + tokens
+  // for experience (level) + tokens
   uchastkovy: { currency: 'tokens', amount: 150, level: 1 },
   mihalych: { currency: 'tokens', amount: 200, level: 2 },
   vorona: { currency: 'tokens', amount: 300, level: 3 },
   zmeya: { currency: 'tokens', amount: 400, level: 5 },
   varan: { currency: 'tokens', amount: 550, level: 7 },
   popugay: { currency: 'tokens', amount: 700, level: 9 },
-  // six for diamonds
+  // v0.23: five more for talons, higher up the ladder
+  golub: { currency: 'tokens', amount: 800, level: 10 },
+  tarakan: { currency: 'tokens', amount: 900, level: 11 },
+  krysa: { currency: 'tokens', amount: 1000, level: 12 },
+  svinya: { currency: 'tokens', amount: 1100, level: 13 },
+  buyvol: { currency: 'tokens', amount: 1250, level: 15 },
+  // for diamonds
   piranya: { currency: 'diamonds', amount: 199, level: 1 },
   leopard: { currency: 'diamonds', amount: 299, level: 1 },
   lobster: { currency: 'diamonds', amount: 299, level: 1 },
   akula: { currency: 'diamonds', amount: 399, level: 1 },
   oryol: { currency: 'diamonds', amount: 399, level: 1 },
   slon: { currency: 'diamonds', amount: 499, level: 1 },
+  koshka: { currency: 'diamonds', amount: 299, level: 1 },
+  lisa: { currency: 'diamonds', amount: 399, level: 1 },
+  nosorog: { currency: 'diamonds', amount: 399, level: 1 },
+  gorilla: { currency: 'diamonds', amount: 499, level: 1 },
+  lev: { currency: 'diamonds', amount: 499, level: 1 },
 };
 
 /** Equipment: the F-1 is free; the rest is bought once with tokens (some from a level). */
