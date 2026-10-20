@@ -7,6 +7,7 @@ export * from './game-rules/weapons.js';
 export * from './game-rules/gadgets.js';
 export * from './game-rules/loadout.js';
 export * from './game-rules/economy.js';
+export * from './game-rules/skins.js';
 export * from './game-rules/match.js';
 export * from './game-rules/progression.js';
 export * from './maps/index.js';

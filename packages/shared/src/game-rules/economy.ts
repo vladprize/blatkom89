@@ -197,6 +197,8 @@ export interface Inventory {
   gadgets: GadgetId[];
   /** Owned modifications per weapon (equipped ones are in loadout.mods). */
   mods: Partial<Record<WeaponId, ModId[]>>;
+  /** Owned weapon skins, «weapon.finish» (equipped ones are in loadout.skins). */
+  skins: string[];
   /** Spawn loadout (validated against ownership). */
   loadout: Loadout;
 }

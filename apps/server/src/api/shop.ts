@@ -3,8 +3,8 @@
  * All prices and rules come from packages/shared/src/game-rules/economy.ts; the server never trusts
  * client-side ownership, balances or prices.
  */
-import { BuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, priceOf } from '@blatkom/shared';
-import type { CaseResult, Loadout, ShopConfig } from '@blatkom/shared';
+import { BuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, SKIN_CASE_PRICE, priceOf } from '@blatkom/shared';
+import type { CaseResult, Loadout, ShopConfig, SkinCaseResult } from '@blatkom/shared';
 import type { RouteModule } from '../app.js';
 import { HttpError, readBody } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
@@ -69,15 +69,26 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
     const user = currentUser(ctx);
     await ctx.body(CaseOpenRequest, 1024);
     const { entry, inventory } = await guard(() => pg().economy.openCase(user.userId));
-    deps.services.analytics.server('case_opened', { weapon: entry.weapon, rarity: entry.rarity, price: CASE_PRICE }, user);
+    deps.services.analytics.server('case_opened', { weapon: entry.weapon, rarity: entry.rarity, price: CASE_PRICE, kind: 'weapon' }, user);
     const res: CaseResult = { weapon: entry.weapon, rarity: entry.rarity, inventory };
+    ctx.json(200, res);
+  });
+
+  /** The skin case (v0.23): a weapon skin not owned yet, 299 diamonds, the same adult confirmation. */
+  router.post('/api/shop/skin-case', auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    if (!deps.env.CASES_ENABLED) throw new HttpError(403, 'cases_disabled', 'Cases are switched off on this server');
+    const user = currentUser(ctx);
+    await ctx.body(CaseOpenRequest, 1024);
+    const { drop, equipped, inventory } = await guard(() => pg().economy.openSkinCase(user.userId));
+    deps.services.analytics.server('case_opened', { weapon: drop.weapon, rarity: drop.rarity, price: SKIN_CASE_PRICE, kind: 'skin', finish: drop.finish }, user);
+    const res: SkinCaseResult = { weapon: drop.weapon, finish: drop.finish, rarity: drop.rarity, equipped, inventory };
     ctx.json(200, res);
   });
 
   router.post('/api/me/loadout', auth, rateLimit(shopLimiter, byUser), async (ctx) => {
     const user = currentUser(ctx);
     const body = await ctx.body(LoadoutRequest, 4096);
-    ctx.json(200, await pg().economy.setLoadout(user.userId, body as Pick<Loadout, 'sidearm' | 'melee' | 'primary'> & Partial<Pick<Loadout, 'gadget' | 'mods'>>));
+    ctx.json(200, await pg().economy.setLoadout(user.userId, body as Pick<Loadout, 'sidearm' | 'melee' | 'primary'> & Partial<Pick<Loadout, 'gadget' | 'mods' | 'skins'>>));
   });
 
   // ── Diamonds for real money ───────────────────────────────────────────────

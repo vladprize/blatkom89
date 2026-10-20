@@ -2704,8 +2704,24 @@ var DEFS2 = {
 var GADGETS = Object.fromEntries(GADGET_IDS.map((id, index) => [id, { ...DEFS2[id], id, index }]));
 var TURRET = Object.freeze({ hp: 100, radius: 9, fireIntervalMs: 160, spread: 0.06, ammo: 90, turnRate: 6 });
 
+// packages/shared/src/game-rules/skins.ts
+var FINISH_IDS = ["berezka", "rzhavchina", "zima", "flora", "gzhel", "pioner", "malahit", "hohloma", "zoloto", "yantar"];
+var FINISHES = Object.freeze({
+  berezka: { id: "berezka", name: "Birch Camo", rarity: "common" },
+  rzhavchina: { id: "rzhavchina", name: "Rust", rarity: "common" },
+  zima: { id: "zima", name: "Winter", rarity: "common" },
+  flora: { id: "flora", name: "Flora", rarity: "rare" },
+  gzhel: { id: "gzhel", name: "Gzhel", rarity: "rare" },
+  pioner: { id: "pioner", name: "Pioneer", rarity: "rare" },
+  malahit: { id: "malahit", name: "Malachite", rarity: "epic" },
+  hohloma: { id: "hohloma", name: "Khokhloma", rarity: "epic" },
+  zoloto: { id: "zoloto", name: "Party Gold", rarity: "legendary" },
+  yantar: { id: "yantar", name: "Amber", rarity: "legendary" }
+});
+var SKIN_RARITY_CHANCE = Object.freeze({ common: 55, rare: 28, epic: 13, legendary: 4 });
+
 // packages/shared/src/game-rules/loadout.ts
-var DEFAULT_LOADOUT = Object.freeze({ sidearm: "pistol", melee: "montirovka", primary: "avtomat", gadget: "f1", mods: {} });
+var DEFAULT_LOADOUT = Object.freeze({ sidearm: "pistol", melee: "montirovka", primary: "avtomat", gadget: "f1", mods: {}, skins: {} });
 
 // packages/shared/src/game-rules/economy.ts
 var FREE_WEAPONS = WEAPON_IDS.filter((w) => WEAPONS[w].tier === "base");
@@ -7120,7 +7136,8 @@ var SERVER_EVENT_PROPS = {
   invite_created: external_exports.object({ code: external_exports.string(), roomId: external_exports.string() }),
   shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
   mod_bought: external_exports.object({ weapon: external_exports.string(), mod: external_exports.string(), cost: external_exports.number().int() }),
-  case_opened: external_exports.object({ weapon: external_exports.string(), rarity: external_exports.enum(["rare", "epic", "legendary"]), price: external_exports.number().int() }),
+  /** The weapon case and (v0.23) the skin case: `kind` skin carries the finish. */
+  case_opened: external_exports.object({ weapon: external_exports.string(), rarity: external_exports.enum(["common", "rare", "epic", "legendary"]), price: external_exports.number().int(), kind: external_exports.enum(["weapon", "skin"]).optional(), finish: external_exports.string().max(24).optional() }),
   payment_completed: external_exports.object({ provider: external_exports.string(), packId: external_exports.string(), diamonds: external_exports.number().int(), amountCents: external_exports.number().int() }),
   email_linked: external_exports.object({})
 };
@@ -7177,7 +7194,9 @@ var LoadoutRequest = external_exports.object({
   primary: external_exports.enum(WEAPON_IDS).nullable(),
   gadget: external_exports.enum(GADGET_IDS).nullable().optional(),
   /** Equipped modifications per weapon (validated against ownership and mounts). */
-  mods: external_exports.record(external_exports.enum(WEAPON_IDS), external_exports.array(external_exports.enum(MOD_IDS)).max(4)).optional()
+  mods: external_exports.record(external_exports.enum(WEAPON_IDS), external_exports.array(external_exports.enum(MOD_IDS)).max(4)).optional(),
+  /** Equipped skins per weapon (validated against ownership). */
+  skins: external_exports.record(external_exports.enum(WEAPON_IDS), external_exports.enum(FINISH_IDS)).optional()
 }).strict();
 var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true) }).strict();
 var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card", "crypto"]) }).strict();

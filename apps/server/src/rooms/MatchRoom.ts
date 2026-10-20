@@ -52,6 +52,8 @@ import type {
   ServerMessage,
   WorldEvent,
   Standing,
+  FinishId,
+  WeaponId,
 } from '@blatkom/shared';
 import type { AuthedUser, PlayerGear, Services } from '../services/contracts.js';
 import type { Logger } from '../logging/logger.js';
@@ -82,6 +84,8 @@ interface FillSeat {
   character: CharacterId;
   level: number;
   avatar: AvatarId | null;
+  /** Weapon skins it wears (like a person who opened cases). */
+  skins: Partial<Record<WeaponId, FinishId>>;
   difficulty: BotDifficulty;
   addedAt: number;
   /** The AI and the world it plays in (a new world — map or mode change — needs a new brain). */
@@ -614,6 +618,7 @@ export class MatchRoom {
       character: persona.character,
       level: persona.level,
       avatar: persona.avatar,
+      skins: persona.loadout.skins ?? {},
       difficulty: persona.difficulty,
       addedAt: this.clock(),
       brain: null,
@@ -1004,6 +1009,7 @@ export class MatchRoom {
         avatar: c.user.avatar ?? null,
         team: p?.team ?? null,
         mods: c.gear.loadout.mods,
+        skins: c.gear.loadout.skins ?? {},
       };
     });
     // players the room filled in look exactly like people (always ready; never the host)
@@ -1022,6 +1028,7 @@ export class MatchRoom {
         avatar: seat.avatar,
         team: p?.team ?? null,
         mods: {},
+        skins: seat.skins,
       };
     });
     const players = [...people, ...filled].sort((a, b) => order(a.id) - order(b.id));

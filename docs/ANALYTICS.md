@@ -30,7 +30,7 @@ occurred_at, received_at, platform, props jsonb)`.
 | `email_linked` | `POST /api/auth/email/link` | — |
 | `shop_purchase` | `POST /api/shop/buy` | `kind` (`weapon`\|`character`\|`gadget`), `item`, `currency`, `amount` |
 | `mod_bought` | `POST /api/shop/mod` | `weapon`, `mod`, `cost` |
-| `case_opened` | `POST /api/shop/case` | `weapon`, `rarity`, `price` |
+| `case_opened` | `POST /api/shop/case`, `POST /api/shop/skin-case` (v0.23) | `weapon`, `rarity`, `price`; skin case: `kind: skin`, `finish` |
 | `payment_completed` | payment webhook credited diamonds | `provider`, `packId`, `diamonds`, `amountCents` |
 | `lobby_created` | `RoomManager.create` | `roomId`, `mapId`, `isPrivate` |
 | `lobby_joined` | `MatchRoom` join / resume | `roomId`, `viaInvite`, `resumed?` |

@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
-import { CASE_PRICE, CASE_TABLE, CHARACTER_PRICES, DEFAULT_LOADOUT, FREE_CHARACTERS, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, WEAPON_PRICES, tokensForMatch } from '@blatkom/shared';
+import { createHmac, randomBytes } from 'node:crypto';
+import { CASE_PRICE, CASE_TABLE, CHARACTER_PRICES, DEFAULT_LOADOUT, FINISHES, FREE_CHARACTERS, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, PROTOCOL_VERSION, SKIN_CASE_PRICE, WEAPON_PRICES, parseSkin, skinId, tokensForMatch } from '@blatkom/shared';
+import { WebSocket } from 'ws';
 import { startTestApp, api, devLogin, TEST_BOT_TOKEN } from '../admin/testkit.js';
 import { signInitData } from '../auth/telegram.js';
 import type { TestApp } from '../admin/testkit.js';
@@ -22,6 +23,13 @@ after(async () => {
 });
 
 const ctx = () => pgContext(app.db.sql, app.env, silentLogger);
+/** A signed-in player made directly (this file signs in more players than the login rate limit allows). */
+const quickUser = async (name: string) => {
+  const p = ctx();
+  const up = await p.users.upsertDev(`dev-quick-${randomBytes(6).toString('hex')}`, name, null);
+  const s = await p.sessions.issue(up.userId, 'dev', null, null);
+  return { userId: up.userId, token: s.token };
+};
 const setLevel = (userId: string, level: number) => app.db.sql`UPDATE profiles SET level = ${level} WHERE user_id = ${userId}`;
 
 test('economy: a new player owns the free weapons and characters and spawns with the default loadout', async () => {
@@ -210,6 +218,89 @@ test('economy: cases cost diamonds, never repeat a weapon and stop when the coll
   } finally {
     await off.close();
   }
+});
+
+test('economy: the skin case — 299 diamonds, never a duplicate, the new skin goes on a bare weapon, odds recorded', async () => {
+  const a = await quickUser('Модник');
+  const open = () => api(app.base, '/api/shop/skin-case', { method: 'POST', token: a.token, body: { confirmAge: true } });
+  assert.equal((await open()).body.error.code, 'funds');
+  assert.equal((await api(app.base, '/api/shop/skin-case', { method: 'POST', token: a.token, body: {} })).status, 400, 'adult confirmation required');
+  await ctx().economy.grant(a.userId, 'diamonds', SKIN_CASE_PRICE * 6 + 10, null, 'test');
+  const got = new Set<string>();
+  const wornBefore = new Map<string, string | undefined>();
+  for (let i = 0; i < 6; i++) {
+    const before = (await ctx().economy.inventory(a.userId)).loadout.skins ?? {};
+    const r = await open();
+    assert.equal(r.status, 200, r.text);
+    const id = skinId(r.body.weapon, r.body.finish);
+    assert.ok(parseSkin(id), id);
+    assert.equal(FINISHES[r.body.finish as keyof typeof FINISHES].rarity, r.body.rarity);
+    assert.ok(!got.has(id), `no duplicate (${id})`);
+    got.add(id);
+    assert.ok(r.body.inventory.skins.includes(id));
+    const prev = before[r.body.weapon as keyof typeof before];
+    wornBefore.set(id, prev);
+    // a weapon without a skin gets the new one; a weapon already wearing one keeps it
+    assert.equal(r.body.equipped, prev === undefined);
+    assert.equal(r.body.inventory.loadout.skins[r.body.weapon], prev ?? r.body.finish);
+  }
+  const inv = await ctx().economy.inventory(a.userId);
+  assert.equal(inv.diamonds, 10);
+  assert.equal(inv.skins.length, 6);
+  const rows = await app.db.sql<Array<{ kind: string; finish_id: string; price: number }>>`SELECT kind, finish_id, price FROM case_openings WHERE user_id = ${a.userId}`;
+  assert.equal(rows.length, 6);
+  assert.ok(rows.every((x) => x.kind === 'skin' && x.finish_id && x.price === SKIN_CASE_PRICE));
+  const [ledger] = await app.db.sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM currency_ledger WHERE user_id = ${a.userId} AND reason = 'case' AND ref LIKE 'skincase:%'`;
+  assert.equal(ledger!.n, 6);
+  // cases switched off: the skin case too
+  const off = await startTestApp({ CASES_ENABLED: false });
+  try {
+    const b = await devLogin(off.base, 'Модник Б');
+    assert.equal((await api(off.base, '/api/shop/skin-case', { method: 'POST', token: b.token, body: { confirmAge: true } })).status, 403);
+  } finally {
+    await off.close();
+  }
+});
+
+test('economy: skins are worn only when owned (any weapon, owned or not), and the room shows them to everybody', async () => {
+  const a = await quickUser('Щёголь');
+  const b = await quickUser('Зритель');
+  await ctx().economy.grantItem(a.userId, 'skin', 'avtomat.zoloto');
+  await ctx().economy.grantItem(a.userId, 'skin', 'svd.gzhel');
+  assert.equal((await ctx().economy.inventory(a.userId)).skins.length, 2);
+  const body = { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', skins: { avtomat: 'zoloto', pistol: 'hohloma', svd: 'gzhel' } };
+  const r = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body });
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual(r.body.loadout.skins, { avtomat: 'zoloto', svd: 'gzhel' }, 'the unowned pistol skin is dropped; the svd skin stays for when one is picked up');
+  assert.equal((await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { ...body, skins: { avtomat: 'not-a-finish' } } })).status, 400);
+  // a later loadout change without «skins» keeps them
+  const keep = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat' } });
+  assert.deepEqual(keep.body.loadout.skins, { avtomat: 'zoloto', svd: 'gzhel' });
+  // in a room: B sees A's skins in the roster
+  const room = await api(app.base, '/api/rooms', { method: 'POST', token: a.token, body: { mapId: 'factory', isPrivate: true, mode: 'ffa' } });
+  // every message is recorded from the first one (welcome and roster can arrive in one packet)
+  const rosters: Array<{ players: Array<{ id: string; skins?: Record<string, string> }> }> = [];
+  const join = (token: string, record: boolean) =>
+    new Promise<WebSocket>((resolve) => {
+      const ws = new WebSocket(`${app.wsBase}/ws`);
+      ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', protocol: PROTOCOL_VERSION, token, roomId: room.body.roomId, character: 'petya', clientVersion: 'test' })));
+      ws.on('message', (d, bin) => {
+        if (bin) return;
+        const m = JSON.parse(String(d));
+        if (m.type === 'welcome') resolve(ws);
+        if (record && m.type === 'roster') rosters.push(m);
+      });
+    });
+  const wa = await join(a.token, false);
+  const wb = await join(b.token, true);
+  const deadline = Date.now() + 5000;
+  while (!rosters.some((m) => m.players.length === 2) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+  const roster = rosters.find((m) => m.players.length === 2)!;
+  assert.ok(roster, 'a roster with both players');
+  assert.deepEqual(roster.players.find((p) => p.id === a.userId)?.skins, { avtomat: 'zoloto', svd: 'gzhel' });
+  assert.deepEqual(roster.players.find((p) => p.id === b.userId)?.skins, {});
+  wa.close();
+  wb.close();
 });
 
 test('economy: the loadout only keeps owned weapons and the server re-reads it for rooms', async () => {

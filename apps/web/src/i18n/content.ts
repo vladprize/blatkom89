@@ -2,10 +2,10 @@
  * Localised names and descriptions of the shared game content. English comes from the shared
  * definitions (packages/shared), Russian from ru-content.ts — always read them through here.
  */
-import { ACHIEVEMENTS, CHARACTERS, GADGETS, MODS, REFUSAL_TEXT, WEAPONS, getMap, isGadgetId } from '@blatkom/shared';
-import type { AchievementId, ArmsId, AvatarId, BuyRefusal, CharacterId, GadgetId, MapId, ModId, WeaponId } from '@blatkom/shared';
+import { ACHIEVEMENTS, CHARACTERS, FINISHES, GADGETS, MODS, REFUSAL_TEXT, WEAPONS, getMap, isGadgetId } from '@blatkom/shared';
+import type { AchievementId, ArmsId, AvatarId, BuyRefusal, CharacterId, FinishId, GadgetId, MapId, ModId, WeaponId } from '@blatkom/shared';
 import { getLang, t } from './index.js';
-import { RU_ACHIEVEMENTS, RU_CHARACTERS, RU_GADGETS, RU_MAPS, RU_MODS, RU_REFUSALS, RU_WEAPONS } from './ru-content.js';
+import { RU_ACHIEVEMENTS, RU_CHARACTERS, RU_FINISHES, RU_GADGETS, RU_MAPS, RU_MODS, RU_REFUSALS, RU_WEAPONS } from './ru-content.js';
 import type { CharacterText } from './ru-content.js';
 
 export type { CharacterText };
@@ -56,6 +56,11 @@ export function avatarName(id: AvatarId): string {
 
 export function weaponName(id: WeaponId): string {
   return ru() ? RU_WEAPONS[id].name : WEAPONS[id].name;
+}
+
+/** A weapon skin's finish («Хохлома» / «Khokhloma»). */
+export function finishName(id: FinishId): string {
+  return ru() ? RU_FINISHES[id] : FINISHES[id].name;
 }
 
 export function weaponBlurb(id: WeaponId): string {
@@ -111,6 +116,6 @@ export function refusalText(r: BuyRefusal): string {
 }
 
 /** «Rare / Epic / Legendary». */
-export function rarityLabel(r: 'rare' | 'epic' | 'legendary'): string {
-  return r === 'rare' ? t('Rare') : r === 'epic' ? t('Epic') : t('Legendary');
+export function rarityLabel(r: 'common' | 'rare' | 'epic' | 'legendary'): string {
+  return r === 'common' ? t('Common') : r === 'rare' ? t('Rare') : r === 'epic' ? t('Epic') : t('Legendary');
 }

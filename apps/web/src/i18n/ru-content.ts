@@ -3,7 +3,7 @@
  * achievements, shop refusals). The English originals live in packages/shared; these are the
  * original Russian texts of the sheets they were translated from.
  */
-import type { AchievementId, BuyRefusal, CharacterId, GadgetId, MapId, ModId, WeaponId } from '@blatkom/shared';
+import type { AchievementId, BuyRefusal, CharacterId, GadgetId, MapId, ModId, WeaponId, FinishId } from '@blatkom/shared';
 
 export interface CharacterText {
   name: string;
@@ -424,6 +424,20 @@ export const RU_ACHIEVEMENTS: Record<AchievementId, { title: string; description
     title: 'Свои люди',
     description: 'Сыграть матч с друзьями по приглашению.'
   }
+};
+
+/** Weapon skins' finishes (v0.23). */
+export const RU_FINISHES: Record<FinishId, string> = {
+  berezka: 'Берёзка',
+  rzhavchina: 'Ржавчина',
+  zima: 'Зимний',
+  flora: 'Флора',
+  gzhel: 'Гжель',
+  pioner: 'Пионер',
+  malahit: 'Малахит',
+  hohloma: 'Хохлома',
+  zoloto: 'Золото партии',
+  yantar: 'Янтарь',
 };
 
 export const RU_REFUSALS: Record<BuyRefusal, string> = {

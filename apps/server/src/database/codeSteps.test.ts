@@ -56,7 +56,8 @@ test('010 keeps every alias with its oldest living holder and numbers the later 
     await match(3, 'teams', 2, 0, null, true, [[com, 1, true, 0]]);
     await match(4, 'ctf', 2, 4, 1, true, [[som, 2, true, 1]]);
     await match(5, 'ffa', 2, 0, null, false, [[petya, 2, true, null]]); // never processed: ignored
-    assert.deepEqual(await migrate(sql), ['010_social.sql']);
+    const applied = await migrate(sql);
+    assert.equal(applied[0], '010_social.sql', 'the migrations after 009, 010 first');
     const ratings = await sql<Array<{ user_id: string; rating: number }>>`SELECT user_id, rating FROM profiles`;
     const r = new Map(ratings.map((x) => [x.user_id, x.rating]));
     assert.deepEqual([r.get(petya), r.get(som), r.get(com)], [1032, 1000, 984], 'first place +16 twice; last −16, middle ±0, team win +16; leaver −16, team draw ±0');

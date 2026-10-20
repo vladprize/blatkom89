@@ -43,6 +43,7 @@ export function toRenderPlayer(p: PlayerState, isLocal: boolean, now: number): R
     score: p.score,
     level: null,
     laser: p.mods[p.weapon]?.includes('laser') ?? false,
+    skin: null,
     flashedMs: Math.max(0, p.flashedUntil - now),
     team: p.team,
     objectives: p.objectives,

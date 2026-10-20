@@ -10709,8 +10709,73 @@ function armsIndex(id) {
   return w >= 0 ? w : WEAPON_IDS.length + GADGETS[id].index;
 }
 
+// packages/shared/src/game-rules/skins.ts
+var FINISH_IDS = ["berezka", "rzhavchina", "zima", "flora", "gzhel", "pioner", "malahit", "hohloma", "zoloto", "yantar"];
+var SKIN_RARITIES = ["common", "rare", "epic", "legendary"];
+var FINISHES = Object.freeze({
+  berezka: { id: "berezka", name: "Birch Camo", rarity: "common" },
+  rzhavchina: { id: "rzhavchina", name: "Rust", rarity: "common" },
+  zima: { id: "zima", name: "Winter", rarity: "common" },
+  flora: { id: "flora", name: "Flora", rarity: "rare" },
+  gzhel: { id: "gzhel", name: "Gzhel", rarity: "rare" },
+  pioner: { id: "pioner", name: "Pioneer", rarity: "rare" },
+  malahit: { id: "malahit", name: "Malachite", rarity: "epic" },
+  hohloma: { id: "hohloma", name: "Khokhloma", rarity: "epic" },
+  zoloto: { id: "zoloto", name: "Party Gold", rarity: "legendary" },
+  yantar: { id: "yantar", name: "Amber", rarity: "legendary" }
+});
+function isFinishId(v) {
+  return typeof v === "string" && FINISH_IDS.includes(v);
+}
+var SKIN_CASE_PRICE = 299;
+var SKIN_RARITY_CHANCE = Object.freeze({ common: 55, rare: 28, epic: 13, legendary: 4 });
+var SKINNABLE_WEAPONS = WEAPON_IDS;
+function skinId(weapon, finish) {
+  return `${weapon}.${finish}`;
+}
+function parseSkin(id) {
+  if (typeof id !== "string") return null;
+  const dot = id.indexOf(".");
+  if (dot <= 0) return null;
+  const weapon = id.slice(0, dot);
+  const finish = id.slice(dot + 1);
+  return isWeaponId(weapon) && isFinishId(finish) && SKINNABLE_WEAPONS.includes(weapon) ? { weapon, finish } : null;
+}
+function skinCaseOdds(owned) {
+  const left = new Map(SKIN_RARITIES.map((r) => [r, 0]));
+  for (const w of SKINNABLE_WEAPONS) for (const f of FINISH_IDS) if (!owned.has(skinId(w, f))) left.set(FINISHES[f].rarity, left.get(FINISHES[f].rarity) + 1);
+  const total = SKIN_RARITIES.reduce((s, r) => s + (left.get(r) > 0 ? SKIN_RARITY_CHANCE[r] : 0), 0);
+  const out = {};
+  for (const r of SKIN_RARITIES) out[r] = total === 0 || left.get(r) === 0 ? 0 : SKIN_RARITY_CHANCE[r] / total * 100;
+  return out;
+}
+function drawSkin(owned, rand) {
+  const odds = skinCaseOdds(owned);
+  let x = Math.min(Math.max(rand(), 0), 0.999999999) * 100;
+  let rarity = null;
+  for (const r of SKIN_RARITIES) {
+    if (odds[r] <= 0) continue;
+    rarity = r;
+    x -= odds[r];
+    if (x < 0) break;
+  }
+  if (!rarity) return null;
+  const pool = [];
+  for (const w of SKINNABLE_WEAPONS) for (const f of FINISH_IDS) if (FINISHES[f].rarity === rarity && !owned.has(skinId(w, f))) pool.push({ weapon: w, finish: f, rarity });
+  if (pool.length === 0) return null;
+  return pool[Math.min(pool.length - 1, Math.floor(Math.min(Math.max(rand(), 0), 0.999999999) * pool.length))];
+}
+function sanitizeSkins(raw, owns2 = () => true) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [w, f] of Object.entries(raw)) {
+    if (isWeaponId(w) && SKINNABLE_WEAPONS.includes(w) && isFinishId(f) && owns2(w, f)) out[w] = f;
+  }
+  return out;
+}
+
 // packages/shared/src/game-rules/loadout.ts
-var DEFAULT_LOADOUT = Object.freeze({ sidearm: "pistol", melee: "montirovka", primary: "avtomat", gadget: "f1", mods: {} });
+var DEFAULT_LOADOUT = Object.freeze({ sidearm: "pistol", melee: "montirovka", primary: "avtomat", gadget: "f1", mods: {}, skins: {} });
 function sanitizeLoadout(raw, own = {}) {
   const r = raw && typeof raw === "object" ? raw : {};
   const ownsW = own.weapon ?? (() => true);
@@ -10731,7 +10796,8 @@ function sanitizeLoadout(raw, own = {}) {
     melee: pick2(r.melee, 2, DEFAULT_LOADOUT.melee),
     primary: r.primary === null ? null : pick2(r.primary, 3, DEFAULT_LOADOUT.primary),
     gadget,
-    mods
+    mods,
+    skins: sanitizeSkins(r.skins, own.skin ?? (() => true))
   };
 }
 
@@ -14481,6 +14547,7 @@ var PRIMARIES = ["avtomat", "avtomat", "obrez", "ksyuha", "uzi", "ppsh", "mp5", 
 var SIDEARMS2 = ["pistol", "pistol", "pistol", "tt", "p92", "deagle"];
 var MELEE = ["montirovka", "montirovka", "bita", "nozh", "topor"];
 var GADGETS2 = ["f1", "f1", "f1", "molotov", "flash", "smoke"];
+var FILL_FINISHES = ["berezka", "berezka", "berezka", "rzhavchina", "rzhavchina", "zima", "zima", "flora", "flora", "gzhel", "pioner", "malahit", "hohloma", "zoloto"];
 var pick = (rnd, a) => a[Math.floor(rnd() * a.length) % a.length];
 function fillPersona(rnd, o) {
   let name = fillNickname(rnd, o.lang);
@@ -14489,7 +14556,7 @@ function fillPersona(rnd, o) {
   const level = Math.max(1, Math.min(60, Math.round(around - 3 + rnd() * 9)));
   const r = rnd();
   const difficulty = around < 4 ? r < 0.6 ? "easy" : "normal" : around < 15 ? r < 0.15 ? "easy" : r < 0.85 ? "normal" : "hard" : r < 0.5 ? "normal" : "hard";
-  return {
+  const persona = {
     name,
     character: rnd() < 0.65 ? pick(rnd, FREE_CHARACTERS) : pick(rnd, CHARACTER_IDS),
     level,
@@ -14497,6 +14564,11 @@ function fillPersona(rnd, o) {
     loadout: { sidearm: pick(rnd, SIDEARMS2), melee: pick(rnd, MELEE), primary: pick(rnd, PRIMARIES), gadget: pick(rnd, GADGETS2), mods: {} },
     difficulty
   };
+  const skins = {};
+  if (persona.loadout.primary && rnd() < 0.3) skins[persona.loadout.primary] = pick(rnd, FILL_FINISHES);
+  if (rnd() < 0.1) skins[persona.loadout.sidearm] = pick(rnd, FILL_FINISHES);
+  persona.loadout.skins = skins;
+  return persona;
 }
 
 // packages/shared/src/net/codec.ts
@@ -14767,7 +14839,8 @@ var SERVER_EVENT_PROPS = {
   invite_created: external_exports.object({ code: external_exports.string(), roomId: external_exports.string() }),
   shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
   mod_bought: external_exports.object({ weapon: external_exports.string(), mod: external_exports.string(), cost: external_exports.number().int() }),
-  case_opened: external_exports.object({ weapon: external_exports.string(), rarity: external_exports.enum(["rare", "epic", "legendary"]), price: external_exports.number().int() }),
+  /** The weapon case and (v0.23) the skin case: `kind` skin carries the finish. */
+  case_opened: external_exports.object({ weapon: external_exports.string(), rarity: external_exports.enum(["common", "rare", "epic", "legendary"]), price: external_exports.number().int(), kind: external_exports.enum(["weapon", "skin"]).optional(), finish: external_exports.string().max(24).optional() }),
   payment_completed: external_exports.object({ provider: external_exports.string(), packId: external_exports.string(), diamonds: external_exports.number().int(), amountCents: external_exports.number().int() }),
   email_linked: external_exports.object({})
 };
@@ -14828,7 +14901,9 @@ var LoadoutRequest = external_exports.object({
   primary: external_exports.enum(WEAPON_IDS).nullable(),
   gadget: external_exports.enum(GADGET_IDS).nullable().optional(),
   /** Equipped modifications per weapon (validated against ownership and mounts). */
-  mods: external_exports.record(external_exports.enum(WEAPON_IDS), external_exports.array(external_exports.enum(MOD_IDS)).max(4)).optional()
+  mods: external_exports.record(external_exports.enum(WEAPON_IDS), external_exports.array(external_exports.enum(MOD_IDS)).max(4)).optional(),
+  /** Equipped skins per weapon (validated against ownership). */
+  skins: external_exports.record(external_exports.enum(WEAPON_IDS), external_exports.enum(FINISH_IDS)).optional()
 }).strict();
 var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true) }).strict();
 var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card", "crypto"]) }).strict();
@@ -15798,10 +15873,12 @@ var EconomyRepo = class {
     const weapons = new Set(FREE_WEAPONS);
     const characters = new Set(FREE_CHARACTERS);
     const gadgets = new Set(FREE_GADGETS);
+    const skins = /* @__PURE__ */ new Set();
     for (const it of items) {
       if (it.kind === "weapon" && isWeaponId(it.item_id)) weapons.add(it.item_id);
       if (it.kind === "character" && isCharacterId(it.item_id)) characters.add(it.item_id);
       if (it.kind === "gadget" && isGadgetId(it.item_id)) gadgets.add(it.item_id);
+      if (it.kind === "skin" && parseSkin(it.item_id)) skins.add(it.item_id);
     }
     const mods = {};
     for (const r of modRows) {
@@ -15810,7 +15887,10 @@ var EconomyRepo = class {
     }
     for (const w of Object.keys(mods)) mods[w] = MOD_IDS.filter((m) => mods[w].includes(m));
     const raw = wallet.loadout && typeof wallet.loadout === "object" ? wallet.loadout : {};
-    const loadout = sanitizeLoadout({ ...DEFAULT_LOADOUT, ...raw }, { weapon: (w) => weapons.has(w), gadget: (g) => gadgets.has(g), mod: (w, m) => mods[w]?.includes(m) ?? false });
+    const loadout = sanitizeLoadout(
+      { ...DEFAULT_LOADOUT, ...raw },
+      { weapon: (w) => weapons.has(w), gadget: (g) => gadgets.has(g), mod: (w, m) => mods[w]?.includes(m) ?? false, skin: (w, f) => skins.has(skinId(w, f)) }
+    );
     return {
       tokens: wallet.tokens,
       diamonds: wallet.diamonds,
@@ -15819,6 +15899,7 @@ var EconomyRepo = class {
       characters: CHARACTER_IDS.filter((c) => characters.has(c)),
       gadgets: GADGET_IDS.filter((g) => gadgets.has(g)),
       mods,
+      skins: [...skins].sort(),
       loadout
     };
   }
@@ -15869,7 +15950,7 @@ var EconomyRepo = class {
       await tx`INSERT INTO weapon_mods (user_id, weapon_id, mod_id) VALUES (${userId}, ${weapon}, ${mod}) ON CONFLICT DO NOTHING`;
       const l = inv.loadout;
       const equipped = [mod, ...l.mods[weapon] ?? []];
-      const stored = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: { ...l.mods, [weapon]: equipped } };
+      const stored = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: { ...l.mods, [weapon]: equipped }, skins: l.skins ?? {} };
       await tx`UPDATE profiles SET loadout = ${tx.json(stored)}, updated_at = now() WHERE user_id = ${userId}`;
       this.log.info("mod purchase", { userId, weapon, mod, cost: q.cost });
       return this.load(tx, userId, { ...wallet, tokens: wallet.tokens - q.cost, loadout: stored });
@@ -15884,11 +15965,38 @@ var EconomyRepo = class {
       if (!entry) throw new EconomyError("collection_complete");
       if (wallet.diamonds < CASE_PRICE) throw new EconomyError("funds");
       const [opening] = await tx`
-        INSERT INTO case_openings (user_id, weapon_id, rarity, price) VALUES (${userId}, ${entry.weapon}, ${entry.rarity}, ${CASE_PRICE}) RETURNING id`;
+        INSERT INTO case_openings (user_id, kind, weapon_id, rarity, price) VALUES (${userId}, 'weapon', ${entry.weapon}, ${entry.rarity}, ${CASE_PRICE}) RETURNING id`;
       await this.debit(tx, userId, "diamonds", CASE_PRICE, wallet.diamonds, "case", `case:${opening.id}`);
       await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${entry.weapon}, 'weapon', 'case') ON CONFLICT DO NOTHING`;
       this.log.info("case opened", { userId, weapon: entry.weapon, rarity: entry.rarity });
       return { entry, inventory: await this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - CASE_PRICE }) };
+    });
+  }
+  /**
+   * Opens the skin case: a skin the player does not own yet (never a duplicate). When the weapon wears
+   * no skin yet, the new one goes on at once.
+   */
+  async openSkinCase(userId, rand = secureRandom) {
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      const drop = drawSkin(new Set(inv.skins), rand);
+      if (!drop) throw new EconomyError("collection_complete");
+      if (wallet.diamonds < SKIN_CASE_PRICE) throw new EconomyError("funds");
+      const [opening] = await tx`
+        INSERT INTO case_openings (user_id, kind, weapon_id, finish_id, rarity, price)
+        VALUES (${userId}, 'skin', ${drop.weapon}, ${drop.finish}, ${drop.rarity}, ${SKIN_CASE_PRICE}) RETURNING id`;
+      await this.debit(tx, userId, "diamonds", SKIN_CASE_PRICE, wallet.diamonds, "case", `skincase:${opening.id}`);
+      await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${skinId(drop.weapon, drop.finish)}, 'skin', 'case') ON CONFLICT DO NOTHING`;
+      const l = inv.loadout;
+      const equipped = !l.skins?.[drop.weapon];
+      let loadout = wallet.loadout;
+      if (equipped) {
+        loadout = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods, skins: { ...l.skins ?? {}, [drop.weapon]: drop.finish } };
+        await tx`UPDATE profiles SET loadout = ${tx.json(loadout)}, updated_at = now() WHERE user_id = ${userId}`;
+      }
+      this.log.info("skin case opened", { userId, weapon: drop.weapon, finish: drop.finish, rarity: drop.rarity });
+      return { drop, equipped, inventory: await this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - SKIN_CASE_PRICE, loadout }) };
     });
   }
   /**
@@ -15900,11 +16008,12 @@ var EconomyRepo = class {
       const wallet = await this.lockWallet(tx, userId);
       const inv = await this.load(tx, userId, wallet);
       const owned = new Set(inv.weapons);
+      const ownedSkins = new Set(inv.skins);
       const l = sanitizeLoadout(
-        { ...raw, gadget: raw.gadget === void 0 ? inv.loadout.gadget : raw.gadget, mods: raw.mods ?? inv.loadout.mods },
-        { weapon: (w) => owned.has(w), gadget: (g) => inv.gadgets.includes(g), mod: (w, m) => inv.mods[w]?.includes(m) ?? false }
+        { ...raw, gadget: raw.gadget === void 0 ? inv.loadout.gadget : raw.gadget, mods: raw.mods ?? inv.loadout.mods, skins: raw.skins ?? inv.loadout.skins },
+        { weapon: (w) => owned.has(w), gadget: (g) => inv.gadgets.includes(g), mod: (w, m) => inv.mods[w]?.includes(m) ?? false, skin: (w, f) => ownedSkins.has(skinId(w, f)) }
       );
-      const stored = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods };
+      const stored = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods, skins: l.skins ?? {} };
       await tx`UPDATE profiles SET loadout = ${tx.json(stored)}, updated_at = now() WHERE user_id = ${userId}`;
       return this.load(tx, userId, { ...wallet, loadout: stored });
     });
@@ -15925,7 +16034,8 @@ var EconomyRepo = class {
   }
   /** Grants an item without payment (administrator). */
   async grantItem(userId, kind, id) {
-    if (kind === "weapon" ? !isWeaponId(id) : kind === "character" ? !isCharacterId(id) : !isGadgetId(id)) throw new EconomyError("not_for_sale");
+    const valid = kind === "weapon" ? isWeaponId(id) : kind === "character" ? isCharacterId(id) : kind === "gadget" ? isGadgetId(id) : parseSkin(id) !== null;
+    if (!valid) throw new EconomyError("not_for_sale");
     await this.sql`INSERT INTO profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
     await this.sql`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${id}, ${kind}, 'grant') ON CONFLICT DO NOTHING`;
   }
@@ -17610,6 +17720,9 @@ async function economy(sql2, r, now = /* @__PURE__ */ new Date()) {
   const cases = await sql2`
     SELECT rarity, count(*)::int AS count, sum(price)::int AS spent FROM case_openings
     WHERE created_at BETWEEN ${from} AND ${to} GROUP BY rarity ORDER BY count DESC, rarity`;
+  const caseKinds = await sql2`
+    SELECT kind, count(*)::int AS count, sum(price)::int AS spent FROM case_openings
+    WHERE created_at BETWEEN ${from} AND ${to} GROUP BY kind ORDER BY kind`;
   const daily = await sql2`
     WITH l AS (
       SELECT (created_at AT TIME ZONE 'UTC')::date AS d, currency, delta FROM currency_ledger WHERE created_at BETWEEN ${from} AND ${to}
@@ -17641,7 +17754,12 @@ async function economy(sql2, r, now = /* @__PURE__ */ new Date()) {
     },
     purchases: { total: sum(byKind.filter((k) => k.source === "tokens" || k.source === "diamonds")), byKind: [...byKind], top: [...top] },
     mods: { total: sum([...mods]), top: [...mods] },
-    cases: { total: sum([...cases]), diamondsSpent: cases.reduce((a, c) => a + c.spent, 0), byRarity: cases.map((c) => ({ rarity: c.rarity, count: c.count })) },
+    cases: {
+      total: sum([...cases]),
+      diamondsSpent: cases.reduce((a, c) => a + c.spent, 0),
+      byRarity: cases.map((c) => ({ rarity: c.rarity, count: c.count })),
+      byKind: caseKinds.map((c) => ({ kind: c.kind, count: c.count, diamondsSpent: c.spent }))
+    },
     daily: daily.map((d) => ({ day: d.day, tokensIssued: d.ti, tokensSpent: d.ts, diamondsIssued: d.di, diamondsSpent: d.ds, revenueCents: d.rev }))
   };
 }
@@ -17945,8 +18063,17 @@ var registerShopRoutes = (router, deps) => {
     const user = currentUser(ctx);
     await ctx.body(CaseOpenRequest, 1024);
     const { entry, inventory } = await guard(() => pg().economy.openCase(user.userId));
-    deps.services.analytics.server("case_opened", { weapon: entry.weapon, rarity: entry.rarity, price: CASE_PRICE }, user);
+    deps.services.analytics.server("case_opened", { weapon: entry.weapon, rarity: entry.rarity, price: CASE_PRICE, kind: "weapon" }, user);
     const res = { weapon: entry.weapon, rarity: entry.rarity, inventory };
+    ctx.json(200, res);
+  });
+  router.post("/api/shop/skin-case", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    if (!deps.env.CASES_ENABLED) throw new HttpError(403, "cases_disabled", "Cases are switched off on this server");
+    const user = currentUser(ctx);
+    await ctx.body(CaseOpenRequest, 1024);
+    const { drop, equipped, inventory } = await guard(() => pg().economy.openSkinCase(user.userId));
+    deps.services.analytics.server("case_opened", { weapon: drop.weapon, rarity: drop.rarity, price: SKIN_CASE_PRICE, kind: "skin", finish: drop.finish }, user);
+    const res = { weapon: drop.weapon, finish: drop.finish, rarity: drop.rarity, equipped, inventory };
     ctx.json(200, res);
   });
   router.post("/api/me/loadout", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
@@ -18938,6 +19065,7 @@ var MatchRoom = class {
       character: persona.character,
       level: persona.level,
       avatar: persona.avatar,
+      skins: persona.loadout.skins ?? {},
       difficulty: persona.difficulty,
       addedAt: this.clock(),
       brain: null,
@@ -19287,7 +19415,8 @@ var MatchRoom = class {
         level: c.user.level,
         avatar: c.user.avatar ?? null,
         team: p?.team ?? null,
-        mods: c.gear.loadout.mods
+        mods: c.gear.loadout.mods,
+        skins: c.gear.loadout.skins ?? {}
       };
     });
     const filled = [...this.seats.values()].map((seat) => {
@@ -19304,7 +19433,8 @@ var MatchRoom = class {
         level: seat.level,
         avatar: seat.avatar,
         team: p?.team ?? null,
-        mods: {}
+        mods: {},
+        skins: seat.skins
       };
     });
     const players = [...people, ...filled].sort((a, b2) => order(a.id) - order(b2.id));

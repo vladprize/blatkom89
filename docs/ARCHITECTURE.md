@@ -58,7 +58,7 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 | `http/` | tiny router (params, JSON body limits, errors), bearer auth, static files (CSP, ETag, cache rules) |
 | `rooms/` | `RoomManager` (shared 60 Hz loop, quick match, limits), `MatchRoom` (lobby, phases, input queues, snapshots, results; filled lineups — players the room runs with `BotBrain`, shown to clients exactly like people, docs/NETCODE.md §2a), `gateway` (WS upgrade, origin/IP limits, hello authentication) |
 | `auth/` | Telegram `initData` HMAC validation, guest login (HMAC of a browser secret), email + password (scrypt) with reset tokens, dev login (non-production only), opaque random session tokens (only an HMAC-SHA-256 of the token is stored) |
-| `economy/`, `payments/` | wallet, purchases, modifications, cases and loadouts with a ledger (row locks, one transaction per change); Stripe / NOWPayments checkouts and verified webhooks, credit-once, refunds ([ECONOMY.md](ECONOMY.md)) |
+| `economy/`, `payments/` | wallet, purchases, modifications, cases (rare weapons, weapon skins) and loadouts with a ledger (row locks, one transaction per change); Stripe / NOWPayments checkouts and verified webhooks, credit-once, refunds ([ECONOMY.md](ECONOMY.md)) |
 | `profiles/`, `progression/` | profile reads/updates, idempotent match recorder (XP, levels, rating, wins/streaks, achievements) |
 | `social/`, `api/social.ts` | friends (requests, acceptance), private messages between friends, invitations to a room, the Top-100; `SocialHub` holds the social WebSockets (`/ws/social`): presence (online / lobby / match from `RoomManager.roomOf`) and live events; unique aliases in `auth/names.ts` |
 | `analytics/` | event ingestion with UUID dedupe, buffered server events, sanitised error log, metrics (DAU/WAU/MAU, D1/D7, charts), retention purge |
@@ -76,7 +76,7 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 | `net/` | REST client, `GameConnection` (WS, reconnect with backoff, ping), `OnlineClient` (auth, rooms, lobby state), `SocialClient` (the social socket and the friends store: presence, unread counts, requests, invitations) |
 | `game/session/` | `OfflineSession` (local World + bots), `OnlineSession` (prediction, reconciliation, interpolation, delayed remote events) — both expose the same `GameSession` interface to the scenes |
 | `game/scenes/` | `BootScene` (loading), `GameScene` (fixed-step loop, camera, events → feedback), `HudScene` (HUD, touch controls, scoreboard), `PreviewScene` (animated map behind menus) |
-| `game/render/` | map renderer (tiles, decals, litter, props, walls, overhead layer, culling), lighting (light map, fixtures, objective light pools), effects, character views (team rings and name colours), equipment, flags and bases (`ObjectiveView`), VHS post-process |
+| `game/render/` | map renderer (tiles, decals, litter, props, walls, overhead layer, culling), lighting (light map, fixtures, objective light pools), effects, character views (team rings and name colours; weapon skins painted by `finish.ts` into canvas textures, `skins.ts`), equipment, flags and bases (`ObjectiveView`), VHS post-process |
 | `game/input/` | keyboard/mouse input and twin-stick touch controls (move stick, aim stick, fire/reload/swap buttons, left-handed mode) |
 | `game/audio/` | `Sfx.ts` — WebAudio-synthesised sound effects with distance attenuation; `Music.ts` — the menu soundtrack (streamed MP3, tries to start without a tap, moves onto the shared audio context after the first tap, fades out in matches; `main.ts` shows «▶ Play» when the browser wants a tap) |
 | `telegram/tg.ts` | Mini Apps SDK wrapper: init, safe areas, back button, haptics, sharing, confirm dialogs |
@@ -84,7 +84,7 @@ tests/e2e        Playwright scripts (offline practice, two-browser online match,
 | `admin/` | the `/admin` dashboard (separate entry, never loaded by players) |
 
 ## 3. Data model (PostgreSQL)
-Migrations: `apps/server/src/database/migrations/` (`001_init.sql` … `010_social.sql`: assists, guest auth, economy and email, team modes — `matches.mode` (`ffa`/`teams`/`ctf`/`bases`), `matches.winner_team`, `match_participants.team`; avatars; filled lineups; v0.23 unlocks; social — `users.name_key` (unique alias key), `profiles.rating`, `match_participants.rating_delta`, `friendships`, `direct_messages`).
+Migrations: `apps/server/src/database/migrations/` (`001_init.sql` … `011_skins.sql`: assists, guest auth, economy and email, team modes — `matches.mode` (`ffa`/`teams`/`ctf`/`bases`), `matches.winner_team`, `match_participants.team`; avatars; filled lineups; v0.23 unlocks; social — `users.name_key` (unique alias key), `profiles.rating`, `match_participants.rating_delta`, `friendships`, `direct_messages`; weapon skins — `user_items` of kind `skin`, `case_openings.kind`/`finish_id`).
 
 `users` (internal UUID, Telegram id unique, display name, language) · `profiles` (level, XP, matches,
 wins, losses, kills, deaths, playtime, streaks, preferred character) · `sessions` (token hash, expiry,

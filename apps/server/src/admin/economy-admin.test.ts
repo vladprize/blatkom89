@@ -117,7 +117,7 @@ describe('funnel and economy metrics (deterministic data)', () => {
     assert.equal(e.purchases.byKind.length, 2);
     assert.deepEqual(e.purchases.top, [{ kind: 'weapon', id: 'nozh', count: 1 }], 'case drops are not counted as purchases in the top list');
     assert.deepEqual(e.mods, { total: 1, top: [{ id: 'silencer', count: 1 }] });
-    assert.deepEqual(e.cases, { total: 1, diamondsSpent: 299, byRarity: [{ rarity: 'rare', count: 1 }] });
+    assert.deepEqual(e.cases, { total: 1, diamondsSpent: 299, byRarity: [{ rarity: 'rare', count: 1 }], byKind: [{ kind: 'weapon', count: 1, diamondsSpent: 299 }] });
     const d3 = e.daily.find((d) => d.day === '2026-04-03')!;
     assert.deepEqual(d3, { day: '2026-04-03', tokensIssued: 300, tokensSpent: 270, diamondsIssued: 0, diamondsSpent: 0, revenueCents: 0 });
     assert.equal(e.daily.find((d) => d.day === '2026-04-04')!.revenueCents, 499);

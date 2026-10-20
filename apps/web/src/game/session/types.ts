@@ -1,4 +1,4 @@
-import type { ArmsId, CharacterId, FlagAction, FlagStatus, GadgetId, GameMode, MapId, MatchPhase, PelletResult, PersonalResult, Standing, Team, TeamResultSummary, WeaponId } from '@blatkom/shared';
+import type { FinishId, ArmsId, CharacterId, FlagAction, FlagStatus, GadgetId, GameMode, MapId, MatchPhase, PelletResult, PersonalResult, Standing, Team, TeamResultSummary, WeaponId } from '@blatkom/shared';
 
 export interface RenderPlayer {
   slot: number;
@@ -27,6 +27,8 @@ export interface RenderPlayer {
   level: number | null;
   /** The weapon in hand has a laser sight: everyone sees the beam. */
   laser: boolean;
+  /** The finish of the weapon in hand (a weapon skin), null: the plain weapon. */
+  skin: FinishId | null;
   /** Blinded by a flashbang for this many more ms. */
   flashedMs: number;
   /** Team matches: 0 red, 1 blue; null in free-for-all. */

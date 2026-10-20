@@ -1,4 +1,4 @@
-# Economy — talons, diamonds, the Arsenal, cases and payments
+# Economy — talons, diamonds, the Arsenal, cases, weapon skins and payments
 
 Rules and prices live in one place, `packages/shared/src/game-rules/economy.ts`; the server
 (`apps/server/src/economy/repo.ts`, `apps/server/src/payments/`) is the only authority that changes
@@ -11,7 +11,7 @@ balances. The client only displays what the server returns. Admin view: «Эко
 |---|---|---|
 | How you get them | online matches only (not practice) | bought for real money, 100 💎 = $1 (no bulk bonus); administrator grants |
 | Sold for money | never | yes — packs of 199, 299, 499, 999 and 1999 💎 |
-| Spent on | token-priced weapons, characters, equipment, every modification | diamond-priced weapons and characters, the rare-weapon case |
+| Spent on | token-priced weapons, characters, equipment, every modification | diamond-priced weapons and characters, the rare-weapon case, the skin case |
 
 Talons per online match (`TOKEN_REWARD`, `tokenBreakdown()`): **5 per elimination, 2 per assist, 5 for
 playing the match to the end**, capped at 100 per match — the same in every mode, so a match pays for
@@ -81,6 +81,34 @@ purchase. When the collection is complete the case is no longer sold. Draws use 
 `POST /api/shop/case` → `403 cases_disabled`) for markets where paid randomised items are restricted.
 Whether that is needed is a legal question for the operator — this document is not legal advice.
 
+## 4a. Weapon skins and the skin case (v0.23)
+
+A skin is a **finish on one particular weapon** («АК-47 · Хохлома») and changes only how it looks —
+never a number (`game-rules/skins.ts`). Ten finishes from the late-Soviet everyday:
+
+| Rarity | Chance | Finishes |
+|---|---|---|
+| common | 55 % | Берёзка (birch camo), Ржавчина (rust), Зимний (winter) |
+| rare | 28 % | Флора (the 1980s camo), Гжель (porcelain blue), Пионер (pioneer red) |
+| epic | 13 % | Малахит (malachite), Хохлома (black, gold and red) |
+| legendary | 4 % | Золото партии (party gold), Янтарь (amber) |
+
+Every weapon can wear every finish: 32 × 10 = 320 skins. **The skin case** costs 299 💎 ($2.99) and gives
+a skin the player does not own: first the rarity is drawn by the chances above (a rarity whose skins are
+all owned drops out and the others share its chance — `skinCaseOdds`), then any unowned skin of that
+rarity with equal chance (`drawSkin`, OS CSPRNG). No duplicates; when all 320 are owned the case is no
+longer sold. The same adult confirmation and `CASES_ENABLED` switch as the weapon case
+(`POST /api/shop/skin-case`). A new skin goes on its weapon at once if the weapon wore none.
+
+Owned skins are `user_items` rows of kind `skin` (`item_id` = `weapon.finish`, migration 011); the worn
+ones are `profiles.loadout.skins` (`{weapon: finish}`), checked against ownership on every read. A skin
+can be worn on a weapon the player does not own — it shows when such a weapon is picked up on the map.
+The room sends everyone's worn skins in the roster; the client paints the weapon's own pixel art with
+the finish (`apps/web/src/game/render/finish.ts`) for the weapon in hand, the HUD icon and the Arsenal's
+pictures. In the dressing room every finish can be tried on (and taken into practice); the player's own
+are worn with a tap. Players the room adds to complete a lineup sometimes wear a common or rare skin,
+like people who opened the case. The admin's economy page splits case openings by kind.
+
 ## 5. Buying diamonds
 
 | Method | Provider | Server keys |
@@ -125,7 +153,12 @@ mandatory reason, never below zero, ledger reason `grant` with the admin's id, a
 ## 7. Tests
 
 `apps/server/src/economy/economy.test.ts` (wallet, purchases and refusals, concurrency, loadout
-validation, cases without duplicates, `CASES_ENABLED`, Stripe and NOWPayments signatures, single
+validation, cases without duplicates, the skin case (price, no duplicates, the new skin worn on a bare
+weapon, recorded openings), skins worn only when owned and shown to everyone in the room roster,
+`CASES_ENABLED`, Stripe and NOWPayments signatures, single
 crediting, refunds, Telegram sessions refused, email sign-in), `apps/server/src/admin/economy-admin.test.ts`
-(economy panel numbers, grants) and `packages/shared/src/__tests__/weapons2.test.ts` (balance,
-modifications, loadouts).
+(economy panel numbers, grants), `packages/shared/src/__tests__/weapons2.test.ts` (balance,
+modifications, loadouts), `packages/shared/src/__tests__/skins.test.ts` (skin ids, the case's odds and
+exhaustion, sanitising, filled players' skins) and `apps/web/src/game/render/finish.test.ts` (every
+finish repaints, keeps transparency and outlines, is deterministic and follows the weapon, not its
+padding); browser: `tests/e2e/skins.mjs`.

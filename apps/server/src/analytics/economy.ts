@@ -136,6 +136,9 @@ export async function economy(sql: Sql, r: AdminRange, now = new Date()): Promis
   const cases = await sql<Array<{ rarity: string; count: number; spent: number }>>`
     SELECT rarity, count(*)::int AS count, sum(price)::int AS spent FROM case_openings
     WHERE created_at BETWEEN ${from} AND ${to} GROUP BY rarity ORDER BY count DESC, rarity`;
+  const caseKinds = await sql<Array<{ kind: string; count: number; spent: number }>>`
+    SELECT kind, count(*)::int AS count, sum(price)::int AS spent FROM case_openings
+    WHERE created_at BETWEEN ${from} AND ${to} GROUP BY kind ORDER BY kind`;
   const daily = await sql<Array<{ day: string; ti: number; ts: number; di: number; ds: number; rev: number }>>`
     WITH l AS (
       SELECT (created_at AT TIME ZONE 'UTC')::date AS d, currency, delta FROM currency_ledger WHERE created_at BETWEEN ${from} AND ${to}
@@ -167,7 +170,12 @@ export async function economy(sql: Sql, r: AdminRange, now = new Date()): Promis
     },
     purchases: { total: sum(byKind.filter((k) => k.source === 'tokens' || k.source === 'diamonds')), byKind: [...byKind], top: [...top] },
     mods: { total: sum([...mods]), top: [...mods] },
-    cases: { total: sum([...cases]), diamondsSpent: cases.reduce((a, c) => a + c.spent, 0), byRarity: cases.map((c) => ({ rarity: c.rarity, count: c.count })) },
+    cases: {
+      total: sum([...cases]),
+      diamondsSpent: cases.reduce((a, c) => a + c.spent, 0),
+      byRarity: cases.map((c) => ({ rarity: c.rarity, count: c.count })),
+      byKind: caseKinds.map((c) => ({ kind: c.kind, count: c.count, diamondsSpent: c.spent })),
+    },
     daily: daily.map((d) => ({ day: d.day, tokensIssued: d.ti, tokensSpent: d.ts, diamondsIssued: d.di, diamondsSpent: d.ds, revenueCents: d.rev })),
   };
 }

@@ -7,6 +7,8 @@ import type { AvatarId } from '../game-rules/avatars.js';
 import { WEAPON_IDS, MOD_IDS } from '../game-rules/weapons.js';
 import { GADGET_IDS } from '../game-rules/gadgets.js';
 import type { WeaponId } from '../game-rules/weapons.js';
+import { FINISH_IDS } from '../game-rules/skins.js';
+import type { FinishId, SkinRarity } from '../game-rules/skins.js';
 import type { Currency, DiamondPack, Inventory, Rarity } from '../game-rules/economy.js';
 import { MAP_IDS } from '../maps/types.js';
 import { GAME_MODES } from '../game-rules/match.js';
@@ -90,6 +92,8 @@ export const LoadoutRequest = z
     gadget: z.enum(GADGET_IDS).nullable().optional(),
     /** Equipped modifications per weapon (validated against ownership and mounts). */
     mods: z.record(z.enum(WEAPON_IDS), z.array(z.enum(MOD_IDS)).max(4)).optional(),
+    /** Equipped skins per weapon (validated against ownership). */
+    skins: z.record(z.enum(WEAPON_IDS), z.enum(FINISH_IDS)).optional(),
   })
   .strict();
 /** Opening a paid case requires an explicit adult confirmation (see docs/ECONOMY.md). */
@@ -106,6 +110,14 @@ export interface ShopConfig {
 export interface CaseResult {
   weapon: WeaponId;
   rarity: Rarity;
+  inventory: Inventory;
+}
+/** POST /api/shop/skin-case — a skin the player did not own; equipped at once when its weapon wore none. */
+export interface SkinCaseResult {
+  weapon: WeaponId;
+  finish: FinishId;
+  rarity: SkinRarity;
+  equipped: boolean;
   inventory: Inventory;
 }
 export interface CheckoutResponse {
@@ -473,6 +485,6 @@ export interface AdminEconomy {
     top: Array<{ kind: string; id: string; count: number }>;
   };
   mods: { total: number; top: Array<{ id: string; count: number }> };
-  cases: { total: number; diamondsSpent: number; byRarity: Array<{ rarity: string; count: number }> };
+  cases: { total: number; diamondsSpent: number; byRarity: Array<{ rarity: string; count: number }>; byKind: Array<{ kind: string; count: number; diamondsSpent: number }> };
   daily: Array<{ day: string; tokensIssued: number; tokensSpent: number; diamondsIssued: number; diamondsSpent: number; revenueCents: number }>;
 }

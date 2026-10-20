@@ -15,6 +15,7 @@ import type { Loadout } from '../game-rules/loadout.js';
 import { isTeamMode } from '../game-rules/match.js';
 import type { GameMode } from '../game-rules/match.js';
 import type { WeaponId } from '../game-rules/weapons.js';
+import type { FinishId } from '../game-rules/skins.js';
 import { fillNickname } from '../game-rules/nicknames.js';
 import type { NickLang } from '../game-rules/nicknames.js';
 import type { BotDifficulty } from './bots.js';
@@ -63,6 +64,8 @@ const PRIMARIES: WeaponId[] = ['avtomat', 'avtomat', 'obrez', 'ksyuha', 'uzi', '
 const SIDEARMS: WeaponId[] = ['pistol', 'pistol', 'pistol', 'tt', 'p92', 'deagle'];
 const MELEE: WeaponId[] = ['montirovka', 'montirovka', 'bita', 'nozh', 'topor'];
 const GADGETS: GadgetId[] = ['f1', 'f1', 'f1', 'molotov', 'flash', 'smoke'];
+/** Finishes weighted like case drops: common often, legendary rarely. */
+const FILL_FINISHES: FinishId[] = ['berezka', 'berezka', 'berezka', 'rzhavchina', 'rzhavchina', 'zima', 'zima', 'flora', 'flora', 'gzhel', 'pioner', 'malahit', 'hohloma', 'zoloto'];
 
 const pick = <T>(rnd: () => number, a: readonly T[]): T => a[Math.floor(rnd() * a.length) % a.length]!;
 
@@ -77,7 +80,7 @@ export function fillPersona(rnd: () => number, o: { lang: NickLang; aroundLevel:
   const level = Math.max(1, Math.min(60, Math.round(around - 3 + rnd() * 9)));
   const r = rnd();
   const difficulty: BotDifficulty = around < 4 ? (r < 0.6 ? 'easy' : 'normal') : around < 15 ? (r < 0.15 ? 'easy' : r < 0.85 ? 'normal' : 'hard') : r < 0.5 ? 'normal' : 'hard';
-  return {
+  const persona: FillPersona = {
     name,
     character: rnd() < 0.65 ? pick(rnd, FREE_CHARACTERS) : pick(rnd, CHARACTER_IDS),
     level,
@@ -85,4 +88,10 @@ export function fillPersona(rnd: () => number, o: { lang: NickLang; aroundLevel:
     loadout: { sidearm: pick(rnd, SIDEARMS), melee: pick(rnd, MELEE), primary: pick(rnd, PRIMARIES), gadget: pick(rnd, GADGETS), mods: {} },
     difficulty,
   };
+  // some carry a skin on the main weapon, like people who opened a case (mostly the common finishes)
+  const skins: Partial<Record<WeaponId, FinishId>> = {};
+  if (persona.loadout.primary && rnd() < 0.3) skins[persona.loadout.primary] = pick(rnd, FILL_FINISHES);
+  if (rnd() < 0.1) skins[persona.loadout.sidearm] = pick(rnd, FILL_FINISHES);
+  persona.loadout.skins = skins;
+  return persona;
 }

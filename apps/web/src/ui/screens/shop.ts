@@ -2,8 +2,8 @@
  * The Arsenal: the dressing room (the character's art with the item being tried on, the same
  * character as it looks in a match, and on the right the case banner and the diamond top-up), the
  * loadout (four equal slot columns: what you own, then what the shop has for that slot; weapons,
- * equipment, modifications), the weapon / equipment / character shop, the rare-weapon case and
- * diamond packs. Prices and rules are the shared ones; every purchase is decided by the server. In
+ * equipment, modifications), the weapon / equipment / character shop, the rare-weapon case, the
+ * weapon-skin case (v0.23; skins are tried on and worn in the dressing room) and diamond packs. Prices and rules are the shared ones; every purchase is decided by the server. In
  * the demo build (no server) the catalog is read-only, but anything can be tried on — in the dressing
  * room and in practice.
  */
@@ -33,8 +33,15 @@ import {
   modQuote,
   modsFor,
   sanitizeMods,
+  FINISH_IDS,
+  FINISHES,
+  SKIN_CASE_PRICE,
+  SKIN_RARITIES,
+  allSkins,
+  skinCaseOdds,
+  skinId,
 } from '@blatkom/shared';
-import type { CharacterId, GadgetId, Inventory, Loadout, ModId, ModMount, Rarity, ShopConfig, ShopKind, ShopPrice, WeaponDef, WeaponId } from '@blatkom/shared';
+import type { CharacterId, FinishId, GadgetId, Inventory, Loadout, ModId, ModMount, Rarity, ShopConfig, ShopKind, ShopPrice, SkinRarity, WeaponDef, WeaponId } from '@blatkom/shared';
 import type * as Phaser from 'phaser';
 import { h, toast, asset, portrait } from '../dom.js';
 import type { OnlineClient } from '../../net/OnlineClient.js';
@@ -42,8 +49,9 @@ import { apiErrorText } from '../../net/errors.js';
 import { sfx } from '../../game/audio/Sfx.js';
 import { haptic } from '../../telegram/tg.js';
 import { t, plural, count, num, getLang } from '../../i18n/index.js';
-import { charText, gadgetBlurb, gadgetName, modText, rarityLabel, refusalText, weaponBlurb, weaponName } from '../../i18n/content.js';
+import { charText, finishName, gadgetBlurb, gadgetName, modText, rarityLabel, refusalText, weaponBlurb, weaponName } from '../../i18n/content.js';
 import { Doll } from '../doll.js';
+import { skinIconUrl } from '../../game/render/skins.js';
 
 export type ArsenalTab = 'loadout' | 'weapons' | 'gear' | 'characters' | 'case' | 'diamonds';
 
@@ -52,6 +60,8 @@ export interface TryOn {
   weapon?: WeaponId;
   mods?: ModId[];
   gadget?: GadgetId;
+  /** The weapon's finish (a skin); null: the plain paint; left out: what the weapon wears. */
+  finish?: FinishId | null;
 }
 
 export interface ArsenalOptions {
@@ -113,8 +123,18 @@ function icon(kind: 'weapon' | 'gadget' | 'mod', id: string, size: IconSize, cls
   return h('img', { class: cls, src: asset(`assets/ui/${dir}/${id}${size === 'small' ? '_s' : ''}.png`), width: w, height: hh, alt: '', draggable: 'false' });
 }
 
-export function weaponImg(w: WeaponId, size: IconSize = 'big'): HTMLImageElement {
-  return icon('weapon', w, size, `wimg wimg--${size}`);
+export function weaponImg(w: WeaponId, size: IconSize = 'big', finish: FinishId | null = null): HTMLImageElement {
+  const img = icon('weapon', w, size, `wimg wimg--${size}`);
+  if (finish) {
+    // the painted icon replaces the plain one as soon as it is ready
+    img.dataset.finish = finish;
+    void skinIconUrl(w, finish, size === 'small')
+      .then((url) => {
+        if (img.dataset.finish === finish) img.src = url;
+      })
+      .catch(() => {});
+  }
+  return img;
 }
 
 export function gadgetImg(g: GadgetId, size: IconSize = 'big'): HTMLImageElement {
@@ -221,7 +241,10 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
 
   const owned = (w: WeaponId) => (inv ? inv.weapons.includes(w) : FREE_WEAPONS.includes(w));
   const ownedGadget = (g: GadgetId) => (inv ? inv.gadgets.includes(g) : FREE_GADGETS.includes(g));
-  const loadout = (): Loadout => inv?.loadout ?? { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', gadget: 'f1', mods: {} };
+  const loadout = (): Loadout => inv?.loadout ?? { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', gadget: 'f1', mods: {}, skins: {} };
+  /** The finish a weapon wears (equipped skin). */
+  const worn = (w: WeaponId): FinishId | null => loadout().skins?.[w] ?? null;
+  const ownsSkin = (w: WeaponId, f: FinishId) => !!inv?.skins.includes(skinId(w, f));
   const fail = (e: unknown) => {
     sfx.play('dry');
     toast(apiErrorText(e));
@@ -272,9 +295,10 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     // the weapon in hand: the tried-on one, or the loadout's when equipment is being tried on
     const w: WeaponId = trying.weapon ?? startWeapon();
     const mods = trying.weapon ? (trying.mods ?? []) : (loadout().mods[w] ?? []);
-    doll.set(c, w, applyMods(WEAPONS[w], mods).laser === true);
+    const finish = trying.weapon && trying.finish !== undefined ? trying.finish : worn(w);
+    doll.set(c, w, applyMods(WEAPONS[w], mods).laser === true, finish);
     const g = trying.gadget;
-    const itemImg = g ? itemEl(`g:${g}`, () => gadgetImg(g)) : itemEl(`w:${w}`, () => weaponImg(w));
+    const itemImg = g ? itemEl(`g:${g}`, () => gadgetImg(g)) : itemEl(`w:${w}:${finish ?? ''}`, () => weaponImg(w, 'big', finish));
     const name = g ? gadgetName(g) : weaponName(w);
     const tagText = g ? slotLabel(4) : slotLabel(WEAPONS[w].slot as 1 | 2 | 3);
     const isOwned = g ? ownedGadget(g) : owned(w);
@@ -312,6 +336,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           h('div', { class: 'muted' }, g ? gadgetBlurb(g) : weaponBlurb(w)),
           getIt,
           !g && mods.length ? h('div', { class: 'modfit' }, t('With:'), ...mods.map((m) => h('span', { class: 'chip' }, modImg(m, 'small'), modText(m).name))) : null,
+          !g ? skinRow(w, finish) : null,
           h(
             'div',
             { class: 'dressing__game' },
@@ -327,6 +352,59 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         ),
         promoColumn(),
       ),
+    );
+  };
+
+  /**
+   * The weapon's skins: the plain paint and every finish — the player's own are worn with a tap (the
+   * server keeps the choice), the others are tried on here and come from the skin case.
+   */
+  const skinRow = (w: WeaponId, current: FinishId | null): HTMLElement => {
+    const pick = (f: FinishId | null) => {
+      trying = { ...trying, weapon: w, finish: f };
+      const wearable = !!online && !!inv && (f === null || ownsSkin(w, f));
+      if (wearable && worn(w) !== f) {
+        const skins = { ...(loadout().skins ?? {}) };
+        if (f) skins[w] = f;
+        else delete skins[w];
+        save({ ...loadout(), skins }, f ? t('Skin on: {name}', { name: `${weaponName(w)} · ${finishName(f)}` }) : t('Standard paint'));
+        return;
+      }
+      sfx.play('click');
+      drawRoom();
+    };
+    const mine = FINISH_IDS.filter((f) => ownsSkin(w, f)).length;
+    return h(
+      'div',
+      { class: 'skinpick', 'data-testid': 'skin-pick' },
+      h('span', { class: 'chiplabel' }, t('Skin')),
+      h('button', { class: 'skinchip', 'aria-pressed': String(current === null), 'data-finish': '', onclick: () => pick(null) }, t('Standard')),
+      ...FINISH_IDS.map((f) =>
+        h(
+          'button',
+          {
+            class: `skinchip skinchip--${FINISHES[f].rarity}${ownsSkin(w, f) ? ' skinchip--mine' : ''}`,
+            'aria-pressed': String(current === f),
+            'data-finish': f,
+            title: ownsSkin(w, f) ? t('Yours — tap to wear it') : t('Try it on — it comes from the skin case'),
+            onclick: () => pick(f),
+          },
+          h('i', { class: `swatch swatch--${f}`, 'aria-hidden': 'true' }),
+          finishName(f),
+          ownsSkin(w, f) ? ' ✓' : '',
+        ),
+      ),
+      current && !ownsSkin(w, current)
+        ? h(
+            'div',
+            { class: 'muted skinpick__note' },
+            online ? t('Not yours yet — this skin comes from the skin case.') : t('Skins come from the skin case in the online version.'),
+            ' ',
+            online ? h('button', { class: 'linkish', onclick: () => ((tab = 'case'), draw(), body.scrollIntoView({ behavior: 'smooth', block: 'start' })) }, t('To the case')) : null,
+          )
+        : mine === 0 && online
+          ? h('div', { class: 'muted skinpick__note' }, t('You have no skins for this weapon yet.'))
+          : null,
     );
   };
 
@@ -649,91 +727,158 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       ),
     );
 
-  // ── case ──────────────────────────────────────────────────────────────
-  let reveal: { weapon: WeaponId; rarity: Rarity } | null = null;
+  // ── cases: rare weapons and weapon skins ──────────────────────────────
+  type Reveal = { kind: 'weapon'; weapon: WeaponId; rarity: Rarity } | { kind: 'skin'; weapon: WeaponId; finish: FinishId; rarity: SkinRarity; equipped: boolean };
+  let reveal: Reveal | null = null;
+  /** The adult confirmation before a paid case. */
+  const confirmCase = (price: number, inside: string, open: () => Promise<void>) => {
+    if (!online || !inv) return;
+    if (inv.diamonds < price) {
+      toast(t('Not enough diamonds'));
+      tab = 'diamonds';
+      draw();
+      return;
+    }
+    const ov = h('div', { class: 'overlay overlay--top' });
+    const close = () => ov.remove();
+    ov.append(
+      h(
+        'div',
+        { class: 'panel modal col' },
+        h('span', { class: 'tag' }, t('Confirmation')),
+        h('div', { style: 'margin-top:8px' }, t('Open the case for {n} {diamonds} ({usd})?', { n: price, diamonds: diamondWord(price), usd: usd(price) })),
+        h('div', { class: 'muted' }, inside),
+        h(
+          'label',
+          { class: 'check' },
+          h('input', {
+            type: 'checkbox',
+            'data-testid': 'case-adult',
+            onchange: (e: Event) => {
+              const btn = ov.querySelector<HTMLButtonElement>('[data-open]');
+              if (btn) btn.disabled = !(e.target as HTMLInputElement).checked;
+            },
+          }),
+          ` ${t('I am 18 or older')}`,
+        ),
+        h(
+          'button',
+          {
+            class: 'btn btn--red',
+            'data-open': '1',
+            'data-testid': 'case-confirm',
+            disabled: true,
+            onclick: () => {
+              close();
+              void act(open);
+            },
+          },
+          t('Open'),
+        ),
+        h('button', { class: 'btn', onclick: close }, t('Cancel')),
+      ),
+    );
+    root.append(ov);
+  };
+  const revealPanel = (r: Reveal): HTMLElement => {
+    const close = h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((reveal = null), draw()) }, t('Close'));
+    if (r.kind === 'weapon')
+      return h(
+        'div',
+        { class: `panel col reveal reveal--${r.rarity}` },
+        h('span', { class: 'tag' }, t('From the case')),
+        h('div', { class: 'h1' }, weaponName(r.weapon)),
+        h('div', { class: 'wpic wpic--big' }, weaponImg(r.weapon)),
+        h('div', { class: 'muted' }, `${rarityLabel(r.rarity)} · ${t('already in your arsenal')}`),
+        h('div', { class: 'row' }, h('button', { class: 'btn btn--small', onclick: () => ((reveal = null), (focus = r.weapon), (tab = 'loadout'), draw()) }, t('Add to kit')), tryBtn({ weapon: r.weapon }), close),
+      );
+    const wearing = worn(r.weapon) === r.finish;
+    return h(
+      'div',
+      { class: `panel col reveal reveal--${r.rarity}`, 'data-testid': 'skin-reveal' },
+      h('span', { class: 'tag' }, t('From the skin case')),
+      h('div', { class: 'h1' }, `${weaponName(r.weapon)} · ${finishName(r.finish)}`),
+      h('div', { class: 'wpic wpic--big' }, weaponImg(r.weapon, 'big', r.finish)),
+      h('div', { class: 'muted' }, `${rarityLabel(r.rarity)} · ${wearing ? t('already on the weapon') : t('in your collection')}`),
+      h(
+        'div',
+        { class: 'row' },
+        wearing
+          ? null
+          : h(
+              'button',
+              {
+                class: 'btn btn--small btn--red',
+                onclick: () => {
+                  const skins = { ...(loadout().skins ?? {}), [r.weapon]: r.finish };
+                  save({ ...loadout(), skins }, t('Skin on: {name}', { name: `${weaponName(r.weapon)} · ${finishName(r.finish)}` }));
+                },
+              },
+              t('Wear it'),
+            ),
+        tryBtn({ weapon: r.weapon, finish: r.finish }),
+        close,
+      ),
+    );
+  };
   const caseTab = (): HTMLElement => {
     const have = new Set(inv?.weapons ?? []);
     const odds = caseOdds(have);
     const left = odds.filter((e) => e.odds > 0).length;
     const enabled = cfg?.casesEnabled !== false;
-    const confirmAndOpen = () => {
-      if (!online || !inv) return;
-      if (inv.diamonds < CASE_PRICE) {
-        toast(t('Not enough diamonds'));
-        tab = 'diamonds';
-        draw();
-        return;
-      }
-      const ov = h('div', { class: 'overlay overlay--top' });
-      const close = () => ov.remove();
-      ov.append(
-        h(
-          'div',
-          { class: 'panel modal col' },
-          h('span', { class: 'tag' }, t('Confirmation')),
-          h('div', { style: 'margin-top:8px' }, t('Open the case for {n} {diamonds} ({usd})?', { n: CASE_PRICE, diamonds: diamondWord(CASE_PRICE), usd: usd(CASE_PRICE) })),
-          h('div', { class: 'muted' }, t('Inside is a random rare weapon you don’t own yet. The odds are listed below. The purchase is final.')),
-          h(
-            'label',
-            { class: 'check' },
-            h('input', {
-              type: 'checkbox',
-              onchange: (e: Event) => {
-                const btn = ov.querySelector<HTMLButtonElement>('[data-open]');
-                if (btn) btn.disabled = !(e.target as HTMLInputElement).checked;
-              },
-            }),
-            ` ${t('I am 18 or older')}`,
-          ),
-          h(
-            'button',
-            {
-              class: 'btn btn--red',
-              'data-open': '1',
-              disabled: true,
-              onclick: () => {
-                close();
-                void act(async () => {
-                  const r = await online.openCase();
-                  reveal = { weapon: r.weapon, rarity: r.rarity };
-                  sfx.play(r.rarity === 'legendary' ? 'supply' : 'pickup');
-                });
-              },
-            },
-            t('Open'),
-          ),
-          h('button', { class: 'btn', onclick: close }, t('Cancel')),
-        ),
-      );
-      root.append(ov);
-    };
-    const shown = reveal;
+    const openWeaponCase = () =>
+      confirmCase(CASE_PRICE, t('Inside is a random rare weapon you don’t own yet. The odds are listed below. The purchase is final.'), async () => {
+        const r = await online!.openCase();
+        reveal = { kind: 'weapon', weapon: r.weapon, rarity: r.rarity };
+        sfx.play(r.rarity === 'legendary' ? 'supply' : 'pickup');
+      });
+    const skinsHave = new Set(inv?.skins ?? []);
+    const skinOdds = skinCaseOdds(skinsHave);
+    const skinTotal = allSkins().length;
+    const skinsLeft = skinTotal - skinsHave.size;
+    const openSkinCase = () =>
+      confirmCase(SKIN_CASE_PRICE, t('Inside is a random weapon skin you don’t own yet. The odds are listed below. The purchase is final.'), async () => {
+        const r = await online!.openSkinCase();
+        reveal = { kind: 'skin', weapon: r.weapon, finish: r.finish, rarity: r.rarity, equipped: r.equipped };
+        trying = { weapon: r.weapon, finish: r.finish, mods: [...(loadout().mods[r.weapon] ?? [])] };
+        sfx.play(r.rarity === 'legendary' || r.rarity === 'epic' ? 'supply' : 'pickup');
+      });
+    const openBtn = (price: number, onOpen: () => void, testid: string) =>
+      h('button', { class: 'btn btn--red', 'data-testid': testid, disabled: !online, onclick: onOpen }, online ? h('span', null, `${t('Open for')} `, amount(price, 'diamonds')) : t('Available in the online version'));
     return h(
       'div',
       { class: 'col' },
-      shown
-        ? h(
-            'div',
-            { class: `panel col reveal reveal--${shown.rarity}` },
-            h('span', { class: 'tag' }, t('From the case')),
-            h('div', { class: 'h1' }, weaponName(shown.weapon)),
-            h('div', { class: 'wpic wpic--big' }, weaponImg(shown.weapon)),
-            h('div', { class: 'muted' }, `${rarityLabel(shown.rarity)} · ${t('already in your arsenal')}`),
-            h('div', { class: 'row' }, h('button', { class: 'btn btn--small', onclick: () => ((reveal = null), (focus = shown.weapon), (tab = 'loadout'), draw()) }, t('Add to kit')), tryBtn({ weapon: shown.weapon }), h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((reveal = null), draw()) }, t('Close'))),
-          )
-        : null,
+      reveal ? revealPanel(reveal) : null,
       h(
         'div',
-        { class: 'panel col' },
-        h('span', { class: 'tag' }, t('The Defitsit Case')),
-        h('div', { class: 'row', style: 'margin-top:6px' }, h('div', { class: 'crate' }), h('div', { class: 'col grow', style: 'gap:4px' }, h('div', { class: 'h2' }, `${t('Rare weapon')} · `, amount(CASE_PRICE, 'diamonds')), h('div', { class: 'muted' }, t('One of 10 rare guns. No duplicates: a weapon you already got from the case never drops again, and the odds of the rest are recalculated. Once the collection is complete, the case is no longer sold.')))),
-        !enabled
-          ? h('div', { class: 'badge badge--off' }, t('Cases are disabled on this server'))
-          : left === 0
-            ? h('div', { class: 'badge badge--ok' }, t('Collection complete!'))
-            : h('button', { class: 'btn btn--red', disabled: !online, onclick: confirmAndOpen }, online ? h('span', null, `${t('Open for')} `, amount(CASE_PRICE, 'diamonds')) : t('Available in the online version')),
-        h('div', { class: 'muted', style: 'font-size:13px' }, t('Adults only. Paid cases are banned in some countries — don’t buy them there. The odds below are honest and enforced by the server.')),
+        { class: 'cases' },
+        h(
+          'div',
+          { class: 'panel col' },
+          h('span', { class: 'tag' }, t('The Defitsit Case')),
+          h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, h('div', { class: 'crate' }), h('div', { class: 'col grow', style: 'gap:4px' }, h('div', { class: 'h2' }, `${t('Rare weapon')} · `, amount(CASE_PRICE, 'diamonds')), h('div', { class: 'muted' }, t('One of 10 rare guns. No duplicates: a weapon you already got from the case never drops again, and the odds of the rest are recalculated. Once the collection is complete, the case is no longer sold.')))),
+          !enabled ? h('div', { class: 'badge badge--off' }, t('Cases are disabled on this server')) : left === 0 ? h('div', { class: 'badge badge--ok' }, t('Collection complete!')) : openBtn(CASE_PRICE, openWeaponCase, 'open-weapon-case'),
+        ),
+        h(
+          'div',
+          { class: 'panel col', 'data-testid': 'skin-case' },
+          h('span', { class: 'tag' }, t('The Skin Case')),
+          h(
+            'div',
+            { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' },
+            h('div', { class: 'crate crate--skins' }),
+            h(
+              'div',
+              { class: 'col grow', style: 'gap:4px' },
+              h('div', { class: 'h2' }, `${t('Weapon skin')} · `, amount(SKIN_CASE_PRICE, 'diamonds')),
+              h('div', { class: 'muted' }, t('One of {n} skins: {f} finishes for each of {w} weapons. Skins change only the look, never the numbers. No duplicates: a skin you have never drops again.', { n: skinTotal, f: FINISH_IDS.length, w: skinTotal / FINISH_IDS.length })),
+              online ? h('div', { class: 'muted', 'data-testid': 'skins-owned' }, t('Your skins: {n} of {total}', { n: skinsHave.size, total: skinTotal })) : null,
+            ),
+          ),
+          !enabled ? h('div', { class: 'badge badge--off' }, t('Cases are disabled on this server')) : skinsLeft === 0 ? h('div', { class: 'badge badge--ok' }, t('Collection complete!')) : openBtn(SKIN_CASE_PRICE, openSkinCase, 'open-skin-case'),
+        ),
       ),
+      h('div', { class: 'muted', style: 'font-size:13px' }, t('Adults only. Paid cases are banned in some countries — don’t buy them there. The odds below are honest and enforced by the server.')),
       h(
         'div',
         { class: 'panel col' },
@@ -757,6 +902,30 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           ),
         ),
         h('div', { class: 'muted', style: 'font-size:13px' }, t('Base odds (before anything is collected): {list}.', { list: CASE_TABLE.map((e) => `${weaponName(e.weapon)} ${e.chance}%`).join(', ') })),
+      ),
+      h(
+        'div',
+        { class: 'panel col', 'data-testid': 'skin-odds' },
+        h('span', { class: 'tag' }, t('Skin odds')),
+        h(
+          'table',
+          { class: 'table', style: 'margin-top:6px' },
+          h('thead', null, h('tr', null, h('th', null, t('Rarity')), h('th', null, t('Finishes')), h('th', { class: 'num' }, t('Chance')))),
+          h(
+            'tbody',
+            null,
+            ...SKIN_RARITIES.map((r) =>
+              h(
+                'tr',
+                { class: skinOdds[r] === 0 ? 'got' : '' },
+                h('td', { class: `rar rar--${r}` }, rarityLabel(r)),
+                h('td', null, h('div', { class: 'finishes' }, ...FINISH_IDS.filter((f) => FINISHES[f].rarity === r).map((f) => h('span', { class: 'finish' }, h('i', { class: `swatch swatch--${f}`, 'aria-hidden': 'true' }), finishName(f))))),
+                h('td', { class: 'num' }, `${skinOdds[r].toFixed(skinOdds[r] < 10 ? 1 : 0)}%`),
+              ),
+            ),
+          ),
+        ),
+        h('div', { class: 'muted', style: 'font-size:13px' }, t('First the rarity is drawn, then any skin of that rarity you don’t have yet, all equally likely. Every weapon can wear every finish.')),
       ),
       h('div', { class: 'cards' }, ...CASE_TABLE.map((e) => weaponCard(e.weapon))),
     );

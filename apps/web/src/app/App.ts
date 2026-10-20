@@ -37,7 +37,7 @@ import { needsWelcome, openWelcome } from '../ui/screens/welcome.js';
 import { sfx } from '../game/audio/Sfx.js';
 import { music } from '../game/audio/Music.js';
 import { t, count, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
-import { charText, gadgetName, modText, weaponName } from '../i18n/content.js';
+import { charText, finishName, gadgetName, modText, weaponName } from '../i18n/content.js';
 import { apiErrorText } from '../net/errors.js';
 
 /** Room capacity shown in the menu. */
@@ -835,13 +835,20 @@ export class App {
 
   /** Practice loadout: the player's own (online), the free default (demo), or a weapon to try on. */
   private practiceLoadout(t?: TryOn): Loadout {
-    const base: Loadout = this.online?.inventory?.loadout ?? { ...DEFAULT_LOADOUT, mods: {} };
+    const base: Loadout = this.online?.inventory?.loadout ?? { ...DEFAULT_LOADOUT, mods: {}, skins: {} };
     if (!t) return base;
     let l: Loadout = { ...base, mods: { ...base.mods } };
     if (t.weapon) {
       const slot = WEAPONS[t.weapon].slot;
       l = { ...l, ...(slot === 1 ? { sidearm: t.weapon } : slot === 2 ? { melee: t.weapon } : { primary: t.weapon }) };
       if (t.mods) l.mods[t.weapon] = [...t.mods];
+      // a skin tried on in the dressing room goes into practice too
+      if (t.finish !== undefined) {
+        const skins = { ...(l.skins ?? {}) };
+        if (t.finish) skins[t.weapon] = t.finish;
+        else delete skins[t.weapon];
+        l = { ...l, skins };
+      }
     }
     if (t.gadget) l.gadget = t.gadget;
     return l;
@@ -849,7 +856,7 @@ export class App {
 
   private static tryOnLabel(o: TryOn): string {
     const parts: string[] = [];
-    if (o.weapon) parts.push(weaponName(o.weapon) + (o.mods?.length ? ` + ${o.mods.map((m) => modText(m).name.toLowerCase()).join(', ')}` : ''));
+    if (o.weapon) parts.push(weaponName(o.weapon) + (o.finish ? ` · ${finishName(o.finish)}` : '') + (o.mods?.length ? ` + ${o.mods.map((m) => modText(m).name.toLowerCase()).join(', ')}` : ''));
     if (o.gadget) parts.push(gadgetName(o.gadget));
     return parts.join(t(' and '));
   }

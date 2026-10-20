@@ -35,7 +35,7 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
    for an hour) are sent through our email provider, **[Resend, or the provider you configure]**.
 4. **Game data:** character, profile avatar (one of the game's portraits, by id), match participation (map, place, eliminations, assists, deaths, damage,
    time), XP, level, achievements, streaks, time in game, match history; talon and diamond balances and
-   every change to them, owned weapons, characters, equipment and modifications, loadout, case openings.
+   every change to them, owned weapons, characters, equipment, modifications and weapon skins, loadout, case openings.
 5. **Purchases (optional):** pack, price, currency, payment provider, the provider’s payment reference,
    status and time. You pay on the provider’s page — Stripe (cards), NOWPayments (cryptocurrency); we
    pass them only an internal payment number.
@@ -101,7 +101,7 @@ When this policy changes, we update the revision date.
 | Table | Personal fields | Purpose | Retention |
 |---|---|---|---|
 | `users` | `telegram_id`, `display_name` (+ `name_key`, its case-folded form for uniqueness), `language_code`, `platform`, `dev_device_id` (dev mode, or `g1:` + HMAC of a guest browser secret), `email`, `password_hash` (scrypt), `email_linked_at`, `created_at`, `last_seen_at` | identity, display, sign-in, analytics | until account deletion |
-| `currency_ledger`, `user_items`, `weapon_mods`, `case_openings` | balance changes (with admin id for grants), owned items, modifications, case draws | economy, support | until account deletion (cascade) |
+| `currency_ledger`, `user_items`, `weapon_mods`, `case_openings` | balance changes (with admin id for grants), owned items (weapon skins included), modifications, case draws (weapons and skins) | economy, support | until account deletion (cascade) |
 | `payments` | `user_id` (SET NULL on deletion), provider and its reference, pack, amount, status, times | accounting, crediting diamonds once | **[accounting retention period]** — not purged automatically |
 | `password_resets` | HMAC of the one-time token, user id, who created it (`email`/`admin`) | password reset | 7 days after expiry; immediately on account deletion |
 | `visitors`, `visitor_days` | random browser id, first/last visit, platform, referring domain, `user_id` (SET NULL on deletion) | visitor funnel | 400 days after the last visit |

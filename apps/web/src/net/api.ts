@@ -13,6 +13,7 @@ import type {
   Inventory,
   ShopConfig,
   CaseResult,
+  SkinCaseResult,
   CheckoutResponse,
   PaymentStatusResponse,
   LedgerEntry,
@@ -121,8 +122,12 @@ export class Api {
   openCase() {
     return this.req<CaseResult>('POST', '/api/shop/case', { confirmAge: true });
   }
+  /** The skin case (v0.23): a weapon skin not owned yet. */
+  openSkinCase() {
+    return this.req<SkinCaseResult>('POST', '/api/shop/skin-case', { confirmAge: true });
+  }
   setLoadout(l: Loadout) {
-    return this.req<Inventory>('POST', '/api/me/loadout', { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods });
+    return this.req<Inventory>('POST', '/api/me/loadout', { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods, skins: l.skins ?? {} });
   }
   checkout(packId: string, method: 'card' | 'crypto') {
     return this.req<CheckoutResponse>('POST', '/api/pay/checkout', { packId, method });

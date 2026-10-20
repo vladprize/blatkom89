@@ -82,6 +82,7 @@ export class PreviewScene extends Phaser.Scene {
         score: 0,
         level: null,
         laser: false,
+        skin: null,
         flashedMs: 0,
         team: null,
         objectives: 0,

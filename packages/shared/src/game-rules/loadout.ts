@@ -6,6 +6,8 @@ import { WEAPONS, isWeaponId, sanitizeMods } from './weapons.js';
 import type { ModId, WeaponId } from './weapons.js';
 import { isGadgetId } from './gadgets.js';
 import type { GadgetId } from './gadgets.js';
+import { sanitizeSkins } from './skins.js';
+import type { FinishId } from './skins.js';
 
 export interface Loadout {
   /** Slot 1: infinite reserve. */
@@ -18,14 +20,18 @@ export interface Loadout {
   gadget: GadgetId | null;
   /** Equipped modifications per weapon (one per mount, see weapons.ts → MODS). */
   mods: Partial<Record<WeaponId, ModId[]>>;
+  /** Equipped skins: the finish each weapon wears (looks only, see skins.ts). */
+  skins?: Partial<Record<WeaponId, FinishId>>;
 }
 
-export const DEFAULT_LOADOUT: Readonly<Loadout> = Object.freeze({ sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', gadget: 'f1', mods: {} });
+export const DEFAULT_LOADOUT: Readonly<Loadout> = Object.freeze({ sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', gadget: 'f1', mods: {}, skins: {} });
 
 export interface LoadoutOwnership {
   weapon?(w: WeaponId): boolean;
   gadget?(g: GadgetId): boolean;
   mod?(w: WeaponId, m: ModId): boolean;
+  /** Owns the skin (a weapon need not be owned to wear its skin when picked up). */
+  skin?(w: WeaponId, f: FinishId): boolean;
 }
 
 /**
@@ -54,5 +60,6 @@ export function sanitizeLoadout(raw: unknown, own: LoadoutOwnership = {}): Loado
     primary: r.primary === null ? null : pick(r.primary, 3, DEFAULT_LOADOUT.primary),
     gadget,
     mods,
+    skins: sanitizeSkins(r.skins, own.skin ?? (() => true)),
   };
 }

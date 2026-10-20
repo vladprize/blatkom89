@@ -106,7 +106,7 @@ export const WEAPON_NAMES: Record<string, string> = {
 };
 export const GADGET_NAMES: Record<string, string> = { f1: 'Граната Ф-1', smoke: 'Дымовая граната', flash: 'Светошумовая', molotov: 'Коктейль Молотова', mine: 'Мина', c4: 'C4', turret: 'Турель' };
 export const MOD_NAMES: Record<string, string> = { silencer: 'Глушитель', reddot: 'Коллиматор', scope: 'Оптика', laser: 'Лазер', grip: 'Рукоять', extmag: 'Увеличенный магазин' };
-export const ITEM_KINDS: Record<string, string> = { weapon: 'Оружие', character: 'Персонаж', gadget: 'Снаряжение' };
+export const ITEM_KINDS: Record<string, string> = { weapon: 'Оружие', character: 'Персонаж', gadget: 'Снаряжение', skin: 'Скин' };
 export const ITEM_SOURCES: Record<string, string> = { tokens: 'за талоны', diamonds: 'за алмазы', case: 'из кейса', grant: 'выдано' };
 export const LEDGER_REASONS: Record<string, string> = {
   match: 'За матчи',
@@ -120,9 +120,27 @@ export const LEDGER_REASONS: Record<string, string> = {
 export const PAYMENT_STATUSES: Record<string, string> = { created: 'ожидает', paid: 'оплачен', failed: 'ошибка', expired: 'истёк', refunded: 'возврат' };
 export const PAYMENT_PROVIDERS: Record<string, string> = { stripe: 'Карта (Stripe)', nowpayments: 'Крипта (NOWPayments)', telegram: 'Telegram Stars' };
 export const SIGN_IN_METHODS: Record<string, string> = { telegram: 'Telegram', guest: 'браузер (гость)', email: 'почта', dev: 'разработка' };
-export const RARITIES: Record<string, string> = { rare: 'Редкое', epic: 'Эпическое', legendary: 'Легендарное' };
+export const RARITIES: Record<string, string> = { common: 'Обычное', rare: 'Редкое', epic: 'Эпическое', legendary: 'Легендарное' };
+/** Weapon skins' finishes (v0.23), as in the game's Russian texts. */
+export const FINISH_NAMES: Record<string, string> = {
+  berezka: 'Берёзка',
+  rzhavchina: 'Ржавчина',
+  zima: 'Зимний',
+  flora: 'Флора',
+  gzhel: 'Гжель',
+  pioner: 'Пионер',
+  malahit: 'Малахит',
+  hohloma: 'Хохлома',
+  zoloto: 'Золото партии',
+  yantar: 'Янтарь',
+};
+export const CASE_KINDS: Record<string, string> = { weapon: 'Кейс с оружием', skin: 'Кейс со скинами' };
 
 export function itemName(kind: string, id: string): string {
+  if (kind === 'skin') {
+    const [w, f] = id.split('.');
+    return `${WEAPON_NAMES[w ?? ''] ?? w} · ${FINISH_NAMES[f ?? ''] ?? f}`;
+  }
   return (kind === 'weapon' ? WEAPON_NAMES[id] : kind === 'character' ? CHARACTER_NAMES[id] : kind === 'gadget' ? GADGET_NAMES[id] : undefined) ?? id;
 }
 

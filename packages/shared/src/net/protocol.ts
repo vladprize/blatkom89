@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { CHARACTER_IDS } from '../game-rules/characters.js';
 import type { CharacterId } from '../game-rules/characters.js';
 import type { AvatarId } from '../game-rules/avatars.js';
+import type { FinishId } from '../game-rules/skins.js';
 import type { GameMode, MatchConfig, MatchPhase, Team, TeamResultSummary } from '../game-rules/match.js';
 import { GAME_MODES } from '../game-rules/match.js';
 import { MAP_IDS } from '../maps/types.js';
@@ -64,6 +65,8 @@ export interface RosterEntry {
   team: Team | null;
   /** Equipped modifications of the player's weapons (client-side prediction of their own weapons). */
   mods?: Partial<Record<WeaponId, ModId[]>>;
+  /** Equipped weapon skins: everybody sees the finish on the weapon in the player's hands. */
+  skins?: Partial<Record<WeaponId, FinishId>>;
 }
 
 export type GameEvent =

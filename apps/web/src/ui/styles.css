@@ -556,3 +556,34 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .toptable .c-wins, .toptable .num.c-rating:not(.sorted), .toptable .num.c-level:not(.sorted), .toptable .num.c-kills:not(.sorted) { display: none; }
   .toptable .sorted { color: var(--beige); }
 }
+
+/* ── v0.23 weapon skins: the dressing room's picker, swatches, the skin case ── */
+.skinpick { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.skinpick .chiplabel { margin-right: 2px; }
+.skinchip { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 13px; line-height: 1.1; color: var(--beige); background: var(--panel-2); border: 1px solid var(--line); padding: 4px 8px; cursor: pointer; }
+.skinchip:hover { border-color: var(--tape); }
+.skinchip[aria-pressed='true'] { border-color: var(--red); box-shadow: 0 0 0 1px var(--red) inset; }
+.skinchip--mine { color: #fff4e4; border-color: #6a5420; }
+.skinchip--epic { color: #d8b6f0; }
+.skinchip--legendary { color: #f1cf72; }
+.skinchip--mine.skinchip--epic, .skinchip--mine.skinchip--legendary { border-color: currentColor; }
+.skinpick__note { flex-basis: 100%; font-size: 13px; }
+.swatch { display: inline-block; width: 14px; height: 10px; flex: none; border: 1px solid rgba(0,0,0,.7); box-shadow: 0 0 0 1px rgba(255,255,255,.08); }
+.swatch--berezka { background: radial-gradient(circle at 30% 40%, #4a5323 0 22%, transparent 24%), radial-gradient(circle at 75% 65%, #6b5232 0 18%, transparent 20%), #9fab6f; }
+.swatch--rzhavchina { background: linear-gradient(135deg, #3a1d0e, #9a4a20 45%, #c9783a 70%, #6b3215); }
+.swatch--zima { background: radial-gradient(circle at 35% 45%, #8d959f 0 25%, transparent 27%), #e6e9ed; }
+.swatch--flora { background: repeating-linear-gradient(115deg, #66773a 0 3px, #9a7445 3px 6px, #36432a 6px 9px); }
+.swatch--gzhel { background: radial-gradient(circle at 40% 50%, #1f45a6 0 28%, transparent 30%), #eef3fb; }
+.swatch--pioner { background: linear-gradient(180deg, #c42b22 0 38%, #e0a92e 38% 44%, #f2ede2 44% 58%, #e0a92e 58% 64%, #c42b22 64%); }
+.swatch--malahit { background: repeating-radial-gradient(circle at 20% 50%, #0a3d22 0 2px, #1a7a43 2px 4px, #6fd39a 4px 5px); }
+.swatch--hohloma { background: radial-gradient(circle at 70% 40%, #e5503f 0 18%, transparent 20%), linear-gradient(135deg, #17110e 0 40%, #e0a92e 40% 55%, #17110e 55%); }
+.swatch--zoloto { background: linear-gradient(135deg, #6a4a10, #ddb03e 45%, #fff3b8 60%, #a8771a); }
+.swatch--yantar { background: radial-gradient(circle at 40% 40%, #ffd27a, #e8901f 45%, #6a3304); }
+.cases { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 760px) { .cases { grid-template-columns: 1fr; } }
+.crate--skins { background: linear-gradient(180deg, #5b2b67 0 18%, #3f1d4a 18% 82%, #26102e 82%); border-color: #160a1b; }
+.crate--skins::after { content: '✦'; color: var(--gold); }
+.reveal--common { border-color: #8f9d5c; }
+.rar--common { color: #b8c48a; }
+.finishes { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.finish { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }

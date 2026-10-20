@@ -6,8 +6,9 @@
  */
 import type * as Phaser from 'phaser';
 import { WEAPONS } from '@blatkom/shared';
-import type { CharacterId, WeaponId } from '@blatkom/shared';
+import type { CharacterId, FinishId, WeaponId } from '@blatkom/shared';
 import { GRIPS, MUZZLES, POSE_ANIMS } from '../game/render/rig.gen.js';
+import { skinTextureKey } from '../game/render/skins.js';
 import { sfx } from '../game/audio/Sfx.js';
 
 /** World pixels shown across the canvas, and where the body sits (the weapon points right). */
@@ -24,6 +25,8 @@ export class Doll {
   private character: CharacterId;
   private weapon: WeaponId;
   private laser = false;
+  /** The weapon's finish (a skin being tried on or worn). */
+  private finish: FinishId | null = null;
   private shotAt = -1e9;
   private raf = 0;
   private detachedSince = 0;
@@ -51,11 +54,12 @@ export class Doll {
     this.raf = requestAnimationFrame(this.loop);
   }
 
-  set(character: CharacterId, weapon: WeaponId, laser = false): void {
+  set(character: CharacterId, weapon: WeaponId, laser = false, finish: FinishId | null = null): void {
     if (character !== this.character || weapon !== this.weapon) this.shotAt = -1e9;
     this.character = character;
     this.weapon = weapon;
     this.laser = laser;
+    this.finish = finish;
     this.el.setAttribute('aria-label', `${character} · ${weapon}`);
   }
 
@@ -167,7 +171,8 @@ export class Doll {
     const cr = Math.cos(aim);
     const sr = Math.sin(aim);
     const gx = grip[0] - kick;
-    this.blit('weapons', `w_${this.weapon}`, cx + (cr * gx - sr * grip[1]) * u, cy + (sr * gx + cr * grip[1]) * u, aim + grip[2], k);
+    const skinKey = this.finish && this.textures ? skinTextureKey(this.textures, `w_${this.weapon}`, this.finish) : '';
+    this.blit(skinKey || 'weapons', skinKey ? '__BASE' : `w_${this.weapon}`, cx + (cr * gx - sr * grip[1]) * u, cy + (sr * gx + cr * grip[1]) * u, aim + grip[2], k);
     this.blit(`char_${ch}`, `${ch}_${pose}_${anim}_${fi}`, cx, cy, aim, k);
     // laser sight and the muzzle flash
     const m = MUZZLES[this.weapon];

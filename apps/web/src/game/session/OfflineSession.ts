@@ -1,6 +1,6 @@
 /** Offline practice: the shared World + bots running locally (no server). */
 import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS, DEFAULT_LOADOUT, MAX_PLAYERS, PRACTICE_NAMES, weaponAmmo, isTeamMode, teamScoreLimitFor } from '@blatkom/shared';
-import type { CharacterId, GadgetId, GameMode, InputFrame, MapId, Standing, BotDifficulty, PlayerState, Loadout, Team, WeaponId } from '@blatkom/shared';
+import type { CharacterId, FinishId, GadgetId, GameMode, InputFrame, MapId, Standing, BotDifficulty, PlayerState, Loadout, Team, WeaponId } from '@blatkom/shared';
 import { getLang } from '../../i18n/index.js';
 import type { GameSession, HudState, RenderBase, RenderFlag, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
 import { toRenderGadget, toRenderPlayer, worldEventToSession, reloadProgress } from './convert.js';
@@ -54,8 +54,11 @@ export class OfflineSession implements GameSession {
   private killedBy: string | null = null;
   private readonly levels = new Map<string, number>();
   private matchSeq = 0;
+  /** The local player's weapon skins (from the loadout; practice bots wear none). */
+  private localSkins: Partial<Record<WeaponId, FinishId>> = {};
 
   constructor(opts: OfflineOptions) {
+    this.localSkins = { ...(opts.loadout?.skins ?? {}) };
     this.mapId = opts.mapId;
     this.gameMode = opts.gameMode ?? 'ffa';
     this.world = new World(getMap(opts.mapId), getCollision(opts.mapId), {
@@ -121,6 +124,7 @@ export class OfflineSession implements GameSession {
     for (const p of this.world.players.values()) {
       const r = toRenderPlayer(p, p.id === this.localId, this.world.time);
       r.level = this.levels.get(p.id) ?? null;
+      if (p.id === this.localId) r.skin = this.localSkins[p.weapon] ?? null;
       const pr = this.prev.get(p.slot);
       if (pr && p.alive) {
         r.x = pr.x + (p.x - pr.x) * this.alpha;
@@ -214,6 +218,7 @@ export class OfflineSession implements GameSession {
   /** Loadout of the local player from the next spawn on (changed in the arsenal between matches). */
   setLocalLoadout(loadout: Loadout): void {
     this.world.setLoadout(this.localId, loadout);
+    this.localSkins = { ...(loadout.skins ?? {}) };
   }
 
   /** Nickname/level of the local player (the profile can change between matches). */

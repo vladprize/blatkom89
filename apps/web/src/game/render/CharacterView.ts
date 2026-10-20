@@ -5,10 +5,11 @@
  */
 import * as Phaser from 'phaser';
 import { angleDiff, WEAPONS } from '@blatkom/shared';
-import type { CharacterId, WeaponId } from '@blatkom/shared';
+import type { CharacterId, FinishId, WeaponId } from '@blatkom/shared';
 import type { RenderPlayer } from '../session/types.js';
 import { D } from './depth.js';
 import { GRIPS } from './rig.gen.js';
+import { setWeaponTexture } from './skins.js';
 
 const SCALE = 0.5;
 /** Tip of the cigarette / cigar / pipe in body space (forward, side; world px), from the rigs. */
@@ -43,6 +44,8 @@ export class CharacterView {
   private readonly bar: Phaser.GameObjects.Graphics;
   private character: CharacterId;
   private weapon: WeaponId;
+  /** The finish on the weapon in hand (a weapon skin). */
+  private skin: FinishId | null = null;
   private legAngle = 0;
   private torsoState: 'idle' | 'shoot' | 'reload' | 'hit' | 'swing' = 'idle';
   private reloading = false;
@@ -66,6 +69,8 @@ export class CharacterView {
     this.legs = scene.add.sprite(p.x, p.y, `char_${p.character}`, `${p.character}_legs_idle_0`).setScale(SCALE).setDepth(D.LEGS);
     this.torso = scene.add.sprite(p.x, p.y, `char_${p.character}`, `${p.character}_${WEAPONS[p.weapon].pose}_idle_0`).setScale(SCALE).setDepth(D.TORSO + p.slot * 0.01);
     this.gun = scene.add.image(p.x, p.y, 'weapons', `w_${p.weapon}`).setScale(SCALE).setDepth(D.TORSO + p.slot * 0.01 - 0.004);
+    this.skin = p.skin;
+    if (p.skin) setWeaponTexture(this.gun, `w_${p.weapon}`, p.skin);
     this.label = scene.add
       .text(p.x, p.y - 25, p.name, { fontFamily: 'Oswald, sans-serif', fontSize: '8px', fontStyle: '500', color: p.isLocal ? LOCAL_TAG : ENEMY_TAG, stroke: '#0b0908', strokeThickness: 2.5, resolution: 4 })
       .setOrigin(0.5, 1)
@@ -114,10 +119,11 @@ export class CharacterView {
     }
   }
 
-  private setWeapon(w: WeaponId) {
+  private setWeapon(w: WeaponId, skin: FinishId | null = this.skin) {
     this.weapon = w;
+    this.skin = skin;
     this.reloading = false;
-    this.gun.setFrame(`w_${w}`);
+    setWeaponTexture(this.gun, `w_${w}`, skin);
     this.playIdle();
   }
 
@@ -148,7 +154,12 @@ export class CharacterView {
     this.ring.setVisible(visible && p.team !== null && !concealed);
     if (!visible) return;
     if (p.team !== null) this.ring.setPosition(p.x, p.y);
-    if (p.weapon !== this.weapon) this.setWeapon(p.weapon);
+    if (p.weapon !== this.weapon) this.setWeapon(p.weapon, p.skin);
+    else if (p.skin !== this.skin) {
+      // only the finish changed (a roster update): repaint, keep the animation
+      this.skin = p.skin;
+      setWeaponTexture(this.gun, `w_${this.weapon}`, p.skin);
+    }
     // reload state
     if (p.reloading && !this.reloading && WEAPONS[p.weapon].kind !== 'melee') {
       this.reloading = true;

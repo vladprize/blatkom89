@@ -9,6 +9,7 @@ import type { GameSession, RenderBase, RenderFlag, RenderPlayer } from '../sessi
 import { hudBus } from './hudBus.js';
 import type { KillFeedEntry, ObjectiveEntry, PointsEntry, SupplyEntry } from './hudBus.js';
 import { touchState, isTouchDevice } from '../input/TouchState.js';
+import { setWeaponTexture } from '../render/skins.js';
 import { getSettings, storageGet, storageSet } from '../../app/settings.js';
 import { analytics } from '../../analytics/client.js';
 import { sfx } from '../audio/Sfx.js';
@@ -915,8 +916,11 @@ export class HudScene extends Phaser.Scene {
       this.hpBar.fillStyle(0x200a08, 1).fillRect(x, y, 150, 10).fillStyle(hp < 30 ? 0xff3a2a : 0xc8312a, 1).fillRect(x, y, (150 * hp) / 100, 10);
       this.hpBar.lineStyle(1, 0x0b0908, 1).strokeRect(x - 0.5, y - 0.5, 151, 11);
     }
-    // weapon
-    fitIcon(this.weaponIcon, `ico_${hud.weapon}`, this.touch ? 64 : 120, this.touch ? 24 : 34);
+    // weapon (with the skin it wears)
+    const mySkin = this.session.players().find((p) => p.isLocal)?.skin ?? null;
+    setWeaponTexture(this.weaponIcon, `ico_${hud.weapon}`, mySkin);
+    const wf = this.weaponIcon.frame;
+    this.weaponIcon.setScale(Math.min(1.1, (this.touch ? 64 : 120) / wf.realWidth, (this.touch ? 24 : 34) / wf.realHeight));
     const def = WEAPONS[hud.weapon];
     this.ammoText.setText(def.kind === 'melee' ? '—' : `${hud.mag}/${hud.reserve < 0 ? '∞' : hud.reserve}`);
     this.ammoText.setColor(def.kind !== 'melee' && hud.mag === 0 ? '#ff6a5a' : BEIGE);

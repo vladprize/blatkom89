@@ -2,7 +2,7 @@
 import type { AdminCurrencyFlow, AdminEconomy } from '@blatkom/shared';
 import { h, clear } from '../dom.js';
 import { apiFetch, rangeQuery } from '../api.js';
-import { num, pct, money, shortDay, dateTime, itemName, ITEM_KINDS, ITEM_SOURCES, LEDGER_REASONS, MOD_NAMES, PAYMENT_PROVIDERS, RARITIES } from '../format.js';
+import { num, pct, money, shortDay, dateTime, itemName, CASE_KINDS, ITEM_KINDS, ITEM_SOURCES, LEDGER_REASONS, MOD_NAMES, PAYMENT_PROVIDERS, RARITIES } from '../format.js';
 import { lineChart, barChart, hBarChart, COLORS, emptyState } from '../charts.js';
 import { rangePicker, getRange } from './range.js';
 
@@ -130,6 +130,7 @@ export async function renderEconomy(root: HTMLElement): Promise<void> {
         e.cases.total
           ? hBarChart(e.cases.byRarity.map((c) => ({ label: RARITIES[c.rarity] ?? c.rarity, value: c.count })), { ariaLabel: 'Кейсы по редкости', color: COLORS.violet })
           : emptyState('кейсы не открывали'),
+        e.cases.byKind?.length ? table(['Кейс', 'Открыто', 'Алмазов'], e.cases.byKind.map((k) => [CASE_KINDS[k.kind] ?? k.kind, num(k.count), num(k.diamondsSpent)]), [1, 2]) : null,
         h('p', { class: 'note' }, `Доля кейсов в тратах алмазов: ${pct(e.diamonds.spentTotal > 0 ? e.cases.diamondsSpent / e.diamonds.spentTotal : null)}.`),
       ),
     ),

@@ -210,6 +210,13 @@ export class OnlineClient {
     return r;
   }
 
+  /** The skin case: a new skin goes on its weapon at once when the weapon wore none (the room re-reads it). */
+  async openSkinCase() {
+    const r = await this.api.openSkinCase();
+    this.applyInventory(r.inventory, true);
+    return r;
+  }
+
   async setLoadout(l: Loadout): Promise<Inventory> {
     return this.applyInventory(await this.api.setLoadout(l), true);
   }
