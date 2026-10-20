@@ -82,7 +82,9 @@ try {
       return { name: e.textContent, size: getComputedStyle(e).fontSize, wide: e.scrollWidth > e.clientWidth + 1, inside: inner.top >= band.top - 1 && inner.bottom <= band.bottom + 1 && band.bottom <= tile.bottom + 1, offset: Math.round(tile.bottom - band.bottom) };
     }),
   );
-  check(caps.length === 7 && caps.every((c) => !c.wide && c.inside) && new Set(caps.map((c) => c.size)).size === 1 && new Set(caps.map((c) => c.offset)).size === 1, `map tiles: 7 captions inside the same band, one size (${caps[0]?.size})`);
+  const capsOk = caps.length === 10 && caps.every((c) => !c.wide && c.inside) && new Set(caps.map((c) => c.size)).size === 1 && new Set(caps.map((c) => c.offset)).size === 1;
+  check(capsOk, `map tiles: ${caps.length} captions inside the same band, one size (${caps[0]?.size})`);
+  if (!capsOk) console.log('  captions:', JSON.stringify(caps));
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await page.waitForFunction(() => window.__blatkom?.game?.scene.getScene('game')?.session?.phase?.() === 'active', null, { timeout: 60000 });
   const me0 = await page.evaluate(() => window.__blatkom.game.scene.getScene('game').session.players().find((p) => p.isLocal));
