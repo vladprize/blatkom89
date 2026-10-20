@@ -21,6 +21,22 @@ import type { AchievementId } from '../game-rules/progression.js';
  */
 export const PROTOCOL_VERSION = 6;
 
+/** Room chat: a line is at most `maxLength` characters; `burst` lines at once, then one per `refillMs`. */
+export const CHAT_RULES = Object.freeze({ maxLength: 140, maxRaw: 400, burst: 4, refillMs: 2500, repeatMs: 4000 });
+
+/**
+ * A chat line as shown: control and direction-override characters out, piles of combining marks
+ * («zalgo») cut to two, spaces collapsed, at most CHAT_RULES.maxLength characters; '' if nothing is left.
+ */
+export function cleanChat(raw: string): string {
+  const s = raw
+    .replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ')
+    .replace(/(\p{M}{2})\p{M}+/gu, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return [...s].slice(0, CHAT_RULES.maxLength).join('').trim();
+}
+
 const roomId = z.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 
 export const ClientMessageSchema = z.discriminatedUnion('type', [
@@ -46,6 +62,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('loadout') }),
   z.object({ type: z.literal('leave') }),
   z.object({ type: z.literal('ping'), t: z.number().finite() }),
+  /** Text chat in the room (lobby and match); `team`: only to your own team (team modes). */
+  z.object({ type: z.literal('chat'), text: z.string().max(CHAT_RULES.maxRaw), team: z.boolean().optional() }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
@@ -138,7 +156,9 @@ export type ServerMessage =
   | { type: 'progress'; matchId: string; result: PersonalResult }
   | { type: 'error'; code: ErrorCode; message: string }
   | { type: 'pong'; t: number; serverTime: number }
-  | { type: 'kicked'; reason: string };
+  | { type: 'kicked'; reason: string }
+  /** A chat line from a person in the room (never stored on the server). */
+  | { type: 'chat'; id: string; name: string; slot: number; team: Team | null; text: string; toTeam: boolean; at: number };
 
 export type ErrorCode =
   | 'bad_message'
@@ -154,6 +174,7 @@ export type ErrorCode =
   | 'match_running'
   | 'not_enough_players'
   | 'team_full'
+  | 'chat_rate'
   | 'internal';
 
 export const WS_CLOSE = {

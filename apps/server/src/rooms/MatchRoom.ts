@@ -34,6 +34,8 @@ import {
   FILL_RULES,
   fillTarget,
   fillPersona,
+  CHAT_RULES,
+  cleanChat,
 } from '@blatkom/shared';
 import type {
   AvatarId,
@@ -134,6 +136,11 @@ interface Client {
   violations: number;
   msgWindowStart: number;
   msgCount: number;
+  /** Room chat: lines left in the burst, when it was last refilled, the last line and when. */
+  chatTokens: number;
+  chatRefillAt: number;
+  lastChat: string;
+  lastChatAt: number;
 }
 
 const AUTO_START_DELAY_MS = 4000;
@@ -307,6 +314,10 @@ export class MatchRoom {
       violations: 0,
       msgWindowStart: Date.now(),
       msgCount: 0,
+      chatTokens: CHAT_RULES.burst,
+      chatRefillAt: Date.now(),
+      lastChat: '',
+      lastChatAt: 0,
     };
     this.clients.set(user.userId, client);
     if (!this.hostId) this.hostId = user.userId;
@@ -502,6 +513,8 @@ export class MatchRoom {
         if (c.ws) c.ws.close(WS_CLOSE.NORMAL, 'leave');
         this.removeClient(c, 'leave');
         return;
+      case 'chat':
+        return this.chat(c, msg.text, msg.team === true);
       case 'hello':
         return; // already joined
     }
@@ -1048,6 +1061,35 @@ export class MatchRoom {
 
   broadcastRoster(): void {
     this.broadcast(this.roster());
+  }
+
+  /**
+   * Room chat (lobby and match): people only, a few lines at once then one every 2.5 s, the same line
+   * twice in a row is dropped; team lines go to your own team in team modes. Lines are relayed, never
+   * stored.
+   */
+  private chat(c: Client, raw: string, team: boolean) {
+    if (!c.connected) return;
+    const text = cleanChat(raw);
+    if (!text) return;
+    const now = Date.now();
+    c.chatTokens = Math.min(CHAT_RULES.burst, c.chatTokens + Math.max(0, now - c.chatRefillAt) / CHAT_RULES.refillMs);
+    c.chatRefillAt = now;
+    if (c.chatTokens < 1) return this.error(c, 'chat_rate', 'Not so fast — wait a moment before the next line');
+    if (text === c.lastChat && now - c.lastChatAt < CHAT_RULES.repeatMs) return;
+    c.chatTokens -= 1;
+    c.lastChat = text;
+    c.lastChatAt = now;
+    const p = this.world.players.get(c.user.userId);
+    const myTeam = p?.team ?? null;
+    const toTeam = team && isTeamMode(this.config.mode) && myTeam !== null;
+    const line: ServerMessage = { type: 'chat', id: c.user.userId, name: c.user.displayName, slot: p?.slot ?? -1, team: myTeam, text, toTeam, at: now };
+    const data = JSON.stringify(line);
+    for (const other of this.clients.values()) {
+      if (!other.connected || !other.ws || other.ws.readyState !== 1) continue;
+      if (toTeam && this.world.players.get(other.user.userId)?.team !== myTeam) continue;
+      other.ws.send(data);
+    }
   }
 
   broadcast(msg: ServerMessage): void {

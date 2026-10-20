@@ -6,7 +6,7 @@ import * as Phaser from 'phaser';
 import { getMap, PROP_DEFS, propFootprint, WEAPONS, SCORING, BASE_RULES, CTF_RULES, isTeamMode } from '@blatkom/shared';
 import type { MapDef, Team, WeaponId } from '@blatkom/shared';
 import type { GameSession, RenderBase, RenderFlag, RenderPlayer } from '../session/types.js';
-import { hudBus } from './hudBus.js';
+import { hudBus, publishHudLayout } from './hudBus.js';
 import type { KillFeedEntry, ObjectiveEntry, PointsEntry, SupplyEntry } from './hudBus.js';
 import { touchState, isTouchDevice } from '../input/TouchState.js';
 import { setWeaponTexture } from '../render/skins.js';
@@ -224,6 +224,7 @@ export class HudScene extends Phaser.Scene {
     hudBus.on('objective', this.onObjective, this);
     this.edge = this.add.graphics().setDepth(18);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      publishHudLayout(null);
       this.scale.off(Phaser.Scale.Events.RESIZE, this.layout, this);
       hudBus.off('killfeed', this.onKillFeed, this);
       hudBus.off('hitmarker', this.onHitMarker, this);
@@ -624,6 +625,15 @@ export class HudScene extends Phaser.Scene {
       this.gadgetCount.setPosition(wx + 182 + 3 * 50 + 38, wy + 7).setVisible(true);
     }
     this.flashOverlay.setSize(W, H);
+    // the room chat (HTML over the canvas): the button left of the menu button, the log under the
+    // kill feed on phones and above the health panel on computers
+    publishHudLayout({
+      W,
+      H,
+      touch: this.touch,
+      chatBtn: { x: mmx - 26 - 42, y: pad + 18, size: 34 },
+      chat: this.touch ? { left: pad, width: Math.min(W * 0.42, 420), top: this.feedY0 + 5 * 22 + 8 } : { left: pad, width: Math.min(W * 0.4, 360), bottom: H - (H - pad - 74) + 10 },
+    });
     this.bigText.setPosition(cx, H * 0.36);
     this.subText.setPosition(cx, H * 0.36 + 48);
     this.promptText.setPosition(cx, H * 0.7);

@@ -137,6 +137,26 @@ try {
   check(state.every((s) => s.mode === 'ctf' && s.flags === '0:home,1:home'), `both clients see two flags at home (${JSON.stringify(state)})`);
   check(state[0].team !== state[1].team, 'the two players are on different teams');
   check(/HOME/.test(state[0].strip) && /НА МЕСТЕ/.test(state[1].strip), `HUD strip in each player's language (${state[0].strip} | ${state[1].strip})`);
+  // team chat (v0.23): T writes to your own team only; the other team gets the lines to everybody
+  await A.page.keyboard.press('t');
+  const scopeTeam = await A.page.getByTestId('room-chat-scope').getAttribute('aria-pressed');
+  await A.page.keyboard.type('flag is clear', { delay: 15 });
+  await A.page.keyboard.press('Enter');
+  const ownTeamLine = await A.page
+    .locator('[data-testid=room-chat-overlay-log] .chatline--team', { hasText: 'flag is clear' })
+    .waitFor({ timeout: 8000 })
+    .then(() => true)
+    .catch(() => false);
+  await A.page.keyboard.press('Enter');
+  await A.page.keyboard.type('gl hf all', { delay: 15 });
+  await A.page.keyboard.press('Enter');
+  const allLine = await B.page
+    .locator('[data-testid=room-chat-overlay-log] [data-testid=room-chat-line]', { hasText: 'gl hf all' })
+    .waitFor({ timeout: 8000 })
+    .then(() => true)
+    .catch(() => false);
+  const leaked = await B.page.locator('[data-testid=room-chat-overlay-log] [data-testid=room-chat-line]', { hasText: 'flag is clear' }).count();
+  check(scopeTeam === 'true' && ownTeamLine && allLine && leaked === 0, `team chat: «T» writes to the own team (${scopeTeam}, shown to A ${ownTeamLine}), the other team gets only the line to everybody (${allLine}, leaked ${leaked})`);
   await A.page.screenshot({ path: `${outDir}/modes_ctf_A.png` });
   await B.page.screenshot({ path: `${outDir}/modes_ctf_B.png` });
   // the 40-second match ends on time: a team result for both

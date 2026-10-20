@@ -122,10 +122,22 @@ export class GameScene extends Phaser.Scene {
     this.scene.launch('hud', { session: this.session });
     this.scene.bringToTop('hud');
     hudBus.on('pause-state', this.onPauseState, this);
+    hudBus.on('chat-open', this.onChatOpen, this);
+    hudBus.on('chat-say', this.onChatSay, this);
   }
 
   private onPauseState(p: boolean) {
     this.paused = p;
+  }
+
+  /** The chat input took the keyboard: keys held at that moment must not stay «down». */
+  private onChatOpen() {
+    this.input.keyboard?.resetKeys();
+  }
+
+  /** A chat line: a speech bubble over the speaker for a few seconds. */
+  private onChatSay(e: { slot: number; text: string }) {
+    this.views.get(e.slot)?.say(e.text, this.time.now);
   }
 
   private onResize(size: Phaser.Structs.Size) {
@@ -162,6 +174,8 @@ export class GameScene extends Phaser.Scene {
   private cleanup() {
     this.unsubSettings?.();
     hudBus.off('pause-state', this.onPauseState, this);
+    hudBus.off('chat-open', this.onChatOpen, this);
+    hudBus.off('chat-say', this.onChatSay, this);
     this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this);
     this.objectives?.destroy();
     this.objectives = null;

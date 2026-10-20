@@ -587,3 +587,46 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .rar--common { color: #b8c48a; }
 .finishes { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .finish { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+/* ── room chat (v0.23): lobby/results panel and the overlay over the match ─────────────────── */
+.rchat { gap: 8px; }
+.rchat__log { display: flex; flex-direction: column; gap: 3px; max-height: 190px; min-height: 64px; overflow-y: auto; overscroll-behavior: contain; background: #0f0d0b; border: 1px solid var(--line); padding: 8px 10px; font-size: 16px; }
+.rchat__empty { font-size: 14px; }
+.rchat__note { font-size: 13px; }
+.rchat__row { display: flex; gap: 6px; align-items: stretch; }
+.rchat__input { flex: 1; min-width: 0; min-height: 42px; padding: 8px 10px; font-size: 16px; }
+.rchat__input--team { border-color: #6f9a52; }
+.rchat__input--team:focus { outline-color: #8fc06a; }
+.rchat__scope { font-family: Oswald, sans-serif; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--beige); background: var(--panel-2); border: 1px solid var(--line); padding: 0 10px; min-width: 76px; cursor: pointer; }
+.rchat__scope[aria-pressed='true'] { background: #2c3b22; border-color: #6f9a52; color: #cfe8b8; }
+.rchat__scope[hidden] { display: none; }
+.rchat__send { white-space: nowrap; min-height: 42px; }
+.rchat__close { font: inherit; font-size: 18px; color: var(--beige); background: var(--panel-2); border: 1px solid var(--line); width: 42px; cursor: pointer; }
+.rchat__quick { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.rchat__quick::-webkit-scrollbar { display: none; }
+.rchat__quick .chip { white-space: nowrap; flex: none; }
+.chatline { line-height: 1.3; overflow-wrap: anywhere; color: var(--beige); }
+.chatline__name { font: inherit; font-weight: 700; color: var(--tape); margin-right: 6px; background: none; border: 0; padding: 0; }
+button.chatline__name { cursor: pointer; }
+button.chatline__name:hover { text-decoration: underline; }
+.chatline__name::after { content: ':'; }
+.chatline__name--red { color: #ff8a7a; }
+.chatline__name--blue { color: #8cc4ff; }
+.chatline__name--me { color: #ffd36a; }
+.chatline__tag { font-family: Oswald, sans-serif; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #cfe8b8; background: #2c3b22; padding: 0 5px; margin-right: 6px; vertical-align: 1px; }
+.chatline--team .chatline__text { color: #d8f0c4; }
+.chatline--sys { color: var(--muted); font-style: italic; }
+.ui > .chatlay { position: fixed; inset: 0; pointer-events: none; }
+.chatlay__box { position: fixed; display: flex; flex-direction: column; gap: 6px; }
+.chatlay--touch.chatlay--open .chatlay__box { flex-direction: column-reverse; }
+.chatlay__log { display: flex; flex-direction: column; gap: 3px; max-height: 30vh; overflow: hidden; font-size: 15px; pointer-events: none; }
+.chatlay--touch .chatlay__log { max-height: 24vh; font-size: 14px; }
+.chatlay__log .chatline { align-self: flex-start; max-width: 100%; max-height: 90px; background: rgba(11,9,8,.66); padding: 2px 8px; text-shadow: 0 1px 0 #000; }
+.chatlay__log .chatline--old { animation: chatout .7s forwards; }
+@keyframes chatout { to { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin-top: -3px; } }
+.chatlay--open .chatlay__log { pointer-events: auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.chatlay--open .chatlay__log .chatline--old { animation: none; opacity: 1; max-height: none; }
+.chatlay__bar { display: none; flex-direction: column; gap: 6px; pointer-events: auto; background: rgba(20,17,14,.94); border: 1px solid var(--line); padding: 8px; box-shadow: 0 4px 0 rgba(0,0,0,.35); }
+.chatlay--open .chatlay__bar { display: flex; }
+.chatlay__btn { position: fixed; pointer-events: auto; display: grid; place-items: center; padding: 0; background: rgba(20,17,14,.7); border: 1px solid rgba(217,199,163,.5); cursor: pointer; }
+.chatlay__btn i { display: block; width: 56%; height: 46%; background: var(--tape); clip-path: polygon(0 0, 100% 0, 100% 74%, 48% 74%, 22% 100%, 26% 74%, 0 74%); }
+.chatlay--open .chatlay__btn { border-color: var(--tape); background: rgba(58,49,40,.9); }

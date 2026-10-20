@@ -10,6 +10,8 @@ export interface Settings {
   showFps: boolean;
   botDifficulty: 'easy' | 'normal' | 'hard';
   bots: number;
+  /** The room chat (lobby, match, results): shown or hidden. */
+  chat: boolean;
 }
 
 const KEY = 'blatkom89.settings.v1';
@@ -35,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showFps: false,
   botDifficulty: 'normal',
   bots: 3,
+  chat: true,
 };
 
 let current: Settings = load();

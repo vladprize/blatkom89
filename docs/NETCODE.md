@@ -42,6 +42,23 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
    and the Tab table in a rematch show the current level). `rematch` votes restart the room with a new
    match id.
 
+### 2c. Room chat (text, v0.23)
+
+Text only; a voice chat is postponed by the owner (it would need a TURN server for players behind NAT).
+1. Client → server on the game socket: `chat {text, team?}` — any phase of the room (lobby, match,
+   results); `text` is at most 400 UTF-16 units on the wire (schema), `team: true` asks for the own team only.
+2. The server cleans the line (`cleanChat` in `net/protocol.ts`: control and direction-override characters
+   become spaces, more than two combining marks in a row are cut, spaces collapse, at most 140 characters)
+   and drops an empty one. Each connection has a token bucket (`CHAT_RULES`: 4 lines at once, one more
+   every 2.5 s) — over it the sender alone gets `error chat_rate`; the same line again within 4 s is
+   dropped silently.
+3. Server → clients: `chat {id, name, slot, team, text, toTeam, at}` to every connected player of the room,
+   or — a team line in a team mode — only to the sender's team (`toTeam: true`). In free-for-all a team
+   line goes to everybody as an ordinary one. The name is the server's display name of the sender.
+4. Nothing is stored or logged: the room passes the line on and forgets it. The client keeps the last 60
+   lines of the current room (lobby panel, overlay during the match, results), shows a speech bubble over
+   the speaker for 4.5 s and lets a player mute others locally (until the page reloads). Bots never chat.
+
 ### 2b. The social socket (`/ws/social`, v0.23)
 
 A second, light WebSocket per app window carries friends' news; game rooms are untouched by it.
@@ -193,14 +210,15 @@ Input frame (14 B): `u32 seq | i8 moveX | i8 moveY | u16 aim | u8 buttons(FIRE,R
 
 ## 6. Verification
 
-* `apps/server/src/rooms/realtime.test.ts` (12 tests, real HTTP+WS server, independent `ws` clients):
+* `apps/server/src/rooms/realtime.test.ts` (14 tests, real HTTP+WS server, independent `ws` clients):
   authoritative combat with identical results and identical per-tick positions on both clients, kill
   events delivered before results, results/XP sent once, speed-hack flood, invalid handshakes and
   commands, capacity (11th player refused), team matches (dealing, switching, no friendly fire, team
   results), capture the flag (take, carry, capture through the server, objectives in snapshots, results and
   the match record) and base capture (Quick Match by mode, a base taken and scoring), disconnect/resume/
   replace, grace-period expiry and empty-room cleanup, rematch with separately recorded matches and the
-  roster refreshed with the earned level, owned gear.
+  roster refreshed with the earned level, owned gear, the room chat (everybody, team only, cleaning, the
+  rate limit).
 * `packages/shared/src/__tests__/` — codec round-trips and malformed input rejection, lag compensation,
   walls blocking shots, movement normalisation, sliding, weapons timing, assists (window, minimum damage,
   reaching the limit), supply drops (free point away from players, full ammo, expiry), teams

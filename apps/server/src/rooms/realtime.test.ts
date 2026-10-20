@@ -662,3 +662,52 @@ test('gear: rooms spawn players with their owned loadout, modifications and equi
   ca.close();
   cb.close();
 });
+
+test('room chat: lines reach everybody in the room, team lines only the team, cleaned and rate-limited', async () => {
+  const host = user('Болтун');
+  const r = await api<{ roomId: string }>('POST', '/api/rooms', host.token, { mapId: 'factory', isPrivate: true, mode: 'teams' });
+  const others = [user('Слушатель'), user('Свой'), user('Чужой')];
+  const ch = Client.join(host, r.data.roomId, 'petya');
+  await ch.msg('welcome');
+  const cs = others.map((u) => Client.join(u, r.data.roomId, 'valuta'));
+  for (const c of cs) await c.msg('welcome');
+  const roster = await ch.msg('roster', (m) => m.players.length === 4);
+  const teamOf = (id: string) => roster.players.find((p) => p.id === id)!.team;
+  // a line to everyone: control characters out, spaces collapsed, the sender's name and team attached
+  ch.send({ type: 'chat', text: '  Здорово,\u0007   пацаны!  ' });
+  for (const c of [ch, ...cs]) {
+    const m = await c.msg('chat', (x) => x.text === 'Здорово, пацаны!');
+    assert.deepEqual([m.id, m.name, m.toTeam, m.team], [host.userId, 'Болтун', false, teamOf(host.userId)]);
+  }
+  // a team line: the host's teammate hears it, the other team doesn't
+  ch.send({ type: 'chat', text: 'Заходим слева', team: true });
+  const mates = [ch, ...cs].filter((_c, i) => teamOf([host, ...others][i]!.userId) === teamOf(host.userId));
+  const rivals = [ch, ...cs].filter((_c, i) => teamOf([host, ...others][i]!.userId) !== teamOf(host.userId));
+  for (const c of mates) assert.equal((await c.msg('chat', (x) => x.text === 'Заходим слева')).toTeam, true);
+  await sleep(300);
+  for (const c of rivals) assert.ok(!c.msgs.some((x) => x.type === 'chat' && x.text === 'Заходим слева'), 'the other team does not hear it');
+  // nothing left after cleaning → nothing sent; over 140 characters → cut; over 400 → refused as a bad message
+  const before = cs[0]!.msgs.length;
+  ch.send({ type: 'chat', text: ' \u0000\u0001 ' });
+  ch.send({ type: 'chat', text: 'я'.repeat(300) });
+  const long = await cs[0]!.msg('chat', (x) => x.text.startsWith('яяя'));
+  assert.equal([...long.text].length, 140);
+  ch.send({ type: 'chat', text: 'x'.repeat(401) });
+  await sleep(200);
+  assert.ok(cs[0]!.msgs.slice(before).filter((x) => x.type === 'chat').length === 1);
+  // a burst of four, then the limit (the same line twice in a row is dropped silently)
+  const spammer = cs[2]!;
+  for (let i = 0; i < 6; i++) spammer.send({ type: 'chat', text: `спам ${i}` });
+  await spammer.msg('error', (m) => m.code === 'chat_rate');
+  await sleep(200);
+  const got = ch.msgs.filter((x): x is Extract<ServerMessage, { type: 'chat' }> => x.type === 'chat' && x.text.startsWith('спам')).map((x) => x.text);
+  assert.deepEqual(got, ['спам 0', 'спам 1', 'спам 2', 'спам 3']);
+  // the same line again within a few seconds is dropped silently (no error either)
+  const echo = cs[1]!;
+  echo.send({ type: 'chat', text: 'дубль' });
+  echo.send({ type: 'chat', text: 'дубль' });
+  await sleep(300);
+  assert.equal(ch.msgs.filter((x) => x.type === 'chat' && x.text === 'дубль').length, 1);
+  assert.ok(!echo.msgs.some((x) => x.type === 'error'), 'a repeat is not an error');
+  for (const c of [ch, ...cs]) c.close();
+});

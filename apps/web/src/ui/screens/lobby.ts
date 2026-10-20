@@ -67,6 +67,8 @@ export function renderLobby(o: {
   inTelegram: boolean;
   /** Online: the «invite friends» panel (under the players). */
   extra?: HTMLElement | null;
+  /** Online: the room chat (under the players). */
+  chat?: HTMLElement | null;
 }): HTMLElement {
   const s = o.state;
   const me = s.players.find((p) => p.id === s.myId);
@@ -146,6 +148,7 @@ export function renderLobby(o: {
         h('div', { class: 'muted', 'data-testid': 'mode-rules' }, modeRules(s.mode, s.limits)),
       ),
       h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Players {n}/{max}', { n: connected, max: s.maxPlayers })), players),
+      o.chat ?? null,
       s.isPrivate ? null : (o.extra ?? null),
       h(
         'div',

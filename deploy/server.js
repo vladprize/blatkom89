@@ -14755,6 +14755,11 @@ function encodeSnapshot(src) {
 
 // packages/shared/src/net/protocol.ts
 var PROTOCOL_VERSION = 6;
+var CHAT_RULES = Object.freeze({ maxLength: 140, maxRaw: 400, burst: 4, refillMs: 2500, repeatMs: 4e3 });
+function cleanChat(raw) {
+  const s = raw.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ").replace(new RegExp("(\\p{M}{2})\\p{M}+", "gu"), "$1").replace(/\s+/g, " ").trim();
+  return [...s].slice(0, CHAT_RULES.maxLength).join("").trim();
+}
 var roomId = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 var ClientMessageSchema = external_exports.discriminatedUnion("type", [
   external_exports.object({
@@ -14778,7 +14783,9 @@ var ClientMessageSchema = external_exports.discriminatedUnion("type", [
   /** The player changed their loadout over the API: the server re-reads it (applies from the next spawn). */
   external_exports.object({ type: external_exports.literal("loadout") }),
   external_exports.object({ type: external_exports.literal("leave") }),
-  external_exports.object({ type: external_exports.literal("ping"), t: external_exports.number().finite() })
+  external_exports.object({ type: external_exports.literal("ping"), t: external_exports.number().finite() }),
+  /** Text chat in the room (lobby and match); `team`: only to your own team (team modes). */
+  external_exports.object({ type: external_exports.literal("chat"), text: external_exports.string().max(CHAT_RULES.maxRaw), team: external_exports.boolean().optional() })
 ]);
 var WS_CLOSE = {
   NORMAL: 1e3,
@@ -18777,7 +18784,11 @@ var MatchRoom = class {
       matchTimeMs: 0,
       violations: 0,
       msgWindowStart: Date.now(),
-      msgCount: 0
+      msgCount: 0,
+      chatTokens: CHAT_RULES.burst,
+      chatRefillAt: Date.now(),
+      lastChat: "",
+      lastChatAt: 0
     };
     this.clients.set(user.userId, client);
     if (!this.hostId) this.hostId = user.userId;
@@ -18960,6 +18971,8 @@ var MatchRoom = class {
         if (c.ws) c.ws.close(WS_CLOSE.NORMAL, "leave");
         this.removeClient(c, "leave");
         return;
+      case "chat":
+        return this.chat(c, msg.text, msg.team === true);
       case "hello":
         return;
     }
@@ -19453,6 +19466,34 @@ var MatchRoom = class {
   }
   broadcastRoster() {
     this.broadcast(this.roster());
+  }
+  /**
+   * Room chat (lobby and match): people only, a few lines at once then one every 2.5 s, the same line
+   * twice in a row is dropped; team lines go to your own team in team modes. Lines are relayed, never
+   * stored.
+   */
+  chat(c, raw, team) {
+    if (!c.connected) return;
+    const text = cleanChat(raw);
+    if (!text) return;
+    const now = Date.now();
+    c.chatTokens = Math.min(CHAT_RULES.burst, c.chatTokens + Math.max(0, now - c.chatRefillAt) / CHAT_RULES.refillMs);
+    c.chatRefillAt = now;
+    if (c.chatTokens < 1) return this.error(c, "chat_rate", "Not so fast \u2014 wait a moment before the next line");
+    if (text === c.lastChat && now - c.lastChatAt < CHAT_RULES.repeatMs) return;
+    c.chatTokens -= 1;
+    c.lastChat = text;
+    c.lastChatAt = now;
+    const p = this.world.players.get(c.user.userId);
+    const myTeam = p?.team ?? null;
+    const toTeam = team && isTeamMode(this.config.mode) && myTeam !== null;
+    const line = { type: "chat", id: c.user.userId, name: c.user.displayName, slot: p?.slot ?? -1, team: myTeam, text, toTeam, at: now };
+    const data = JSON.stringify(line);
+    for (const other of this.clients.values()) {
+      if (!other.connected || !other.ws || other.ws.readyState !== 1) continue;
+      if (toTeam && this.world.players.get(other.user.userId)?.team !== myTeam) continue;
+      other.ws.send(data);
+    }
   }
   broadcast(msg) {
     const s = JSON.stringify(msg);

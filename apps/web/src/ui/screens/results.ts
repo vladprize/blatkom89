@@ -35,6 +35,8 @@ export function renderResults(o: {
   offlineNote?: string;
   onRematch: () => void;
   onMenu: () => void;
+  /** Online: the room chat (under the buttons). */
+  chat?: HTMLElement | null;
 }): HTMLElement {
   const r = o.results;
   const mode = r.gameMode ?? 'ffa';
@@ -159,6 +161,7 @@ export function renderResults(o: {
       ),
       personal ? xpPanel() : o.offline ? h('div', { class: 'muted' }, o.offlineNote ?? t('Practice doesn’t count towards the online profile, XP or talons.')) : h('div', { class: 'muted' }, me ? t('Filing the results…') : ''),
       h('div', { class: 'row' }, h('button', { class: 'btn btn--red grow', onclick: o.onRematch }, o.offline ? t('Again') : t('Rematch')), h('button', { class: 'btn grow', onclick: o.onMenu }, t('To menu'))),
+      o.chat ?? null,
     ),
   );
 }

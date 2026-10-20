@@ -8,12 +8,14 @@ import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
 import { hudBus } from '../game/scenes/hudBus.js';
+import { ChatOverlay, ChatPanel, isMuted } from '../ui/chat.js';
+import type { ChatSource } from '../ui/chat.js';
 import { h, toast, portrait, asset, fmtDuration } from '../ui/dom.js';
-import { getSettings, updateSettings, storageGet, storageSet } from './settings.js';
+import { getSettings, updateSettings, storageGet, storageSet, onSettings } from './settings.js';
 import { ONLINE_AVAILABLE, VERSION } from './config.js';
 import { setBackButton, enterGameMode, leaveGameMode, telegramStartParam, inTelegram, haptic } from '../telegram/tg.js';
 import { OnlineClient } from '../net/OnlineClient.js';
-import type { LobbyState } from '../net/OnlineClient.js';
+import type { ChatLine, LobbyState } from '../net/OnlineClient.js';
 import { analytics } from '../analytics/client.js';
 import { renderSettings } from '../ui/screens/settings.js';
 import { loadOnlineProfile, renderProfileView } from '../ui/screens/profile.js';
@@ -133,6 +135,10 @@ export class App {
   private topBy: LeaderboardBy = 'rating';
   private socialTiles: HTMLElement | null = null;
   private inviteCards = new Map<string, () => void>();
+  /** Room chat: the panel of the lobby/results (one per room) and the overlay over the match. */
+  private chatPanel: ChatPanel | null = null;
+  private chatPanelRoom: string | null = null;
+  private chatOverlay: ChatOverlay | null = null;
 
   constructor() {
     const saved = storageGet('blatkom89.character');
@@ -141,6 +147,13 @@ export class App {
     hudBus.on('pause', () => this.togglePause());
     hudBus.on('match-end', () => setTimeout(() => this.onMatchFinished(), 2200));
     onLangChange(() => this.relocalize());
+    // the chat switched off or on in the settings (also from the pause menu during a match)
+    onSettings((st) => {
+      if (!st.chat && this.chatOverlay) {
+        this.chatOverlay.destroy();
+        this.chatOverlay = null;
+      } else if (st.chat && !this.chatOverlay && this.screen === 'game' && this.session?.mode === 'online') this.mountChatOverlay();
+    });
   }
 
   /** The language was switched: draw the current screen again in the new language. */
@@ -158,9 +171,11 @@ export class App {
       case 'arsenal':
         return this.open(this.screen, false);
       case 'lobby':
+        this.chatPanel?.refresh();
         if (this.lastLobby) this.onLobby(this.lastLobby);
         return;
       case 'results':
+        this.chatPanel?.refresh();
         if (this.lastResults) this.showResults(this.lastResults);
         return;
       default:
@@ -203,6 +218,7 @@ export class App {
         },
         onError: (msg, fatal) => (fatal ? this.showError(msg) : toast(msg)),
         onLeft: () => this.goMenu(),
+        onChat: (line) => this.onChat(line),
       });
       this.online.onEmailSessionExpired = (email) =>
         openEmailLogin(this.root, this.online!, { email, note: t('This account’s session has expired — please sign in again.'), onDone: () => this.afterAccountSwitch() });
@@ -318,6 +334,10 @@ export class App {
   private go(s: Screen, push = true) {
     if (push && this.screen !== s && !['loading', 'error', 'game'].includes(this.screen)) this.history.push(this.screen);
     this.screen = s;
+    if (s !== 'game' && this.chatOverlay) {
+      this.chatOverlay.destroy();
+      this.chatOverlay = null;
+    }
     setBackButton(s !== 'menu' && s !== 'game' && s !== 'loading');
     this.host.previewScene()?.setFocus(s === 'characters' ? this.character : null);
   }
@@ -891,10 +911,15 @@ export class App {
     setTimeout(() => this.root.querySelector('.rotate-hint')?.remove(), 4000);
     enterGameMode();
     this.host.startGame(session);
+    if (session.mode === 'online') this.mountChatOverlay();
   }
 
   private endSession(showPreview = true) {
     if (this.pauseEl) this.togglePause();
+    if (this.chatOverlay) {
+      this.chatOverlay.destroy();
+      this.chatOverlay = null;
+    }
     if (this.session) {
       this.host.stopGame();
       this.session.destroy();
@@ -913,6 +938,7 @@ export class App {
       return;
     }
     const offline = this.session?.mode === 'offline';
+    this.chatOverlay?.close();
     hudBus.emit('pause-state', true);
     this.pauseEl = h(
       'div',
@@ -953,7 +979,8 @@ export class App {
     this.resultsShown = true;
     this.lastResults = r;
     music.setWanted(true);
-    if (this.screen !== 'results') this.go('results', false);
+    const same = this.screen === 'results';
+    if (!same) this.go('results', false);
     const offline = this.session?.mode !== 'online';
     const myId = offline ? 'local' : (this.online?.profile?.id ?? '');
     // demo build: a finished practice match counts towards the browser-only profile (once per match)
@@ -968,10 +995,12 @@ export class App {
       }
       if (this.lastLocalResult?.matchId === r.matchId) r = { ...r, personal: this.lastLocalResult.personal };
     }
-    const el = renderResults({
+    const chat = offline ? null : this.roomChat();
+    const make = () => renderResults({
       results: r,
       myId,
       offline,
+      chat: chat?.el ?? null,
       localProfile: local && !!this.localProfile,
       ...(local && !this.localProfile ? { offlineNote: t('Pick an alias in the menu and practice will start earning you XP and levels.') } : {}),
       onRematch: () => {
@@ -988,7 +1017,7 @@ export class App {
       },
       onMenu: () => this.leaveMatch(),
     });
-    this.render(el);
+    this.redraw(same, chat, make);
   }
 
   // ── online ──────────────────────────────────────────────────────────────
@@ -1124,6 +1153,62 @@ export class App {
   }
 
   /** Live news from friends: invitations, requests, messages. */
+  // ── room chat ───────────────────────────────────────────────────────────
+  private chatSource(): ChatSource | null {
+    const online = this.online;
+    if (!online) return null;
+    return {
+      lines: () => online.chatLines,
+      send: (text, team) => online.sendChat(text, team),
+      canTeam: () => {
+        const s = this.lastLobby;
+        return !!s && isTeamMode(s.mode) && (s.players.find((p) => p.id === s.myId)?.team ?? null) !== null;
+      },
+    };
+  }
+
+  /** The chat panel of the current room (lobby, results); null when the chat is switched off. */
+  private roomChat(): ChatPanel | null {
+    const src = this.chatSource();
+    const room = this.online?.chatRoomId ?? null;
+    if (!src || !room || !getSettings().chat) return null;
+    if (!this.chatPanel || this.chatPanelRoom !== room) {
+      this.chatPanel = new ChatPanel(src);
+      this.chatPanelRoom = room;
+    }
+    return this.chatPanel;
+  }
+
+  private mountChatOverlay() {
+    this.chatOverlay?.destroy();
+    this.chatOverlay = null;
+    const src = this.chatSource();
+    if (!src || !getSettings().chat) return;
+    this.chatOverlay = new ChatOverlay(src, { canvas: () => this.host.game.canvas, canOpen: () => this.screen === 'game' && !this.pauseEl });
+    this.chatOverlay.mount(this.root);
+  }
+
+  private onChat(line: ChatLine) {
+    if (!getSettings().chat) return;
+    if (this.chatPanel && this.chatPanelRoom === this.online?.chatRoomId) this.chatPanel.add(line);
+    this.chatOverlay?.add(line);
+    if (line.system || isMuted(line)) return;
+    if (this.screen === 'game') hudBus.emit('chat-say', { slot: line.slot, text: line.text });
+    else if (!line.mine) sfx.play('click', { volume: 0.4 });
+  }
+
+  /** Draws a lobby/results screen again without losing the chat input's focus or the page's scroll. */
+  private redraw(same: boolean, chat: ChatPanel | null, el: () => HTMLElement) {
+    const top = same ? (this.root.querySelector<HTMLElement>(':scope > .screen')?.scrollTop ?? 0) : 0;
+    const draw = () => this.render(el());
+    if (chat) chat.keep(draw);
+    else draw();
+    if (same && top) {
+      const sc = this.root.querySelector<HTMLElement>(':scope > .screen');
+      if (sc) sc.scrollTop = top;
+    }
+  }
+
   private onSocial(e: SocialSignal) {
     if (e.type === 'changed') return this.refreshSocialTiles();
     if (!this.online) return;
@@ -1222,6 +1307,7 @@ export class App {
     if (this.screen === 'game' && (s.phase === 'active' || s.phase === 'countdown' || s.phase === 'ready' || s.phase === 'finished')) return;
     if (this.screen === 'results' && s.phase === 'finished') return;
     if (s.phase !== 'waiting') return;
+    const same = this.screen === 'lobby';
     if (this.screen !== 'lobby') {
       this.endSession();
       this.go('lobby', false);
@@ -1240,10 +1326,12 @@ export class App {
         })
         .catch((e) => toast(apiErrorText(e)));
     }
-    this.render(
+    const chat = this.roomChat();
+    this.redraw(same, chat, () =>
       renderLobby({
         state: s,
         extra: online ? friendsInvitePanel({ online, roomId: s.roomId, inRoom: (id) => s.players.some((p) => p.id === id), onFriends: () => this.showSocial() }) : null,
+        chat: chat?.el ?? null,
         character: this.onlineCharacter(),
         onReady: (r) => this.online?.setReady(r),
         onStart: () => this.online?.startMatch(),

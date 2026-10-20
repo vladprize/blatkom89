@@ -34,7 +34,12 @@ export interface LobbyState {
   limits?: { teamScoreLimit: number; captureLimit: number; baseScoreLimit: number };
 }
 
+/** A line of the room chat as the client keeps it (system: a local notice such as «not so fast»). */
+export type ChatLine = Omit<Extract<ServerMessage, { type: 'chat' }>, 'type'> & { mine: boolean; system?: boolean };
+
 export interface OnlineCallbacks {
+  /** A chat line arrived (lobby, match, results). */
+  onChat?(line: ChatLine): void;
   onLobby(s: LobbyState): void;
   onMatchStart(session: OnlineSession): void;
   onResults(r: ResultsData): void;
@@ -60,6 +65,9 @@ export class OnlineClient {
   readonly social = new SocialClient(this.api, () => this.profile?.id ?? null);
   /** Friends invited from the current room (id → when), so the lobby shows «Invited ✓». */
   readonly invited = new Map<string, number>();
+  /** The current room's chat (the last 60 lines) and the room it belongs to. */
+  chatLines: ChatLine[] = [];
+  chatRoomId: string | null = null;
   /** Wallet, owned items and loadout (refreshed after purchases and matches). */
   inventory: Inventory | null = null;
   /** Called when the stored email session has expired and the player has to sign in again. */
@@ -283,6 +291,10 @@ export class OnlineClient {
   async joinRoom(roomId: string, c: CharacterId): Promise<void> {
     await this.ensureAuth();
     this.closeConn();
+    if (this.chatRoomId !== roomId) {
+      this.chatLines = [];
+      this.chatRoomId = roomId;
+    }
     this.roomId = roomId;
     this.invited.clear();
     const conn = new GameConnection(
@@ -380,11 +392,20 @@ export class OnlineClient {
         this.cb.onProgress();
         break;
       case 'error':
+        if (m.code === 'chat_rate') {
+          this.pushChat({ id: '', name: '', slot: -1, team: null, text: errorText(m.code, m.message), toTeam: false, at: Date.now(), mine: true, system: true });
+          break;
+        }
         this.cb.onError(errorText(m.code, m.message), m.code === 'unauthorized' || m.code === 'room_not_found' || m.code === 'room_full' || m.code === 'version_mismatch');
         break;
       case 'kicked':
         this.cb.onError(t('Disconnected by the server.'), true);
         break;
+      case 'chat': {
+        const { type: _type, ...line } = m;
+        this.pushChat({ ...line, mine: m.id === this.playerId });
+        break;
+      }
       default:
         break;
     }
@@ -408,6 +429,19 @@ export class OnlineClient {
   rematch(): void {
     this.conn?.send({ type: 'rematch' });
   }
+  private pushChat(line: ChatLine) {
+    this.chatLines.push(line);
+    if (this.chatLines.length > 60) this.chatLines.splice(0, this.chatLines.length - 60);
+    this.cb.onChat?.(line);
+  }
+  /** A chat line to the room (team: only to your own team in team modes). */
+  sendChat(text: string, team = false): void {
+    this.conn?.send({ type: 'chat', text: text.slice(0, 400), ...(team ? { team: true } : {}) });
+  }
+  /** In a room right now (lobby, match or results). */
+  inRoom(): boolean {
+    return this.conn !== null;
+  }
 
   async leave(): Promise<void> {
     this.conn?.send({ type: 'leave' });
@@ -427,5 +461,7 @@ export class OnlineClient {
     this.roomId = null;
     this.lobby = null;
     this.invited.clear();
+    this.chatLines = [];
+    this.chatRoomId = null;
   }
 }

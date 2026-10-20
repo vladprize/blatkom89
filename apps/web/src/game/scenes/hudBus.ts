@@ -47,3 +47,29 @@ export interface ObjectiveEntry {
   team: import('@blatkom/shared').Team;
   banner?: { title: string; sub?: string; good: boolean | null };
 }
+
+/**
+ * Where the HTML overlays (the room chat) may sit, in HUD pixels; HudScene publishes it on every
+ * layout (null when the HUD is gone). The overlay converts it with the canvas rectangle.
+ */
+export interface HudLayout {
+  /** The HUD's size in its own pixels. */
+  W: number;
+  H: number;
+  touch: boolean;
+  /** Centre and size of the chat button (left of the menu button). */
+  chatBtn: { x: number; y: number; size: number };
+  /** The chat log: its left edge, width and either top (phones, under the kill feed) or bottom (computers, above the health panel). */
+  chat: { left: number; width: number; top?: number; bottom?: number };
+}
+
+let lastLayout: HudLayout | null = null;
+
+export function publishHudLayout(l: HudLayout | null): void {
+  lastLayout = l;
+  hudBus.emit('hud-layout', l);
+}
+
+export function hudLayout(): HudLayout | null {
+  return lastLayout;
+}

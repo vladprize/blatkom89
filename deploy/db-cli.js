@@ -7062,6 +7062,7 @@ var NEVER = INVALID;
 
 // packages/shared/src/net/protocol.ts
 var PROTOCOL_VERSION = 6;
+var CHAT_RULES = Object.freeze({ maxLength: 140, maxRaw: 400, burst: 4, refillMs: 2500, repeatMs: 4e3 });
 var roomId = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 var ClientMessageSchema = external_exports.discriminatedUnion("type", [
   external_exports.object({
@@ -7085,7 +7086,9 @@ var ClientMessageSchema = external_exports.discriminatedUnion("type", [
   /** The player changed their loadout over the API: the server re-reads it (applies from the next spawn). */
   external_exports.object({ type: external_exports.literal("loadout") }),
   external_exports.object({ type: external_exports.literal("leave") }),
-  external_exports.object({ type: external_exports.literal("ping"), t: external_exports.number().finite() })
+  external_exports.object({ type: external_exports.literal("ping"), t: external_exports.number().finite() }),
+  /** Text chat in the room (lobby and match); `team`: only to your own team (team modes). */
+  external_exports.object({ type: external_exports.literal("chat"), text: external_exports.string().max(CHAT_RULES.maxRaw), team: external_exports.boolean().optional() })
 ]);
 
 // packages/shared/src/events/analytics.ts

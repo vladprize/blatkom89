@@ -98,7 +98,20 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
     slider(t('Stick size'), 'stickScale', 0.7, 1.4, 0.05),
     h('div', { class: 'muted', style: 'font-size:14px' }, t('Computer: WASD — move, mouse — aim, left click — fire, R — reload, Q / wheel / 1-3 — weapons, G / middle click — equipment, E — pick up, Shift — walk quietly, Tab — score, Esc — menu.')),
   );
+  const chat = opts.online
+    ? h(
+        'div',
+        { class: 'panel col' },
+        h('span', { class: 'tag' }, t('Chat')),
+        seg(t('Room chat (lobby, match, results)'), [
+          [true, t('Shown')],
+          [false, t('Hidden')],
+        ], 'chat'),
+        h('div', { class: 'muted', style: 'font-size:14px' }, t('Enter — say something to everybody, T — to your team, Tab — switch. Lines go to the players in the room and aren’t stored.')),
+      )
+    : null;
   const items: HTMLElement[] = [language, graphics, sound, controls];
+  if (chat) items.push(chat);
   if (opts.online && !opts.inGame) {
     const input = h('input', { class: 'input', value: opts.online.profile?.displayName ?? '', maxlength: '24', 'aria-label': t('In-game name') }) as HTMLInputElement;
     items.push(

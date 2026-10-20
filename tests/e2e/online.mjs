@@ -113,8 +113,33 @@ step('B joined through the invite link; both lobbies show 2 players');
 report.nickInLobbyB = (await B.page.getByText(NICK_A).count()) > 0;
 report.nickInLobbyA = (await A.page.getByText(NICK_B).count()) > 0;
 step(`lobbies show the nicknames: A's on B ${report.nickInLobbyB}, B's on A ${report.nickInLobbyA}`);
+// ── room chat in the lobby (v0.23) ─────────────────────────────────────────
+{
+  const LINE = `Hello from the courtyard ${RUN} 🔫`;
+  await A.page.getByTestId('room-chat-input').fill(LINE);
+  await A.page.keyboard.press('Enter');
+  const onB = await B.page
+    .locator('[data-testid=room-chat-log] [data-testid=room-chat-line]', { hasText: LINE })
+    .waitFor({ timeout: 8000 })
+    .then(() => true)
+    .catch(() => false);
+  await B.page.locator('[data-testid=room-chat-quick] .chip').first().click();
+  const quickOnA = await A.page
+    .locator('[data-testid=room-chat-log] [data-testid=room-chat-line]', { hasText: 'Hi, lads!' })
+    .waitFor({ timeout: 8000 })
+    .then(() => true)
+    .catch(() => false);
+  report.lobbyChat = { onB, quickOnA };
+  step(`lobby chat: A's line reached B ${onB}; B's ready-made «Hi, lads!» reached A ${quickOnA}`);
+}
 await A.page.screenshot({ path: `${outDir}/online_lobby_A.png` });
+// A is typing when B gets ready: the lobby redraws, the draft and the focus stay
+await A.page.getByTestId('room-chat-input').fill('half a thought');
 await B.page.getByRole('button', { name: /^Ready$/ }).click();
+await A.page.waitForTimeout(1200);
+report.chatDraftKept = await A.page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'room-chat-input' && document.activeElement.value === 'half a thought');
+step(`A's chat draft and focus survive the lobby redraw: ${report.chatDraftKept}`);
+await A.page.getByTestId('room-chat-input').fill('');
 await A.page.getByRole('button', { name: /^Start/ }).click();
 await Promise.all(
   [A, B].map((p) => p.page.waitForFunction(() => window.__blatkom?.game?.scene.getScene('game')?.session?.phase?.() === 'active', null, { timeout: 30000 })),
@@ -154,6 +179,34 @@ const state = (p) =>
     const screen = me ? { x: canvas.left + (me.x - cam.worldView.x) * cam.zoom * k, y: canvas.top + (me.y - cam.worldView.y) * cam.zoom * k } : null;
     return { phase: s.phase(), players, me, screen, hud: s.hud() };
   });
+
+// ── room chat over the match: Enter opens it, the keys typed don't move the player, Enter sends;
+// B sees the line in the overlay and a bubble over A ───────────────────────────────────────────────
+{
+  const before = await state(A);
+  await A.page.keyboard.press('Enter');
+  const opened = await A.page
+    .locator('[data-testid=room-chat-overlay].chatlay--open')
+    .waitFor({ timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+  const LINE2 = 'wasd on my way';
+  await A.page.keyboard.type(LINE2, { delay: 20 });
+  await A.page.waitForTimeout(300);
+  const during = await state(A);
+  await A.page.keyboard.press('Enter');
+  const onB = await B.page
+    .locator('[data-testid=room-chat-overlay-log] [data-testid=room-chat-line]', { hasText: LINE2 })
+    .waitFor({ timeout: 8000 })
+    .then(() => true)
+    .catch(() => false);
+  const bubble = await B.page.evaluate((slot) => window.__blatkom.game.scene.getScene('game').views.get(slot)?.bubble?.text ?? null, before.me.slot);
+  const closed = (await A.page.locator('[data-testid=room-chat-overlay].chatlay--open').count()) === 0;
+  const alive = before.me.alive && during.me.alive;
+  report.matchChat = { opened, stood: alive ? Math.hypot(during.me.x - before.me.x, during.me.y - before.me.y) < 1 : null, onB, bubble: bubble === LINE2, closed };
+  step(`match chat: ${JSON.stringify(report.matchChat)}`);
+  await B.page.screenshot({ path: `${outDir}/online_chat_B.png` });
+}
 
 const deviations = [];
 const held = { A: new Set(), B: new Set() };
@@ -235,6 +288,9 @@ report.assistsColumn = /\bAst\b/i.test(ra.head);
 report.resultsTable = ta.split('\n').map((l) => l.trim());
 step(`both clients show the results screen; tables identical: ${ta === tb}`);
 await A.page.getByText(/\+\d+ XP/).waitFor({ timeout: 15000 }).catch(() => problems.push('XP panel did not appear for A'));
+// the room chat goes on under the results with everything said in this room
+report.resultsChat = await A.page.locator('[data-testid=room-chat-panel] [data-testid=room-chat-line]').count();
+step(`results screen: the room chat with ${report.resultsChat} lines`);
 await Promise.all([A.page.screenshot({ path: `${outDir}/online_results_A.png` }), B.page.screenshot({ path: `${outDir}/online_results_B.png` })]);
 
 // ── persistence ───────────────────────────────────────────────────────────
@@ -293,6 +349,15 @@ const ok =
   report.equipment?.seenOnB === true &&
   report.equipment?.explodedOnB === true &&
   report.equipment?.chargesAfter === report.equipment?.chargesBefore - 1 &&
+  report.lobbyChat?.onB === true &&
+  report.lobbyChat?.quickOnA === true &&
+  report.chatDraftKept === true &&
+  report.matchChat?.opened === true &&
+  report.matchChat?.stood !== false &&
+  report.matchChat?.onB === true &&
+  report.matchChat?.bubble === true &&
+  report.matchChat?.closed === true &&
+  report.resultsChat >= 3 &&
   deviations.length > 0 &&
   (!adminUser || (report.adminLoggedIn === true && report.adminRoomsRussian === true));
 process.exit(ok ? 0 : 1);

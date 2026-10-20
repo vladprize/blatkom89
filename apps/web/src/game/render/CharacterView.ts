@@ -39,6 +39,9 @@ export class CharacterView {
   /** Weapon in hand (atlas «weapons», origin = grip). */
   private readonly gun: Phaser.GameObjects.Image;
   private readonly label: Phaser.GameObjects.Text;
+  /** Chat speech bubble (created on the first line) and when it goes away. */
+  private bubble: Phaser.GameObjects.Text | null = null;
+  private bubbleUntil = 0;
   /** Level badge left of the health bar (gold plate with the number). */
   private readonly levelTag: Phaser.GameObjects.Text;
   private readonly bar: Phaser.GameObjects.Graphics;
@@ -142,6 +145,7 @@ export class CharacterView {
     if (visible !== this.alive) {
       this.alive = visible;
       for (const o of [this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.setVisible(visible);
+      if (!visible) this.bubble?.setVisible(false);
       if (visible) this.playIdle();
     }
     if (p.team !== this.ringTeam) {
@@ -251,6 +255,11 @@ export class CharacterView {
     this.label.setVisible(!concealed);
     this.bar.setVisible(!concealed);
     if (concealed) this.levelTag.setVisible(false);
+    if (this.bubble) {
+      const left = this.bubbleUntil - now;
+      if (left <= 0) this.bubble.setVisible(false);
+      else this.bubble.setPosition(Math.round(p.x * 2) / 2, Math.round((p.y - 32) * 2) / 2).setAlpha(Math.min(1, left / 400)).setVisible(!concealed);
+    }
 
     // cigarette, cigar and pipe smoke for the smokers
     const off = SMOKERS[this.character];
@@ -262,8 +271,24 @@ export class CharacterView {
     }
   }
 
+  /** A chat line said by this player: a bubble over the name for a few seconds (long lines cut). */
+  say(text: string, now: number): void {
+    const cps = Array.from(text);
+    const shown = cps.length > 48 ? `${cps.slice(0, 46).join('').trimEnd()}…` : text;
+    if (!this.bubble) {
+      this.bubble = this.label.scene.add
+        .text(0, 0, '', { fontFamily: 'PT Sans Narrow, sans-serif', fontSize: '7px', color: '#1a1410', backgroundColor: '#e9dcbc', padding: { x: 2.5, y: 1 }, wordWrap: { width: 92, useAdvancedWrap: true }, align: 'center', resolution: 4 })
+        .setOrigin(0.5, 1)
+        .setDepth(D.LABEL + 0.02);
+    }
+    this.bubble.setText(shown).setVisible(this.alive);
+    this.bubble.setPosition(this.label.x, this.label.y - 10);
+    this.bubbleUntil = now + 4500;
+  }
+
   destroy(): void {
     for (const o of [this.ring, this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.destroy();
+    this.bubble?.destroy();
   }
 }
 
