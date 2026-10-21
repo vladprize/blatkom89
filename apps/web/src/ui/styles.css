@@ -558,6 +558,21 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .toptable .sorted { color: var(--beige); }
 }
 
+/* ── sheets (ui/sheet.ts): a bottom sheet on phones, a centred dialog on wide screens ──────────── */
+.sheetlay { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-end; justify-content: center; background: rgba(8,6,5,.74); padding: calc(10px + var(--safe-top)) calc(6px + var(--safe-right)) 0 calc(6px + var(--safe-left)); animation: sheetfade .15s ease-out; }
+.sheet { width: min(560px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px calc(12px + var(--safe-bottom)); border-bottom: 0; animation: sheetup .2s ease-out; }
+.sheet__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 34px; }
+.sheet__x { flex: none; width: 36px; height: 36px; display: grid; place-items: center; font: inherit; font-size: 18px; color: var(--beige); background: var(--panel-2); border: 1px solid var(--line); cursor: pointer; }
+.sheet__x:hover { border-color: var(--tape); }
+.sheet__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 10px; }
+.sheet__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.sheet__actions[hidden] { display: none; }
+.sheet__actions > .btn { flex: 1 1 0; min-width: 0; }
+@media (min-width: 761px) { .sheetlay { align-items: center; padding: 24px; } .sheet { border-bottom: 1px solid var(--line); max-height: min(760px, 100%); padding-bottom: 14px; } }
+@keyframes sheetup { from { transform: translateY(28px); opacity: .5; } }
+@keyframes sheetfade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .sheetlay, .sheet { animation: none; } }
+
 /* ── v0.23 weapon skins: the dressing room's picker, swatches, the skin case ── */
 .skinpick { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .skinpick .chiplabel { margin-right: 2px; }
