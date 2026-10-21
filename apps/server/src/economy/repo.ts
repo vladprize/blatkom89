@@ -168,13 +168,16 @@ export class EconomyRepo implements Economy {
       const inv = await this.load(tx, userId, wallet);
       const entry = drawCase(new Set(inv.weapons), rand());
       if (!entry) throw new EconomyError('collection_complete');
-      if (wallet.diamonds < CASE_PRICE) throw new EconomyError('funds');
+      const price = CASE_PRICE;
+      const balance = price.currency === 'tokens' ? wallet.tokens : wallet.diamonds;
+      if (inv.level < price.level) throw new EconomyError('level');
+      if (balance < price.amount) throw new EconomyError('funds');
       const [opening] = await tx<Array<{ id: string }>>`
-        INSERT INTO case_openings (user_id, kind, weapon_id, rarity, price) VALUES (${userId}, 'weapon', ${entry.weapon}, ${entry.rarity}, ${CASE_PRICE}) RETURNING id`;
-      await this.debit(tx, userId, 'diamonds', CASE_PRICE, wallet.diamonds, 'case', `case:${opening!.id}`);
+        INSERT INTO case_openings (user_id, kind, weapon_id, rarity, price, currency) VALUES (${userId}, 'weapon', ${entry.weapon}, ${entry.rarity}, ${price.amount}, ${price.currency}) RETURNING id`;
+      await this.debit(tx, userId, price.currency, price.amount, balance, 'case', `case:${opening!.id}`);
       await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${entry.weapon}, 'weapon', 'case') ON CONFLICT DO NOTHING`;
       this.log.info('case opened', { userId, weapon: entry.weapon, rarity: entry.rarity });
-      return { entry, inventory: await this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - CASE_PRICE }) };
+      return { entry, inventory: await this.load(tx, userId, { ...wallet, [price.currency]: balance - price.amount }) };
     });
   }
 
@@ -188,11 +191,14 @@ export class EconomyRepo implements Economy {
       const inv = await this.load(tx, userId, wallet);
       const drop = drawSkin(new Set(inv.skins), rand);
       if (!drop) throw new EconomyError('collection_complete');
-      if (wallet.diamonds < SKIN_CASE_PRICE) throw new EconomyError('funds');
+      const price = SKIN_CASE_PRICE;
+      const balance = price.currency === 'tokens' ? wallet.tokens : wallet.diamonds;
+      if (inv.level < price.level) throw new EconomyError('level');
+      if (balance < price.amount) throw new EconomyError('funds');
       const [opening] = await tx<Array<{ id: string }>>`
-        INSERT INTO case_openings (user_id, kind, weapon_id, finish_id, rarity, price)
-        VALUES (${userId}, 'skin', ${drop.weapon}, ${drop.finish}, ${drop.rarity}, ${SKIN_CASE_PRICE}) RETURNING id`;
-      await this.debit(tx, userId, 'diamonds', SKIN_CASE_PRICE, wallet.diamonds, 'case', `skincase:${opening!.id}`);
+        INSERT INTO case_openings (user_id, kind, weapon_id, finish_id, rarity, price, currency)
+        VALUES (${userId}, 'skin', ${drop.weapon}, ${drop.finish}, ${drop.rarity}, ${price.amount}, ${price.currency}) RETURNING id`;
+      await this.debit(tx, userId, price.currency, price.amount, balance, 'case', `skincase:${opening!.id}`);
       await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${skinId(drop.weapon, drop.finish)}, 'skin', 'case') ON CONFLICT DO NOTHING`;
       const l = inv.loadout;
       const equipped = !l.skins?.[drop.weapon];
@@ -202,7 +208,7 @@ export class EconomyRepo implements Economy {
         await tx`UPDATE profiles SET loadout = ${tx.json(loadout as postgres.JSONValue)}, updated_at = now() WHERE user_id = ${userId}`;
       }
       this.log.info('skin case opened', { userId, weapon: drop.weapon, finish: drop.finish, rarity: drop.rarity });
-      return { drop, equipped, inventory: await this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - SKIN_CASE_PRICE, loadout }) };
+      return { drop, equipped, inventory: await this.load(tx, userId, { ...wallet, [price.currency]: balance - price.amount, loadout }) };
     });
   }
 

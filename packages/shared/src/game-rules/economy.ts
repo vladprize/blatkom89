@@ -1,18 +1,23 @@
 /**
  * In-game economy (configuration + pure rules; the server is the only authority that persists it).
  *
+ * v0.24: the game is free — nothing is sold for money (REAL_MONEY = false, the owner's decision).
  *  - Tokens (shown in the game as «talons») are earned by playing online matches and are never sold.
- *  - Diamonds are bought for real money (100 💎 = $1) or granted by an administrator.
+ *    Everything in the shop is unlocked with talons and experience (a level requirement).
  *  - Free for everyone: two characters (the rooster and the panther), a full kit of three weapons
  *    (Makarov, crowbar, AK-47) and the F-1 grenade.
- *  - Characters: six for tokens from a level, six for diamonds ($1.99–4.99).
- *  - Shop weapons are sidegrades (see weapons.ts): 4 for tokens, 5 for tokens from a level, 10 for
- *    diamonds ($1.99–4.99) — a few more for diamonds than for tokens. Rare weapons come only from
- *    cases ($2.99), never as duplicates.
+ *  - Characters: 22 for talons from level 1 to level 26 (the eleven that were sold for diamonds until
+ *    v0.24 now close the ladder, levels 16–26).
+ *  - Shop weapons are sidegrades (see weapons.ts): 19 for talons, most of them from a level. Rare
+ *    weapons and weapon skins come from cases bought with talons (no money in them), never as
+ *    duplicates, with the odds shown.
+ *  - Diamonds (100 💎 = $1) and the payment code stay for a later Telegram Stars shop: with
+ *    REAL_MONEY off the server sells no packs and no item has a diamond price; an administrator can
+ *    still grant diamonds, they just buy nothing.
  *  - Until v0.23 the wolf, the bear and the sawn-off were free: accounts made before then keep them
  *    (migration 009).
  *  - Modifications (silencer, sights, laser, grip, magazine) and equipment (grenades, mines, C4,
- *    turret) cost tokens only: nothing that changes a fight is sold for money.
+ *    turret) cost tokens only.
  */
 import { WEAPONS, WEAPON_IDS, modsFor } from './weapons.js';
 import type { ModId, WeaponId } from './weapons.js';
@@ -32,34 +37,36 @@ export interface ShopPrice {
   level: number;
 }
 
+/** Real-money sales (diamond packs and diamond prices). Off since v0.24: the game is free. */
+export const REAL_MONEY: boolean = false;
+
 /** 100 diamonds = 1 US dollar. */
 export const DIAMONDS_PER_USD = 100;
 
 export const FREE_WEAPONS: readonly WeaponId[] = WEAPON_IDS.filter((w) => WEAPONS[w].tier === 'base');
 
 export const WEAPON_PRICES: Readonly<Partial<Record<WeaponId, ShopPrice>>> = {
-  // four for tokens (the first one after about three matches)
+  // four for talons from the start (the first one after about three matches)
   obrez: { currency: 'tokens', amount: 100, level: 1 },
   nozh: { currency: 'tokens', amount: 120, level: 1 },
   tt: { currency: 'tokens', amount: 150, level: 1 },
   uzi: { currency: 'tokens', amount: 200, level: 1 },
-  // five for tokens from a level
+  // fifteen up the ladder (v0.24: the ten that were sold for diamonds are in it now)
   p92: { currency: 'tokens', amount: 250, level: 3 },
+  deagle: { currency: 'tokens', amount: 300, level: 4 },
   bita: { currency: 'tokens', amount: 300, level: 5 },
+  topor: { currency: 'tokens', amount: 350, level: 6 },
   ksyuha: { currency: 'tokens', amount: 400, level: 7 },
+  mp5: { currency: 'tokens', amount: 450, level: 8 },
+  s12: { currency: 'tokens', amount: 500, level: 9 },
   ppsh: { currency: 'tokens', amount: 500, level: 10 },
+  m4: { currency: 'tokens', amount: 550, level: 11 },
+  g36: { currency: 'tokens', amount: 600, level: 12 },
   m24: { currency: 'tokens', amount: 650, level: 13 },
-  // ten for diamonds: $1.99 – $4.99
-  deagle: { currency: 'diamonds', amount: 199, level: 1 },
-  topor: { currency: 'diamonds', amount: 199, level: 1 },
-  mp5: { currency: 'diamonds', amount: 299, level: 1 },
-  s12: { currency: 'diamonds', amount: 299, level: 1 },
-  m4: { currency: 'diamonds', amount: 399, level: 1 },
-  g36: { currency: 'diamonds', amount: 399, level: 1 },
-  m249: { currency: 'diamonds', amount: 399, level: 1 },
-  svd: { currency: 'diamonds', amount: 499, level: 1 },
-  awm: { currency: 'diamonds', amount: 499, level: 1 },
-  rpg: { currency: 'diamonds', amount: 499, level: 1 },
+  m249: { currency: 'tokens', amount: 700, level: 14 },
+  svd: { currency: 'tokens', amount: 800, level: 15 },
+  awm: { currency: 'tokens', amount: 900, level: 17 },
+  rpg: { currency: 'tokens', amount: 1000, level: 19 },
 };
 
 export const CHARACTER_PRICES: Readonly<Partial<Record<CharacterId, ShopPrice>>> = {
@@ -76,18 +83,18 @@ export const CHARACTER_PRICES: Readonly<Partial<Record<CharacterId, ShopPrice>>>
   krysa: { currency: 'tokens', amount: 1000, level: 12 },
   svinya: { currency: 'tokens', amount: 1100, level: 13 },
   buyvol: { currency: 'tokens', amount: 1250, level: 15 },
-  // for diamonds
-  piranya: { currency: 'diamonds', amount: 199, level: 1 },
-  leopard: { currency: 'diamonds', amount: 299, level: 1 },
-  lobster: { currency: 'diamonds', amount: 299, level: 1 },
-  akula: { currency: 'diamonds', amount: 399, level: 1 },
-  oryol: { currency: 'diamonds', amount: 399, level: 1 },
-  slon: { currency: 'diamonds', amount: 499, level: 1 },
-  koshka: { currency: 'diamonds', amount: 299, level: 1 },
-  lisa: { currency: 'diamonds', amount: 399, level: 1 },
-  nosorog: { currency: 'diamonds', amount: 399, level: 1 },
-  gorilla: { currency: 'diamonds', amount: 499, level: 1 },
-  lev: { currency: 'diamonds', amount: 499, level: 1 },
+  // v0.24: the eleven that were sold for diamonds close the ladder
+  piranya: { currency: 'tokens', amount: 1300, level: 16 },
+  koshka: { currency: 'tokens', amount: 1350, level: 17 },
+  leopard: { currency: 'tokens', amount: 1400, level: 18 },
+  lobster: { currency: 'tokens', amount: 1450, level: 19 },
+  akula: { currency: 'tokens', amount: 1500, level: 20 },
+  lisa: { currency: 'tokens', amount: 1600, level: 21 },
+  oryol: { currency: 'tokens', amount: 1700, level: 22 },
+  nosorog: { currency: 'tokens', amount: 1800, level: 23 },
+  slon: { currency: 'tokens', amount: 1900, level: 24 },
+  gorilla: { currency: 'tokens', amount: 2000, level: 25 },
+  lev: { currency: 'tokens', amount: 2200, level: 26 },
 };
 
 /** Equipment: the F-1 is free; the rest is bought once with tokens (some from a level). */
@@ -112,8 +119,8 @@ export interface CaseEntry {
   chance: number;
 }
 
-/** Price of one case in diamonds ($2.99). */
-export const CASE_PRICE = 299;
+/** Price of one rare-weapon case (v0.24: talons — there is no money in it). */
+export const CASE_PRICE: ShopPrice = { currency: 'tokens', amount: 600, level: 1 };
 export const CASE_TABLE: readonly CaseEntry[] = [
   { weapon: 'mauser', rarity: 'rare', chance: 12 },
   { weapon: 'kuvalda', rarity: 'rare', chance: 12 },

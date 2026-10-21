@@ -68,7 +68,8 @@ describe('funnel and economy metrics (deterministic data)', () => {
       (${uid.a!}, 'nozh', 'weapon', 'tokens', ${new Date('2026-04-03T11:10:00Z')}),
       (${uid.b!}, 'mauser', 'weapon', 'case', ${new Date('2026-04-04T08:01:00Z')})`;
     await db.sql`INSERT INTO weapon_mods (user_id, weapon_id, mod_id, acquired_at) VALUES (${uid.a!}, 'avtomat', 'silencer', ${new Date('2026-04-03T11:12:00Z')})`;
-    await db.sql`INSERT INTO case_openings (user_id, weapon_id, rarity, price, created_at) VALUES (${uid.b!}, 'mauser', 'rare', 299, ${new Date('2026-04-04T08:01:00Z')})`;
+    // an opening paid in diamonds (before v0.24); talon openings don't count as diamonds spent
+    await db.sql`INSERT INTO case_openings (user_id, weapon_id, rarity, price, currency, created_at) VALUES (${uid.b!}, 'mauser', 'rare', 299, 'diamonds', ${new Date('2026-04-04T08:01:00Z')})`;
     const pay = (u: string, status: string, cents: number, created: string, paid: string | null, provider = 'stripe') =>
       db.sql`INSERT INTO payments (user_id, provider, provider_ref, pack_id, diamonds, amount_cents, status, created_at, paid_at)
              VALUES (${uid[u]!}, ${provider}, ${randomUUID()}, 'd499', 499, ${cents}, ${status}, ${new Date(created)}, ${paid ? new Date(paid) : null})`;

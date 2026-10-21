@@ -4,6 +4,7 @@
  * or to sign in to an account that already has one — or to carry on as a guest (asked again a day
  * later). Inside Telegram the account is the Telegram account, so nothing is asked there.
  */
+import { REAL_MONEY } from '@blatkom/shared';
 import type { OnlineClient } from '../../net/OnlineClient.js';
 import { h, toast } from '../dom.js';
 import { t } from '../../i18n/index.js';
@@ -46,7 +47,8 @@ export function openWelcome(root: HTMLElement, online: OnlineClient, onDone: (o:
     btn.setAttribute('disabled', '');
     try {
       await online.linkEmail(email.value.trim(), pass.value);
-      toast(t('Account created — progress and purchases are tied to {email}', { email: online.profile?.email ?? email.value.trim() }));
+      const tied = online.profile?.email ?? email.value.trim();
+      toast(REAL_MONEY ? t('Account created — progress and purchases are tied to {email}', { email: tied }) : t('Account created — your progress is tied to {email}', { email: tied }));
       close('linked');
     } catch (e) {
       toast(apiErrorText(e));
@@ -64,7 +66,13 @@ export function openWelcome(root: HTMLElement, online: OnlineClient, onDone: (o:
       { class: 'panel modal col welcome' },
       h('span', { class: 'tag' }, t('Account')),
       h('div', { class: 'h2', style: 'margin-top:8px' }, t('Keep your progress')),
-      h('div', { class: 'muted' }, t('Register an email: your level, talons, diamonds and everything you buy stay with you on any device. As a guest, the account lives only in this browser.')),
+      h(
+        'div',
+        { class: 'muted' },
+        REAL_MONEY
+          ? t('Register an email: your level, talons, diamonds and everything you buy stay with you on any device. As a guest, the account lives only in this browser.')
+          : t('Register an email: your level, talons and everything you unlock stay with you on any device. As a guest, the account lives only in this browser.'),
+      ),
       email,
       pass,
       pass2,

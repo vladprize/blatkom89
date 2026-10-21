@@ -3,6 +3,7 @@
  * survive a new phone or a cleared browser), sign in by email on another device, change or reset
  * the password.
  */
+import { REAL_MONEY } from '@blatkom/shared';
 import { h, toast } from '../dom.js';
 import type { OnlineClient } from '../../net/OnlineClient.js';
 import { t } from '../../i18n/index.js';
@@ -44,7 +45,7 @@ export function renderAccountPanel(online: OnlineClient, o: { root: HTMLElement;
     );
     panel.append(
       h('div', { style: 'margin-top:8px' }, t('Email:'), ' ', h('b', null, p.email)),
-      h('div', { class: 'muted' }, t('With this email and password the account opens on any device — progress and purchases stay on the books.')),
+      h('div', { class: 'muted' }, REAL_MONEY ? t('With this email and password the account opens on any device — progress and purchases stay on the books.') : t('With this email and password the account opens on any device — your progress stays on the books.')),
       h('div', { class: 'row' }, h('button', { class: 'btn btn--small', onclick: () => form.classList.toggle('hidden') }, t('Change password')), h('button', { class: 'btn btn--small btn--ghost', onclick: () => openEmailLogin(o.root, online, { onDone: o.onChanged }) }, t('Sign in to another account'))),
       form,
     );
@@ -54,7 +55,7 @@ export function renderAccountPanel(online: OnlineClient, o: { root: HTMLElement;
   const pass = field('password', t('Password (8+ characters)'), 'new-password');
   const pass2 = field('password', t('Password again'), 'new-password');
   panel.append(
-    h('div', { style: 'margin-top:8px' }, t('Register an email so the account doesn’t go missing: without it, progress and purchases live only in this browser.')),
+    h('div', { style: 'margin-top:8px' }, REAL_MONEY ? t('Register an email so the account doesn’t go missing: without it, progress and purchases live only in this browser.') : t('Register an email so the account doesn’t go missing: without it, your progress lives only in this browser.')),
     email,
     pass,
     pass2,

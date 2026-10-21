@@ -18,11 +18,11 @@ const NEW = [
   ['krysa', 'Sery', 'talons'],
   ['svinya', 'Borka', 'talons'],
   ['buyvol', 'Bugai', 'talons'],
-  ['koshka', 'Murka', 'diamonds'],
-  ['lisa', 'Alisa', 'diamonds'],
-  ['nosorog', 'Rogov', 'diamonds'],
-  ['gorilla', 'Samson', 'diamonds'],
-  ['lev', 'Arkadich', 'diamonds'],
+  ['koshka', 'Murka', 'talons'],
+  ['lisa', 'Alisa', 'talons'],
+  ['nosorog', 'Rogov', 'talons'],
+  ['gorilla', 'Samson', 'talons'],
+  ['lev', 'Arkadich', 'talons'],
 ];
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const problems = [];
@@ -86,7 +86,7 @@ try {
     if (ok) files++;
     else console.log(`  ${id}: locked ${locked}, file: ${text.replace(/\s+/g, ' ').slice(0, 160)}`);
   }
-  check(files === NEW.length, `the ten new characters have personal files with the art, locked, priced in talons or diamonds (${files}/10)`);
+  check(files === NEW.length, `the ten new characters have personal files with the art, locked, priced in talons (v0.24: all of them) (${files}/10)`);
   await page.screenshot({ path: `${outDir}/roster_dossier.png` });
 
   // try the last one (Arkadich) in practice

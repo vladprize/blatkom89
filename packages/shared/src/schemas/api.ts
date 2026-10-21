@@ -97,7 +97,8 @@ export const LoadoutRequest = z
   })
   .strict();
 /** Opening a paid case requires an explicit adult confirmation (see docs/ECONOMY.md). */
-export const CaseOpenRequest = z.object({ confirmAge: z.literal(true) }).strict();
+/** `confirmAge` is required only while a case costs real money (diamonds); talon cases need none. */
+export const CaseOpenRequest = z.object({ confirmAge: z.literal(true).optional() }).strict();
 export const CheckoutRequest = z.object({ packId: z.string().regex(/^[a-z0-9]{2,16}$/), method: z.enum(['card', 'crypto']) }).strict();
 
 /** GET /api/shop/config — which payment methods are configured on this server. */

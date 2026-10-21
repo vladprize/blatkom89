@@ -134,10 +134,10 @@ export async function economy(sql: Sql, r: AdminRange, now = new Date()): Promis
     SELECT mod_id AS id, count(*)::int AS count FROM weapon_mods
     WHERE acquired_at BETWEEN ${from} AND ${to} GROUP BY mod_id ORDER BY count DESC, mod_id`;
   const cases = await sql<Array<{ rarity: string; count: number; spent: number }>>`
-    SELECT rarity, count(*)::int AS count, sum(price)::int AS spent FROM case_openings
+    SELECT rarity, count(*)::int AS count, COALESCE(sum(price) FILTER (WHERE currency = 'diamonds'), 0)::int AS spent FROM case_openings
     WHERE created_at BETWEEN ${from} AND ${to} GROUP BY rarity ORDER BY count DESC, rarity`;
   const caseKinds = await sql<Array<{ kind: string; count: number; spent: number }>>`
-    SELECT kind, count(*)::int AS count, sum(price)::int AS spent FROM case_openings
+    SELECT kind, count(*)::int AS count, COALESCE(sum(price) FILTER (WHERE currency = 'diamonds'), 0)::int AS spent FROM case_openings
     WHERE created_at BETWEEN ${from} AND ${to} GROUP BY kind ORDER BY kind`;
   const daily = await sql<Array<{ day: string; ti: number; ts: number; di: number; ds: number; rev: number }>>`
     WITH l AS (

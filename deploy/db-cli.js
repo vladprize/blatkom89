@@ -2912,28 +2912,27 @@ var DEFAULT_LOADOUT = Object.freeze({ sidearm: "pistol", melee: "montirovka", pr
 // packages/shared/src/game-rules/economy.ts
 var FREE_WEAPONS = WEAPON_IDS.filter((w) => WEAPONS[w].tier === "base");
 var WEAPON_PRICES = {
-  // four for tokens (the first one after about three matches)
+  // four for talons from the start (the first one after about three matches)
   obrez: { currency: "tokens", amount: 100, level: 1 },
   nozh: { currency: "tokens", amount: 120, level: 1 },
   tt: { currency: "tokens", amount: 150, level: 1 },
   uzi: { currency: "tokens", amount: 200, level: 1 },
-  // five for tokens from a level
+  // fifteen up the ladder (v0.24: the ten that were sold for diamonds are in it now)
   p92: { currency: "tokens", amount: 250, level: 3 },
+  deagle: { currency: "tokens", amount: 300, level: 4 },
   bita: { currency: "tokens", amount: 300, level: 5 },
+  topor: { currency: "tokens", amount: 350, level: 6 },
   ksyuha: { currency: "tokens", amount: 400, level: 7 },
+  mp5: { currency: "tokens", amount: 450, level: 8 },
+  s12: { currency: "tokens", amount: 500, level: 9 },
   ppsh: { currency: "tokens", amount: 500, level: 10 },
+  m4: { currency: "tokens", amount: 550, level: 11 },
+  g36: { currency: "tokens", amount: 600, level: 12 },
   m24: { currency: "tokens", amount: 650, level: 13 },
-  // ten for diamonds: $1.99 – $4.99
-  deagle: { currency: "diamonds", amount: 199, level: 1 },
-  topor: { currency: "diamonds", amount: 199, level: 1 },
-  mp5: { currency: "diamonds", amount: 299, level: 1 },
-  s12: { currency: "diamonds", amount: 299, level: 1 },
-  m4: { currency: "diamonds", amount: 399, level: 1 },
-  g36: { currency: "diamonds", amount: 399, level: 1 },
-  m249: { currency: "diamonds", amount: 399, level: 1 },
-  svd: { currency: "diamonds", amount: 499, level: 1 },
-  awm: { currency: "diamonds", amount: 499, level: 1 },
-  rpg: { currency: "diamonds", amount: 499, level: 1 }
+  m249: { currency: "tokens", amount: 700, level: 14 },
+  svd: { currency: "tokens", amount: 800, level: 15 },
+  awm: { currency: "tokens", amount: 900, level: 17 },
+  rpg: { currency: "tokens", amount: 1e3, level: 19 }
 };
 var CHARACTER_PRICES = {
   // for experience (level) + tokens
@@ -2949,18 +2948,18 @@ var CHARACTER_PRICES = {
   krysa: { currency: "tokens", amount: 1e3, level: 12 },
   svinya: { currency: "tokens", amount: 1100, level: 13 },
   buyvol: { currency: "tokens", amount: 1250, level: 15 },
-  // for diamonds
-  piranya: { currency: "diamonds", amount: 199, level: 1 },
-  leopard: { currency: "diamonds", amount: 299, level: 1 },
-  lobster: { currency: "diamonds", amount: 299, level: 1 },
-  akula: { currency: "diamonds", amount: 399, level: 1 },
-  oryol: { currency: "diamonds", amount: 399, level: 1 },
-  slon: { currency: "diamonds", amount: 499, level: 1 },
-  koshka: { currency: "diamonds", amount: 299, level: 1 },
-  lisa: { currency: "diamonds", amount: 399, level: 1 },
-  nosorog: { currency: "diamonds", amount: 399, level: 1 },
-  gorilla: { currency: "diamonds", amount: 499, level: 1 },
-  lev: { currency: "diamonds", amount: 499, level: 1 }
+  // v0.24: the eleven that were sold for diamonds close the ladder
+  piranya: { currency: "tokens", amount: 1300, level: 16 },
+  koshka: { currency: "tokens", amount: 1350, level: 17 },
+  leopard: { currency: "tokens", amount: 1400, level: 18 },
+  lobster: { currency: "tokens", amount: 1450, level: 19 },
+  akula: { currency: "tokens", amount: 1500, level: 20 },
+  lisa: { currency: "tokens", amount: 1600, level: 21 },
+  oryol: { currency: "tokens", amount: 1700, level: 22 },
+  nosorog: { currency: "tokens", amount: 1800, level: 23 },
+  slon: { currency: "tokens", amount: 1900, level: 24 },
+  gorilla: { currency: "tokens", amount: 2e3, level: 25 },
+  lev: { currency: "tokens", amount: 2200, level: 26 }
 };
 var GADGET_PRICES = {
   smoke: { currency: "tokens", amount: 100, level: 1 },
@@ -7420,7 +7419,7 @@ var LoadoutRequest = external_exports.object({
   /** Equipped skins per weapon (validated against ownership). */
   skins: external_exports.record(external_exports.enum(WEAPON_IDS), external_exports.enum(FINISH_IDS)).optional()
 }).strict();
-var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true) }).strict();
+var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true).optional() }).strict();
 var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card", "crypto"]) }).strict();
 var UpdateProfileRequest = external_exports.object({
   displayName: displayNameSchema.optional(),

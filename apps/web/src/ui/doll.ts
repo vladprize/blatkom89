@@ -75,6 +75,12 @@ export class Doll {
     this.raf = 0;
   }
 
+  /** Restarts the animation after the canvas was off the page for a while (phones move it between screens). */
+  wake(): void {
+    this.detachedSince = 0;
+    if (!this.raf) this.raf = requestAnimationFrame(this.loop);
+  }
+
   private loop(now: number) {
     // the dressing room may be re-rendered: stop once the canvas has left the page
     if (!this.el.isConnected && now > 2000 && this.raf) {

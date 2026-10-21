@@ -865,3 +865,176 @@ button.chatline__name:hover { text-decoration: underline; }
 .chatlay__btn { position: fixed; pointer-events: auto; display: grid; place-items: center; padding: 0; background: rgba(20,17,14,.7); border: 1px solid rgba(217,199,163,.5); cursor: pointer; }
 .chatlay__btn i { display: block; width: 56%; height: 46%; background: var(--tape); clip-path: polygon(0 0, 100% 0, 100% 74%, 48% 74%, 22% 100%, 26% 74%, 0 74%); }
 .chatlay--open .chatlay__btn { border-color: var(--tape); background: rgba(58,49,40,.9); }
+
+/* ── the Arsenal without real money (v0.24): two-column dressing room, a note in the wallet ── */
+.dressing__grid--two { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); }
+.wallet__note { font-size: 14px; }
+
+/* ── the Arsenal on phones (≤ 560 px wide, ui/screens/shop.ts): the wallet and «Экипировка | Магазин»
+   on top, every tab on one screen, details in bottom sheets (owner's mobile pass) ── */
+.arsmodes, .arschips { display: none; }
+@media (max-width: 560px) {
+  .wrap--arsenal { gap: 8px; }
+  .wrap--arsenal .topbar .h1 { font-size: 24px; }
+  .arsenal--phone { gap: 8px; }
+  .arsenal--phone > .col { gap: 8px; }
+  /* wallet: talons (and diamonds when sold) in one line */
+  .arsenal--phone .wallet { flex-wrap: nowrap; gap: 8px; min-height: 34px; }
+  .arsenal--phone .coin { padding: 4px 9px; font-size: 17px; white-space: nowrap; flex: none; }
+  .arsenal--phone .coin span { font-size: 11px; letter-spacing: .03em; }
+  .arsenal--phone .wallet .btn { margin-left: auto; flex: none; min-height: 34px; padding: 6px 12px; font-size: 13px; }
+  .arsenal--phone .wallet__note { font-size: 13px; line-height: 1.15; min-width: 0; }
+  .arsenal--phone .wallet > .muted:only-child { font-size: 13px; line-height: 1.25; }
+  /* the two halves and the shop's departments */
+  .arsmodes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .arsmodes button { min-height: 42px; padding: 6px 8px; font-size: 16px; letter-spacing: .08em; }
+  .arschips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-top: -2px; }
+  .arschips--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .arschips[hidden] { display: none; }
+  .arschips button { min-height: 32px; padding: 4px 2px; font-size: 12px; letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: transparent; }
+  .arschips button[aria-pressed='true'] { background: #3a3128; border-color: var(--tape); color: #fff4e4; }
+  .arsnote { font-size: 12.5px; line-height: 1.25; }
+
+  /* «Экипировка»: the dressing room (in-game view + what's in hand) and the four slots */
+  .kit { display: flex; flex-direction: column; gap: 14px; }
+  .kitcard { display: grid; grid-template-columns: 128px minmax(0, 1fr); grid-template-areas: 'doll info' 'acts acts'; gap: 8px 10px; padding: 16px 10px 10px; }
+  .kitcard.dressing--flash { animation: dressflash .8s ease-out; }
+  .kitcard__doll { grid-area: doll; position: relative; line-height: 0; border: 1px solid var(--line); align-self: start; box-shadow: 0 3px 0 rgba(0,0,0,.4); }
+  .kitcard__doll .dressing__label { font-size: 10px; padding: 2px 6px 1px; }
+  .kitcard__fire { position: absolute; right: 4px; bottom: 4px; font-family: Oswald, sans-serif; font-weight: 600; font-size: 12px; line-height: 1.1; text-transform: uppercase; letter-spacing: .05em; color: #fff4e4; background: rgba(200,49,42,.92); border: 1px solid #e0483c; padding: 4px 8px; cursor: pointer; }
+  .kitcard__info { grid-area: info; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .kitcard__who { display: flex; align-items: center; gap: 6px; padding: 2px 6px 2px 2px; background: var(--panel-2); border: 1px solid var(--line); color: var(--beige); cursor: pointer; font: inherit; text-align: left; min-width: 0; }
+  .kitcard__who img { width: 28px; height: 28px; image-rendering: pixelated; flex: none; }
+  .kitcard__whotxt { display: flex; flex-direction: column; min-width: 0; line-height: 1.1; }
+  .kitcard__whotxt b { font-family: Oswald, sans-serif; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kitcard__whotxt small { font-family: Oswald, sans-serif; font-size: 10px; color: #ff7a6a; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kitcard__who i { margin-left: auto; font-style: normal; color: var(--muted); font-size: 18px; line-height: 1; }
+  .kitcard__name { font-family: Oswald, sans-serif; font-weight: 700; font-size: 20px; line-height: 1.05; text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; overflow-wrap: anywhere; }
+  .kitcard__meta { font-size: 13px; line-height: 1.2; color: var(--muted); }
+  .kitcard__try { margin-top: auto; min-height: 34px; padding: 6px 8px; font-size: 12px; line-height: 1.1; }
+  .kitcard__acts { grid-area: acts; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .kitcard__acts .btn { min-height: 36px; padding: 6px; font-size: 13px; }
+  .kitslots { display: flex; flex-direction: column; gap: 5px; padding: 16px 8px 8px; }
+  .kitslot { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+  .kitslot__main { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 46px; padding: 4px 8px; background: var(--panel-2); border: 1px solid var(--line); color: var(--beige); font: inherit; text-align: left; cursor: pointer; }
+  .kitslot.on .kitslot__main { border-color: var(--red); box-shadow: 0 0 0 1px rgba(200,49,42,.5); }
+  .kitslot__pic { flex: none; width: 72px; display: grid; place-items: center; }
+  .kitslot__pic .wimg--small { width: 72px; }
+  .kitslot__pic .none { font-size: 20px; color: var(--muted); }
+  .kitslot__txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+  .kitslot__txt b { font-family: Oswald, sans-serif; font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kitslot__txt small { font-size: 12px; color: var(--muted); }
+  .kitslot__change { min-height: 0; padding: 6px 10px; font-size: 12px; }
+
+  /* «Магазин»: grids of the shop's items */
+  .shoptab { display: flex; flex-direction: column; gap: 8px; }
+  .arsseg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .arsseg button { min-height: 32px; padding: 4px; font-size: 12px; display: flex; gap: 5px; align-items: center; justify-content: center; white-space: nowrap; }
+  .arsseg small { font-family: 'PT Sans Narrow', sans-serif; font-size: 11px; opacity: .75; }
+  .shopgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+  .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; min-height: 72px; padding: 6px 3px 5px; background: var(--panel-2); border: 1px solid var(--line); color: var(--beige); font: inherit; text-align: center; cursor: pointer; }
+  .cell:active { transform: translateY(1px); }
+  .cell .wimg--small { width: 100%; max-width: 72px; }
+  .cell__name { font-family: Oswald, sans-serif; font-size: 11px; line-height: 1.1; text-transform: uppercase; letter-spacing: .02em; max-width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .cell__own { font-family: Oswald, sans-serif; font-size: 10.5px; color: #9fd08a; text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .cell .wbtn__price { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .cell .wbtn__price small { font-size: 10px; }
+  .cell--mine { border-color: #4e6a3e; }
+  .charshop { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+  .cell--char { min-height: 0; padding: 3px 2px 4px; gap: 2px; justify-content: flex-start; }
+  .cell--char img { width: 100%; height: auto; aspect-ratio: 1 / 1; image-rendering: pixelated; display: block; }
+  .cell--char .cell__name { font-size: 10px; -webkit-line-clamp: 1; }
+  .cell--char .wbtn__price { font-size: 10px; }
+  .cell--char .wbtn__price small { display: none; }
+  /* cases: two compact cards, the odds in sheets */
+  .arscases { gap: 16px; }
+  .casecard { display: flex; flex-direction: column; gap: 8px; padding: 18px 10px 10px; }
+  .casecard__row { display: flex; gap: 10px; align-items: center; }
+  .casecard .crate { width: 56px; height: 44px; }
+  .casecard__txt { gap: 2px; min-width: 0; }
+  .casecard__txt b { font-family: Oswald, sans-serif; font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: .03em; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .casecard__txt .muted { font-size: 13px; line-height: 1.2; }
+  .casecard__acts { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+  .casecard__acts .btn { min-height: 40px; padding: 8px 10px; font-size: 14px; }
+  .casecard__acts .badge { justify-self: start; }
+  /* diamonds (only when sold): one line per pack */
+  .packrows { display: flex; flex-direction: column; gap: 6px; }
+  .packrow { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); }
+  .packrow__amt { font-family: Oswald, sans-serif; font-size: 18px; min-width: 76px; }
+  .packrow__usd { font-family: Oswald, sans-serif; font-size: 15px; color: var(--muted); margin-right: auto; }
+  .packrow .btn { min-height: 34px; padding: 6px 10px; font-size: 12px; }
+
+  /* the Arsenal's sheets */
+  .sheet--ars .modhead { display: none; }
+  .sheet--ars .modrow { grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; padding: 6px 0; }
+  .sheet--ars .modrow .micon { width: 48px; height: 24px; padding: 0; }
+  .sheet--ars .modrow b { font-size: 14px; }
+  .sheet--ars .modrow .muted { font-size: 12px; }
+  .sheet--ars .modrow .plus, .sheet--ars .modrow .minus { font-size: 12.5px; line-height: 1.15; }
+  .sheet--ars .modrow .acts { grid-column: auto; flex-direction: column; align-items: stretch; gap: 4px; }
+  .sheet--ars .modrow .acts .btn { min-height: 30px; padding: 4px 8px; font-size: 12px; }
+  /* phones: a modification is tried on by fitting it (the kit's dressing room shows it) */
+  .sheet--ars .modrow [data-try] { display: none; }
+  .sheet--ars .modrow .col { gap: 1px !important; }
+  .sheet--ars .modrow .badge { margin-left: 4px !important; }
+  .sheet--ars .wstats { gap: 2px; }
+  .sheet--ars .wstat { grid-template-columns: 82px minmax(0, 1fr) 64px; gap: 6px; font-size: 12px; }
+  .sheet--ars .wstat span { font-size: 11px; }
+  .sheet--ars .wstat b { font-size: 12px; }
+  .sheet--ars .wstats > .muted { font-size: 12px !important; line-height: 1.2; }
+  .sheet--ars .modfit { font-size: 12px; gap: 4px; }
+  .sheet--ars .modfit .chip { padding: 1px 4px; }
+  .sheet--ars .table td, .sheet--ars .table th { padding: 4px 6px; font-size: 13px; }
+  .sheet--ars .table .wimg--small { width: 56px; }
+  .sheet--ars .reveal { padding: 0; gap: 8px; }
+  .sheet--ars .reveal .h1 { font-size: 24px; }
+  .sheet--ars .reveal .wpic--big { height: 96px; }
+  .sheet--ars .reveal .wpic--big .wimg { width: 252px; }
+  .slotsheet__list { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+  .slotopt { flex-direction: row; justify-content: flex-start; gap: 8px; min-height: 48px; padding: 4px 8px; text-align: left; }
+  .slotopt .wimg--small { width: 60px; }
+  .slotopt .none { width: 60px; text-align: center; }
+  .slotopt > span:last-child { font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .skinsheet__pic { height: 64px; margin: 0; }
+  .skinsheet__pic .wimg--big { width: 192px; }
+  .itemsheet { gap: 8px; }
+  .itemsheet__top { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 10px; align-items: start; }
+  .itemsheet__top .kitcard__doll { grid-area: auto; }
+  .itemsheet__tags { gap: 6px; }
+  .itemsheet__blurb { font-size: 13px; line-height: 1.25; }
+  .itemsheet .wpic { height: 64px; margin: 0; }
+  .itemsheet .facts { font-size: 13px; }
+  .itemacts { display: flex; gap: 6px; width: 100%; align-items: center; }
+  .itemacts > * { flex: 1 1 0; min-width: 0; }
+  .itemacts > .badge { flex: 0 1 auto; text-align: center; }
+  .itemacts .btn { min-height: 42px; padding: 6px 8px; font-size: 13px; line-height: 1.1; white-space: normal; text-align: center; }
+  .charsheet { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 6px 10px; align-items: start; }
+  .charsheet__hero { width: 96px; height: 128px; object-fit: cover; border: 2px solid var(--tape); display: block; }
+  .charsheet__txt { gap: 4px; min-width: 0; }
+  .charsheet__txt .nick { font-family: Oswald, sans-serif; color: var(--red); text-transform: uppercase; letter-spacing: .04em; font-size: 15px; }
+  .charsheet__txt .muted { font-size: 13px; line-height: 1.2; }
+  .charsheet__txt .badge { align-self: flex-start; }
+  .charsheet__txt .quote { font-size: 14px; line-height: 1.2; }
+  .charsheet__lore { grid-column: 1 / -1; font-size: 13px; line-height: 1.28; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+}
+/* shorter phones: the dressing room and the slots a little tighter */
+@media (max-width: 560px) and (max-height: 700px) {
+  .sheet--ars .modsheet { gap: 6px; }
+  .sheet--ars .modrow { padding: 3px 0; }
+  .sheet--ars .modrow .plus, .sheet--ars .modrow .minus { font-size: 12px; line-height: 1.1; }
+  .sheet--ars .wstats > .muted { display: none; }
+  .sheet--ars .wstat { line-height: 1.1; }
+  .kit { gap: 12px; }
+  .kitcard { grid-template-columns: 112px minmax(0, 1fr); }
+  .kitcard__doll .doll { width: 112px !important; }
+  .kitslot__main { min-height: 42px; }
+  .cell { min-height: 66px; }
+}
+@media (max-width: 560px) and (max-height: 620px) {
+  .kitcard { grid-template-columns: 96px minmax(0, 1fr); padding-top: 14px; }
+  .kitcard__doll .doll { width: 96px !important; }
+  .kitcard__meta + .kitcard__meta { display: none; }
+  .kitslot__main { min-height: 40px; padding: 2px 8px; }
+  .cell--char .cell__name { display: none; }
+  .arsnote { display: none; }
+}

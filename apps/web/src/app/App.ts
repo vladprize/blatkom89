@@ -2,7 +2,7 @@
  * App shell: screen navigation (HTML/CSS over the canvas), offline practice flow, online flow
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
-import { CHARACTER_IDS, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, isCharacterId, isGameMode, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
+import { CHARACTER_IDS, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, REAL_MONEY, isCharacterId, isGameMode, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
 import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
@@ -462,7 +462,7 @@ export class App {
           ),
         ),
         ONLINE_AVAILABLE
-          ? h('div', { class: 'footer' }, t('BLATKOM ’89 · v{v} · Free to play, purchases optional', { v: VERSION }), ' · ', h('a', { href: asset(getLang() === 'ru' ? 'privacy-ru.html' : 'privacy.html'), target: '_blank', style: 'color:inherit' }, t('Privacy')), ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits')))
+          ? h('div', { class: 'footer' }, (REAL_MONEY ? t('BLATKOM ’89 · v{v} · Free to play, purchases optional', { v: VERSION }) : t('BLATKOM ’89 · v{v} · Free to play', { v: VERSION })), ' · ', h('a', { href: asset(getLang() === 'ru' ? 'privacy-ru.html' : 'privacy.html'), target: '_blank', style: 'color:inherit' }, t('Privacy')), ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits')))
           : h('div', { class: 'footer' }, t('BLATKOM ’89 · v{v} · Demo: the game runs right in your browser; no data is collected or sent anywhere.', { v: VERSION }), ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits'))),
       ),
     );
@@ -550,7 +550,7 @@ export class App {
         nick,
         h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
         h('div', { class: 'xp' }, lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} XP` : t('max level')),
-        inv ? h('div', { class: 'tile__wallet' }, amount(inv.tokens, 'tokens'), amount(inv.diamonds, 'diamonds')) : null,
+        inv ? h('div', { class: 'tile__wallet' }, amount(inv.tokens, 'tokens'), REAL_MONEY ? amount(inv.diamonds, 'diamonds') : null) : null,
       ),
       h('button', { class: 'edit', 'aria-label': t('Change alias'), title: t('Change alias'), onclick: () => this.editNickname() }, '✎'),
     );
@@ -837,8 +837,8 @@ export class App {
       onWallet: () => this.refreshStrip(),
       onCharacter: (c) => this.showCharacters(true, c),
     });
-    // wider than the other screens: the dressing room has three columns (sketch v0.23)
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap wrap--wide' }, this.topbar(t('Arsenal')), el)));
+    // wider than the other screens: the dressing room has columns (sketch v0.23); phones get their own layout
+    this.render(h('div', { class: 'screen screen--dim screen--arsenal' }, h('div', { class: 'wrap wrap--wide wrap--arsenal' }, this.topbar(t('Arsenal')), el)));
   }
 
   // ── practice ────────────────────────────────────────────────────────────

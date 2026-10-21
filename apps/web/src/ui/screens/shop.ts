@@ -6,6 +6,11 @@
  * weapon-skin case (v0.23; skins are tried on and worn in the dressing room) and diamond packs. Prices and rules are the shared ones; every purchase is decided by the server. In
  * the demo build (no server) the catalog is read-only, but anything can be tried on — in the dressing
  * room and in practice.
+ *
+ * Phones (≤ 560 px wide) get their own layout of the same state and actions: the wallet on top, then
+ * two halves — «Экипировка» (only what the player has: the dressing room with the in-game view and the
+ * four slots, each changed from a sheet of the player's own items) and «Магазин» (weapons, equipment,
+ * characters, cases, diamonds as compact grids) — every tab on one screen, details in bottom sheets.
  */
 import {
   CASE_PRICE,
@@ -21,6 +26,7 @@ import {
   MODS,
   MOD_PRICES,
   PRIMARY_WEAPONS,
+  REAL_MONEY,
   SHOP_CHARACTERS,
   SHOP_WEAPONS,
   SIDEARMS,
@@ -51,9 +57,15 @@ import { haptic } from '../../telegram/tg.js';
 import { t, plural, count, num, getLang } from '../../i18n/index.js';
 import { charText, finishName, gadgetBlurb, gadgetName, modText, rarityLabel, refusalText, weaponBlurb, weaponName } from '../../i18n/content.js';
 import { Doll } from '../doll.js';
+import { openSheet } from '../sheet.js';
+import type { Sheet } from '../sheet.js';
 import { skinIconUrl } from '../../game/render/skins.js';
 
 export type ArsenalTab = 'loadout' | 'weapons' | 'gear' | 'characters' | 'case' | 'diamonds';
+type ShopTab = Exclude<ArsenalTab, 'loadout'>;
+
+/** Phones get their own Arsenal: the wallet and the kit/shop switch on top, every tab on one screen. */
+const PHONE_QUERY = '(max-width: 560px)';
 
 /** What to try on: a weapon (optionally with modifications) and/or equipment. */
 export interface TryOn {
@@ -227,7 +239,8 @@ function gadgetFacts(id: GadgetId): string[] {
 }
 
 export function renderArsenal(o: ArsenalOptions): HTMLElement {
-  let tab: ArsenalTab = o.tab ?? 'loadout';
+  // v0.24: nothing is sold for money — no diamonds tab
+  let tab: ArsenalTab = o.tab === 'diamonds' && !REAL_MONEY ? 'loadout' : (o.tab ?? 'loadout');
   let inv: Inventory | null = o.online?.inventory ?? null;
   let cfg: ShopConfig | null = null;
   let busy = false;
@@ -237,11 +250,23 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   const walletEl = h('div', { class: 'wallet' });
   const tabsEl = h('div', { class: 'seg tabs', role: 'tablist' });
   const body = h('div', { class: 'col' });
-  root.append(roomEl, walletEl, tabsEl, body);
+  // phones: «Экипировка | Магазин» and the shop's departments instead of the six tabs
+  const modeEl = h('div', { class: 'seg arsmodes', role: 'tablist' });
+  const chipsEl = h('div', { class: 'seg arschips', role: 'tablist' });
+  const phoneQuery = typeof window.matchMedia === 'function' ? window.matchMedia(PHONE_QUERY) : null;
+  let phone = !!phoneQuery?.matches;
+  const layout = () => {
+    root.classList.toggle('arsenal--phone', phone);
+    if (phone) root.replaceChildren(walletEl, modeEl, chipsEl, body);
+    else root.replaceChildren(roomEl, walletEl, tabsEl, body);
+  };
+  layout();
 
   const owned = (w: WeaponId) => (inv ? inv.weapons.includes(w) : FREE_WEAPONS.includes(w));
   const ownedGadget = (g: GadgetId) => (inv ? inv.gadgets.includes(g) : FREE_GADGETS.includes(g));
-  const loadout = (): Loadout => inv?.loadout ?? { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', gadget: 'f1', mods: {}, skins: {} };
+  /** The demo on a phone: the slots can be changed locally (nothing is saved without a server). */
+  let demoKit: Loadout | null = null;
+  const loadout = (): Loadout => inv?.loadout ?? (phone ? demoKit : null) ?? { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', gadget: 'f1', mods: {}, skins: {} };
   /** The finish a weapon wears (equipped skin). */
   const worn = (w: WeaponId): FinishId | null => loadout().skins?.[w] ?? null;
   const ownsSkin = (w: WeaponId, f: FinishId) => !!inv?.skins.includes(skinId(w, f));
@@ -269,7 +294,14 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     }
   };
   const save = (next: Loadout, ok = t('Saved — applies from your next spawn')) => {
-    if (!online || !inv) return;
+    if (!online || !inv) {
+      // the demo on a phone keeps the change on the screen (nothing to save it to)
+      if (phone) {
+        demoKit = next;
+        draw();
+      }
+      return;
+    }
     void act(() => online.setLoadout(next), ok);
   };
 
@@ -297,6 +329,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     const mods = trying.weapon ? (trying.mods ?? []) : (loadout().mods[w] ?? []);
     const finish = trying.weapon && trying.finish !== undefined ? trying.finish : worn(w);
     doll.set(c, w, applyMods(WEAPONS[w], mods).laser === true, finish);
+    doll.wake();
     const g = trying.gadget;
     const itemImg = g ? itemEl(`g:${g}`, () => gadgetImg(g)) : itemEl(`w:${w}:${finish ?? ''}`, () => weaponImg(w, 'big', finish));
     const name = g ? gadgetName(g) : weaponName(w);
@@ -314,13 +347,13 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       : price
         ? h('div', { class: 'dressing__buy' }, buyButton(g ? 'gadget' : 'weapon', g ?? w, price, true))
         : !g && WEAPONS[w].tier === 'rare'
-          ? h('div', { class: 'dressing__buy' }, h('button', { class: 'btn btn--small btn--red', onclick: () => ((tab = 'case'), draw()) }, t('To the case')))
+          ? h('div', { class: 'dressing__buy' }, h('button', { class: 'btn btn--small btn--red', onclick: () => toTab('case') }, t('To the case')))
           : null;
     roomEl.replaceChildren(
       h('span', { class: 'tag' }, t('Dressing room')),
       h(
         'div',
-        { class: 'dressing__grid' },
+        { class: `dressing__grid ${REAL_MONEY ? '' : 'dressing__grid--two'}` },
         h(
           'div',
           { class: 'dressing__poster', role: 'button', tabindex: '0', title: t('Change character'), onclick: () => o.onCharacter?.(c), onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && o.onCharacter?.(c) },
@@ -350,7 +383,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
             ),
           ),
         ),
-        promoColumn(),
+        REAL_MONEY ? promoColumn() : null,
       ),
     );
   };
@@ -371,7 +404,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         return;
       }
       sfx.play('click');
-      drawRoom();
+      refreshPreview();
     };
     const mine = FINISH_IDS.filter((f) => ownsSkin(w, f)).length;
     return h(
@@ -400,7 +433,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
             { class: 'muted skinpick__note' },
             online ? t('Not yours yet — this skin comes from the skin case.') : t('Skins come from the skin case in the online version.'),
             ' ',
-            online ? h('button', { class: 'linkish', onclick: () => ((tab = 'case'), draw(), body.scrollIntoView({ behavior: 'smooth', block: 'start' })) }, t('To the case')) : null,
+            online ? h('button', { class: 'linkish', onclick: () => toTab('case', true) }, t('To the case')) : null,
           )
         : mine === 0 && online
           ? h('div', { class: 'muted skinpick__note' }, t('You have no skins for this weapon yet.'))
@@ -413,7 +446,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     const lang = getLang() === 'ru' ? 'ru' : 'en';
     const banner = h(
       'button',
-      { class: 'promo-case', 'data-testid': 'promo-case', 'aria-label': t('Rare weapon case — {n} {diamonds}', { n: CASE_PRICE, diamonds: diamondWord(CASE_PRICE) }), onclick: () => ((tab = 'case'), sfx.play('click'), draw(), body.scrollIntoView({ behavior: 'smooth', block: 'start' })) },
+      { class: 'promo-case', 'data-testid': 'promo-case', 'aria-label': t('Rare weapon case — {n} {diamonds}', { n: CASE_PRICE.amount, diamonds: diamondWord(CASE_PRICE.amount) }), onclick: () => (sfx.play('click'), toTab('case', true)) },
       h('img', { src: asset(`assets/ui/banners/case-weapons-${lang}.jpg`), width: 1200, height: 675, alt: '', draggable: 'false', 'data-lang': lang }),
     );
     const balance = inv ? inv.diamonds : null;
@@ -435,9 +468,16 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   /** «Примерить»: put it on in the dressing room and bring the dressing room into view. */
   const tryOn = (next: TryOn) => {
     trying = next;
-    drawRoom();
     sfx.play('pickup', { volume: 0.5 });
     haptic('select');
+    if (phone) {
+      // phones: the kit's dressing room shows it (the sheet it came from closes)
+      toTab('loadout');
+      const card = body.querySelector('.kitcard');
+      card?.classList.add('dressing--flash');
+      return;
+    }
+    drawRoom();
     roomEl.classList.remove('dressing--flash');
     void roomEl.offsetWidth;
     roomEl.classList.add('dressing--flash');
@@ -447,14 +487,27 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
 
   const drawWallet = () => {
     if (!online) {
-      walletEl.replaceChildren(h('div', { class: 'muted' }, t('Demo version: the catalogue is for browsing. Talons, diamonds and purchases work in the online version; anything can be tried on in the dressing room and in practice.')));
+      walletEl.replaceChildren(
+        h(
+          'div',
+          { class: 'muted' },
+          phone
+            ? t('Demo: browse and try on — talons and unlocks work in the online version.')
+            : REAL_MONEY
+              ? t('Demo version: the catalogue is for browsing. Talons, diamonds and purchases work in the online version; anything can be tried on in the dressing room and in practice.')
+              : t('Demo version: the catalogue is for browsing. Talons and unlocks work in the online version; anything can be tried on in the dressing room and in practice.'),
+        ),
+      );
       return;
     }
-    walletEl.replaceChildren(
-      h('div', { class: 'coin', title: t('Talons — earned in online matches') }, cur('tokens'), h('b', null, inv ? String(inv.tokens) : '…'), h('span', null, t('talons'))),
-      h('div', { class: 'coin', title: t('Diamonds — bought for money') }, cur('diamonds'), h('b', null, inv ? String(inv.diamonds) : '…'), h('span', null, t('diamonds'))),
-      h('button', { class: 'btn btn--small', onclick: () => ((tab = 'diamonds'), draw()) }, t('Top up')),
-    );
+    const coins: HTMLElement[] = [h('div', { class: 'coin', title: t('Talons — earned in online matches') }, cur('tokens'), h('b', null, inv ? String(inv.tokens) : '…'), h('span', null, t('talons')))];
+    if (REAL_MONEY)
+      coins.push(
+        h('div', { class: 'coin', title: t('Diamonds — bought for money') }, cur('diamonds'), h('b', null, inv ? String(inv.diamonds) : '…'), h('span', null, t('diamonds'))),
+        h('button', { class: 'btn btn--small', 'data-testid': 'wallet-topup', onclick: () => toTab('diamonds') }, t('Top up')),
+      );
+    else coins.push(h('span', { class: 'muted wallet__note' }, t('Talons are earned in online matches')));
+    walletEl.replaceChildren(...coins);
   };
 
   const drawTabs = () => {
@@ -464,7 +517,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       ['gear', t('Equipment')],
       ['characters', t('Characters')],
       ['case', t('Case')],
-      ['diamonds', t('Diamonds')],
+      ...(REAL_MONEY ? [['diamonds', t('Diamonds')] as [ArsenalTab, string]] : []),
     ];
     tabsEl.replaceChildren(...tabs.map(([id, label]) => h('button', { role: 'tab', 'aria-pressed': String(tab === id), onclick: () => ((tab = id), sfx.play('click'), draw()) }, label)));
   };
@@ -553,7 +606,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     const equipped = l.mods[fw] ?? [];
     const head = h(
       'div',
-      { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' },
+      { class: 'row modhead', style: 'margin-top:6px;flex-wrap:nowrap' },
       weaponImg(fw),
       h('div', { class: 'col grow', style: 'gap:2px' }, h('div', { class: 'h2' }, weaponName(fw)), h('div', { class: 'muted' }, fit.length ? t('One modification per mount. They are bought with talons for a particular weapon, and each has a plus and a minus. Pick a weapon in the slots above to set it up.') : t('This weapon takes no modifications. Pick another weapon in the slots above.'))),
     );
@@ -609,7 +662,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         onclick: () => {
           if (r === 'funds') {
             toast(price.currency === 'tokens' ? t('Not enough talons — you earn them in online matches') : t('Not enough diamonds'));
-            if (price.currency === 'diamonds') ((tab = 'diamonds'), draw());
+            if (price.currency === 'diamonds') toTab('diamonds');
             return;
           }
           if (kind === 'gadget')
@@ -650,14 +703,20 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
 
   const weaponsTab = (): HTMLElement => {
     const group = (title: string, note: string, list: readonly WeaponId[]) =>
-      h('div', { class: 'col' }, h('div', { class: 'row' }, h('div', { class: 'h2' }, title), h('span', { class: 'muted' }, note)), h('div', { class: 'cards' }, ...list.map(weaponCard)));
+      list.length ? h('div', { class: 'col' }, h('div', { class: 'row' }, h('div', { class: 'h2' }, title), h('span', { class: 'muted' }, note)), h('div', { class: 'cards' }, ...list.map(weaponCard))) : null;
     const tokenNoLevel = SHOP_WEAPONS.filter((w) => WEAPON_PRICES[w]!.currency === 'tokens' && WEAPON_PRICES[w]!.level <= 1);
     const tokenLevel = SHOP_WEAPONS.filter((w) => WEAPON_PRICES[w]!.currency === 'tokens' && WEAPON_PRICES[w]!.level > 1);
     const forDiamonds = SHOP_WEAPONS.filter((w) => WEAPON_PRICES[w]!.currency === 'diamonds');
     return h(
       'div',
       { class: 'col' },
-      h('div', { class: 'muted' }, t('Paid weapons aren’t stronger than the free ones — just different, each with its own pluses and minuses. Try any of them on in the dressing room or test it in practice.')),
+      h(
+        'div',
+        { class: 'muted' },
+        REAL_MONEY
+          ? t('Paid weapons aren’t stronger than the free ones — just different, each with its own pluses and minuses. Try any of them on in the dressing room or test it in practice.')
+          : t('Shop weapons aren’t stronger than the free ones — just different, each with its own pluses and minuses. Try any of them on in the dressing room or test it in practice.'),
+      ),
       group(t('Free'), t('everyone has these'), FREE_WEAPONS),
       group(t('For talons'), t('talons come with every online match'), tokenNoLevel),
       group(t('For talons, by level'), t('unlock as you rise through the ranks'), tokenLevel),
@@ -706,7 +765,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     h(
       'div',
       { class: 'col' },
-      h('div', { class: 'muted' }, t('All characters have the same stats — they differ in looks and backstory. Half are unlocked with experience and talons, half with diamonds.')),
+      h('div', { class: 'muted' }, REAL_MONEY ? t('All characters have the same stats — they differ in looks and backstory. Half are unlocked with experience and talons, half with diamonds.') : t('All characters have the same stats — they differ in looks and backstory. Every one is unlocked with experience and talons.')),
       h(
         'div',
         { class: 'cards' },
@@ -730,15 +789,21 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   // ── cases: rare weapons and weapon skins ──────────────────────────────
   type Reveal = { kind: 'weapon'; weapon: WeaponId; rarity: Rarity } | { kind: 'skin'; weapon: WeaponId; finish: FinishId; rarity: SkinRarity; equipped: boolean };
   let reveal: Reveal | null = null;
-  /** The adult confirmation before a paid case. */
-  const confirmCase = (price: number, inside: string, open: () => Promise<void>) => {
+  const caseFunds = (p: ShopPrice) => (inv ? (p.currency === 'tokens' ? inv.tokens : inv.diamonds) : 0);
+  /**
+   * The confirmation before a case. Paid with diamonds (real money) it needs the adult checkbox; paid
+   * with talons (v0.24: there is no money in it) a plain «open?» is enough.
+   */
+  const confirmCase = (price: ShopPrice, inside: string, open: () => Promise<void>) => {
     if (!online || !inv) return;
-    if (inv.diamonds < price) {
+    if (inv.level < price.level) return void toast(t('From level {n}', { n: price.level }));
+    if (caseFunds(price) < price.amount) {
+      if (price.currency === 'tokens') return void toast(t('Not enough talons — you earn them in online matches'));
       toast(t('Not enough diamonds'));
-      tab = 'diamonds';
-      draw();
+      toTab('diamonds');
       return;
     }
+    const paid = price.currency === 'diamonds';
     const ov = h('div', { class: 'overlay overlay--top' });
     const close = () => ov.remove();
     ov.append(
@@ -746,28 +811,34 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         'div',
         { class: 'panel modal col' },
         h('span', { class: 'tag' }, t('Confirmation')),
-        h('div', { style: 'margin-top:8px' }, t('Open the case for {n} {diamonds} ({usd})?', { n: price, diamonds: diamondWord(price), usd: usd(price) })),
-        h('div', { class: 'muted' }, inside),
         h(
-          'label',
-          { class: 'check' },
-          h('input', {
-            type: 'checkbox',
-            'data-testid': 'case-adult',
-            onchange: (e: Event) => {
-              const btn = ov.querySelector<HTMLButtonElement>('[data-open]');
-              if (btn) btn.disabled = !(e.target as HTMLInputElement).checked;
-            },
-          }),
-          ` ${t('I am 18 or older')}`,
+          'div',
+          { style: 'margin-top:8px' },
+          paid ? t('Open the case for {n} {diamonds} ({usd})?', { n: price.amount, diamonds: diamondWord(price.amount), usd: usd(price.amount) }) : t('Open the case for {n} {talons}?', { n: price.amount, talons: tokenWord(price.amount) }),
         ),
+        h('div', { class: 'muted' }, inside),
+        paid
+          ? h(
+              'label',
+              { class: 'check' },
+              h('input', {
+                type: 'checkbox',
+                'data-testid': 'case-adult',
+                onchange: (e: Event) => {
+                  const btn = ov.querySelector<HTMLButtonElement>('[data-open]');
+                  if (btn) btn.disabled = !(e.target as HTMLInputElement).checked;
+                },
+              }),
+              ` ${t('I am 18 or older')}`,
+            )
+          : null,
         h(
           'button',
           {
             class: 'btn btn--red',
             'data-open': '1',
             'data-testid': 'case-confirm',
-            disabled: true,
+            disabled: paid,
             onclick: () => {
               close();
               void act(open);
@@ -780,8 +851,82 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     );
     root.append(ov);
   };
+  const openWeaponCase = () =>
+    confirmCase(CASE_PRICE, t('Inside is a random rare weapon you don’t own yet. The odds are listed below. The purchase is final.'), async () => {
+      const r = await online!.openCase();
+      reveal = { kind: 'weapon', weapon: r.weapon, rarity: r.rarity };
+      sfx.play(r.rarity === 'legendary' ? 'supply' : 'pickup');
+    });
+  const openSkinCase = () =>
+    confirmCase(SKIN_CASE_PRICE, t('Inside is a random weapon skin you don’t own yet. The odds are listed below. The purchase is final.'), async () => {
+      const r = await online!.openSkinCase();
+      reveal = { kind: 'skin', weapon: r.weapon, finish: r.finish, rarity: r.rarity, equipped: r.equipped };
+      trying = { weapon: r.weapon, finish: r.finish, mods: [...(loadout().mods[r.weapon] ?? [])] };
+      sfx.play(r.rarity === 'legendary' || r.rarity === 'epic' ? 'supply' : 'pickup');
+    });
+  const openBtn = (price: ShopPrice, onOpen: () => void, testid: string) =>
+    h('button', { class: 'btn btn--red', 'data-testid': testid, disabled: !online, onclick: onOpen }, online ? h('span', null, `${t('Open for')} `, amount(price.amount, price.currency)) : t('Available in the online version'));
+  const caseNote = () =>
+    REAL_MONEY && (CASE_PRICE.currency === 'diamonds' || SKIN_CASE_PRICE.currency === 'diamonds')
+      ? t('Adults only. Paid cases are banned in some countries — don’t buy them there. The odds below are honest and enforced by the server.')
+      : t('Cases are opened with talons you earn in matches — there is no money in them. The odds are honest and enforced by the server.');
+  /** The weapon case's odds table (wide screens: under the cases; phones: in a sheet). */
+  const caseOddsPanel = (): HTMLElement => {
+    const have = new Set(inv?.weapons ?? []);
+    return h(
+      'div',
+      { class: 'panel col' },
+      h('span', { class: 'tag' }, t('Odds')),
+      h(
+        'table',
+        { class: 'table', style: 'margin-top:6px' },
+        h('thead', null, h('tr', null, h('th', null, t('Weapon')), h('th', null, t('Rarity')), h('th', { class: 'num' }, t('Chance')))),
+        h(
+          'tbody',
+          null,
+          ...caseOdds(have).map((e) =>
+            h(
+              'tr',
+              { class: e.odds === 0 ? 'got' : '' },
+              h('td', null, h('div', { class: 'row', style: 'flex-wrap:nowrap;gap:8px' }, weaponImg(e.weapon, 'small'), weaponName(e.weapon))),
+              h('td', { class: `rar rar--${e.rarity}` }, rarityLabel(e.rarity)),
+              h('td', { class: 'num' }, e.odds === 0 && have.has(e.weapon) ? t('owned') : `${e.odds.toFixed(e.odds < 10 ? 1 : 0)}%`),
+            ),
+          ),
+        ),
+      ),
+      h('div', { class: 'muted', style: 'font-size:13px' }, t('Base odds (before anything is collected): {list}.', { list: CASE_TABLE.map((e) => `${weaponName(e.weapon)} ${e.chance}%`).join(', ') })),
+    );
+  };
+  const skinOddsPanel = (): HTMLElement => {
+    const skinOdds = skinCaseOdds(new Set(inv?.skins ?? []));
+    return h(
+      'div',
+      { class: 'panel col', 'data-testid': 'skin-odds' },
+      h('span', { class: 'tag' }, t('Skin odds')),
+      h(
+        'table',
+        { class: 'table', style: 'margin-top:6px' },
+        h('thead', null, h('tr', null, h('th', null, t('Rarity')), h('th', null, t('Finishes')), h('th', { class: 'num' }, t('Chance')))),
+        h(
+          'tbody',
+          null,
+          ...SKIN_RARITIES.map((r) =>
+            h(
+              'tr',
+              { class: skinOdds[r] === 0 ? 'got' : '' },
+              h('td', { class: `rar rar--${r}` }, rarityLabel(r)),
+              h('td', null, h('div', { class: 'finishes' }, ...FINISH_IDS.filter((f) => FINISHES[f].rarity === r).map((f) => h('span', { class: 'finish' }, h('i', { class: `swatch swatch--${f}`, 'aria-hidden': 'true' }), finishName(f))))),
+              h('td', { class: 'num' }, `${skinOdds[r].toFixed(skinOdds[r] < 10 ? 1 : 0)}%`),
+            ),
+          ),
+        ),
+      ),
+      h('div', { class: 'muted', style: 'font-size:13px' }, t('First the rarity is drawn, then any skin of that rarity you don’t have yet, all equally likely. Every weapon can wear every finish.')),
+    );
+  };
   const revealPanel = (r: Reveal): HTMLElement => {
-    const close = h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((reveal = null), draw()) }, t('Close'));
+    const close = h('button', { class: 'btn btn--small btn--ghost', onclick: () => ((reveal = null), closeSheet(), draw()) }, t('Close'));
     if (r.kind === 'weapon')
       return h(
         'div',
@@ -790,7 +935,28 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         h('div', { class: 'h1' }, weaponName(r.weapon)),
         h('div', { class: 'wpic wpic--big' }, weaponImg(r.weapon)),
         h('div', { class: 'muted' }, `${rarityLabel(r.rarity)} · ${t('already in your arsenal')}`),
-        h('div', { class: 'row' }, h('button', { class: 'btn btn--small', onclick: () => ((reveal = null), (focus = r.weapon), (tab = 'loadout'), draw()) }, t('Add to kit')), tryBtn({ weapon: r.weapon }), close),
+        h(
+          'div',
+          { class: 'row' },
+          h(
+            'button',
+            {
+              class: 'btn btn--small',
+              onclick: () => {
+                reveal = null;
+                if (!phone) return void ((focus = r.weapon), (tab = 'loadout'), draw());
+                // phones: straight into its slot, shown in the kit
+                closeSheet();
+                tab = 'loadout';
+                takeItem('weapon', r.weapon);
+                draw();
+              },
+            },
+            t('Add to kit'),
+          ),
+          tryBtn({ weapon: r.weapon }),
+          close,
+        ),
       );
     const wearing = worn(r.weapon) === r.finish;
     return h(
@@ -823,28 +989,11 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   };
   const caseTab = (): HTMLElement => {
     const have = new Set(inv?.weapons ?? []);
-    const odds = caseOdds(have);
-    const left = odds.filter((e) => e.odds > 0).length;
+    const left = caseOdds(have).filter((e) => e.odds > 0).length;
     const enabled = cfg?.casesEnabled !== false;
-    const openWeaponCase = () =>
-      confirmCase(CASE_PRICE, t('Inside is a random rare weapon you don’t own yet. The odds are listed below. The purchase is final.'), async () => {
-        const r = await online!.openCase();
-        reveal = { kind: 'weapon', weapon: r.weapon, rarity: r.rarity };
-        sfx.play(r.rarity === 'legendary' ? 'supply' : 'pickup');
-      });
     const skinsHave = new Set(inv?.skins ?? []);
-    const skinOdds = skinCaseOdds(skinsHave);
     const skinTotal = allSkins().length;
     const skinsLeft = skinTotal - skinsHave.size;
-    const openSkinCase = () =>
-      confirmCase(SKIN_CASE_PRICE, t('Inside is a random weapon skin you don’t own yet. The odds are listed below. The purchase is final.'), async () => {
-        const r = await online!.openSkinCase();
-        reveal = { kind: 'skin', weapon: r.weapon, finish: r.finish, rarity: r.rarity, equipped: r.equipped };
-        trying = { weapon: r.weapon, finish: r.finish, mods: [...(loadout().mods[r.weapon] ?? [])] };
-        sfx.play(r.rarity === 'legendary' || r.rarity === 'epic' ? 'supply' : 'pickup');
-      });
-    const openBtn = (price: number, onOpen: () => void, testid: string) =>
-      h('button', { class: 'btn btn--red', 'data-testid': testid, disabled: !online, onclick: onOpen }, online ? h('span', null, `${t('Open for')} `, amount(price, 'diamonds')) : t('Available in the online version'));
     return h(
       'div',
       { class: 'col' },
@@ -856,7 +1005,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           'div',
           { class: 'panel col' },
           h('span', { class: 'tag' }, t('The Defitsit Case')),
-          h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, h('div', { class: 'crate' }), h('div', { class: 'col grow', style: 'gap:4px' }, h('div', { class: 'h2' }, `${t('Rare weapon')} · `, amount(CASE_PRICE, 'diamonds')), h('div', { class: 'muted' }, t('One of 10 rare guns. No duplicates: a weapon you already got from the case never drops again, and the odds of the rest are recalculated. Once the collection is complete, the case is no longer sold.')))),
+          h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, h('div', { class: 'crate' }), h('div', { class: 'col grow', style: 'gap:4px' }, h('div', { class: 'h2' }, `${t('Rare weapon')} · `, amount(CASE_PRICE.amount, CASE_PRICE.currency)), h('div', { class: 'muted' }, t('One of 10 rare guns. No duplicates: a weapon you already got from the case never drops again, and the odds of the rest are recalculated. Once the collection is complete, the case is no longer sold.')))),
           !enabled ? h('div', { class: 'badge badge--off' }, t('Cases are disabled on this server')) : left === 0 ? h('div', { class: 'badge badge--ok' }, t('Collection complete!')) : openBtn(CASE_PRICE, openWeaponCase, 'open-weapon-case'),
         ),
         h(
@@ -870,7 +1019,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
             h(
               'div',
               { class: 'col grow', style: 'gap:4px' },
-              h('div', { class: 'h2' }, `${t('Weapon skin')} · `, amount(SKIN_CASE_PRICE, 'diamonds')),
+              h('div', { class: 'h2' }, `${t('Weapon skin')} · `, amount(SKIN_CASE_PRICE.amount, SKIN_CASE_PRICE.currency)),
               h('div', { class: 'muted' }, t('One of {n} skins: {f} finishes for each of {w} weapons. Skins change only the look, never the numbers. No duplicates: a skin you have never drops again.', { n: skinTotal, f: FINISH_IDS.length, w: skinTotal / FINISH_IDS.length })),
               online ? h('div', { class: 'muted', 'data-testid': 'skins-owned' }, t('Your skins: {n} of {total}', { n: skinsHave.size, total: skinTotal })) : null,
             ),
@@ -878,76 +1027,34 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           !enabled ? h('div', { class: 'badge badge--off' }, t('Cases are disabled on this server')) : skinsLeft === 0 ? h('div', { class: 'badge badge--ok' }, t('Collection complete!')) : openBtn(SKIN_CASE_PRICE, openSkinCase, 'open-skin-case'),
         ),
       ),
-      h('div', { class: 'muted', style: 'font-size:13px' }, t('Adults only. Paid cases are banned in some countries — don’t buy them there. The odds below are honest and enforced by the server.')),
-      h(
-        'div',
-        { class: 'panel col' },
-        h('span', { class: 'tag' }, t('Odds')),
-        h(
-          'table',
-          { class: 'table', style: 'margin-top:6px' },
-          h('thead', null, h('tr', null, h('th', null, t('Weapon')), h('th', null, t('Rarity')), h('th', { class: 'num' }, t('Chance')))),
-          h(
-            'tbody',
-            null,
-            ...odds.map((e) =>
-              h(
-                'tr',
-                { class: e.odds === 0 ? 'got' : '' },
-                h('td', null, h('div', { class: 'row', style: 'flex-wrap:nowrap;gap:8px' }, weaponImg(e.weapon, 'small'), weaponName(e.weapon))),
-                h('td', { class: `rar rar--${e.rarity}` }, rarityLabel(e.rarity)),
-                h('td', { class: 'num' }, e.odds === 0 && have.has(e.weapon) ? t('owned') : `${e.odds.toFixed(e.odds < 10 ? 1 : 0)}%`),
-              ),
-            ),
-          ),
-        ),
-        h('div', { class: 'muted', style: 'font-size:13px' }, t('Base odds (before anything is collected): {list}.', { list: CASE_TABLE.map((e) => `${weaponName(e.weapon)} ${e.chance}%`).join(', ') })),
-      ),
-      h(
-        'div',
-        { class: 'panel col', 'data-testid': 'skin-odds' },
-        h('span', { class: 'tag' }, t('Skin odds')),
-        h(
-          'table',
-          { class: 'table', style: 'margin-top:6px' },
-          h('thead', null, h('tr', null, h('th', null, t('Rarity')), h('th', null, t('Finishes')), h('th', { class: 'num' }, t('Chance')))),
-          h(
-            'tbody',
-            null,
-            ...SKIN_RARITIES.map((r) =>
-              h(
-                'tr',
-                { class: skinOdds[r] === 0 ? 'got' : '' },
-                h('td', { class: `rar rar--${r}` }, rarityLabel(r)),
-                h('td', null, h('div', { class: 'finishes' }, ...FINISH_IDS.filter((f) => FINISHES[f].rarity === r).map((f) => h('span', { class: 'finish' }, h('i', { class: `swatch swatch--${f}`, 'aria-hidden': 'true' }), finishName(f))))),
-                h('td', { class: 'num' }, `${skinOdds[r].toFixed(skinOdds[r] < 10 ? 1 : 0)}%`),
-              ),
-            ),
-          ),
-        ),
-        h('div', { class: 'muted', style: 'font-size:13px' }, t('First the rarity is drawn, then any skin of that rarity you don’t have yet, all equally likely. Every weapon can wear every finish.')),
-      ),
+      h('div', { class: 'muted', style: 'font-size:13px' }, caseNote()),
+      caseOddsPanel(),
+      skinOddsPanel(),
       h('div', { class: 'cards' }, ...CASE_TABLE.map((e) => weaponCard(e.weapon))),
     );
   };
 
-  // ── diamonds ──────────────────────────────────────────────────────────
-  const diamondsTab = (): HTMLElement => {
-    if (!online) return h('div', { class: 'panel' }, t('Buying diamonds works in the online version of the game.'));
-    if (o.inTelegram) return h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Diamonds')), h('div', { style: 'margin-top:8px' }, t('Buying diamonds inside Telegram is coming soon (via Telegram Stars).')));
+  // ── diamonds (real money: off since v0.24) ─────────────────────────────
+  const payMethods = (): Array<['card' | 'crypto', string]> => {
     const methods: Array<['card' | 'crypto', string]> = [];
     if (cfg?.card) methods.push(['card', t('By card')]);
     if (cfg?.crypto) methods.push(['crypto', t('With crypto')]);
-    const buyPack = (packId: string, method: 'card' | 'crypto') =>
-      void act(async () => {
-        const r = await online.api.checkout(packId, method);
-        try {
-          sessionStorage.setItem('blatkom89.pending-payment', r.paymentId);
-        } catch {
-          /* private mode: the ?pid= return parameter still works */
-        }
-        openExternal(r.url);
-      });
+    return methods;
+  };
+  const buyPack = (packId: string, method: 'card' | 'crypto') =>
+    void act(async () => {
+      const r = await online!.api.checkout(packId, method);
+      try {
+        sessionStorage.setItem('blatkom89.pending-payment', r.paymentId);
+      } catch {
+        /* private mode: the ?pid= return parameter still works */
+      }
+      openExternal(r.url);
+    });
+  const diamondsTab = (): HTMLElement => {
+    if (!online) return h('div', { class: 'panel' }, t('Buying diamonds works in the online version of the game.'));
+    if (o.inTelegram) return h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Diamonds')), h('div', { style: 'margin-top:8px' }, t('Buying diamonds inside Telegram is coming soon (via Telegram Stars).')));
+    const methods = payMethods();
     return h(
       'div',
       { class: 'col' },
@@ -977,7 +1084,563 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     );
   };
 
+  // ── phones (≤ 560 px wide) ─────────────────────────────────────────────
+  // The owner's mobile pass: the wallet on top, then «Экипировка» (only what the player has — the
+  // dressing room with the in-game view and the four slots, each changed from a sheet of the player's
+  // own items) and «Магазин» (weapons, equipment, characters and cases as compact grids). Every tab
+  // fits one screen; details open in bottom sheets.
+  let lastShop: ShopTab = tab === 'loadout' ? 'weapons' : tab;
+  let shopSlot: 1 | 2 | 3 = 3;
+  let pdoll: Doll | null = null;
+  const phoneDoll = (): Doll => (pdoll ??= new Doll(o.textures, o.character, startWeapon(), 128));
+  interface PhoneSheet {
+    s: Sheet;
+    body: () => HTMLElement;
+    actions: (() => HTMLElement | null) | null;
+  }
+  let psheet: PhoneSheet | null = null;
+  const openPhoneSheet = (title: string, testid: string, body: () => HTMLElement, actions: (() => HTMLElement | null) | null = null, onClose?: () => void) => {
+    const s = openSheet(document.getElementById('ui') ?? document.body, {
+      title,
+      testid,
+      cls: 'sheet--ars',
+      body: body(),
+      actions: actions?.() ?? null,
+      onClose: () => {
+        if (psheet?.s === s) psheet = null;
+        onClose?.();
+      },
+    });
+    psheet = { s, body, actions };
+  };
+  const closeSheet = () => psheet?.s.close();
+  /** Redraws an open sheet after the state changed (a purchase, a new loadout). */
+  const refreshSheet = () => {
+    if (!psheet) return;
+    psheet.s.setBody(psheet.body());
+    if (psheet.actions) psheet.s.setActions(psheet.actions());
+  };
+  /** Switches the tab (phones: closes an open sheet; wide screens may bring the tab into view). */
+  function toTab(next: ArsenalTab, scroll = false) {
+    if (next === 'diamonds' && !REAL_MONEY) next = 'loadout';
+    closeSheet();
+    tab = next;
+    if (next !== 'loadout') lastShop = next;
+    draw();
+    if (scroll && !phone) body.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  /** The skin picker's preview: the dressing room on wide screens, the kit (and its sheet) on phones. */
+  function refreshPreview() {
+    if (phone) draw();
+    else drawRoom();
+  }
+  const go = (next: ArsenalTab) => {
+    sfx.play('click');
+    toTab(next);
+  };
+  const shopTabs = (): Array<[ShopTab, string]> => [
+    ['weapons', t('Weapons')],
+    ['gear', t('Equipment')],
+    ['characters', t('Characters')],
+    ['case', t('Cases')],
+    ...(REAL_MONEY ? [['diamonds', t('Diamonds')] as [ShopTab, string]] : []),
+  ];
+  const drawPhoneTabs = () => {
+    const kit = tab === 'loadout';
+    modeEl.replaceChildren(
+      h('button', { role: 'tab', 'aria-pressed': String(kit), 'data-tab': 'loadout', 'data-testid': 'ars-kit', onclick: () => !kit && go('loadout') }, t('Loadout')),
+      h('button', { role: 'tab', 'aria-pressed': String(!kit), 'data-tab': 'shop', 'data-testid': 'ars-shop', onclick: () => kit && go(lastShop) }, t('Shop')),
+    );
+    chipsEl.hidden = kit;
+    chipsEl.classList.toggle('arschips--5', shopTabs().length > 4);
+    chipsEl.replaceChildren(...shopTabs().map(([id, label]) => h('button', { role: 'tab', 'aria-pressed': String(tab === id), 'data-tab': id, onclick: () => tab !== id && go(id) }, label)));
+  };
+  const slotWeapon = (l: Loadout, slot: 1 | 2 | 3): WeaponId | null => (slot === 1 ? l.sidearm : slot === 2 ? l.melee : l.primary);
+  const withSlot = (l: Loadout, slot: 1 | 2 | 3, w: WeaponId | null): Loadout => (slot === 1 ? (w ? { ...l, sidearm: w } : l) : slot === 2 ? (w ? { ...l, melee: w } : l) : { ...l, primary: w });
+  const inKit = (kind: 'weapon' | 'gadget', id: WeaponId | GadgetId) => {
+    const l = loadout();
+    return kind === 'weapon' ? l.sidearm === id || l.melee === id || l.primary === id : l.gadget === id;
+  };
+  /** Puts an owned weapon into its slot (or equipment into slot 4) and shows it in the kit. */
+  function takeItem(kind: 'weapon' | 'gadget', id: WeaponId | GadgetId) {
+    const l = loadout();
+    if (kind === 'gadget') {
+      trying = { gadget: id as GadgetId };
+      return save({ ...l, gadget: id as GadgetId }, t('{name} — now in your kit', { name: gadgetName(id as GadgetId) }));
+    }
+    const w = id as WeaponId;
+    trying = { weapon: w, mods: [...(l.mods[w] ?? [])] };
+    focus = w;
+    save(withSlot(l, WEAPONS[w].slot as 1 | 2 | 3, w), t('{name} — now in your kit', { name: weaponName(w) }));
+  }
+  const dollBox = (d: Doll, w: WeaponId) =>
+    h('div', { class: 'kitcard__doll' }, d.el, h('span', { class: 'dressing__label' }, t('In the game')), h('button', { class: 'kitcard__fire', 'data-testid': 'doll-fire', onclick: () => d.fire() }, WEAPONS[w].kind === 'melee' ? t('Swing!') : t('Fire!')));
+
+  // ── «Экипировка»: the dressing room and the four slots ────────────────────
+  const kitPhone = (): HTMLElement => {
+    const l = loadout();
+    const c = o.character;
+    const ct = charText(c);
+    const g = trying.gadget ?? null;
+    const w: WeaponId = trying.weapon ?? startWeapon();
+    const def = WEAPONS[w];
+    const mods = trying.weapon ? (trying.mods ?? []) : (l.mods[w] ?? []);
+    const finish = trying.weapon && trying.finish !== undefined ? trying.finish : worn(w);
+    const d = phoneDoll();
+    d.set(c, w, applyMods(def, mods).laser === true, finish);
+    d.wake();
+    const fit = modsFor(def);
+    const card = h(
+      'div',
+      { class: 'panel kitcard', 'data-testid': 'kit-card' },
+      h('span', { class: 'tag' }, t('Dressing room')),
+      dollBox(d, w),
+      h(
+        'div',
+        { class: 'kitcard__info' },
+        h('button', { class: 'kitcard__who', title: t('Change character'), 'data-testid': 'kit-character', onclick: () => o.onCharacter?.(c) }, portrait(c, true), h('span', { class: 'kitcard__whotxt' }, h('b', null, ct.name), h('small', null, `«${ct.nickname}»`)), h('i', { 'aria-hidden': 'true' }, '›')),
+        h('div', { class: 'kitcard__name', 'data-testid': 'dressing-name' }, g ? gadgetName(g) : weaponName(w)),
+        g
+          ? h('div', { class: 'kitcard__meta' }, `${slotLabel(4)} · ${gadgetFacts(g)[0]}`)
+          : h('div', { class: 'kitcard__meta' }, `${slotLabel(def.slot as 1 | 2 | 3)} · ${t('Skin')}: ${finish ? finishName(finish) : t('Standard')}`),
+        !g && fit.length ? h('div', { class: 'kitcard__meta' }, `${t('Modifications')}: ${mods.length ? mods.map((m) => modText(m).name).join(', ') : '—'}`) : null,
+        h('button', { class: 'btn btn--small btn--red kitcard__try', onclick: () => o.onTry(trying) }, t('Test in practice')),
+      ),
+      g
+        ? null
+        : h(
+            'div',
+            { class: 'kitcard__acts' },
+            h('button', { class: 'btn btn--small', 'data-testid': 'kit-skins', onclick: () => openSkins(w) }, t('Skins')),
+            h('button', { class: 'btn btn--small', 'data-testid': 'kit-mods', onclick: () => openMods(w) }, fit.length ? t('Modifications') : t('Stats')),
+          ),
+    );
+    const slots = h('div', { class: 'panel kitslots', 'data-testid': 'kit-slots' }, h('span', { class: 'tag' }, t('Kit')), ...([1, 2, 3, 4] as const).map((s) => slotRow(s, l)));
+    return h('div', { class: 'kit' }, card, slots);
+  };
+  const slotRow = (slot: 1 | 2 | 3 | 4, l: Loadout): HTMLElement => {
+    const cur = slot === 4 ? l.gadget : slotWeapon(l, slot);
+    const on = cur !== null && (slot === 4 ? trying.gadget === cur : !trying.gadget && trying.weapon === cur);
+    const pic = cur === null ? h('span', { class: 'none' }, '—') : slot === 4 ? gadgetImg(cur as GadgetId, 'small') : weaponImg(cur as WeaponId, 'small', worn(cur as WeaponId));
+    const name = cur === null ? (slot === 3 ? t('Sidearm only') : t('No equipment')) : slot === 4 ? gadgetName(cur as GadgetId) : weaponName(cur as WeaponId);
+    const show = () => {
+      if (cur === null) return openSlot(slot);
+      trying = slot === 4 ? { gadget: cur as GadgetId } : { weapon: cur as WeaponId, mods: [...(l.mods[cur as WeaponId] ?? [])] };
+      if (slot !== 4) focus = cur as WeaponId;
+      sfx.play('click');
+      draw();
+    };
+    return h(
+      'div',
+      { class: `kitslot ${on ? 'on' : ''}`, 'data-slot': String(slot) },
+      h('button', { class: 'kitslot__main', 'aria-pressed': String(on), onclick: show }, h('span', { class: 'kitslot__pic' }, pic), h('span', { class: 'kitslot__txt' }, h('b', null, name), h('small', null, `${slot} · ${slotLabel(slot)}`))),
+      h('button', { class: 'btn btn--small kitslot__change', 'data-testid': `slot-change-${slot}`, onclick: () => openSlot(slot) }, t('Change')),
+    );
+  };
+  /** A slot's sheet: the player's own items for it; the shop is one button away. */
+  const openSlot = (slot: 1 | 2 | 3 | 4) => openPhoneSheet(`${slot} · ${slotLabel(slot)}`, 'slot-sheet', () => slotPicker(slot));
+  const slotPicker = (slot: 1 | 2 | 3 | 4): HTMLElement => {
+    const l = loadout();
+    const option = (pic: HTMLElement, name: string, on: boolean, pick: () => void, id: string) =>
+      h('button', { class: `wbtn slotopt ${on ? 'on' : ''}`, 'aria-pressed': String(on), 'data-opt': id, onclick: pick }, pic, h('span', null, name));
+    const none = () => h('span', { class: 'none' }, '—');
+    let opts: HTMLElement[];
+    let more: number;
+    if (slot === 4) {
+      opts = [...GADGET_IDS.filter(ownedGadget), null].map((g) =>
+        option(
+          g ? gadgetImg(g, 'small') : none(),
+          g ? gadgetName(g) : t('No equipment'),
+          g === l.gadget,
+          () => {
+            trying = g ? { gadget: g } : { weapon: startWeapon(), mods: [...(l.mods[startWeapon()] ?? [])] };
+            closeSheet();
+            if (g === l.gadget) return draw();
+            save({ ...l, gadget: g }, g ? t('{name} — now in your kit', { name: gadgetName(g) }) : undefined);
+          },
+          g ?? 'none',
+        ),
+      );
+      more = GADGET_IDS.filter((g) => !ownedGadget(g)).length;
+    } else {
+      const list = slot === 1 ? SIDEARMS : slot === 2 ? MELEE_WEAPONS : PRIMARY_WEAPONS;
+      const cur = slotWeapon(l, slot);
+      opts = [...list.filter(owned), ...(slot === 3 ? [null] : [])].map((w) =>
+        option(
+          w ? weaponImg(w, 'small', worn(w)) : none(),
+          w ? weaponName(w) : t('Sidearm only'),
+          w === cur,
+          () => {
+            const shown = w ?? l.sidearm;
+            trying = { weapon: shown, mods: [...(l.mods[shown] ?? [])] };
+            focus = shown;
+            closeSheet();
+            if (w === cur) return draw();
+            save(withSlot(l, slot, w));
+          },
+          w ?? 'none',
+        ),
+      );
+      more = list.filter((w) => !owned(w) && WEAPONS[w].tier !== 'rare').length;
+    }
+    return h(
+      'div',
+      { class: 'col slotsheet' },
+      h('div', { class: 'slotsheet__list' }, ...opts),
+      more > 0
+        ? h(
+            'button',
+            {
+              class: 'btn btn--small btn--ghost',
+              'data-testid': 'slot-shop',
+              onclick: () => {
+                if (slot !== 4) shopSlot = slot;
+                go(slot === 4 ? 'gear' : 'weapons');
+              },
+            },
+            t('{n} more in the shop →', { n: more }),
+          )
+        : null,
+    );
+  };
+  const openSkins = (w: WeaponId) =>
+    openPhoneSheet(
+      `${t('Skins')} · ${weaponName(w)}`,
+      'skin-sheet',
+      () => {
+        const finish = trying.weapon === w && trying.finish !== undefined ? trying.finish : worn(w);
+        return h('div', { class: 'col skinsheet' }, h('div', { class: 'wpic skinsheet__pic' }, weaponImg(w, 'big', finish)), skinRow(w, finish));
+      },
+      null,
+      () => {
+        // a skin that isn't the player's was only tried on: the kit shows what the weapon really wears
+        if (trying.weapon === w && trying.finish && !ownsSkin(w, trying.finish)) {
+          trying = { weapon: w, mods: [...(trying.mods ?? [])] };
+          draw();
+        }
+      },
+    );
+  const openMods = (w: WeaponId) =>
+    openPhoneSheet(modsFor(WEAPONS[w]).length ? `${t('Modifications')} · ${weaponName(w)}` : weaponName(w), 'mods-sheet', () => {
+      const l = loadout();
+      const panel = modsFor(WEAPONS[w]).length ? modsPanel(w, l) : null;
+      panel?.classList.add('panel--insheet');
+      return h('div', { class: 'col modsheet' }, panel, statBars(w, l.mods[w]));
+    });
+
+  // ── «Магазин»: compact grids, an item's card in a sheet ───────────────────
+  const tierRank = (p: ShopPrice | undefined) => (p ? (p.currency === 'tokens' ? 1 : 2) : 0);
+  const shopOrder = (a: ShopPrice | undefined, b: ShopPrice | undefined) => tierRank(a) - tierRank(b) || (a?.level ?? 0) - (b?.level ?? 0) || (a?.amount ?? 0) - (b?.amount ?? 0);
+  const priceTag = (price: ShopPrice) => {
+    const lockedByLevel = !!inv && inv.level < price.level;
+    return h('span', { class: `wbtn__price ${price.currency}` }, cur(price.currency), String(price.amount), lockedByLevel ? h('small', null, ` · ${t('LV {n}', { n: price.level })}`) : null);
+  };
+  const cell = (kind: 'weapon' | 'gadget', id: WeaponId | GadgetId): HTMLElement => {
+    const price = kind === 'weapon' ? WEAPON_PRICES[id as WeaponId] : GADGET_PRICES[id as GadgetId];
+    const mine = kind === 'weapon' ? owned(id as WeaponId) : ownedGadget(id as GadgetId);
+    const note = mine ? h('span', { class: 'cell__own' }, inKit(kind, id) ? `✓ ${t('In your kit')}` : `✓ ${t('Yours')}`) : price ? priceTag(price) : h('span', { class: 'cell__own' }, t('Free'));
+    return h(
+      'button',
+      { class: `cell ${mine ? 'cell--mine' : ''}`, 'data-item': id, onclick: () => openItem(kind, id) },
+      kind === 'weapon' ? weaponImg(id as WeaponId, 'small', mine ? worn(id as WeaponId) : null) : gadgetImg(id as GadgetId, 'small'),
+      h('span', { class: 'cell__name' }, kind === 'weapon' ? weaponName(id as WeaponId) : gadgetName(id as GadgetId)),
+      note,
+    );
+  };
+  const weaponsPhone = (): HTMLElement => {
+    const lists: Array<[1 | 2 | 3, string, readonly WeaponId[]]> = [
+      [1, t('Sidearms'), SIDEARMS],
+      [2, t('Melee'), MELEE_WEAPONS],
+      [3, t('Primary'), PRIMARY_WEAPONS],
+    ];
+    // the case-only weapons live in «Cases»
+    const forSale = (list: readonly WeaponId[]) => list.filter((w) => WEAPONS[w].tier !== 'rare').sort((a, b) => shopOrder(WEAPON_PRICES[a], WEAPON_PRICES[b]));
+    const shown = forSale(lists.find(([s]) => s === shopSlot)![2]);
+    return h(
+      'div',
+      { class: 'shoptab' },
+      h(
+        'div',
+        { class: 'seg arsseg', role: 'tablist' },
+        ...lists.map(([s, label, list]) =>
+          h(
+            'button',
+            {
+              role: 'tab',
+              'aria-pressed': String(s === shopSlot),
+              'data-slot': String(s),
+              onclick: () => {
+                if (s === shopSlot) return;
+                shopSlot = s;
+                sfx.play('click');
+                draw();
+              },
+            },
+            label,
+            h('small', null, String(forSale(list).length)),
+          ),
+        ),
+      ),
+      h('div', { class: 'shopgrid', 'data-testid': 'shop-weapons' }, ...shown.map((w) => cell('weapon', w))),
+      h('div', { class: 'muted arsnote' }, t('Shop weapons are no stronger than the free ones — just different.')),
+    );
+  };
+  const gearPhone = (): HTMLElement =>
+    h(
+      'div',
+      { class: 'shoptab' },
+      h('div', { class: 'shopgrid', 'data-testid': 'shop-gear' }, ...[...GADGET_IDS].sort((a, b) => shopOrder(GADGET_PRICES[a], GADGET_PRICES[b])).map((g) => cell('gadget', g))),
+      h('div', { class: 'muted arsnote' }, t('The fourth slot: one kind at a time, the charges refill at every spawn.')),
+    );
+  const charsPhone = (): HTMLElement =>
+    h(
+      'div',
+      { class: 'shoptab' },
+      h(
+        'div',
+        { class: 'charshop', 'data-testid': 'shop-characters' },
+        ...SHOP_CHARACTERS.map((c) => {
+          const price = CHARACTER_PRICES[c]!;
+          const mine = inv ? inv.characters.includes(c) : false;
+          return h('button', { class: `cell cell--char ${mine ? 'cell--mine' : ''}`, 'data-char': c, onclick: () => openChar(c) }, portrait(c, true), h('span', { class: 'cell__name' }, charText(c).name), mine ? h('span', { class: 'cell__own' }, `✓ ${t('Yours')}`) : priceTag(price));
+        }),
+      ),
+      h('div', { class: 'muted arsnote' }, t('Everyone has the same stats — only the looks and the story differ.')),
+    );
+  const casePhone = (): HTMLElement => {
+    const enabled = cfg?.casesEnabled !== false;
+    const left = caseOdds(new Set(inv?.weapons ?? [])).filter((e) => e.odds > 0).length;
+    const skinTotal = allSkins().length;
+    const skinsOwned = inv?.skins.length ?? 0;
+    const state = (done: boolean, open: HTMLElement) => (!enabled ? h('span', { class: 'badge badge--off' }, t('Cases are disabled on this server')) : done ? h('span', { class: 'badge badge--ok' }, t('Collection complete!')) : open);
+    const card = (o2: { testid: string; tag: string; crate: string; title: string; price: ShopPrice; text: string; extra: HTMLElement | null; done: boolean; open: () => void; openId: string; odds: () => HTMLElement; oddsTitle: string; oddsId: string }) =>
+      h(
+        'div',
+        { class: 'panel casecard', 'data-testid': o2.testid },
+        h('span', { class: 'tag' }, o2.tag),
+        h('div', { class: 'casecard__row' }, h('div', { class: `crate ${o2.crate}` }), h('div', { class: 'col casecard__txt' }, h('b', null, `${o2.title} · `, amount(o2.price.amount, o2.price.currency)), h('span', { class: 'muted' }, o2.text), o2.extra)),
+        h(
+          'div',
+          { class: 'casecard__acts' },
+          state(o2.done, openBtn(o2.price, o2.open, o2.openId)),
+          h(
+            'button',
+            {
+              class: 'btn btn--small',
+              'data-testid': o2.oddsId,
+              onclick: () =>
+                openPhoneSheet(o2.oddsTitle, 'odds-sheet', () => {
+                  const p = o2.odds();
+                  p.classList.add('panel--insheet');
+                  return p;
+                }),
+            },
+            t('Odds'),
+          ),
+        ),
+      );
+    return h(
+      'div',
+      { class: 'col arscases' },
+      card({
+        testid: 'weapon-case',
+        tag: t('The Defitsit Case'),
+        crate: '',
+        title: t('Rare weapon'),
+        price: CASE_PRICE,
+        text: t('One of 10 rare guns. No repeats: the odds of the rest are recalculated.'),
+        extra: null,
+        done: left === 0,
+        open: openWeaponCase,
+        openId: 'open-weapon-case',
+        odds: caseOddsPanel,
+        oddsTitle: t('Odds'),
+        oddsId: 'case-odds-open',
+      }),
+      card({
+        testid: 'skin-case',
+        tag: t('The Skin Case'),
+        crate: 'crate--skins',
+        title: t('Weapon skin'),
+        price: SKIN_CASE_PRICE,
+        text: t('Only the look changes, never the numbers. No repeats.'),
+        extra: online ? h('span', { class: 'muted', 'data-testid': 'skins-owned' }, t('Your skins: {n} of {total}', { n: skinsOwned, total: skinTotal })) : null,
+        done: skinsOwned >= skinTotal,
+        open: openSkinCase,
+        openId: 'open-skin-case',
+        odds: skinOddsPanel,
+        oddsTitle: t('Skin odds'),
+        oddsId: 'skin-odds-open',
+      }),
+      h('div', { class: 'muted arsnote' }, caseNote()),
+    );
+  };
+  const diamondsPhone = (): HTMLElement => {
+    if (!online) return h('div', { class: 'panel' }, t('Buying diamonds works in the online version of the game.'));
+    if (o.inTelegram) return h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Diamonds')), h('div', { style: 'margin-top:8px' }, t('Buying diamonds inside Telegram is coming soon (via Telegram Stars).')));
+    const methods = payMethods();
+    return h(
+      'div',
+      { class: 'col arsdiamonds' },
+      h('div', { class: 'muted arsnote' }, t('100 diamonds = $1. Diamonds buy weapons, characters and cases. Talons are never sold for money — you earn them in matches and spend them on weapons, equipment and modifications.')),
+      methods.length === 0 ? h('span', { class: 'badge', style: 'align-self:flex-start' }, t('Payments are not connected yet — coming soon')) : null,
+      h(
+        'div',
+        { class: 'packrows' },
+        ...(cfg?.packs ?? []).map((p) =>
+          h(
+            'div',
+            { class: 'packrow' },
+            h('b', { class: 'packrow__amt' }, amount(p.diamonds, 'diamonds')),
+            h('span', { class: 'packrow__usd' }, `$${(p.usdCents / 100).toFixed(2)}`),
+            ...(methods.length ? methods.map(([m, label]) => h('button', { class: 'btn btn--small btn--red', onclick: () => buyPack(p.id, m) }, label)) : [h('button', { class: 'btn btn--small', disabled: true }, t('Soon'))]),
+          ),
+        ),
+      ),
+      h('div', { class: 'muted arsnote' }, t('Purchases belong to your account. To keep them when you change devices, link an email in your profile.')),
+    );
+  };
+  /** An item's card: the in-game view (weapons), what it does, and buy / take / test. */
+  const openItem = (kind: 'weapon' | 'gadget', id: WeaponId | GadgetId) =>
+    openPhoneSheet(kind === 'weapon' ? weaponName(id as WeaponId) : gadgetName(id as GadgetId), 'item-sheet', () => (kind === 'weapon' ? weaponSheet(id as WeaponId) : gadgetSheet(id as GadgetId)), () => itemActions(kind, id));
+  const statusBadge = (mine: boolean, price: ShopPrice | undefined, rare: boolean) =>
+    mine ? h('span', { class: 'badge badge--ok' }, t('Yours')) : price ? h('span', { class: 'badge' }, priceLabel(price)) : h('span', { class: 'badge' }, rare ? t('Case only') : t('Free'));
+  const weaponSheet = (w: WeaponId): HTMLElement => {
+    const def = WEAPONS[w];
+    const mine = owned(w);
+    const d = phoneDoll();
+    d.set(o.character, w, def.laser === true, mine ? worn(w) : null);
+    d.wake();
+    const fit = modsFor(def);
+    return h(
+      'div',
+      { class: 'col itemsheet' },
+      h(
+        'div',
+        { class: 'itemsheet__top' },
+        dollBox(d, w),
+        h('div', { class: 'col itemsheet__txt' }, h('div', { class: 'row itemsheet__tags' }, h('span', { class: 'chiplabel' }, slotLabel(def.slot as 1 | 2 | 3)), statusBadge(mine, WEAPON_PRICES[w], def.tier === 'rare')), h('div', { class: 'muted itemsheet__blurb' }, weaponBlurb(w))),
+      ),
+      statBars(w),
+      fit.length ? h('div', { class: 'modfit' }, t('Modifications:'), ...fit.map((m) => h('span', { class: 'chip', title: `${modText(m).name}: ${modText(m).plus}; ${modText(m).minus}` }, modImg(m, 'small'), modText(m).name))) : null,
+    );
+  };
+  const gadgetSheet = (g: GadgetId): HTMLElement => {
+    const def = GADGETS[g];
+    return h(
+      'div',
+      { class: 'col itemsheet' },
+      h('div', { class: 'row itemsheet__tags' }, h('span', { class: 'chiplabel' }, def.use === 'throw' ? t('Throw') : def.use === 'place' ? t('Place') : t('Deploy')), statusBadge(ownedGadget(g), GADGET_PRICES[g], false)),
+      h('div', { class: 'wpic' }, gadgetImg(g)),
+      h('div', { class: 'muted itemsheet__blurb' }, gadgetBlurb(g)),
+      h('ul', { class: 'facts' }, ...gadgetFacts(g).map((f) => h('li', null, f))),
+    );
+  };
+  const itemActions = (kind: 'weapon' | 'gadget', id: WeaponId | GadgetId): HTMLElement => {
+    const price = kind === 'weapon' ? WEAPON_PRICES[id as WeaponId] : GADGET_PRICES[id as GadgetId];
+    const mine = kind === 'weapon' ? owned(id as WeaponId) : ownedGadget(id as GadgetId);
+    const acts: HTMLElement[] = [];
+    if (!mine && price) acts.push(buyButton(kind, id, price, true));
+    else if (!mine && kind === 'weapon' && WEAPONS[id as WeaponId].tier === 'rare') acts.push(h('button', { class: 'btn btn--small btn--red', onclick: () => go('case') }, t('To the case')));
+    else if (mine && inKit(kind, id)) acts.push(h('span', { class: 'badge badge--ok' }, t('In your kit')));
+    else if (mine)
+      acts.push(
+        h(
+          'button',
+          {
+            class: 'btn btn--small btn--red',
+            'data-testid': 'item-take',
+            onclick: () => {
+              // into the kit — and the kit comes into view
+              closeSheet();
+              tab = 'loadout';
+              takeItem(kind, id);
+              draw();
+            },
+          },
+          t('Take'),
+        ),
+      );
+    acts.push(
+      h(
+        'button',
+        {
+          class: 'btn btn--small',
+          onclick: () => {
+            closeSheet();
+            o.onTry(kind === 'weapon' ? { weapon: id as WeaponId } : { gadget: id as GadgetId });
+          },
+        },
+        t('Test in practice'),
+      ),
+    );
+    return h('div', { class: 'itemacts' }, ...acts);
+  };
+  /** A character's card: the art, who they are, and buy / the personal file. */
+  const openChar = (c: CharacterId) =>
+    openPhoneSheet(
+      charText(c).name,
+      'char-sheet',
+      () => {
+        const d = charText(c);
+        const mine = inv ? inv.characters.includes(c) : false;
+        return h(
+          'div',
+          { class: 'charsheet' },
+          heroImg(c, 'charsheet__hero'),
+          h('div', { class: 'col charsheet__txt' }, h('div', { class: 'nick' }, `«${d.nickname}»`), h('div', { class: 'muted' }, `${d.species} · ${d.role}`), statusBadge(mine, CHARACTER_PRICES[c], false), h('div', { class: 'quote' }, `«${d.quote}»`)),
+          h('div', { class: 'lore charsheet__lore' }, d.lore),
+        );
+      },
+      () => {
+        const price = CHARACTER_PRICES[c];
+        return h(
+          'div',
+          { class: 'itemacts' },
+          price ? buyButton('character', c, price, true) : null,
+          o.onCharacter
+            ? h(
+                'button',
+                {
+                  class: 'btn btn--small',
+                  onclick: () => {
+                    closeSheet();
+                    o.onCharacter!(c);
+                  },
+                },
+                t('Dossier'),
+              )
+            : null,
+        );
+      },
+    );
+  const drawPhone = () => {
+    drawWallet();
+    drawPhoneTabs();
+    body.replaceChildren(tab === 'loadout' ? kitPhone() : tab === 'weapons' ? weaponsPhone() : tab === 'gear' ? gearPhone() : tab === 'characters' ? charsPhone() : tab === 'case' ? casePhone() : diamondsPhone());
+    if (reveal && !psheet)
+      openPhoneSheet(reveal.kind === 'weapon' ? t('From the case') : t('From the skin case'), 'reveal-sheet', () => {
+        if (!reveal) return h('div');
+        const p = revealPanel(reveal);
+        p.classList.add('panel--insheet');
+        return p;
+      }, null, () => {
+        reveal = null;
+      });
+    else refreshSheet();
+  };
+  const onMedia = () => {
+    if (!root.isConnected) return phoneQuery?.removeEventListener?.('change', onMedia);
+    if (phone === !!phoneQuery?.matches) return;
+    phone = !!phoneQuery?.matches;
+    closeSheet();
+    layout();
+    draw();
+  };
+  phoneQuery?.addEventListener?.('change', onMedia);
+
   const draw = () => {
+    if (phone) return drawPhone();
     drawRoom();
     drawWallet();
     drawTabs();

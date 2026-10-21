@@ -709,6 +709,30 @@ export const RU: Record<string, string> = {
   'Solo': 'Сам за себя',
   'Teams': 'Команды',
   'Flag': 'Флаг',
+  // ── Mobile: Arsenal
+  'Loadout': 'Экипировка',
+  'Shop': 'Магазин',
+  'Cases': 'Кейсы',
+  'Skins': 'Скины',
+  'Stats': 'Характеристики',
+  'Sidearms': 'Пистолеты',
+  'Shop weapons are no stronger than the free ones — just different.': 'Оружие из магазина не сильнее бесплатного — просто другое.',
+  'The fourth slot: one kind at a time, the charges refill at every spawn.': 'Четвёртый слот: берёшь одну вещь, заряды пополняются при каждом появлении.',
+  'Everyone has the same stats — only the looks and the story differ.': 'Характеристики у всех одинаковые — отличаются только внешность и история.',
+  'One of 10 rare guns. No repeats: the odds of the rest are recalculated.': 'Один из 10 редких стволов. Без повторов: шансы остальных пересчитываются.',
+  'Only the look changes, never the numbers. No repeats.': 'Меняется только внешний вид, не цифры. Без повторов.',
+  'Demo: browse and try on — talons and unlocks work in the online version.': 'Демо: смотри и примеряй — талоны и открытия работают в онлайн-версии.',
+  'Demo version: the catalogue is for browsing. Talons and unlocks work in the online version; anything can be tried on in the dressing room and in practice.': 'Демо-версия: каталог для просмотра. Талоны и открытия работают в онлайн-версии; примерить что угодно можно в примерочной и испытать в тренировке.',
+  'Talons are earned in online matches': 'Талоны дают за онлайн-матчи',
+  'All characters have the same stats — they differ in looks and backstory. Every one is unlocked with experience and talons.': 'Все персонажи равны по характеристикам — отличаются внешностью и историей. Каждого открывают опытом и талонами.',
+  'Shop weapons aren’t stronger than the free ones — just different, each with its own pluses and minuses. Try any of them on in the dressing room or test it in practice.': 'Оружие из магазина не сильнее бесплатного — просто другое, у каждого свои плюсы и минусы. Любое можно примерить в примерочной или испытать в тренировке.',
+  'Open the case for {n} {talons}?': 'Открыть кейс за {n} {talons}?',
+  'Cases are opened with talons you earn in matches — there is no money in them. The odds are honest and enforced by the server.': 'Кейсы открываются за талоны, которые дают за матчи, — денег в них нет. Шансы честные и проверяются сервером.',
+  'BLATKOM ’89 · v{v} · Free to play': 'БЛАТКОМ ’89 · v{v} · Играть бесплатно',
+  'Account created — your progress is tied to {email}': 'Аккаунт создан — прогресс привязан к {email}',
+  'Register an email: your level, talons and everything you unlock stay with you on any device. As a guest, the account lives only in this browser.': 'Привяжи почту — уровень, талоны и всё открытое останутся с тобой на любом устройстве. У гостя аккаунт живёт только в этом браузере.',
+  'With this email and password the account opens on any device — your progress stays on the books.': 'С этой почтой и паролем аккаунт открывается на любом устройстве — прогресс останется на учёте.',
+  'Register an email so the account doesn’t go missing: without it, your progress lives only in this browser.': 'Привяжи почту, чтобы аккаунт не потерялся: без неё прогресс живёт только в этом браузере.',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)
@@ -765,6 +789,8 @@ export const RU: Record<string, string> = {
   'Your friend is already in this room': 'Друг уже в этой комнате',
   'Invalid player id': 'Неверный идентификатор игрока',
   'Not so fast — wait a moment before the next line': 'Не так быстро — подожди секунду перед следующей репликой',
+  'Nothing is sold for money: the game is free': 'За деньги ничего не продаётся: игра бесплатная',
+  'Confirm that you are 18 or older': 'Подтверди, что тебе есть 18',
 };
 
 /** Russian plural forms [one, few, many] keyed by the English singular passed to plural() / count(). */

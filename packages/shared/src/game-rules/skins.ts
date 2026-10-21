@@ -1,11 +1,12 @@
 /**
  * Weapon skins (v0.23): a finish — a paint job from the late-Soviet everyday (birch camo, Gzhel,
  * Khokhloma, «party gold»…) — on one particular weapon. Skins change only how a weapon looks: never
- * its numbers. They come from the skin case (299 diamonds, never a duplicate); a skin is equipped on
- * its weapon in the Arsenal and everybody in the match sees it.
+ * its numbers. They come from the skin case (talons since v0.24, never a duplicate); a skin is
+ * equipped on its weapon in the Arsenal and everybody in the match sees it.
  */
 import { WEAPON_IDS, isWeaponId } from './weapons.js';
 import type { WeaponId } from './weapons.js';
+import type { ShopPrice } from './economy.js';
 
 export const FINISH_IDS = ['berezka', 'rzhavchina', 'zima', 'flora', 'gzhel', 'pioner', 'malahit', 'hohloma', 'zoloto', 'yantar'] as const;
 export type FinishId = (typeof FINISH_IDS)[number];
@@ -37,8 +38,8 @@ export function isFinishId(v: unknown): v is FinishId {
   return typeof v === 'string' && (FINISH_IDS as readonly string[]).includes(v);
 }
 
-/** Price of the skin case in diamonds ($2.99, like the weapon case). */
-export const SKIN_CASE_PRICE = 299;
+/** Price of the skin case (v0.24: talons — there is no money in it). */
+export const SKIN_CASE_PRICE: ShopPrice = { currency: 'tokens', amount: 150, level: 1 };
 
 /** Chance of each rarity in percent (sums to 100) while every rarity still has skins to give. */
 export const SKIN_RARITY_CHANCE: Readonly<Record<SkinRarity, number>> = Object.freeze({ common: 55, rare: 28, epic: 13, legendary: 4 });

@@ -74,7 +74,7 @@ disabled in production).
 - [ ] A Telegram account with Russian as the app language opens the game in Russian, an English one in
       English; the EN/RU switch works and is remembered after closing and reopening the Mini App.
 - [ ] A team match (red vs blue, capture the flag or base capture) with players on both phones.
-- [ ] The Arsenal's Diamonds tab inside Telegram says purchases come later via Telegram Stars (card/crypto are web-only; the server refuses them for Telegram sessions).
+- [ ] v0.24: the game is free — the Arsenal shows no diamonds, no «Top up» and no Diamonds tab (inside Telegram and on the website alike); everything is unlocked with talons.
 - [ ] `/admin` shows the two players and the match.
 
 These steps need a real bot and domain and were **not** executed while building this release.
@@ -82,9 +82,10 @@ These steps need a real bot and domain and were **not** executed while building 
 ## Payments inside Telegram
 
 Telegram requires digital goods sold inside a Mini App to be paid with Telegram Stars (`XTR`).
-This release sells diamonds only on the website (Stripe / NOWPayments); inside the Mini App the
-Diamonds tab shows a «coming soon via Telegram Stars» note and `POST /api/pay/checkout` answers
-`403 telegram_stars_only` for sessions opened through Telegram. Implementing Stars means: an invoice
+Since v0.24 nothing is sold for money at all (`REAL_MONEY = false`, [ECONOMY.md](ECONOMY.md)):
+`POST /api/pay/checkout` answers `403 payments_off` for everybody. When sales return, the website's
+card / crypto code is kept for browsers and sessions opened through Telegram are refused
+(`403 telegram_stars_only`). Implementing Stars means: an invoice
 link from the bot (`createInvoiceLink`, currency `XTR`, price in Stars), answering
 `pre_checkout_query`, crediting diamonds once on `successful_payment` (idempotent by
 `telegram_payment_charge_id`, `payments.provider = 'telegram'` is already allowed by the schema) and

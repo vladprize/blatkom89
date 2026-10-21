@@ -1,7 +1,8 @@
-// Weapon skins end-to-end (v0.23): a player with diamonds opens the skin case in the Arsenal (adult
-// confirmation), sees the skin revealed and in the collection, the dressing room marks it as theirs
-// and paints the weapon, an unowned finish can be tried on, and in practice the weapon in hand and the
-// HUD icon wear the skin. The diamonds are granted straight in the test database (DATABASE_URL).
+// Weapon skins end-to-end (v0.23; v0.24: the case costs talons, no money in it, so no adult checkbox): a
+// player with talons opens the skin case in the Arsenal, sees the skin revealed and in the collection,
+// the dressing room marks it as theirs and paints the weapon, an unowned finish can be tried on, and in
+// practice the weapon in hand and the HUD icon wear the skin. The talons are granted straight in the
+// test database (DATABASE_URL).
 //
 // Usage: DATABASE_URL=… node tests/e2e/skins.mjs <baseUrl> <outDir>
 import { chromium } from 'playwright';
@@ -54,7 +55,7 @@ try {
   await page.getByRole('button', { name: 'Done' }).click();
   await page.getByTestId('menu-nick').waitFor({ timeout: 20000 });
   const userId = await page.evaluate(() => window.__blatkom.app.online.profile.id);
-  await sql`UPDATE profiles SET diamonds = 1000 WHERE user_id = ${userId}`;
+  await sql`UPDATE profiles SET tokens = 1000 WHERE user_id = ${userId}`;
 
   await page.getByTestId('arsenal-tile').click();
   await page.locator('.tabs button', { hasText: 'Case' }).click();
@@ -63,8 +64,7 @@ try {
   check(/0 of 320/.test(owned0), `the skin case is on the case tab next to the weapon case («${owned0}»)`);
   check((await page.locator('[data-testid=skin-odds] tbody tr').count()) === 4, 'the skin odds list four rarities');
   await page.getByTestId('open-skin-case').click();
-  check(await page.getByTestId('case-confirm').isDisabled(), 'opening needs the adult confirmation first');
-  await page.getByTestId('case-adult').check();
+  check((await page.getByTestId('case-adult').count()) === 0 && (await page.getByTestId('case-confirm').isEnabled()), 'a talon case is opened with a plain confirmation (no money, no adult checkbox)');
   await page.getByTestId('case-confirm').click();
   await page.getByTestId('skin-reveal').waitFor({ timeout: 15000 });
   const revealed = (await page.getByTestId('skin-reveal').locator('.h1').innerText()).trim();
@@ -72,11 +72,11 @@ try {
   const inv = await page.evaluate(() => window.__blatkom.app.online.inventory);
   const skin = inv.skins[0];
   const [weapon, finish] = skin.split('.');
-  check(inv.skins.length === 1 && inv.diamonds === 701, `one skin in the inventory (${skin}), 299 diamonds spent`);
+  check(inv.skins.length === 1 && inv.tokens === 850, `one skin in the inventory (${skin}), 150 talons spent`);
   check(inv.loadout.skins[weapon] === finish, 'the new skin went on its weapon at once');
   await page.screenshot({ path: `${outDir}/skins_reveal.png` });
-  const rows = await sql`SELECT kind, finish_id, price FROM case_openings WHERE user_id = ${userId}`;
-  check(rows.length === 1 && rows[0].kind === 'skin' && rows[0].finish_id === finish && rows[0].price === 299, 'the opening is recorded on the server');
+  const rows = await sql`SELECT kind, finish_id, price, currency FROM case_openings WHERE user_id = ${userId}`;
+  check(rows.length === 1 && rows[0].kind === 'skin' && rows[0].finish_id === finish && rows[0].price === 150 && rows[0].currency === 'tokens', 'the opening is recorded on the server (150 talons)');
 
   // the dressing room: try the skin on and see it marked as yours
   await page.locator('[data-testid=skin-reveal] [data-try]').click();

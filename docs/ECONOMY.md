@@ -1,17 +1,23 @@
-# Economy — talons, diamonds, the Arsenal, cases, weapon skins and payments
+# Economy — talons, the Arsenal, cases, weapon skins (and the payment code kept for later)
 
 Rules and prices live in one place, `packages/shared/src/game-rules/economy.ts`; the server
 (`apps/server/src/economy/repo.ts`, `apps/server/src/payments/`) is the only authority that changes
 balances. The client only displays what the server returns. Admin view: «Экономика» in `/admin`
 ([ADMIN.md](ADMIN.md), metric definitions in [ANALYTICS.md](ANALYTICS.md) §7).
 
+**v0.24: the game is free — nothing is sold for money** (the owner's decision; `REAL_MONEY = false`).
+Everything in the Arsenal, both cases included, is unlocked with talons and experience. Diamonds and
+the payment code stay in the codebase for a later Telegram Stars shop (§5): with `REAL_MONEY` off the
+server offers no packs and refuses checkouts (`403 payments_off`), no item has a diamond price, and
+the client shows no diamonds, no «Top up» and no diamonds tab anywhere.
+
 ## 1. Currencies
 
 | | Talons (`tokens` in code) | Diamonds (`diamonds`) |
 |---|---|---|
-| How you get them | online matches only (not practice) | bought for real money, 100 💎 = $1 (no bulk bonus); administrator grants |
-| Sold for money | never | yes — packs of 199, 299, 499, 999 and 1999 💎 |
-| Spent on | token-priced weapons, characters, equipment, every modification | diamond-priced weapons and characters, the rare-weapon case, the skin case |
+| How you get them | online matches only (not practice) | v0.24: not sold; only an administrator can grant them |
+| Sold for money | never | not while `REAL_MONEY` is off (packs of 199 … 1999 💎 when it is on) |
+| Spent on | everything: weapons, characters, equipment, modifications, both cases | nothing while `REAL_MONEY` is off |
 
 Talons per online match (`TOKEN_REWARD`, `tokenBreakdown()`): **5 per elimination, 2 per assist, 5 for
 playing the match to the end**, capped at 100 per match — the same in every mode, so a match pays for
@@ -37,24 +43,22 @@ grants).
 
 ## 3. The Arsenal
 
-Prices (`WEAPON_PRICES`, `CHARACTER_PRICES`, `GADGET_PRICES`, `MOD_PRICES`):
+Prices (`WEAPON_PRICES`, `CHARACTER_PRICES`, `GADGET_PRICES`, `MOD_PRICES`), all in talons since v0.24:
 
 | Item | Price |
 |---|---|
-| Sawn-off / Knife / TT / Uzi | 100 / 120 / 150 / 200 talons |
-| P92 (lvl 3) / Bat (lvl 5) / AKS-74U (lvl 7) / PPSh-41 (lvl 10) / M24 (lvl 13) | 250 / 300 / 400 / 500 / 650 talons |
-| Deagle, Axe | 199 💎 |
-| MP5, S-12K | 299 💎 |
-| M4A1, G36, M249 | 399 💎 |
-| SVD, AWM, RPG-7 | 499 💎 |
-| Characters for level + talons (eleven): Uchastkovy (lvl 1), Mikhalych (2), Karlych (3), Sonka (5), Tolyan (7), Gosha (9); v0.23: Sizy (10), Prusak (11), Sery (12), Borka (13), Bugai (15) | 150 / 200 / 300 / 400 / 550 / 700 talons; 800 / 900 / 1000 / 1100 / 1250 talons |
-| Characters for diamonds (eleven): Vityok / Lyova, Slavik / Zhora, Garik «Pendos» / Batya; v0.23: Murka / Alisa, Rogov / Samson, Arkadich | 199 / 299 / 399 / 499 💎; 299 / 399 / 399 / 499 / 499 💎 |
-| Equipment: smoke / flashbang (lvl 2) / Molotov (lvl 4) / mine (lvl 6) / C4 (lvl 8) / turret (lvl 12) | 100 / 150 / 250 / 300 / 350 / 450 talons |
-| Modifications, per weapon: red dot, laser / grip / silencer, extended mag / scope | 100 / 120 / 150 / 200 talons |
+| Sawn-off / Knife / TT / Uzi | 100 / 120 / 150 / 200 |
+| P92 (lvl 3) / Deagle (4) / Bat (5) / Axe (6) / AKS-74U (7) / MP5 (8) / S-12K (9) / PPSh-41 (10) | 250 / 300 / 300 / 350 / 400 / 450 / 500 / 500 |
+| M4A1 (lvl 11) / G36 (12) / M24 (13) / M249 (14) / SVD (15) / AWM (17) / RPG-7 (19) | 550 / 600 / 650 / 700 / 800 / 900 / 1000 |
+| Characters, levels 1–15: Uchastkovy (1), Mikhalych (2), Karlych (3), Sonka (5), Tolyan (7), Gosha (9), Sizy (10), Prusak (11), Sery (12), Borka (13), Bugai (15) | 150 / 200 / 300 / 400 / 550 / 700 / 800 / 900 / 1000 / 1100 / 1250 |
+| Characters, levels 16–26 (sold for diamonds until v0.24): Vityok (16), Murka (17), Lyova (18), Slavik (19), Zhora (20), Alisa (21), Garik «Pendos» (22), Rogov (23), Batya (24), Samson (25), Arkadich (26) | 1300 / 1350 / 1400 / 1450 / 1500 / 1600 / 1700 / 1800 / 1900 / 2000 / 2200 |
+| Equipment: smoke / flashbang (lvl 2) / Molotov (lvl 4) / mine (lvl 6) / C4 (lvl 8) / turret (lvl 12) | 100 / 150 / 250 / 300 / 350 / 450 |
+| Modifications, per weapon: red dot, laser / grip / silencer, extended mag / scope | 100 / 120 / 150 / 200 |
+| Rare-weapon case / skin case | 600 / 150 |
 
-Weapons for diamonds (10) slightly outnumber those for talons (9); characters are split evenly (11 / 11; the
-ten of v0.23 are default prices — five for talons higher up the level ladder, five for diamonds — until the
-owner names others).
+The ten weapons and eleven characters that were sold for diamonds until v0.24 joined the talon ladder
+at the levels above (the owner can change the numbers in the one table). A match pays about 30–40
+talons and 100–200 XP, so the top of the ladder (level 26) is a goal for months of play.
 
 Principles:
 
@@ -72,15 +76,20 @@ Principles:
 
 ## 4. The rare-weapon case
 
-299 💎 for one of ten rare weapons (Commissar's Mauser, Udarnik sledgehammer, engraved Tulka, the beat
+600 talons (v0.24; 299 💎 before) for one of ten rare weapons (Commissar's Mauser, Udarnik sledgehammer, engraved Tulka, the beat
 cop's crossbow, Stroyka nail gun — 12 % each; Tommy gun, Plamya-84 flamethrower, Mukha RPG — 10 %
 each; Golden Kalash, GM-94 grenade launcher — 5 % each). **No duplicates:** owned weapons never drop
 and the odds of the rest are renormalised (`caseOdds`); the Arsenal lists the current odds before the
 purchase. When the collection is complete the case is no longer sold. Draws use the OS CSPRNG
 (`crypto.randomInt`).
 
-`CASES_ENABLED=false` switches the case off on a server (`/api/shop/config` → `casesEnabled: false`,
-`POST /api/shop/case` → `403 cases_disabled`) for markets where paid randomised items are restricted.
+Cases are paid with talons, which are earned in matches and never sold, so there is no money in them and
+no adult confirmation (`confirmAge` is required only while a case has a diamond price). Every opening is
+recorded with its price and currency (`case_openings.currency`, migration 012); the admin's «diamonds spent
+on cases» counts only openings paid in diamonds.
+
+`CASES_ENABLED=false` switches the cases off on a server (`/api/shop/config` → `casesEnabled: false`,
+`POST /api/shop/case` → `403 cases_disabled`) for markets where randomised items are restricted.
 Whether that is needed is a legal question for the operator — this document is not legal advice.
 
 ## 4a. Weapon skins and the skin case (v0.23)
@@ -95,11 +104,11 @@ never a number (`game-rules/skins.ts`). Ten finishes from the late-Soviet everyd
 | epic | 13 % | Малахит (malachite), Хохлома (black, gold and red) |
 | legendary | 4 % | Золото партии (party gold), Янтарь (amber) |
 
-Every weapon can wear every finish: 32 × 10 = 320 skins. **The skin case** costs 299 💎 ($2.99) and gives
+Every weapon can wear every finish: 32 × 10 = 320 skins. **The skin case** costs 150 talons (v0.24; 299 💎 before) and gives
 a skin the player does not own: first the rarity is drawn by the chances above (a rarity whose skins are
 all owned drops out and the others share its chance — `skinCaseOdds`), then any unowned skin of that
 rarity with equal chance (`drawSkin`, OS CSPRNG). No duplicates; when all 320 are owned the case is no
-longer sold. The same adult confirmation and `CASES_ENABLED` switch as the weapon case
+longer sold. The same rules and `CASES_ENABLED` switch as the weapon case
 (`POST /api/shop/skin-case`). A new skin goes on its weapon at once if the weapon wore none.
 
 Owned skins are `user_items` rows of kind `skin` (`item_id` = `weapon.finish`, migration 011); the worn
@@ -111,7 +120,13 @@ pictures. In the dressing room every finish can be tried on (and taken into prac
 are worn with a tap. Players the room adds to complete a lineup sometimes wear a common or rare skin,
 like people who opened the case. The admin's economy page splits case openings by kind.
 
-## 5. Buying diamonds
+## 5. Buying diamonds (off since v0.24)
+
+Everything below is implemented and tested but switched off: with `REAL_MONEY = false`
+`/api/shop/config` reports no methods and no packs, `POST /api/pay/checkout` answers `403 payments_off`,
+and the client never shows diamonds. To sell again: set `REAL_MONEY`, give items diamond prices in the
+same tables, configure a provider (or Telegram Stars) and bring back the privacy-policy paragraph about
+payments.
 
 | Method | Provider | Server keys |
 |---|---|---|
@@ -155,8 +170,9 @@ mandatory reason, never below zero, ledger reason `grant` with the admin's id, a
 ## 7. Tests
 
 `apps/server/src/economy/economy.test.ts` (wallet, purchases and refusals, concurrency, loadout
-validation, cases without duplicates, the skin case (price, no duplicates, the new skin worn on a bare
-weapon, recorded openings), skins worn only when owned and shown to everyone in the room roster,
+validation, the free economy of v0.24 (every price in talons, diamonds buy nothing, checkout refused),
+cases for talons without duplicates, the skin case (price, no duplicates, the new skin worn on a bare
+weapon, recorded openings with their currency), skins worn only when owned and shown to everyone in the room roster,
 `CASES_ENABLED`, Stripe and NOWPayments signatures, single
 crediting, refunds, Telegram sessions refused, email sign-in), `apps/server/src/admin/economy-admin.test.ts`
 (economy panel numbers, grants), `packages/shared/src/__tests__/weapons2.test.ts` (balance,

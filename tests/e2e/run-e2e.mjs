@@ -21,6 +21,8 @@
 //      picker, the skin on the weapon in hand and on the HUD icon in practice (tests/e2e/skins.mjs)
 //  12. the roster (v0.23): 24 characters with portraits, the ten new ones' personal files and prices,
 //      practice as a new character, all ten sprite atlases loaded (tests/e2e/roster.mjs)
+//  13. phones (v0.24): the menu, the characters and the Arsenal (kit, every shop tab, its sheets) fit one
+//      phone screen at 393×680 RU and 360×640 EN, and nothing is sold for money (tests/e2e/phone.mjs)
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
 // E2E_PROD=1 runs the prebuilt deploy/ bundle exactly as a host would (NODE_ENV=production, guest login,
 // RENDER_EXTERNAL_URL, TRUST_PROXY) instead of the development server.
@@ -136,6 +138,9 @@ try {
   console.log('\n[e2e] the roster: 24 characters, the ten new ones in the files and in practice');
   const roster = spawnSync(process.execPath, ['tests/e2e/roster.mjs', base, join(out, 'roster')], { stdio: 'inherit' });
   if (roster.status !== 0) failed = true;
+  console.log('\n[e2e] phones: every screen and the Arsenal on one phone screen, nothing for money');
+  const phone = spawnSync(process.execPath, ['tests/e2e/phone.mjs', base, join(out, 'phone')], { stdio: 'inherit' });
+  if (phone.status !== 0) failed = true;
   console.log('\n[e2e] the three new maps: the picker in Russian, the cemetery, the square and the pioneer camp in practice');
   const maps = spawnSync(process.execPath, ['tests/e2e/maps.mjs', base, join(out, 'maps')], { stdio: 'inherit' });
   if (maps.status !== 0) failed = true;

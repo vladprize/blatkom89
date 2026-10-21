@@ -10916,7 +10916,7 @@ var FINISHES = Object.freeze({
 function isFinishId(v) {
   return typeof v === "string" && FINISH_IDS.includes(v);
 }
-var SKIN_CASE_PRICE = 299;
+var SKIN_CASE_PRICE = { currency: "tokens", amount: 150, level: 1 };
 var SKIN_RARITY_CHANCE = Object.freeze({ common: 55, rare: 28, epic: 13, legendary: 4 });
 var SKINNABLE_WEAPONS = WEAPON_IDS;
 function skinId(weapon, finish) {
@@ -10991,30 +10991,30 @@ function sanitizeLoadout(raw, own = {}) {
 }
 
 // packages/shared/src/game-rules/economy.ts
+var REAL_MONEY = false;
 var FREE_WEAPONS = WEAPON_IDS.filter((w) => WEAPONS[w].tier === "base");
 var WEAPON_PRICES = {
-  // four for tokens (the first one after about three matches)
+  // four for talons from the start (the first one after about three matches)
   obrez: { currency: "tokens", amount: 100, level: 1 },
   nozh: { currency: "tokens", amount: 120, level: 1 },
   tt: { currency: "tokens", amount: 150, level: 1 },
   uzi: { currency: "tokens", amount: 200, level: 1 },
-  // five for tokens from a level
+  // fifteen up the ladder (v0.24: the ten that were sold for diamonds are in it now)
   p92: { currency: "tokens", amount: 250, level: 3 },
+  deagle: { currency: "tokens", amount: 300, level: 4 },
   bita: { currency: "tokens", amount: 300, level: 5 },
+  topor: { currency: "tokens", amount: 350, level: 6 },
   ksyuha: { currency: "tokens", amount: 400, level: 7 },
+  mp5: { currency: "tokens", amount: 450, level: 8 },
+  s12: { currency: "tokens", amount: 500, level: 9 },
   ppsh: { currency: "tokens", amount: 500, level: 10 },
+  m4: { currency: "tokens", amount: 550, level: 11 },
+  g36: { currency: "tokens", amount: 600, level: 12 },
   m24: { currency: "tokens", amount: 650, level: 13 },
-  // ten for diamonds: $1.99 – $4.99
-  deagle: { currency: "diamonds", amount: 199, level: 1 },
-  topor: { currency: "diamonds", amount: 199, level: 1 },
-  mp5: { currency: "diamonds", amount: 299, level: 1 },
-  s12: { currency: "diamonds", amount: 299, level: 1 },
-  m4: { currency: "diamonds", amount: 399, level: 1 },
-  g36: { currency: "diamonds", amount: 399, level: 1 },
-  m249: { currency: "diamonds", amount: 399, level: 1 },
-  svd: { currency: "diamonds", amount: 499, level: 1 },
-  awm: { currency: "diamonds", amount: 499, level: 1 },
-  rpg: { currency: "diamonds", amount: 499, level: 1 }
+  m249: { currency: "tokens", amount: 700, level: 14 },
+  svd: { currency: "tokens", amount: 800, level: 15 },
+  awm: { currency: "tokens", amount: 900, level: 17 },
+  rpg: { currency: "tokens", amount: 1e3, level: 19 }
 };
 var CHARACTER_PRICES = {
   // for experience (level) + tokens
@@ -11030,18 +11030,18 @@ var CHARACTER_PRICES = {
   krysa: { currency: "tokens", amount: 1e3, level: 12 },
   svinya: { currency: "tokens", amount: 1100, level: 13 },
   buyvol: { currency: "tokens", amount: 1250, level: 15 },
-  // for diamonds
-  piranya: { currency: "diamonds", amount: 199, level: 1 },
-  leopard: { currency: "diamonds", amount: 299, level: 1 },
-  lobster: { currency: "diamonds", amount: 299, level: 1 },
-  akula: { currency: "diamonds", amount: 399, level: 1 },
-  oryol: { currency: "diamonds", amount: 399, level: 1 },
-  slon: { currency: "diamonds", amount: 499, level: 1 },
-  koshka: { currency: "diamonds", amount: 299, level: 1 },
-  lisa: { currency: "diamonds", amount: 399, level: 1 },
-  nosorog: { currency: "diamonds", amount: 399, level: 1 },
-  gorilla: { currency: "diamonds", amount: 499, level: 1 },
-  lev: { currency: "diamonds", amount: 499, level: 1 }
+  // v0.24: the eleven that were sold for diamonds close the ladder
+  piranya: { currency: "tokens", amount: 1300, level: 16 },
+  koshka: { currency: "tokens", amount: 1350, level: 17 },
+  leopard: { currency: "tokens", amount: 1400, level: 18 },
+  lobster: { currency: "tokens", amount: 1450, level: 19 },
+  akula: { currency: "tokens", amount: 1500, level: 20 },
+  lisa: { currency: "tokens", amount: 1600, level: 21 },
+  oryol: { currency: "tokens", amount: 1700, level: 22 },
+  nosorog: { currency: "tokens", amount: 1800, level: 23 },
+  slon: { currency: "tokens", amount: 1900, level: 24 },
+  gorilla: { currency: "tokens", amount: 2e3, level: 25 },
+  lev: { currency: "tokens", amount: 2200, level: 26 }
 };
 var FREE_GADGETS = ["f1"];
 var GADGET_PRICES = {
@@ -11053,7 +11053,7 @@ var GADGET_PRICES = {
   turret: { currency: "tokens", amount: 450, level: 12 }
 };
 var MOD_PRICES = { silencer: 150, reddot: 100, scope: 200, laser: 100, grip: 120, extmag: 150 };
-var CASE_PRICE = 299;
+var CASE_PRICE = { currency: "tokens", amount: 600, level: 1 };
 var CASE_TABLE = [
   { weapon: "mauser", rarity: "rare", chance: 12 },
   { weapon: "kuvalda", rarity: "rare", chance: 12 },
@@ -15572,7 +15572,7 @@ var LoadoutRequest = external_exports.object({
   /** Equipped skins per weapon (validated against ownership). */
   skins: external_exports.record(external_exports.enum(WEAPON_IDS), external_exports.enum(FINISH_IDS)).optional()
 }).strict();
-var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true) }).strict();
+var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true).optional() }).strict();
 var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card", "crypto"]) }).strict();
 var UpdateProfileRequest = external_exports.object({
   displayName: displayNameSchema.optional(),
@@ -16630,13 +16630,16 @@ var EconomyRepo = class {
       const inv = await this.load(tx, userId, wallet);
       const entry = drawCase(new Set(inv.weapons), rand());
       if (!entry) throw new EconomyError("collection_complete");
-      if (wallet.diamonds < CASE_PRICE) throw new EconomyError("funds");
+      const price = CASE_PRICE;
+      const balance = price.currency === "tokens" ? wallet.tokens : wallet.diamonds;
+      if (inv.level < price.level) throw new EconomyError("level");
+      if (balance < price.amount) throw new EconomyError("funds");
       const [opening] = await tx`
-        INSERT INTO case_openings (user_id, kind, weapon_id, rarity, price) VALUES (${userId}, 'weapon', ${entry.weapon}, ${entry.rarity}, ${CASE_PRICE}) RETURNING id`;
-      await this.debit(tx, userId, "diamonds", CASE_PRICE, wallet.diamonds, "case", `case:${opening.id}`);
+        INSERT INTO case_openings (user_id, kind, weapon_id, rarity, price, currency) VALUES (${userId}, 'weapon', ${entry.weapon}, ${entry.rarity}, ${price.amount}, ${price.currency}) RETURNING id`;
+      await this.debit(tx, userId, price.currency, price.amount, balance, "case", `case:${opening.id}`);
       await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${entry.weapon}, 'weapon', 'case') ON CONFLICT DO NOTHING`;
       this.log.info("case opened", { userId, weapon: entry.weapon, rarity: entry.rarity });
-      return { entry, inventory: await this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - CASE_PRICE }) };
+      return { entry, inventory: await this.load(tx, userId, { ...wallet, [price.currency]: balance - price.amount }) };
     });
   }
   /**
@@ -16649,11 +16652,14 @@ var EconomyRepo = class {
       const inv = await this.load(tx, userId, wallet);
       const drop = drawSkin(new Set(inv.skins), rand);
       if (!drop) throw new EconomyError("collection_complete");
-      if (wallet.diamonds < SKIN_CASE_PRICE) throw new EconomyError("funds");
+      const price = SKIN_CASE_PRICE;
+      const balance = price.currency === "tokens" ? wallet.tokens : wallet.diamonds;
+      if (inv.level < price.level) throw new EconomyError("level");
+      if (balance < price.amount) throw new EconomyError("funds");
       const [opening] = await tx`
-        INSERT INTO case_openings (user_id, kind, weapon_id, finish_id, rarity, price)
-        VALUES (${userId}, 'skin', ${drop.weapon}, ${drop.finish}, ${drop.rarity}, ${SKIN_CASE_PRICE}) RETURNING id`;
-      await this.debit(tx, userId, "diamonds", SKIN_CASE_PRICE, wallet.diamonds, "case", `skincase:${opening.id}`);
+        INSERT INTO case_openings (user_id, kind, weapon_id, finish_id, rarity, price, currency)
+        VALUES (${userId}, 'skin', ${drop.weapon}, ${drop.finish}, ${drop.rarity}, ${price.amount}, ${price.currency}) RETURNING id`;
+      await this.debit(tx, userId, price.currency, price.amount, balance, "case", `skincase:${opening.id}`);
       await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${skinId(drop.weapon, drop.finish)}, 'skin', 'case') ON CONFLICT DO NOTHING`;
       const l = inv.loadout;
       const equipped = !l.skins?.[drop.weapon];
@@ -16663,7 +16669,7 @@ var EconomyRepo = class {
         await tx`UPDATE profiles SET loadout = ${tx.json(loadout)}, updated_at = now() WHERE user_id = ${userId}`;
       }
       this.log.info("skin case opened", { userId, weapon: drop.weapon, finish: drop.finish, rarity: drop.rarity });
-      return { drop, equipped, inventory: await this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - SKIN_CASE_PRICE, loadout }) };
+      return { drop, equipped, inventory: await this.load(tx, userId, { ...wallet, [price.currency]: balance - price.amount, loadout }) };
     });
   }
   /**
@@ -18385,10 +18391,10 @@ async function economy(sql2, r, now = /* @__PURE__ */ new Date()) {
     SELECT mod_id AS id, count(*)::int AS count FROM weapon_mods
     WHERE acquired_at BETWEEN ${from} AND ${to} GROUP BY mod_id ORDER BY count DESC, mod_id`;
   const cases = await sql2`
-    SELECT rarity, count(*)::int AS count, sum(price)::int AS spent FROM case_openings
+    SELECT rarity, count(*)::int AS count, COALESCE(sum(price) FILTER (WHERE currency = 'diamonds'), 0)::int AS spent FROM case_openings
     WHERE created_at BETWEEN ${from} AND ${to} GROUP BY rarity ORDER BY count DESC, rarity`;
   const caseKinds = await sql2`
-    SELECT kind, count(*)::int AS count, sum(price)::int AS spent FROM case_openings
+    SELECT kind, count(*)::int AS count, COALESCE(sum(price) FILTER (WHERE currency = 'diamonds'), 0)::int AS spent FROM case_openings
     WHERE created_at BETWEEN ${from} AND ${to} GROUP BY kind ORDER BY kind`;
   const daily = await sql2`
     WITH l AS (
@@ -18698,9 +18704,12 @@ var registerShopRoutes = (router, deps) => {
       throw e;
     }
   };
+  const adultCheck = (body, price) => {
+    if (price.currency === "diamonds" && body.confirmAge !== true) throw new HttpError(400, "confirm_age", "Confirm that you are 18 or older");
+  };
   router.get("/api/shop/config", (ctx) => {
     const p = deps.sql ? pg().payments : null;
-    const res = { card: !!p?.card, crypto: !!p?.crypto, casesEnabled: deps.env.CASES_ENABLED, packs: [...DIAMOND_PACKS] };
+    const res = { card: REAL_MONEY && !!p?.card, crypto: REAL_MONEY && !!p?.crypto, casesEnabled: deps.env.CASES_ENABLED, packs: REAL_MONEY ? [...DIAMOND_PACKS] : [] };
     ctx.json(200, res);
   });
   router.get("/api/me/inventory", auth, async (ctx) => {
@@ -18728,18 +18737,18 @@ var registerShopRoutes = (router, deps) => {
   router.post("/api/shop/case", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
     if (!deps.env.CASES_ENABLED) throw new HttpError(403, "cases_disabled", "Cases are switched off on this server");
     const user = currentUser(ctx);
-    await ctx.body(CaseOpenRequest, 1024);
+    adultCheck(await ctx.body(CaseOpenRequest, 1024), CASE_PRICE);
     const { entry, inventory } = await guard(() => pg().economy.openCase(user.userId));
-    deps.services.analytics.server("case_opened", { weapon: entry.weapon, rarity: entry.rarity, price: CASE_PRICE, kind: "weapon" }, user);
+    deps.services.analytics.server("case_opened", { weapon: entry.weapon, rarity: entry.rarity, price: CASE_PRICE.amount, currency: CASE_PRICE.currency, kind: "weapon" }, user);
     const res = { weapon: entry.weapon, rarity: entry.rarity, inventory };
     ctx.json(200, res);
   });
   router.post("/api/shop/skin-case", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
     if (!deps.env.CASES_ENABLED) throw new HttpError(403, "cases_disabled", "Cases are switched off on this server");
     const user = currentUser(ctx);
-    await ctx.body(CaseOpenRequest, 1024);
+    adultCheck(await ctx.body(CaseOpenRequest, 1024), SKIN_CASE_PRICE);
     const { drop, equipped, inventory } = await guard(() => pg().economy.openSkinCase(user.userId));
-    deps.services.analytics.server("case_opened", { weapon: drop.weapon, rarity: drop.rarity, price: SKIN_CASE_PRICE, kind: "skin", finish: drop.finish }, user);
+    deps.services.analytics.server("case_opened", { weapon: drop.weapon, rarity: drop.rarity, price: SKIN_CASE_PRICE.amount, currency: SKIN_CASE_PRICE.currency, kind: "skin", finish: drop.finish }, user);
     const res = { weapon: drop.weapon, finish: drop.finish, rarity: drop.rarity, equipped, inventory };
     ctx.json(200, res);
   });
@@ -18749,6 +18758,7 @@ var registerShopRoutes = (router, deps) => {
     ctx.json(200, await pg().economy.setLoadout(user.userId, body));
   });
   router.post("/api/pay/checkout", auth, rateLimit(payLimiter, byUser), async (ctx) => {
+    if (!REAL_MONEY) throw new HttpError(403, "payments_off", "Nothing is sold for money: the game is free");
     const user = currentUser(ctx);
     if (user.method === "telegram") throw new HttpError(403, "telegram_stars_only", "Inside Telegram, diamonds will be sold for Telegram Stars \u2014 coming soon");
     const body = await ctx.body(CheckoutRequest, 1024);
