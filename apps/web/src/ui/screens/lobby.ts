@@ -154,7 +154,7 @@ export function renderLobby(o: {
           ? h(
               'div',
               { class: 'topbar__invite' },
-              s.inviteCode ? h('span', { class: 'code' }, s.inviteCode) : null,
+              s.inviteCode ? h('span', { class: 'topbar__code' }, s.inviteCode) : null,
               h('button', { class: 'btn btn--small btn--red', onclick: () => (shareInvite(invite, t('District business won’t wait. Come on down to BLATKOM ’89!')) ? null : void copy()) }, o.inTelegram ? t('Call the lads') : t('Share')),
               h('button', { class: 'btn btn--small topbar__copy', onclick: () => void copy() }, t('Copy')),
             )

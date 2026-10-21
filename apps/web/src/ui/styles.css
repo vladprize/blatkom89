@@ -579,6 +579,7 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 /* phone-only parts (shown by the block below) */
 .mapfield__line, .lobby__invite-btn, .pstar, .pdot, .teamcol__join .short, .topbar__invite, .lobby__rules-btn, .lobby__mapline, .rchat__qbtn, .modebtn__short { display: none; }
 .player--free { opacity: .45; }
+.charsum { display: none; }
 @media (max-width: 560px) {
   .screen { padding: calc(10px + var(--safe-top)) calc(10px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(10px + var(--safe-left)); }
   .wrap { gap: 10px; }
@@ -628,14 +629,6 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .tile--profile .tile__wallet { grid-column: 4; grid-row: 1 / 4; margin: 0; flex-direction: column; gap: 2px; font-size: 16px; align-items: flex-end; }
   .tile--profile .edit { top: 50%; right: 8px; transform: translateY(-50%); }
   .wrap--menu > .footer { padding-top: 0; font-size: 12px; line-height: 1.35; }
-}
-@media (max-width: 560px) and (max-height: 700px) {
-  .lobby { gap: 7px; }
-  .lobby .teamcol { padding: 4px; gap: 4px; }
-  .lobby .teamcol > .list { gap: 3px; }
-  .wrap--menu .logo { width: min(60%, 240px); }
-  .menu__play > .btn--red { min-height: 48px; }
-  .menu__play .stile { min-height: 46px; }
 
   /* the welcome window: labels stay inside their buttons, the window fits the screen */
   .overlay { padding: 10px; }
@@ -700,7 +693,7 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .lobby__invite { display: none; }
   .lobby--private .topbar .h1 { display: none; }
   .topbar__invite { display: flex; align-items: center; gap: 6px; margin-left: auto; min-width: 0; }
-  .topbar__invite .code { font-size: 20px; letter-spacing: .1em; white-space: nowrap; }
+  .topbar__code { font-family: Oswald, sans-serif; font-size: 20px; letter-spacing: .1em; color: var(--tape); white-space: nowrap; }
   .topbar__invite .btn { min-height: 36px; padding: 6px 10px; font-size: 13px; white-space: nowrap; }
   /* the phone's share sheet has «Copy» itself */
   .topbar__copy { display: none; }
@@ -720,6 +713,69 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .rchat.rchat--quick .rchat__qbtn { border-color: var(--tape); background: #3a3128; }
   .panel--insheet { border: 0; box-shadow: none; padding: 0; background: none; }
   .panel--insheet::before, .panel--insheet > .tag { display: none; }
+
+  /* character screen: 24 portraits in 6 × 4, the chosen one's summary, the personal file in a sheet */
+  .charsel { gap: 9px; }
+  .chars { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
+  .chars button { padding: 2px 2px 3px; gap: 2px; font-size: 10.5px; letter-spacing: 0; border-width: 1px; }
+  .chars button[aria-pressed='true'] { border-width: 2px; }
+  .chars button.locked::after { top: 3px; right: 3px; font-size: 10px; }
+  .screen--chars .dossier { display: none; }
+  .charsum { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; padding: 14px 10px 10px; }
+  .charsum__hero { display: block; padding: 0; border: 3px solid #e8dcc0; border-bottom-width: 10px; background: #e8dcc0; cursor: pointer; aspect-ratio: 3 / 4; overflow: hidden; transform: rotate(-1.2deg); box-shadow: 0 4px 0 rgba(0,0,0,.4); align-self: start; }
+  .charsum__img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .charsum__hero--locked .charsum__img { filter: grayscale(.85) contrast(.9) brightness(.8); }
+  .charsum__text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .charsum__name { font-family: Oswald, sans-serif; font-weight: 700; font-size: 20px; text-transform: uppercase; line-height: 1.05; }
+  .charsum__name .nick { color: var(--red); font-size: 15px; letter-spacing: .04em; }
+  .charsum__role { font-size: 14px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .charsum .badge { font-size: 11px; white-space: normal; line-height: 1.15; }
+  .charsum__quote { font-size: 14px; line-height: 1.2; padding-left: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .charsum__more { min-height: 30px; padding: 4px 10px; font-size: 12px; }
+  .charsel__actions { flex-wrap: nowrap; gap: 8px; }
+  .charsel__actions .btn { min-height: 46px; padding: 8px; font-size: 15px; min-width: 0; line-height: 1.1; white-space: normal; text-align: center; }
+  .dossier--sheet { display: grid; grid-template-columns: minmax(0, 37%) minmax(0, 1fr); gap: 5px 10px; align-items: start; }
+  .dossier--sheet > .dossier__hero { grid-column: 1; grid-row: 1 / span 4; margin: 4px 2px 0; border-width: 4px; border-bottom-width: 14px; max-width: none; justify-self: stretch; }
+  .dossier--sheet > .dossier__hero::before { top: -10px; left: 16px; width: 10px; height: 24px; border-width: 2px; }
+  .dossier--sheet .dossier__stamp { font-size: 11px; padding: 2px 6px; bottom: 14px; border-width: 2px; }
+  .dossier--sheet .dossier__text { display: contents; }
+  .dossier--sheet .dossier__text > * { grid-column: 2; font-size: 13px; line-height: 1.25; }
+  .dossier--sheet .dossier__text > .h1 { font-size: 20px; line-height: 1.1; }
+  .dossier--sheet .dossier__text > .quote { font-size: 15px; }
+  .dossier--sheet .dossier__text > .lore, .dossier--sheet .dossier__text > .badge, .dossier--sheet .dossier__text > .dossier__fields { grid-column: 1 / -1; }
+  .dossier--sheet .lore { font-size: 13px; line-height: 1.28; }
+  .dossier--sheet .dossier__fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 12px; margin-top: 0 !important; }
+  .dossier--sheet .field { grid-template-columns: 1fr; gap: 0; padding: 2px 0 3px; }
+  .dossier--sheet .field b { font-size: 10px; }
+  .dossier--sheet .field span { font-size: 16px; }
+  .dossier--sheet .dossier__note { grid-column: 1 / -1; font-size: 12px !important; margin-top: 4px !important; }
+}
+/* shorter phones (≤ 700 px tall): a little tighter everywhere */
+@media (max-width: 560px) and (max-height: 700px) {
+  .charsel { gap: 7px; }
+  .chars button { font-size: 9.5px; }
+  .charsum { grid-template-columns: 78px minmax(0, 1fr); padding-top: 13px; }
+  .charsum__quote { -webkit-line-clamp: 1; }
+  .dossier--sheet .dossier__note { display: none; }
+  .dossier--sheet .dossier__text > .quote { font-size: 14px; }
+  .dossier--sheet .lore { line-height: 1.22; }
+  .sheet { gap: 6px; padding-top: 8px; }
+  .sheet__head { min-height: 30px; }
+  .sheet__x { width: 32px; height: 32px; }
+  .lobby { gap: 7px; }
+  .lobby .player { min-height: 24px; padding-top: 1px; padding-bottom: 1px; line-height: 1.1; }
+  .lobby .seg--modes .modebtn { min-height: 44px; }
+  .lobby .rchat__log { min-height: 36px; max-height: 36px; padding-top: 2px; padding-bottom: 2px; }
+  .lobby .teamcol { padding: 4px; gap: 4px; }
+  .lobby .teamcol > .list { gap: 3px; }
+  .wrap--menu .logo { width: min(60%, 240px); }
+  .menu__play > .btn--red { min-height: 48px; }
+  .menu__play .stile { min-height: 46px; }
+}
+/* very short phones (≤ 620 px tall) */
+@media (max-width: 560px) and (max-height: 620px) {
+  .chars button > span { display: none; }
+  .lobby__note { display: none; }
 }
 
 /* ── v0.23 weapon skins: the dressing room's picker, swatches, the skin case ── */

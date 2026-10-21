@@ -11,6 +11,7 @@ import { hudBus } from '../game/scenes/hudBus.js';
 import { ChatOverlay, ChatPanel, isMuted } from '../ui/chat.js';
 import type { ChatSource } from '../ui/chat.js';
 import { h, toast, portrait, asset, fmtDuration } from '../ui/dom.js';
+import { openSheet } from '../ui/sheet.js';
 import { getSettings, updateSettings, storageGet, storageSet, onSettings } from './settings.js';
 import { ONLINE_AVAILABLE, VERSION } from './config.js';
 import { setBackButton, enterGameMode, leaveGameMode, telegramStartParam, inTelegram, haptic } from '../telegram/tg.js';
@@ -721,7 +722,45 @@ export class App {
     this.host.previewScene()?.setFocus(selected);
     const grid = h('div', { class: 'chars', role: 'radiogroup', 'aria-label': t('Characters') });
     const dossier = h('div', { class: 'panel dossier' });
-    const actions = h('div', { class: 'row' });
+    // phones: a short summary under the grid; the whole personal file opens in a sheet
+    const summary = h('div', { class: 'panel charsum', 'data-testid': 'char-summary' });
+    const actions = h('div', { class: 'row charsel__actions' });
+    /** The personal file: the portrait from the BLATKOM sheets, the text and the record card. */
+    const file = (id: CharacterId, locked: boolean, price: string | null): HTMLElement[] => {
+      const c = charText(id);
+      return [
+        h('div', { class: `dossier__hero ${locked ? 'dossier__hero--locked' : ''}` }, heroImg(id, 'dossier__img'), h('div', { class: 'dossier__stamp' }, locked ? t('NOT IN THE CREW') : t('IN THE CREW'))),
+        h(
+          'div',
+          { class: 'col dossier__text' },
+          h('div', { class: 'h1' }, c.name, ' ', h('span', { style: 'color:var(--red)' }, `«${c.nickname}»`)),
+          h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, t('Role:'), ' '), c.role),
+          h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, t('Temper:'), ' '), c.personality),
+          h('div', { class: 'quote' }, `«${c.quote}»`),
+          h('div', { class: 'lore' }, c.lore),
+          price ? h('div', { class: 'badge badge--host', style: 'align-self:flex-start' }, price) : null,
+          h(
+            'div',
+            { class: 'col dossier__fields', style: 'gap:0;margin-top:6px' },
+            ...(
+              [
+                [t('Name'), c.name],
+                [t('Alias'), c.nickname],
+                [t('Species'), c.species],
+                [t('District'), c.district],
+                [t('Business'), c.business],
+                [t('Weapons'), c.weaponsNote],
+              ] as const
+            ).map(([k, v]) => h('div', { class: 'field' }, h('b', null, k), h('span', null, v))),
+            h('div', { class: 'muted dossier__note', style: 'font-size:13px;margin-top:8px' }, t('All characters have the same stats — only their looks and temper differ.')),
+          ),
+        ),
+      ];
+    };
+    const buttons = (locked: boolean): HTMLElement[] =>
+      locked
+        ? [h('button', { class: 'btn btn--red grow', onclick: () => this.showArsenal(true, 'characters') }, t('Unlock in the Arsenal')), h('button', { class: 'btn grow', onclick: () => this.startPractice({ ...this.lastPractice, character: selected }) }, t('Try in practice'))]
+        : [h('button', { class: 'btn btn--red grow', onclick: confirm }, t('Choose'))];
     const draw = () => {
       grid.replaceChildren(
         ...CHARACTER_IDS.map((id) =>
@@ -747,42 +786,28 @@ export class App {
       const c = charText(selected);
       const locked = !this.ownsCharacter(selected);
       const price = locked ? characterPriceNote(selected, this.online?.inventory ?? null) : null;
-      dossier.replaceChildren(
+      dossier.replaceChildren(h('span', { class: 'tag' }, t('Personal File')), ...file(selected, locked, price));
+      const openFile = () =>
+        openSheet(this.root, {
+          title: t('Personal File'),
+          testid: 'dossier-sheet',
+          cls: 'sheet--dossier',
+          body: h('div', { class: 'dossier dossier--sheet' }, ...file(selected, locked, price)),
+          actions: h('div', { class: 'row', style: 'flex:1;flex-wrap:nowrap' }, ...buttons(locked)),
+        });
+      summary.replaceChildren(
         h('span', { class: 'tag' }, t('Personal File')),
-        // the character's portrait from the BLATKOM sheets, as on the poster
-        h('div', { class: `dossier__hero ${locked ? 'dossier__hero--locked' : ''}` }, heroImg(selected, 'dossier__img'), h('div', { class: 'dossier__stamp' }, locked ? t('NOT IN THE CREW') : t('IN THE CREW'))),
+        h('button', { class: `charsum__hero ${locked ? 'charsum__hero--locked' : ''}`, 'aria-label': t('Personal File'), onclick: openFile }, heroImg(selected, 'charsum__img')),
         h(
           'div',
-          { class: 'col dossier__text' },
-          h('div', { class: 'h1' }, c.name, ' ', h('span', { style: 'color:var(--red)' }, `«${c.nickname}»`)),
-          h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, t('Role:'), ' '), c.role),
-          h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, t('Temper:'), ' '), c.personality),
-          h('div', { class: 'quote' }, `«${c.quote}»`),
-          h('div', { class: 'lore' }, c.lore),
-          price ? h('div', { class: 'badge badge--host', style: 'align-self:flex-start' }, price) : null,
-          h(
-            'div',
-            { class: 'col', style: 'gap:0;margin-top:6px' },
-            ...(
-              [
-                [t('Name'), c.name],
-                [t('Alias'), c.nickname],
-                [t('Species'), c.species],
-                [t('District'), c.district],
-                [t('Business'), c.business],
-                [t('Weapons'), c.weaponsNote],
-              ] as const
-            ).map(([k, v]) => h('div', { class: 'field' }, h('b', null, k), h('span', null, v))),
-            h('div', { class: 'muted', style: 'font-size:13px;margin-top:8px' }, t('All characters have the same stats — only their looks and temper differ.')),
-          ),
+          { class: 'charsum__text' },
+          h('div', { class: 'charsum__name' }, c.name, ' ', h('span', { class: 'nick' }, `«${c.nickname}»`)),
+          h('div', { class: 'charsum__role muted' }, c.role),
+          h('div', { class: 'quote charsum__quote' }, `«${c.quote}»`),
+          h('div', { class: 'row', style: 'gap:6px;margin-top:auto' }, price ? h('span', { class: 'badge badge--host' }, price) : h('span', { class: 'badge badge--ok' }, t('IN THE CREW')), h('button', { class: 'btn btn--small charsum__more', 'data-testid': 'dossier-open', onclick: openFile }, t('Personal File'), ' ›')),
         ),
       );
-      actions.replaceChildren(
-        locked
-          ? h('button', { class: 'btn btn--red grow', onclick: () => this.showArsenal(true, 'characters') }, t('Unlock in the Arsenal'))
-          : h('button', { class: 'btn btn--red grow', onclick: confirm }, t('Choose')),
-      );
-      if (locked) actions.append(h('button', { class: 'btn grow', onclick: () => this.startPractice({ ...this.lastPractice, character: selected }) }, t('Try in practice')));
+      actions.replaceChildren(...buttons(locked));
     };
     const confirm = () => {
       if (!this.ownsCharacter(selected)) return;
@@ -790,11 +815,13 @@ export class App {
       storageSet('blatkom89.character', selected);
       analytics.track('character_selected', { character: selected });
       void this.online?.setPreferredCharacter(selected);
+      root.querySelector('.sheetlay')?.dispatchEvent(new Event('sheet-close'));
       this.back();
     };
+    const root = this.root;
     draw();
     if (this.online) void this.online.loadInventory().then(() => this.screen === 'characters' && draw()).catch(() => {});
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar(t('Choose a Character')), grid, dossier, actions)));
+    this.render(h('div', { class: 'screen screen--dim screen--chars' }, h('div', { class: 'wrap charsel' }, this.topbar(t('Choose a Character')), grid, summary, dossier, actions)));
   }
 
   // ── arsenal (loadout, shop, case, diamonds) ─────────────────────────────
