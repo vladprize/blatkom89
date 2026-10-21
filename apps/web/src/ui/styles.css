@@ -595,7 +595,13 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .corner .seg--tiny button { min-height: 32px; padding: 5px 8px; font-size: 13px; }
   .corner .iconbtn { width: 34px; height: 32px; }
   .corner__gear { display: grid; }
-  .wrap--menu .logo { width: min(74%, 300px); margin: -4px auto 0; }
+  .wrap--menu .logo { width: min(74%, 300px); margin: -4px auto 0; transform: translateX(7.5%); }
+  /* the star and the word sit left of the picture's middle (the ’89 hangs out right): shift the
+     picture so the word is centred on the screen */
+  .wrap--menu .logo[src*='logo_ru'] { transform: translateX(7.15%); }
+  /* the logo and the panels in the middle of the screen, the switches stay on top */
+  .wrap--menu > .menu-center { margin-top: auto; margin-bottom: auto; }
+  .wrap--menu > .footer { margin-top: 0; }
   .menu { gap: 10px; margin-top: 2px; }
   .menu__play { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 18px 10px 10px; }
   .menu__play > .btn--red { grid-column: 1 / -1; min-height: 52px; }
@@ -714,6 +720,12 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .panel--insheet { border: 0; box-shadow: none; padding: 0; background: none; }
   .panel--insheet::before, .panel--insheet > .tag { display: none; }
 
+  /* the avatar picker: 24 portraits in 5 columns, the whole window on one screen */
+  .avamodal { gap: 8px; padding: 16px 10px 10px; margin-top: 0; }
+  .avamodal .h2 { font-size: 24px; margin-top: 2px !important; }
+  .avamodal .muted { font-size: 14px !important; }
+  .avapick { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 2px; }
+
   /* character screen: 24 portraits in 6 × 4, the chosen one's summary, the personal file in a sheet */
   .charsel { gap: 9px; }
   .chars { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
@@ -774,6 +786,7 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 }
 /* very short phones (≤ 620 px tall) */
 @media (max-width: 560px) and (max-height: 620px) {
+  .avapick { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
   .chars button > span { display: none; }
   .lobby__note { display: none; }
 }

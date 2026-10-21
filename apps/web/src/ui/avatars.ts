@@ -93,7 +93,7 @@ export function openAvatarPicker(root: HTMLElement, o: { current: AvatarId | nul
     { class: 'overlay overlay--top overlay--scroll', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('Choose an avatar'), onclick: (e: Event) => e.target === overlay && close() },
     h(
       'div',
-      { class: 'panel modal modal--wide col' },
+      { class: 'panel modal modal--wide col avamodal' },
       h('span', { class: 'tag' }, t('Personal file')),
       h('div', { class: 'h2', style: 'margin-top:8px' }, t('Choose an avatar')),
       h('div', { class: 'muted', style: 'font-size:15px' }, t('Others see it next to your alias in the rooms.')),
