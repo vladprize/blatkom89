@@ -36,18 +36,28 @@ const LIGHT_TEX_SIZE = 256;
 /** Peak brightness gain of a map lamp at full intensity (in scene-multiplier units). */
 const LAMP_GAIN = 1.25;
 const BLEND_KEY = '__blatkomOverbright';
+const ADD_KEY = '__blatkomPureAdd';
 
-function overbrightBlend(scene: Phaser.Scene): number | null {
+/** A custom WebGL blend mode, registered once per renderer (null on the Canvas renderer). */
+function customBlend(scene: Phaser.Scene, key: string, make: (gl: WebGLRenderingContext) => number[]): number | null {
   const r = scene.game.renderer;
   if (r.type !== Phaser.WEBGL) return null;
   const wr = r as Phaser.Renderer.WebGL.WebGLRenderer;
   const holder = wr as unknown as Record<string, number | undefined>;
-  if (holder[BLEND_KEY] === undefined) {
-    const gl = wr.gl;
-    holder[BLEND_KEY] = wr.addBlendMode([gl.DST_COLOR, gl.SRC_COLOR], gl.FUNC_ADD);
-  }
-  return holder[BLEND_KEY]!;
+  if (holder[key] === undefined) holder[key] = wr.addBlendMode(make(wr.gl), wr.gl.FUNC_ADD);
+  return holder[key]!;
 }
+
+/** result = 2 × light × scene (see the header). */
+const overbrightBlend = (scene: Phaser.Scene) => customBlend(scene, BLEND_KEY, (gl) => [gl.DST_COLOR, gl.SRC_COLOR]);
+
+/**
+ * Plain additive light (src + dst). Phaser's own ADD is (src + dst × dst alpha), and a Render
+ * Texture draws its batch into a cleared buffer first: there the alpha left by one pool scaled down
+ * every pool drawn under the next one's square — a lamp's light was cut out in a square around each
+ * player (the «square shadow»). With ONE/ONE the pools just add up.
+ */
+const pureAddBlend = (scene: Phaser.Scene) => customBlend(scene, ADD_KEY, (gl) => [gl.ONE, gl.ONE]);
 
 function ensureTextures(scene: Phaser.Scene): void {
   const tm = scene.textures;
@@ -130,6 +140,8 @@ export class Lighting {
   private readonly ambient: number;
   private readonly flickerSeeds: number[];
   private readonly blend: number | null;
+  /** Blend of the light pools inside the light map (pure additive; Canvas: «lighter»). */
+  private readonly addBlend: number;
   /** Light-map units per scene-multiplier unit (0.5 with the overbright blend, 1 with multiply). */
   private readonly unit: number;
   private readonly fixtures: Fixture[] = [];
@@ -144,6 +156,7 @@ export class Lighting {
   ) {
     ensureTextures(scene);
     this.blend = overbrightBlend(scene);
+    this.addBlend = pureAddBlend(scene) ?? Phaser.BlendModes.ADD;
     this.unit = this.blend === null ? 1 : 0.5;
     const a = map.ambient;
     // Ambient: the map tint (hue only) blended toward white, at a brightness set by the level.
@@ -252,7 +265,10 @@ export class Lighting {
       const k = 1 - (now - d.born) / Math.max(1, d.until - d.born);
       this.stamp(rt, d.x - ox, d.y - oy, d.radius, d.color, d.intensity * k, view, d.x, d.y);
     }
-    // one fill + one batched draw instead of a framebuffer switch per light (matters on tiled mobile GPUs)
+    // one fill + one batched draw instead of a framebuffer switch per light (matters on tiled mobile GPUs).
+    // The fill is drawn with whatever blend mode the renderer was left in: make it a plain overwrite.
+    const r = this.scene.game.renderer;
+    if (r.type === Phaser.WEBGL) (r as Phaser.Renderer.WebGL.WebGLRenderer).setBlendMode(Phaser.BlendModes.NORMAL);
     rt.fill(this.ambient, 1);
     if (this.used > 0) rt.draw(this.pool.slice(0, this.used));
   }
@@ -262,7 +278,7 @@ export class Lighting {
     if (wx + radius < view.x || wx - radius > view.right || wy + radius < view.y || wy - radius > view.bottom) return;
     let img = this.pool[this.used];
     if (!img) {
-      img = this.scene.make.image({ key: LIGHT_TEX, add: false }).setOrigin(0.5, 0.5).setBlendMode(Phaser.BlendModes.ADD);
+      img = this.scene.make.image({ key: LIGHT_TEX, add: false }).setOrigin(0.5, 0.5).setBlendMode(this.addBlend);
       this.pool.push(img);
     }
     this.used++;
