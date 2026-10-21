@@ -22,6 +22,20 @@ export function modeName(m: GameMode): string {
 }
 
 /** Under the name on a mode button. */
+/** A one-word name for the narrow mode buttons on phones (the full name is in the rules sheet). */
+export function modeShort(m: GameMode): string {
+  switch (m) {
+    case 'ffa':
+      return t('Solo');
+    case 'teams':
+      return t('Teams');
+    case 'ctf':
+      return t('Flag');
+    case 'bases':
+      return t('Bases');
+  }
+}
+
 export function modeSub(m: GameMode): string {
   switch (m) {
     case 'ffa':

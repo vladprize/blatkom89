@@ -26,7 +26,7 @@ import { clearLocalProfile, loadLocalProfile, saveLocalProfile } from '../profil
 import { openNicknameDialog, randomNickname } from '../profile/nickname.js';
 import { renderResults } from '../ui/screens/results.js';
 import { renderLobby, modeSwitch } from '../ui/screens/lobby.js';
-import { mapPicker } from '../ui/maps.js';
+import { mapField } from '../ui/maps.js';
 import { fitAlias, whenSized } from '../ui/fit.js';
 import { avatarButton, openAvatarPicker } from '../ui/avatars.js';
 import { MODE_ORDER, modeIcon, modeName, modeRules, modeSub } from '../ui/modes.js';
@@ -77,6 +77,25 @@ function speakerIcon(on: boolean): SVGSVGElement {
     path('M15.5 8.5a5 5 0 0 1 0 7', true);
     path('M18.5 5.5a9.5 9.5 0 0 1 0 13', true);
   } else path('M16 9.5l5 5M21 9.5l-5 5', true);
+  return svg;
+}
+
+/** A cog (settings), inline SVG: the phone menu keeps Settings in the corner. */
+function gearIcon(): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '18');
+  svg.setAttribute('height', '18');
+  svg.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS(NS, 'path');
+  p.setAttribute('fill', 'currentColor');
+  p.setAttribute('fill-rule', 'evenodd');
+  p.setAttribute(
+    'd',
+    'M10.3 2h3.4l.5 2.6c.6.2 1.2.5 1.7.9l2.5-.9 1.7 2.9-2 1.7c.1.6.1 1.2 0 1.8l2 1.7-1.7 2.9-2.5-.9c-.5.4-1.1.7-1.7.9l-.5 2.6h-3.4l-.5-2.6c-.6-.2-1.2-.5-1.7-.9l-2.5.9-1.7-2.9 2-1.7a6 6 0 0 1 0-1.8l-2-1.7 1.7-2.9 2.5.9c.5-.4 1.1-.7 1.7-.9zM12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8z',
+  );
+  svg.append(p);
   return svg;
 }
 
@@ -418,7 +437,7 @@ export class App {
               h('button', { class: 'btn btn--red', onclick: () => this.quickMatch(), disabled: !ONLINE_AVAILABLE }, t('Quick Match'), h('span', { class: 'sub' }, t('online, up to {n} comrades', { n: MAX_ROOM_PLAYERS }))),
               h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, t('Play with Friends'), h('span', { class: 'sub' }, t('a room by invitation'))),
               h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, t('Practice'), h('span', { class: 'sub' }, t('against bots, no internet needed'))),
-              h('button', { class: 'btn', onclick: () => this.showSettings() }, t('Settings'), h('span', { class: 'sub' }, t('picture, sound, controls, language'))),
+              h('button', { class: 'btn menu__settings', onclick: () => this.showSettings() }, t('Settings'), h('span', { class: 'sub' }, t('picture, sound, controls, language'))),
               this.online ? (this.socialTiles = this.socialRow()) : null,
               onlineNote,
             ),
@@ -435,7 +454,7 @@ export class App {
                   portrait(this.character),
                   h('div', { class: 'col', style: 'gap:2px;min-width:0' }, h('div', { class: 'name' }, charText(this.character).name), h('div', { class: 'nick' }, `«${charText(this.character).nickname}»`), h('div', { class: 'hand' }, charText(this.character).quote)),
                 ),
-                h('button', { class: 'btn btn--small', onclick: () => this.showCharacters() }, t('Change character')),
+                h('button', { class: 'btn btn--small menu__charbtn', onclick: () => this.showCharacters() }, t('Change character')),
               ),
               h('div', { class: 'tiles' }, this.stripEl, this.arsenalTile()),
             ),
@@ -475,6 +494,8 @@ export class App {
       paint();
       box.append(btn);
     }
+    // phones: Settings lives here instead of a fourth big button
+    if (this.screen === 'menu') box.append(h('button', { class: 'iconbtn corner__gear', 'aria-label': t('Settings'), title: t('Settings'), 'data-testid': 'corner-settings', onclick: () => this.showSettings() }, gearIcon()));
     return box;
   }
 
@@ -819,7 +840,7 @@ export class App {
       'div',
       { class: 'wrap' },
       this.topbar(t('Practice')),
-      h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Map')), mapPicker({ selected: mapId, onPick: (m) => (mapId = m) })),
+      h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Map')), mapField({ selected: mapId, onPick: (m) => (mapId = m) })),
       h(
         'div',
         { class: 'panel col' },
@@ -1076,7 +1097,7 @@ export class App {
         h('span', { class: 'tag' }, t('Your Own Room')),
         h('div', { class: 'muted' }, t('Create a room and send your friends the invite link. Up to {n} players.', { n: MAX_ROOM_PLAYERS })),
         modeSwitch({ mode: gameMode, onMode: (m) => (gameMode = m) }),
-        mapPicker({ selected: mapId, onPick: (m) => (mapId = m) }),
+        mapField({ selected: mapId, onPick: (m) => (mapId = m) }),
         h(
           'button',
           {

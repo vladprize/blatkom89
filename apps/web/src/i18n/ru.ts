@@ -702,6 +702,13 @@ export const RU: Record<string, string> = {
   'Rare': 'Редкое',
   'Epic': 'Эпическое',
   'Legendary': 'Легендарное',
+  // ── Mobile: menu, lobby, characters
+  'Change': 'Сменить',
+  'Rules': 'Правила',
+  'Ready-made lines': 'Готовые фразы',
+  'Solo': 'Сам за себя',
+  'Teams': 'Команды',
+  'Flag': 'Флаг',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)

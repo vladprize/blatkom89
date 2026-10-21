@@ -51,10 +51,13 @@ class Composer {
   team = false;
   private readonly scopeBtn: HTMLButtonElement;
   private readonly sendBtn: HTMLButtonElement;
+  /** Phones (lobby/results panel): shows the ready-made lines in place of the log. */
+  private readonly quickBtn: HTMLButtonElement;
 
   constructor(
     private readonly src: ChatSource,
     private readonly onSent: () => void,
+    onQuick?: () => void,
   ) {
     this.input = h('input', {
       class: 'input rchat__input',
@@ -65,10 +68,11 @@ class Composer {
     }) as HTMLInputElement;
     this.scopeBtn = h('button', { class: 'rchat__scope', type: 'button', 'data-testid': 'room-chat-scope', onclick: () => (this.setTeam(!this.team), this.input.focus()) }) as HTMLButtonElement;
     this.sendBtn = h('button', { class: 'btn btn--small btn--red rchat__send', type: 'button', 'data-testid': 'room-chat-send', onclick: () => this.send() }) as HTMLButtonElement;
-    this.row = h('div', { class: 'rchat__row' }, this.scopeBtn, this.input, this.sendBtn);
+    this.quickBtn = h('button', { class: 'rchat__qbtn', type: 'button', 'data-testid': 'room-chat-quickbtn', onclick: () => onQuick?.() }, '☺') as HTMLButtonElement;
+    this.row = h('div', { class: 'rchat__row' }, this.scopeBtn, onQuick ? this.quickBtn : null, this.input, this.sendBtn);
     this.quick = h('div', { class: 'rchat__quick', 'data-testid': 'room-chat-quick' });
     // a press on the buttons must not take the focus away from the input (the overlay closes on blur)
-    for (const b of [this.scopeBtn, this.sendBtn]) b.addEventListener('pointerdown', (e) => e.preventDefault());
+    for (const b of [this.scopeBtn, this.sendBtn, this.quickBtn]) b.addEventListener('pointerdown', (e) => e.preventDefault());
     this.quick.addEventListener('pointerdown', (e) => e.preventDefault());
     this.relabel();
   }
@@ -78,6 +82,8 @@ class Composer {
     this.input.placeholder = t('Say something…');
     this.input.setAttribute('aria-label', t('Chat message'));
     this.sendBtn.textContent = t('Send');
+    this.quickBtn.setAttribute('aria-label', t('Ready-made lines'));
+    this.quickBtn.title = t('Ready-made lines');
     fill(this.quick, ...quickLines().map((q) => h('button', { class: 'chip', type: 'button', onclick: () => this.send(q) }, q)));
     this.setTeam(this.team);
   }
@@ -113,7 +119,14 @@ export class ChatPanel {
 
   constructor(private readonly src: ChatSource) {
     this.log = h('div', { class: 'rchat__log', role: 'log', 'aria-live': 'polite', 'data-testid': 'room-chat-log' });
-    this.composer = new Composer(src, () => this.scrollDown());
+    this.composer = new Composer(
+      src,
+      () => {
+        this.el.classList.remove('rchat--quick');
+        this.scrollDown();
+      },
+      () => this.el.classList.toggle('rchat--quick'),
+    );
     this.composer.input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.isComposing) {
         e.preventDefault();
