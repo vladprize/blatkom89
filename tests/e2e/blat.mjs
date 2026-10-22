@@ -8,11 +8,15 @@
 // balance becomes 1 800 and «counted» 1; B opening it again pays nothing more; an existing player who
 // opens a link is not attached to anyone; B's phone screen has no sideways scroll. With an admin login,
 // the dashboard's $BLAT page and the player's card show it too.
+// Part C: the BLAT DROP tab says the date isn't set yet; the administrator sets one in the dashboard (or,
+// without an admin login, the test writes it into the database) and A's desktop and B's phone count down
+// to the same second; a balance snapshot from the dashboard downloads as CSV with A's 1 800 and B's 300;
+// clearing the date brings «isn't set yet» back.
 //
 // Usage: DATABASE_URL=… node tests/e2e/blat.mjs <baseUrl> <outDir> [adminUser] [adminPass]
 import { chromium } from 'playwright';
 import postgres from 'postgres';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
 const [base, outDir, adminUser, adminPass] = process.argv.slice(2);
@@ -83,6 +87,20 @@ async function openBlat(page) {
   await page.getByTestId('menu-blat').click();
   await page.getByTestId('blat-balance').waitFor({ timeout: 20000 });
 }
+async function openDrop(page) {
+  await page.getByTestId('menu-blat').click();
+  await page.getByTestId('blat-tab-drop').click();
+  await page.getByTestId('blat-drop').waitFor({ timeout: 20000 });
+}
+/** Back to the balance tab and to BLAT DROP again (a fresh answer from the server). */
+async function reopenDrop(page) {
+  await page.getByTestId('blat-tab-balance').click();
+  await page.getByTestId('blat-balance').waitFor({ timeout: 20000 });
+  await page.getByTestId('blat-tab-drop').click();
+  await page.getByTestId('blat-drop').waitFor({ timeout: 20000 });
+}
+const readCount = (page) => page.evaluate(() => ['d', 'h', 'm', 's'].map((k) => Number(document.querySelector(`[data-testid=drop-${k}]`)?.textContent)));
+const seconds = ([d, h, m, s]) => ((d * 24 + h) * 60 + m) * 60 + s;
 async function toMenu(page) {
   await page.locator('.back').first().click();
   await page.getByTestId('menu-nick').waitFor({ timeout: 15000 });
@@ -162,10 +180,13 @@ try {
   check(self.length === 0, 'A (an existing account) opening B’s link is not attached to anyone');
 
   // ── the dashboard ─────────────────────────────────────────────────────────
+  let admin = null;
   if (adminUser && adminPass) {
-    const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 }, locale: 'ru-RU' });
+    const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 }, locale: 'ru-RU', timezoneId: 'UTC', acceptDownloads: true });
     const page = await ctx.newPage();
     page.on('pageerror', (e) => problems.push(`[admin pageerror] ${e.message}`));
+    // the dashboard asks before every change
+    page.on('dialog', (d) => void d.accept());
     await page.goto(base + '/admin');
     await page.locator('input[name=username]').fill(adminUser);
     await page.locator('input[name=password]').fill(adminPass);
@@ -183,8 +204,69 @@ try {
     const card = await page.locator('section.card', { hasText: '$BLAT и приглашения' }).evaluate((el) => el.textContent);
     check(/Код приглашения/.test(card) && card.includes(code) && /Засчитано приглашений\s*1/.test(card), 'admin player card: the code, one counted invitation');
     await page.screenshot({ path: `${outDir}/blat_admin_player.png`, fullPage: true });
-    await ctx.close();
+    admin = { ctx, page };
   }
+
+  // ── BLAT DROP (part C) ─────────────────────────────────────────────────────
+  await sql`DELETE FROM app_settings WHERE key = 'blat_drop.announce_at'`;
+  await openDrop(A.page);
+  const none = (await A.page.getByTestId('drop-date').innerText()).trim();
+  check(/isn’t set yet/.test(none) && (await A.page.getByTestId('drop-count').count()) === 0, `A’s BLAT DROP tab before a date is set: «${none}», no countdown`);
+  const prepNone = (await A.page.getByTestId('drop-prep').innerText()).trim();
+  check(/being accumulated; the announcement date isn’t set yet/.test(prepNone), `the preparation status says so too: «${prepNone}»`);
+  await A.page.screenshot({ path: `${outDir}/blat_drop_none_A.png` });
+  const target = new Date(Date.now() + 30 * 86_400_000 + 3 * 3_600_000);
+  target.setUTCSeconds(0, 0);
+  if (admin) {
+    await admin.page.goto(`${base}/admin#/blat`);
+    const card = admin.page.getByTestId('drop-card');
+    await card.getByTestId('drop-input').waitFor({ timeout: 15000 });
+    await card.getByTestId('drop-input').fill(target.toISOString().slice(0, 16));
+    await card.getByTestId('drop-save').click();
+    await card.getByTestId('drop-current').filter({ hasText: 'задана в панели' }).waitFor({ timeout: 15000 });
+    check(true, `the administrator set the date in the dashboard («${(await card.getByTestId('drop-current').innerText()).trim()}»)`);
+  } else {
+    await sql`INSERT INTO app_settings (key, value) VALUES ('blat_drop.announce_at', ${sql.json({ announceAt: target.toISOString() })})
+              ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`;
+  }
+  await reopenDrop(A.page);
+  await A.page.getByTestId('drop-count').waitFor({ timeout: 15000 });
+  await toMenu(B.page);
+  await openDrop(B.page);
+  await B.page.getByTestId('drop-count').waitFor({ timeout: 15000 });
+  await A.page.waitForTimeout(1200);
+  const [ta, tb] = await Promise.all([readCount(A.page), readCount(B.page)]);
+  const expectLeft = Math.floor((target.getTime() - Date.now()) / 1000);
+  check(ta[0] === 30 && Math.abs(seconds(ta) - expectLeft) <= 3, `A’s countdown: ${ta[0]} d ${ta[1]} h ${ta[2]} min ${ta[3]} s (≈ ${expectLeft} s left)`);
+  check(Math.abs(seconds(ta) - seconds(tb)) <= 2, `B’s phone counts down to the same second (${tb.join(':')} vs ${ta.join(':')})`);
+  const mineBal = (await A.page.getByTestId('drop-balance').innerText()).replace(/\s+/g, ' ').trim();
+  const mineFriends = (await A.page.getByTestId('drop-friends').innerText()).replace(/\s+/g, ' ').trim();
+  check(/1,800/.test(mineBal) && /^1 /.test(mineFriends), `A’s BLAT DROP tab: A’s $BLAT and counted friends («${mineBal}» · «${mineFriends}»)`);
+  const prepSet = (await A.page.getByTestId('drop-prep').innerText()).trim();
+  check(/until the announcement date/.test(prepSet), `the preparation status: «${prepSet}»`);
+  const dateText = (await A.page.getByTestId('drop-date').innerText()).trim();
+  check(dateText.includes(String(target.getUTCFullYear())), `A sees the date: «${dateText}»`);
+  const dropOver = await B.page.evaluate(() => document.scrollingElement.scrollWidth - innerWidth);
+  check(dropOver <= 0, `B’s BLAT DROP fits the phone (${dropOver}px sideways)`);
+  await A.page.screenshot({ path: `${outDir}/blat_drop_A.png` });
+  await B.page.screenshot({ path: `${outDir}/blat_drop_B_phone.png` });
+  if (admin) {
+    const snaps = admin.page.getByTestId('snapshots-card');
+    await snaps.getByTestId('snapshot-take').click();
+    await snaps.locator('tbody tr').first().waitFor({ timeout: 15000 });
+    const [dl] = await Promise.all([admin.page.waitForEvent('download'), snaps.locator('tbody tr').first().locator('a', { hasText: 'CSV' }).click()]);
+    const csvText = readFileSync(await dl.path(), 'utf8');
+    check(csvText.includes(`${A.id},Inviter ${RUN},1800,`) && csvText.includes(`${B.id},Recruit ${RUN},300,`), `the dashboard’s balance snapshot downloads as CSV with A’s 1 800 and B’s 300 (${csvText.split('\r\n').length - 2} rows)`);
+    await admin.page.screenshot({ path: `${outDir}/blat_admin_drop.png`, fullPage: true });
+    await admin.page.getByTestId('drop-card').getByTestId('drop-clear').click();
+    await admin.page.getByTestId('drop-card').getByTestId('drop-current').filter({ hasText: 'не задана' }).waitFor({ timeout: 15000 });
+  } else {
+    await sql`UPDATE app_settings SET value = ${sql.json({ announceAt: null })} WHERE key = 'blat_drop.announce_at'`;
+  }
+  await reopenDrop(A.page);
+  const again = (await A.page.getByTestId('drop-date').innerText()).trim();
+  check(/isn’t set yet/.test(again), `the date taken away: «${again}» again`);
+  if (admin) await admin.ctx.close();
   check(problems.length === 0, `no page errors (${problems.join(' | ')})`);
   await A.ctx.close();
   await B.ctx.close();

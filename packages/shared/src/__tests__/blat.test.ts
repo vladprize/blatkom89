@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BLAT_LEVEL_CAP_REWARD, LEVEL_CAP, REFERRAL_TIERS, blatForLevel, blatForLevelsUpTo, isRefCode, referralReward } from '../index.js';
+import { BLAT_LEVEL_CAP_REWARD, LEVEL_CAP, REFERRAL_TIERS, blatForLevel, blatForLevelsUpTo, dropCountdown, dropMsLeft, isRefCode, referralReward } from '../index.js';
 
 test('$BLAT for levels: 300, 350, 400… growing to 10 000 and staying there (the draft table)', () => {
   assert.deepEqual([1, 2, 3, 10, 11, 20, 30, 40, 50, 51, 99].map(blatForLevel), [300, 350, 400, 750, 850, 1750, 3750, 6750, 10_000, 10_000, 10_000]);
@@ -20,4 +20,19 @@ test('$BLAT for referrals: the owner’s scale by the invitation’s number (1�
   assert.equal(sum, 4 * 1500 + 5 * 3000 + 3 * 5000);
   assert.equal(REFERRAL_TIERS[0]!.from, 1);
   assert.ok(isRefCode('Ab12Cd34') && isRefCode('streamer_name') && !isRefCode('a b') && !isRefCode('x') && !isRefCode(42));
+});
+
+test('BLAT DROP countdown: by the server’s clock — a device clock ten minutes off counts to the same second; never below zero', () => {
+  const at = '2027-04-23T12:00:00.000Z';
+  const server = '2026-10-23T12:00:00.000Z';
+  const exact = Date.parse(server);
+  const right = dropMsLeft(at, server, exact, exact + 5000);
+  const fast = dropMsLeft(at, server, exact + 600_000, exact + 600_000 + 5000);
+  const slow = dropMsLeft(at, server, exact - 3_600_000, exact - 3_600_000 + 5000);
+  assert.equal(fast, right);
+  assert.equal(slow, right);
+  assert.deepEqual(dropCountdown(right), { d: 181, h: 23, m: 59, s: 55 });
+  assert.deepEqual(dropCountdown(-5000), { d: 0, h: 0, m: 0, s: 0 });
+  assert.deepEqual(dropCountdown(Number.NaN), { d: 0, h: 0, m: 0, s: 0 });
+  assert.deepEqual(dropCountdown(90_061_000), { d: 1, h: 1, m: 1, s: 1 });
 });

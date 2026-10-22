@@ -45,6 +45,7 @@ import { apiErrorText } from '../net/errors.js';
 import { watchForUpdates } from './updates.js';
 import { renderClubs, renderClub, renderClubEditor, clubLabel } from '../ui/screens/clubs.js';
 import { renderBlat, blatCoin, fmtBlat } from '../ui/screens/blat.js';
+import { renderBlatDrop } from '../ui/screens/blatDrop.js';
 import { PROVIDER_NAME, loginErrorText } from '../ui/screens/signin.js';
 import type { LoginProvider } from '../net/oauth.js';
 import { clubFlag } from '../ui/clubFlag.js';
@@ -159,6 +160,8 @@ export class App {
   private stripEl: HTMLElement | null = null;
   /** V2.0: «+300 $BLAT …» waiting to be shown on the menu. */
   private blatNote: string | null = null;
+  /** V2.0: the $BLAT screen's open tab (the balance or BLAT DROP). */
+  private blatTab: 'balance' | 'drop' = 'balance';
   /** Last lobby state and results (to redraw them after a language switch). */
   private lastLobby: LobbyState | null = null;
   private lastResults: ResultsData | null = null;
@@ -636,31 +639,53 @@ export class App {
       // V2.0: $BLAT — the coin, the balance
       h(
         'button',
-        { class: 'stile stile--blat', 'data-testid': 'menu-blat', onclick: () => this.showBlat() },
+        { class: 'stile stile--blat', 'data-testid': 'menu-blat', onclick: () => this.showBlat(true, 'balance') },
         h('span', { class: 'stile__coin' }, blatCoin(32, '')),
         h('span', { class: 'stile__txt' }, h('b', null, '$BLAT'), h('small', { 'data-testid': 'menu-blat-balance' }, fmtBlat(this.online?.profile?.blat ?? 0))),
       ),
     );
   }
 
-  /** V2.0: $BLAT — balance, history, level rewards, invitations. */
-  private showBlat(push = true) {
+  /** V2.0: $BLAT — balance, history, level rewards, invitations; part C: the BLAT DROP tab. */
+  private showBlat(push = true, tab: 'balance' | 'drop' = this.blatTab) {
     const online = this.online;
     if (!online) return;
+    this.blatTab = tab;
     this.go('blat', push);
-    const wrap = h('div', { class: 'wrap' }, this.topbar('$BLAT'), h('div', { class: 'col center' }, h('div', { class: 'spinner' })));
+    const tabBtn = (id: 'balance' | 'drop', label: string) =>
+      h('button', { type: 'button', role: 'tab', 'aria-pressed': String(tab === id), 'aria-selected': String(tab === id), 'data-testid': `blat-tab-${id}`, onclick: () => tab !== id && this.showBlat(false, id) }, label);
+    const tabs = h('div', { class: 'seg blat__tabs', role: 'tablist' }, tabBtn('balance', '$BLAT'), tabBtn('drop', 'BLAT DROP'));
+    const body = h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
+    const wrap = h('div', { class: 'wrap' }, this.topbar('$BLAT'), tabs, body);
     this.render(h('div', { class: 'screen screen--dim' }, wrap));
+    const fail = (e: unknown) => {
+      if (this.screen === 'blat' && this.blatTab === tab) body.replaceWith(h('div', { class: 'panel' }, apiErrorText(e)));
+    };
+    if (tab === 'drop') {
+      // the server's clock against this device's: the middle of the request is the best guess of «now»
+      const sent = Date.now();
+      const drop = online.api.blatDrop().then((d) => ({ d, at: (sent + Date.now()) / 2 }));
+      // the player's own numbers on the same tab (the date still shows if they don't come)
+      const mine = online.api
+        .blat()
+        .then((b) => ({ balance: b.balance, confirmed: b.referral.confirmed }))
+        .catch(() => null);
+      void Promise.all([drop, mine])
+        .then(([{ d, at }, m]) => {
+          if (this.screen === 'blat' && this.blatTab === 'drop') body.replaceWith(renderBlatDrop(d, at, m));
+        })
+        .catch(fail);
+      return;
+    }
     void online.api
       .blat()
       .then((d) => {
-        if (this.screen !== 'blat') return;
+        if (this.screen !== 'blat' || this.blatTab !== 'balance') return;
         if (online.profile) online.profile = { ...online.profile, blat: d.balance };
-        wrap.replaceChildren(this.topbar('$BLAT'), renderBlat(d));
+        body.replaceWith(renderBlat(d));
         if (d.justCredited > 0) toast(t('+{n} $BLAT for the levels you reached', { n: fmtBlat(d.justCredited) }));
       })
-      .catch((e) => {
-        if (this.screen === 'blat') wrap.replaceChildren(this.topbar('$BLAT'), h('div', { class: 'panel' }, apiErrorText(e)));
-      });
+      .catch(fail);
   }
 
   /** Clubs (v0.3): the player's club flag (or the icon), its tag, and requests waiting for the head. */
@@ -1477,7 +1502,7 @@ export class App {
       case 'referral':
         if (!inGame) toast(e.held ? t('An invitation of yours is being checked — the reward comes after the check') : t('{name} played their first match through your link: +{n} $BLAT', { name: e.name, n: fmtBlat(e.reward) }));
         if (this.online.profile && e.balance >= 0) this.online.profile = { ...this.online.profile, blat: e.balance };
-        if (this.screen === 'blat') this.showBlat(false);
+        if (this.screen === 'blat' && this.blatTab === 'balance') this.showBlat(false);
         else this.refreshSocialTiles();
         return;
       case 'dm': {

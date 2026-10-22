@@ -2,6 +2,7 @@
 import type {
   AuthResponse,
   BlatResponse,
+  BlatDropInfo,
   AvatarId,
   CreateRoomResponse,
   InviteInfo,
@@ -90,6 +91,10 @@ export class Api {
   /** V2.0: $BLAT — balance, history, level rewards, the referral programme. */
   blat() {
     return this.req<BlatResponse>('GET', '/api/blat');
+  }
+  /** V2.0 part C: the BLAT DROP announcement date and the server's clock. */
+  blatDrop() {
+    return this.req<BlatDropInfo>('GET', '/api/blat/drop');
   }
   /** Anonymous «opened the site» ping for the admin funnel (random per-browser id only). */
   visit(visitorId: string, referrer?: string) {

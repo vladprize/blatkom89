@@ -7625,6 +7625,8 @@ var AdminCreateUserRequest = external_exports.object({
   role: external_exports.enum(["admin", "viewer"])
 }).strict();
 var AdminReferralDecision = external_exports.object({ action: external_exports.enum(["confirm", "reject"]), note: external_exports.string().trim().max(200).optional() }).strict();
+var AdminBlatDropRequest = external_exports.object({ announceAt: external_exports.string().datetime({ offset: true }).nullable() }).strict();
+var AdminBlatSnapshotRequest = external_exports.object({ note: external_exports.string().trim().max(200).optional() }).strict();
 var AdminBlatFlagRequest = external_exports.object({ flag: external_exports.string().trim().min(1).max(200).nullable() }).strict();
 var AdminGrantRequest = external_exports.object({
   currency: external_exports.enum(["tokens", "diamonds"]),

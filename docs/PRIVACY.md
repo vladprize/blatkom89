@@ -58,7 +58,9 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
    code; who invited you, if you came through someone's link, and the people who came through yours
    (their in-game names, whether the invitation counted); if an administrator marked your account as
    suspicious, that mark and its reason. The person who invited you sees your in-game name and whether
-   your invitation counted.
+   your invitation counted. When the operator takes a snapshot of $BLAT balances, it keeps your internal
+   id, in-game name and balance at that moment (no Telegram id, email or device data) until the snapshot
+   is deleted or you delete your profile.
 8. **Visit statistics:** a random visitor identifier created by your browser, first/last visit, days
    with visits, platform type and the domain of the site you came from — to count how many visitors
    become players; linked to your profile once you sign in.
@@ -96,6 +98,7 @@ Google, Discord, Facebook and Reddit when you sign in with them (on their page).
 | Friend list and requests | until removed by you or the friend, or the profile is deleted |
 | Gang membership and join requests | until you leave (or are shown out), withdraw, or the profile is deleted |
 | $BLAT balance and its history, your invitation code, who invited you | until you delete the profile |
+| Your line in a $BLAT balance snapshot | until the operator deletes the snapshot, or you delete the profile |
 | Error reports | 90 days |
 | Sign-in session records | 90 days after the session ends |
 | Password-reset links | valid 1 hour, deleted 7 days later |
@@ -126,6 +129,8 @@ When this policy changes, we update the revision date.
 |---|---|---|---|
 | `users` | `telegram_id`, `display_name` (+ `name_key`, its case-folded form for uniqueness), `language_code`, `platform`, `dev_device_id` (dev mode, or `g1:` + HMAC of a guest browser secret), `email`, `password_hash` (scrypt), `email_linked_at`, `created_at`, `last_seen_at`; V2.0: `ref_code` (the player's invitation code), `blat_flag` (an admin's «suspicious» mark with its reason) | identity, display, sign-in, analytics, referral programme | until account deletion |
 | `currency_ledger`, `user_items`, `weapon_mods`, `case_openings` | balance changes (with admin id for grants; V2.0: $BLAT credits `level:<n>` / `referral:<invited player's id>`), owned items (weapon skins included), modifications, case draws (weapons and skins) | economy, support, no double credits | until account deletion (cascade); an inviter's `referral:<id>` row stays with the inviter after the invited player is deleted (the id no longer resolves) |
+| `blat_snapshots`, `blat_snapshot_rows` (V2.0 part C) | a snapshot's moment, admin, note, totals, rules; per account: `user_id` (cascade), the alias at that moment, balance, earned, sums by source, the ledger's sum, the flag, eligibility | balance snapshots ([BLAT.md](BLAT.md) §6) | until an admin deletes the snapshot; an account's rows go with the account |
+| `app_settings` (V2.0 part C) | none (e.g. the BLAT DROP date) and the admin who changed it | central settings | kept |
 | `referrals` (V2.0) | invited player (`referee_id`, cascade), inviter (`referrer_id`, SET NULL on deletion), the code used, attach/decision times, status, number, reward, an admin's note | referral programme ([BLAT.md](BLAT.md)) | until the invited player's account is deleted |
 | `payments` | `user_id` (SET NULL on deletion), provider and its reference, pack, amount, status, times | accounting, crediting diamonds once | **[accounting retention period]** — not purged automatically |
 | `user_identities` (v0.3) | provider (`google`/`facebook`/`discord`/`reddit`), the provider's id for the player (`provider_uid`), user id, first/last use | sign-in with a provider | until account deletion (cascade) |
@@ -178,7 +183,7 @@ update the table in Part 1 §5.
 1. revokes all of the player's sessions;
 2. `DELETE FROM users WHERE id = …` — cascades to `profiles`, `sessions`, `user_daily_activity`,
    `match_participants`, `player_achievements`, `currency_ledger`, `user_items`, `weapon_mods`,
-   `case_openings`, `password_resets`, `user_identities`, `auth_handoffs`, `friendships`, `direct_messages`, `club_members`, `club_requests`, `referrals` (the player's own row; as an inviter, `referrer_id` becomes `NULL`) (before that the
+   `case_openings`, `password_resets`, `user_identities`, `auth_handoffs`, `friendships`, `direct_messages`, `club_members`, `club_requests`, `referrals` (the player's own row; as an inviter, `referrer_id` becomes `NULL`), `blat_snapshot_rows` (before that the
    player leaves their club like a player who quits: a head hands it to the longest-standing member, a last member closes it);
    sets `user_id`/`session_id`/`created_by` to `NULL` in
    `analytics_events`, `app_errors`, `invitations`, `payments`, `visitors`;

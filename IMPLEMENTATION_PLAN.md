@@ -178,7 +178,7 @@ competitive section (1×1 … 5×5, teams, ratings — safe mode, bets designed 
 polish (fullscreen, orientation, safe areas, minimise/restore, reconnect, server-side `initData`,
 linking Telegram to an existing account); analytics and admin numbers for all of it.
 
-Order: **B** $BLAT + levels + referrals (v0.2.9) → **C** BLAT DROP + snapshot export → **D** «Блатной
+Order: **B** $BLAT + levels + referrals (v0.2.9) → **C** BLAT DROP + snapshot export (v0.2.10) → **D** «Блатной
 кон» → **E/F** Telegram polish, account linking, analytics/admin metrics. The story mode (v0.3 part 4)
 waits on the branch `wip/story` and continues after V2.0.
 
@@ -190,7 +190,9 @@ waits on the branch `wip/story` and continues after V2.0.
 | A $BLAT section from the main menu; red minimalist pixel coin without text | a fourth tile in the menu row (Friends · Gangs · Top-100 · $BLAT) with the coin and the balance; the coin is hand-placed pixel art (16 px, drawn at 32/48/128 with nearest-neighbour); fits phones (E2E `phone.mjs` 40 / 40) | ✅ |
 | Admin: $BLAT credits/totals, referrals, suspicious accounts | «$BLAT» tab (on hand, issued by source all time / in the period, the biggest balances, invitations by status with count / turn-down), the player card's «$BLAT и приглашения» (code, inviter, invitations, flag) and $BLAT rows in its ledger | ✅ admin covered in `blat.test.ts` and E2E |
 | Item 12 of the prompt: the rematch freeze | fixed earlier (commit d0e7432) | ✅ |
-| BLAT DROP tab, snapshot export, «Блатной кон», Telegram polish, account linking, analytics | parts C–F | ⏳ |
+| BLAT DROP tab: black/red/bordeaux, the coin, «BLAT DROP», «BLAT DROP ANNOUNCE DATE», a countdown (~6 months) from a date set on the server, the same server time for everyone, «Дата объявления ещё не установлена» without one, central updates, no guarantees | **v0.2.10.** The second tab of the $BLAT screen; `GET /api/blat/drop` returns the date and the server's clock, the client keeps the difference to its own clock (`dropMsLeft`) — a wrong device clock counts to the same second. The date: an admin's value in `/admin → $BLAT` (`app_settings`, audited; «Убрать дату» → «not set»), else `BLAT_DROP_ANNOUNCE_AT`; the dashboard suggests six months ahead. The disclaimer under it: in-game points, an announcement date, no token / price / profit / listing guaranteed | ✅ 2 DB tests (`blat/drop.test.ts`), shared countdown test, E2E `blat.mjs` (not set → set in the dashboard → A's desktop and B's phone count to the same second → cleared) |
+| Token preparation only: ledger, history, dedupe, a snapshot at a moment, suspicious-account checks, CSV/JSON export, documented rules, game balance separate from any blockchain balance | the ledger/dedupe/history from part B; **balance snapshots** (migration 017): one REPEATABLE READ transaction freezes every balance > 0 with the sums by source and the ledger's sum; not eligible: flagged accounts and balances the ledger doesn't explain; totals; CSV (formula-safe) / JSON with the rules (version 1); audited; deleted accounts leave the snapshots. No token, wallet, transaction, price or exchange anywhere (docs/BLAT.md §6–7) | ✅ DB test (moment, eligibility, totals, exports, roles, deletion), E2E (a snapshot downloaded as CSV with the players' balances) |
+| «Блатной кон», Telegram polish, account linking, analytics | parts D–F | ⏳ |
 
 Decisions taken (to be confirmed by the owner): the level table above; an invitation counts after a
 whole online match of at least 60 s with damage dealt; more than 20 confirmations a day per inviter

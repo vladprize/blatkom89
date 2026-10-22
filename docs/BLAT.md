@@ -7,7 +7,7 @@ wallet, no blockchain connection and no token in this release.
 
 Rules live in `packages/shared/src/game-rules/blat.ts`; credits happen only on the server
 (`apps/server/src/blat/repo.ts`), inside database transactions. The client displays what the server
-returns. Admin view: «$BLAT» in `/admin` ([ADMIN.md](ADMIN.md)).
+returns. Admin view: «$BLAT» in `/admin` ([ADMIN.md](ADMIN.md)). BLAT DROP and balance snapshots: §6.
 
 ## 1. Where the numbers live
 
@@ -123,19 +123,62 @@ is being checked — the reward comes after the check».
 | GET | `/api/admin/referrals?status=` | viewer | the last 300 invitations |
 | POST | `/api/admin/referrals/:refereeId` | admin + CSRF | `{ action: 'confirm' \| 'reject', note? }` — a held or pending invitation |
 | POST | `/api/admin/players/:id/blat-flag` | admin + CSRF | `{ flag: '<reason>' \| null }` |
+| GET | `/api/blat/drop` | anyone (30 / min per address) | `{ announceAt: ISO \| null, serverNow: ISO }` — the BLAT DROP date and the server's clock |
+| GET | `/api/admin/blat/drop` | viewer | the date, where it comes from (`admin` / `env` / none), who set it and when |
+| POST | `/api/admin/blat/drop` | admin + CSRF | `{ announceAt: ISO \| null }` — set the date or clear it («not set yet»); 2020 … ten years ahead; audited `blat_drop_date` |
+| GET / POST | `/api/admin/blat/snapshots` | viewer / admin + CSRF | the last 50 snapshots / take one now (`{ note? }`); audited `blat_snapshot` |
+| GET | `/api/admin/blat/snapshots/:id/export?format=csv\|json` | admin | the frozen rows (CSV formula-safe; JSON with the rules); audited `export_blat_snapshot` |
+| DELETE | `/api/admin/blat/snapshots/:id` | admin + CSRF | removes a snapshot and its rows; audited `blat_snapshot_delete` |
 
 The admin player card shows the balance, the code, who invited the player, their invitations by status
 and the flag; the ledger table there lists $BLAT operations with talons and diamonds.
 
 ## 5. Deleting an account
 
-Deleting an account deletes its balance, its ledger rows and its own `referrals` row. An inviter keeps a
+Deleting an account deletes its balance, its ledger rows, its own `referrals` row and its rows in every
+balance snapshot (§6). An inviter keeps a
 reward already paid for that player (the ledger row `referral:<id>` stays with the inviter; the id no
 longer leads anywhere). Details: [PRIVACY.md](PRIVACY.md).
 
-## 6. What this release does not do
+## 6. BLAT DROP and balance snapshots (V2.0 part C)
+
+**BLAT DROP tab** (the second tab of the $BLAT screen): black, red and bordeaux, the coin, «BLAT DROP»,
+«BLAT DROP ANNOUNCE DATE», the date in the player's language and time zone and a countdown in days,
+hours, minutes and seconds. The countdown runs **by the server's clock**: every answer of
+`/api/blat/drop` carries the server's time, the client keeps the difference to its own clock
+(`dropMsLeft`), so a phone whose clock is wrong counts down to the same second as everyone. Without a
+date the tab says «The announcement date isn't set yet» / «Дата объявления ещё не установлена»; once the
+date has passed — «The date has come — watch the news». Under it, always: $BLAT are in-game points;
+BLAT DROP is an announcement date, not a promise — no token, price, profit or listing is guaranteed.
+
+**Where the date comes from:** an administrator sets it in `/admin → $BLAT → BLAT DROP` (stored in
+`app_settings`, key `blat_drop.announce_at`; «Убрать дату» stores «not set»); before any administrator
+has touched it, the server variable `BLAT_DROP_ANNOUNCE_AT` (optional) is used. One central value — every
+player gets the change the next time the tab is opened. The dashboard suggests a date six months ahead
+when none is set; nothing is shown to players until it is saved.
+
+**Balance snapshots** (`/admin → $BLAT → Снимки балансов`, admin role). A snapshot freezes every
+$BLAT balance at one moment — one `REPEATABLE READ` transaction, so a credit made meanwhile is wholly in
+or wholly out — into `blat_snapshots` / `blat_snapshot_rows`. Rules (version 1, stored with every
+snapshot):
+
+| | |
+|---|---|
+| Included | every existing account with a $BLAT balance above 0 at that moment: internal id, alias at that moment, balance, total earned, the sums from levels / invitations / grants, the ledger's sum |
+| Eligible | not flagged by an administrator **and** the $BLAT ledger adds up to the balance |
+| Not eligible (`reasons`) | `flagged` — an administrator marked the account as suspicious; `ledger_mismatch` — the ledger does not explain the balance (look before anything else) |
+| Totals | accounts and eligible accounts, $BLAT in all and $BLAT of the eligible ones |
+| Never in it | Telegram ids, emails, sign-in data, anything about devices |
+| Kept | until an administrator deletes the snapshot; an account deleted later leaves every snapshot with its row («сейчас» shows the rows left) |
+
+Exports: CSV (formula-safe cells, UTF-8 with BOM) and JSON (the snapshot, its rules and the rows), both
+audited. **A snapshot is a record, not a transfer:** the game balance stays the game balance; any later
+use of a snapshot (for example a separate on-chain distribution) is a separate decision with its own
+legal review, and would need its own data (such as wallet addresses) collected with the players'
+consent — none of that exists in the game.
+
+## 7. What this release does not do
 
 - no cryptocurrency token, no wallets, no transactions, no automatic exchange of points for anything;
-- no transfers between players, no buying or selling of $BLAT, no prices;
-- no payouts to partners or streamers (partner links are a later stage);
-- the BLAT DROP tab and the balance snapshot export come in the next part (Stage C).
+- no transfers between players, no buying or selling of $BLAT, no prices, no market value;
+- no payouts to partners or streamers (partner links are a later stage).

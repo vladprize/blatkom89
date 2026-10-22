@@ -1,7 +1,8 @@
 /** /api/admin/* — secure analytics dashboard API (see docs/ADMIN.md). */
-import { AdminBlatFlagRequest, AdminCreateUserRequest, AdminGrantRequest, AdminLoginRequest, AdminReferralDecision, getMap, isMapId, levelForXp } from '@blatkom/shared';
+import { AdminBlatDropRequest, AdminBlatFlagRequest, AdminBlatSnapshotRequest, AdminCreateUserRequest, AdminGrantRequest, AdminLoginRequest, AdminReferralDecision, getMap, isMapId, levelForXp } from '@blatkom/shared';
 import type { AdminBlatSummary, AdminMe, AdminPaymentRow, AdminPlayerDetail, AdminReferralRow, AdminResetLink, CharacterId } from '@blatkom/shared';
 import { BlatRepo } from '../blat/repo.js';
+import { BlatDropRepo, DROP_DATE_BOUNDS } from '../blat/drop.js';
 import { notifyReferral } from '../api/blat.js';
 import type { RouteModule } from '../app.js';
 import { HttpError } from '../http/router.js';
@@ -250,6 +251,77 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
     if (rows.length === 0) throw new HttpError(404, 'not_found', 'Игрок не найден');
     await audit(p.sql, deps.log, { adminId: a.id, action: body.flag ? 'blat_flag' : 'blat_unflag', target: id, details: { flag: body.flag }, ip: ctx.ip });
     ctx.json(200, { flag: body.flag });
+  });
+
+  // ── V2.0 part C: the BLAT DROP date and balance snapshots ───────────────────
+  const drop = () => new BlatDropRepo(pg().sql, deps.env.BLAT_DROP_ANNOUNCE_AT);
+
+  router.get('/api/admin/blat/drop', viewer, async (ctx) => {
+    ctx.json(200, await drop().date());
+  });
+
+  /** Sets the announcement date every player counts down to (null: «not set yet»). */
+  router.post('/api/admin/blat/drop', admin, async (ctx) => {
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, 'rate_limited', 'Слишком много операций подряд, подождите', { 'retry-after': '60' });
+    const body = await ctx.body(AdminBlatDropRequest, 1024);
+    let at: Date | null = null;
+    if (body.announceAt !== null) {
+      at = new Date(body.announceAt);
+      const max = Date.now() + DROP_DATE_BOUNDS.maxYearsAhead * 365.25 * 86_400_000;
+      if (Number.isNaN(at.getTime()) || at.getTime() < DROP_DATE_BOUNDS.min || at.getTime() > max) throw new HttpError(400, 'bad_date', 'Дата вне допустимого диапазона');
+    }
+    const before = await drop().date();
+    const after = await drop().setDate(at, a.id);
+    await audit(pg().sql, deps.log, { adminId: a.id, action: 'blat_drop_date', details: { from: before.announceAt, to: after.announceAt }, ip: ctx.ip });
+    ctx.json(200, after);
+  });
+
+  router.get('/api/admin/blat/snapshots', viewer, async (ctx) => {
+    ctx.json(200, await drop().list(50));
+  });
+
+  /** Freezes every $BLAT balance at this moment (one transaction). */
+  router.post('/api/admin/blat/snapshots', admin, async (ctx) => {
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, 'rate_limited', 'Слишком много операций подряд, подождите', { 'retry-after': '60' });
+    const body = await ctx.body(AdminBlatSnapshotRequest, 1024);
+    const s = await drop().takeSnapshot(a.id, body.note || null);
+    await audit(pg().sql, deps.log, { adminId: a.id, action: 'blat_snapshot', target: s.id, details: { accounts: s.accounts, eligible: s.eligible, total: s.total, eligibleTotal: s.eligibleTotal }, ip: ctx.ip });
+    ctx.json(200, s);
+  });
+
+  /** A snapshot as CSV (formula-safe) or JSON (with its rules). Audited like every export. */
+  router.get('/api/admin/blat/snapshots/:id/export', admin, async (ctx) => {
+    const id = ctx.params.id ?? '';
+    if (!UUID_RE.test(id)) throw new HttpError(400, 'bad_id', 'Неверный идентификатор');
+    const format = ctx.query.get('format') === 'json' ? 'json' : 'csv';
+    const snap = await drop().rows(id);
+    if (!snap) throw new HttpError(404, 'not_found', 'Снимок не найден');
+    await audit(pg().sql, deps.log, { adminId: currentAdmin(ctx).id, action: 'export_blat_snapshot', target: id, details: { format, rows: snap.rows.length }, ip: ctx.ip });
+    const name = `blat-snapshot-${snap.snapshot.takenAt.slice(0, 19).replace(/[:T]/g, '-')}`;
+    if (format === 'json') {
+      ctx.send(200, JSON.stringify(snap, null, 2), 'application/json; charset=utf-8', { 'content-disposition': `attachment; filename="${name}.json"`, 'cache-control': 'no-store' });
+      return;
+    }
+    csv(
+      ctx,
+      `${name}.csv`,
+      toCsv(
+        ['user_id', 'display_name', 'balance', 'earned', 'from_levels', 'from_referrals', 'from_grants', 'ledger_sum', 'eligible', 'reasons', 'flag', 'snapshot_id', 'taken_at'],
+        snap.rows.map((r) => [r.userId, r.name, r.balance, r.earned, r.fromLevels, r.fromReferrals, r.fromGrants, r.ledgerSum, r.eligible, r.reasons.join(' '), r.flag, snap.snapshot.id, snap.snapshot.takenAt]),
+      ),
+    );
+  });
+
+  router.delete('/api/admin/blat/snapshots/:id', admin, async (ctx) => {
+    const id = ctx.params.id ?? '';
+    if (!UUID_RE.test(id)) throw new HttpError(400, 'bad_id', 'Неверный идентификатор');
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, 'rate_limited', 'Слишком много операций подряд, подождите', { 'retry-after': '60' });
+    if (!(await drop().remove(id))) throw new HttpError(404, 'not_found', 'Снимок не найден');
+    await audit(pg().sql, deps.log, { adminId: a.id, action: 'blat_snapshot_delete', target: id, ip: ctx.ip });
+    ctx.json(200, { ok: true });
   });
 
   /** Audited balance adjustment (support compensation, corrections). Never below zero. */

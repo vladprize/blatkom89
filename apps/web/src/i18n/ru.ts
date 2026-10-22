@@ -877,6 +877,22 @@ export const RU: Record<string, string> = {
   '{name} played their first match through your link: +{n} $BLAT': '{name} — первый матч по твоей ссылке: +{n} $BLAT',
   '$BLAT for the new level · {total} in total': '$BLAT за новый уровень · всего {total}',
   '+{n} $BLAT — welcome to the district': '+{n} $BLAT — добро пожаловать на район',
+  'days': 'дн',
+  'hrs': 'ч',
+  'min': 'мин',
+  'sec': 'сек',
+  'The announcement date isn’t set yet': 'Дата объявления ещё не установлена',
+  'By the server’s clock — the same for every player': 'По часам сервера — одинаково для всех',
+  '$BLAT are in-game points. BLAT DROP is an announcement date, not a promise: no token, price, profit or listing is guaranteed.': '$BLAT — игровые баллы. BLAT DROP — дата объявления, а не обещание: ни токен, ни цена, ни прибыль, ни листинг не гарантируются.',
+  'The date has come — watch the news': 'Дата наступила — следи за новостями',
+  'your $BLAT': 'твои $BLAT',
+  'by your link': 'по твоей ссылке',
+  'Status: $BLAT are being accumulated; the announcement date isn’t set yet.': 'Статус: идёт накопление $BLAT; дата объявления ещё не назначена.',
+  'Status: $BLAT are being accumulated until the announcement date.': 'Статус: идёт накопление $BLAT — до даты объявления.',
+  'Status: the announcement date has come.': 'Статус: дата объявления наступила.',
+  'How $BLAT accumulate:': 'Как копятся $BLAT:',
+  'every new level — once ({first} at the start, up to {cap} a level)': 'за каждый новый уровень — один раз ({first} на старте, до {cap} за уровень)',
+  'every friend who comes through your link and plays a whole online match — from {n}': 'за каждого друга, который пришёл по твоей ссылке и доиграл онлайн-матч, — от {n}',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)
@@ -967,4 +983,5 @@ export const RU_PLURALS: Record<string, readonly [string, string, string]> = {
   hit: ['попадание', 'попадания', 'попаданий'],
   charge: ['заряд', 'заряда', 'зарядов'],
   member: ['человек', 'человека', 'человек'],
+  friend: ['друг', 'друга', 'друзей'],
 };

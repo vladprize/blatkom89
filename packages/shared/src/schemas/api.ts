@@ -474,6 +474,42 @@ export interface AdminBlatSummary {
 }
 
 export const AdminReferralDecision = z.object({ action: z.enum(['confirm', 'reject']), note: z.string().trim().max(200).optional() }).strict();
+
+/** V2.0 part C: the BLAT DROP announcement date as the admin sees it (`source`: who set it). */
+export interface AdminBlatDrop {
+  announceAt: string | null;
+  source: 'admin' | 'env' | null;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+export const AdminBlatDropRequest = z.object({ announceAt: z.string().datetime({ offset: true }).nullable() }).strict();
+
+/** V2.0 part C: a balance snapshot (`rowsNow`: rows left — deleted accounts leave with their data). */
+export interface AdminBlatSnapshot {
+  id: string;
+  takenAt: string;
+  takenBy: string | null;
+  note: string | null;
+  accounts: number;
+  eligible: number;
+  total: number;
+  eligibleTotal: number;
+  rowsNow: number;
+}
+export interface AdminBlatSnapshotRow {
+  userId: string;
+  name: string;
+  balance: number;
+  earned: number;
+  fromLevels: number;
+  fromReferrals: number;
+  fromGrants: number;
+  ledgerSum: number;
+  eligible: boolean;
+  reasons: string[];
+  flag: string | null;
+}
+export const AdminBlatSnapshotRequest = z.object({ note: z.string().trim().max(200).optional() }).strict();
 export const AdminBlatFlagRequest = z.object({ flag: z.string().trim().min(1).max(200).nullable() }).strict();
 
 export interface AdminPaymentRow {

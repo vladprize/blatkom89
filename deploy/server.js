@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.9"),
+  SERVER_VERSION: external_exports.string().default("0.2.10"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -7827,6 +7827,11 @@ var EnvSchema = external_exports.object({
   NOWPAYMENTS_API_KEY: external_exports.string().optional(),
   NOWPAYMENTS_IPN_SECRET: external_exports.string().optional(),
   NOWPAYMENTS_SANDBOX: bool.default("false"),
+  /**
+   * V2.0: the BLAT DROP announcement date players count down to (ISO 8601, e.g. 2027-04-23T12:00:00Z),
+   * used until an administrator sets one in /admin → $BLAT (docs/BLAT.md §6).
+   */
+  BLAT_DROP_ANNOUNCE_AT: external_exports.string().datetime({ offset: true }).optional(),
   /** Password-reset emails through Resend (https://resend.com); without a key the admin issues reset links. */
   RESEND_API_KEY: external_exports.string().optional(),
   MAIL_FROM: external_exports.string().optional()
@@ -15847,6 +15852,8 @@ var AdminCreateUserRequest = external_exports.object({
   role: external_exports.enum(["admin", "viewer"])
 }).strict();
 var AdminReferralDecision = external_exports.object({ action: external_exports.enum(["confirm", "reject"]), note: external_exports.string().trim().max(200).optional() }).strict();
+var AdminBlatDropRequest = external_exports.object({ announceAt: external_exports.string().datetime({ offset: true }).nullable() }).strict();
+var AdminBlatSnapshotRequest = external_exports.object({ note: external_exports.string().trim().max(200).optional() }).strict();
 var AdminBlatFlagRequest = external_exports.object({ flag: external_exports.string().trim().min(1).max(200).nullable() }).strict();
 var AdminGrantRequest = external_exports.object({
   currency: external_exports.enum(["tokens", "diamonds"]),
@@ -16015,7 +16022,7 @@ async function migrate(sql2, dir = DEFAULT_MIGRATIONS_DIR) {
 }
 
 // apps/server/src/app.ts
-import { randomUUID as randomUUID2 } from "node:crypto";
+import { randomUUID as randomUUID3 } from "node:crypto";
 
 // apps/server/src/http/router.ts
 var HttpError = class extends Error {
@@ -18974,11 +18981,118 @@ var registerEventRoutes = (router, deps) => {
   });
 };
 
+// apps/server/src/blat/drop.ts
+import { randomUUID as randomUUID2 } from "node:crypto";
+var DROP_KEY = "blat_drop.announce_at";
+var SNAPSHOT_RULES = Object.freeze({
+  version: 1,
+  includes: "every existing account whose $BLAT balance is above 0 at the moment of the snapshot",
+  balance: "profiles.blat read in one REPEATABLE READ transaction",
+  eligible: "not flagged by an administrator, and the $BLAT ledger adds up to the balance",
+  reasons: { flagged: "an administrator marked the account as suspicious", ledger_mismatch: "the $BLAT ledger does not add up to the balance" },
+  not: "a snapshot is a record only: it creates no token, wallet, price or transfer"
+});
+var DROP_DATE_BOUNDS = Object.freeze({ min: Date.UTC(2020, 0, 1), maxYearsAhead: 10 });
+var BlatDropRepo = class {
+  constructor(sql2, envDate) {
+    this.sql = sql2;
+    this.envDate = envDate;
+  }
+  sql;
+  envDate;
+  /** The announcement date and where it comes from. */
+  async date() {
+    const [row] = await this.sql`
+      SELECT s.value, s.updated_at, a.username FROM app_settings s LEFT JOIN admin_users a ON a.id = s.updated_by WHERE s.key = ${DROP_KEY}`;
+    if (row) return { announceAt: row.value?.announceAt ?? null, source: "admin", updatedAt: row.updated_at.toISOString(), updatedBy: row.username };
+    const env2 = this.envDate ? new Date(this.envDate) : null;
+    return env2 && !Number.isNaN(env2.getTime()) ? { announceAt: env2.toISOString(), source: "env", updatedAt: null, updatedBy: null } : { announceAt: null, source: null, updatedAt: null, updatedBy: null };
+  }
+  /** An administrator sets the date (null: «not set yet», even when the server variable has one). */
+  async setDate(at, adminId) {
+    const value = { announceAt: at ? at.toISOString() : null };
+    await this.sql`
+      INSERT INTO app_settings (key, value, updated_at, updated_by) VALUES (${DROP_KEY}, ${this.sql.json(value)}, now(), ${adminId})
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now(), updated_by = EXCLUDED.updated_by`;
+    return this.date();
+  }
+  /** Back to the server's variable (or «not set» without one). */
+  async resetDate() {
+    await this.sql`DELETE FROM app_settings WHERE key = ${DROP_KEY}`;
+    return this.date();
+  }
+  /** Freezes every $BLAT balance at this moment. */
+  async takeSnapshot(adminId, note) {
+    const id = randomUUID2();
+    await this.sql.begin("isolation level repeatable read", async (tx) => {
+      const [t] = await tx`SELECT now() AS at`;
+      await tx`
+        INSERT INTO blat_snapshots (id, taken_at, taken_by, note, accounts, eligible, total, eligible_total, rules)
+        VALUES (${id}, ${t.at}, ${adminId}, ${note}, 0, 0, 0, 0, ${tx.json(SNAPSHOT_RULES)})`;
+      await tx`
+        INSERT INTO blat_snapshot_rows (snapshot_id, user_id, display_name, balance, earned, from_levels, from_referrals, from_grants, ledger_sum, flag, eligible, reasons)
+        SELECT ${id}, u.id, u.display_name, p.blat, p.blat_earned,
+               COALESCE(l.lv, 0), COALESCE(l.rf, 0), COALESCE(l.gr, 0), COALESCE(l.total, 0), u.blat_flag,
+               (u.blat_flag IS NULL AND COALESCE(l.total, 0) = p.blat),
+               array_remove(ARRAY[CASE WHEN u.blat_flag IS NOT NULL THEN 'flagged' END, CASE WHEN COALESCE(l.total, 0) <> p.blat THEN 'ledger_mismatch' END], NULL)
+        FROM profiles p
+        JOIN users u ON u.id = p.user_id AND u.deleted_at IS NULL
+        LEFT JOIN (
+          SELECT user_id, sum(delta) AS total,
+                 sum(delta) FILTER (WHERE reason = 'level') AS lv,
+                 sum(delta) FILTER (WHERE reason = 'referral') AS rf,
+                 sum(delta) FILTER (WHERE reason = 'grant') AS gr
+          FROM currency_ledger WHERE currency = 'blat' GROUP BY user_id
+        ) l ON l.user_id = u.id
+        WHERE p.blat > 0`;
+      await tx`
+        UPDATE blat_snapshots s SET
+          accounts = r.accounts, eligible = r.eligible, total = r.total, eligible_total = r.eligible_total
+        FROM (
+          SELECT count(*)::int AS accounts, count(*) FILTER (WHERE eligible)::int AS eligible,
+                 COALESCE(sum(balance), 0) AS total, COALESCE(sum(balance) FILTER (WHERE eligible), 0) AS eligible_total
+          FROM blat_snapshot_rows WHERE snapshot_id = ${id}
+        ) r
+        WHERE s.id = ${id}`;
+    });
+    const [s] = await this.list(1, id);
+    return s;
+  }
+  /** The latest snapshots (or one). */
+  async list(limit = 50, only = null) {
+    const rows = await this.sql`
+      SELECT s.id, s.taken_at, a.username, s.note, s.accounts, s.eligible, s.total::text AS total, s.eligible_total::text AS eligible_total,
+             (SELECT count(*)::int FROM blat_snapshot_rows r WHERE r.snapshot_id = s.id) AS still
+      FROM blat_snapshots s LEFT JOIN admin_users a ON a.id = s.taken_by
+      WHERE ${only === null ? this.sql`TRUE` : this.sql`s.id = ${only}`}
+      ORDER BY s.taken_at DESC LIMIT ${limit}`;
+    return rows.map((r) => ({ id: r.id, takenAt: r.taken_at.toISOString(), takenBy: r.username, note: r.note, accounts: r.accounts, eligible: r.eligible, total: Number(r.total), eligibleTotal: Number(r.eligible_total), rowsNow: r.still }));
+  }
+  /** A snapshot with its rows (largest balances first), or null. */
+  async rows(id) {
+    const [s] = await this.list(1, id);
+    if (!s) return null;
+    const [r] = await this.sql`SELECT rules FROM blat_snapshots WHERE id = ${id}`;
+    const rows = await this.sql`
+      SELECT user_id, display_name, balance, earned, from_levels::text, from_referrals::text, from_grants::text, ledger_sum::text, flag, eligible, reasons
+      FROM blat_snapshot_rows WHERE snapshot_id = ${id} ORDER BY balance DESC, user_id`;
+    return {
+      snapshot: s,
+      rules: r?.rules ?? null,
+      rows: rows.map((x) => ({ userId: x.user_id, name: x.display_name, balance: x.balance, earned: x.earned, fromLevels: Number(x.from_levels), fromReferrals: Number(x.from_referrals), fromGrants: Number(x.from_grants), ledgerSum: Number(x.ledger_sum), eligible: x.eligible, reasons: x.reasons, flag: x.flag }))
+    };
+  }
+  async remove(id) {
+    return (await this.sql`DELETE FROM blat_snapshots WHERE id = ${id} RETURNING id`).length > 0;
+  }
+};
+
 // apps/server/src/api/blat.ts
 var registerBlatRoutes = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
   const byUser = (ctx) => currentUser(ctx).userId;
   const readLimiter = new RateLimiter(60, 1);
+  const dropLimiter = new RateLimiter(30, 30 / 60);
   const repo = () => {
     if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
     return new BlatRepo(deps.sql, { publicUrl: deps.env.PUBLIC_URL, botUsername: deps.env.TELEGRAM_BOT_USERNAME || null });
@@ -18994,6 +19108,12 @@ var registerBlatRoutes = (router, deps) => {
       if (c) notifyReferral(deps.social, c);
     }
     const res = await r.overview(me.userId);
+    ctx.json(200, res, { "cache-control": "no-store" });
+  });
+  router.get("/api/blat/drop", rateLimit(dropLimiter), async (ctx) => {
+    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
+    const d = await new BlatDropRepo(deps.sql, deps.env.BLAT_DROP_ANNOUNCE_AT).date();
+    const res = { announceAt: d.announceAt, serverNow: (/* @__PURE__ */ new Date()).toISOString() };
     ctx.json(200, res, { "cache-control": "no-store" });
   });
 };
@@ -19697,6 +19817,66 @@ var registerAdminRoutes = (router, deps) => {
     if (rows.length === 0) throw new HttpError(404, "not_found", "\u0418\u0433\u0440\u043E\u043A \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
     await audit(p.sql, deps.log, { adminId: a.id, action: body.flag ? "blat_flag" : "blat_unflag", target: id, details: { flag: body.flag }, ip: ctx.ip });
     ctx.json(200, { flag: body.flag });
+  });
+  const drop = () => new BlatDropRepo(pg().sql, deps.env.BLAT_DROP_ANNOUNCE_AT);
+  router.get("/api/admin/blat/drop", viewer, async (ctx) => {
+    ctx.json(200, await drop().date());
+  });
+  router.post("/api/admin/blat/drop", admin, async (ctx) => {
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
+    const body = await ctx.body(AdminBlatDropRequest, 1024);
+    let at = null;
+    if (body.announceAt !== null) {
+      at = new Date(body.announceAt);
+      const max = Date.now() + DROP_DATE_BOUNDS.maxYearsAhead * 365.25 * 864e5;
+      if (Number.isNaN(at.getTime()) || at.getTime() < DROP_DATE_BOUNDS.min || at.getTime() > max) throw new HttpError(400, "bad_date", "\u0414\u0430\u0442\u0430 \u0432\u043D\u0435 \u0434\u043E\u043F\u0443\u0441\u0442\u0438\u043C\u043E\u0433\u043E \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D\u0430");
+    }
+    const before = await drop().date();
+    const after = await drop().setDate(at, a.id);
+    await audit(pg().sql, deps.log, { adminId: a.id, action: "blat_drop_date", details: { from: before.announceAt, to: after.announceAt }, ip: ctx.ip });
+    ctx.json(200, after);
+  });
+  router.get("/api/admin/blat/snapshots", viewer, async (ctx) => {
+    ctx.json(200, await drop().list(50));
+  });
+  router.post("/api/admin/blat/snapshots", admin, async (ctx) => {
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
+    const body = await ctx.body(AdminBlatSnapshotRequest, 1024);
+    const s = await drop().takeSnapshot(a.id, body.note || null);
+    await audit(pg().sql, deps.log, { adminId: a.id, action: "blat_snapshot", target: s.id, details: { accounts: s.accounts, eligible: s.eligible, total: s.total, eligibleTotal: s.eligibleTotal }, ip: ctx.ip });
+    ctx.json(200, s);
+  });
+  router.get("/api/admin/blat/snapshots/:id/export", admin, async (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID_RE3.test(id)) throw new HttpError(400, "bad_id", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440");
+    const format = ctx.query.get("format") === "json" ? "json" : "csv";
+    const snap = await drop().rows(id);
+    if (!snap) throw new HttpError(404, "not_found", "\u0421\u043D\u0438\u043C\u043E\u043A \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    await audit(pg().sql, deps.log, { adminId: currentAdmin(ctx).id, action: "export_blat_snapshot", target: id, details: { format, rows: snap.rows.length }, ip: ctx.ip });
+    const name = `blat-snapshot-${snap.snapshot.takenAt.slice(0, 19).replace(/[:T]/g, "-")}`;
+    if (format === "json") {
+      ctx.send(200, JSON.stringify(snap, null, 2), "application/json; charset=utf-8", { "content-disposition": `attachment; filename="${name}.json"`, "cache-control": "no-store" });
+      return;
+    }
+    csv(
+      ctx,
+      `${name}.csv`,
+      toCsv(
+        ["user_id", "display_name", "balance", "earned", "from_levels", "from_referrals", "from_grants", "ledger_sum", "eligible", "reasons", "flag", "snapshot_id", "taken_at"],
+        snap.rows.map((r) => [r.userId, r.name, r.balance, r.earned, r.fromLevels, r.fromReferrals, r.fromGrants, r.ledgerSum, r.eligible, r.reasons.join(" "), r.flag, snap.snapshot.id, snap.snapshot.takenAt])
+      )
+    );
+  });
+  router.delete("/api/admin/blat/snapshots/:id", admin, async (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID_RE3.test(id)) throw new HttpError(400, "bad_id", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440");
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
+    if (!await drop().remove(id)) throw new HttpError(404, "not_found", "\u0421\u043D\u0438\u043C\u043E\u043A \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    await audit(pg().sql, deps.log, { adminId: a.id, action: "blat_snapshot_delete", target: id, ip: ctx.ip });
+    ctx.json(200, { ok: true });
   });
   router.post("/api/admin/players/:id/grant", admin, async (ctx) => {
     const id = ctx.params.id ?? "";
@@ -21039,7 +21219,7 @@ function createApp(deps, modules = ROUTE_MODULES) {
   const statics = deps.env.STATIC_DIR ? serveStatic(deps.env.STATIC_DIR) : null;
   const allowed = new Set(deps.env.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean));
   return async function handle(req, res) {
-    const requestId = randomUUID2();
+    const requestId = randomUUID3();
     const ctx = createCtx(req, res, { trustProxy: deps.env.TRUST_PROXY, requestId, log: deps.log });
     const origin = req.headers.origin;
     if (origin && allowed.has(origin)) {
@@ -21083,7 +21263,7 @@ function createApp(deps, modules = ROUTE_MODULES) {
 import { randomBytes as randomBytes9 } from "node:crypto";
 
 // apps/server/src/rooms/MatchRoom.ts
-import { randomBytes as randomBytes8, randomUUID as randomUUID3 } from "node:crypto";
+import { randomBytes as randomBytes8, randomUUID as randomUUID4 } from "node:crypto";
 var between = (a, b2) => a + Math.random() * Math.max(0, b2 - a);
 var NAV = /* @__PURE__ */ new Map();
 function navFor(mapId, world) {
@@ -21532,7 +21712,7 @@ var MatchRoom = class {
     const taken = /* @__PURE__ */ new Set();
     for (const p of this.world.players.values()) taken.add(p.name.toLowerCase());
     const persona = fillPersona(Math.random, { lang, aroundLevel: people ? levels / people : 1, taken });
-    const id = randomUUID3();
+    const id = randomUUID4();
     this.world.addPlayer(id, persona.name, persona.character, true, persona.loadout, team ?? void 0);
     const seat = {
       id,
@@ -21649,7 +21829,7 @@ var MatchRoom = class {
       c.lastQueuedSeq = 0;
     }
     this.world.beginMatch();
-    this.matchId = randomUUID3();
+    this.matchId = randomUUID4();
     this.matchStartedAtWall = Date.now();
     this.resultsSent = false;
     const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite, team: this.world.players.get(c.user.userId)?.team ?? null }));

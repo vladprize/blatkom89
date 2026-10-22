@@ -12,7 +12,8 @@ card with wallet, purchases, ledger, payments and admin actions), «ОПГ» (v0
 «ОПГ» — since v0.2.8: every gang — the game's own marked «игры» — with its rating, people, boss and
 requests; an admin removes a player's gang, e.g. for an offensive name or flag), «$BLAT» (V2.0: points
 on hand, issued for levels / invitations in all time and in the period, the biggest balances, invitations
-by status — an admin counts or turns down the ones held for a check; [BLAT.md](BLAT.md)), «Ошибки»,
+by status — an admin counts or turns down the ones held for a check; the BLAT DROP announcement date
+players count down to; balance snapshots with CSV / JSON downloads; [BLAT.md](BLAT.md)), «Ошибки»,
 «Экспорт», «Аудит». The player card has a «$BLAT и приглашения» block (balance, code, who invited the
 player, their invitations; an admin marks or clears «suspicious»).
 
@@ -58,6 +59,7 @@ Passwords: minimum 12 characters; stored as `scrypt$N$r$p$salt$hash` (N=16384, r
 | Funnel and economy panels | ✅ | ✅ |
 | Balance grants / corrections, password-reset links | — | ✅ |
 | $BLAT: count / turn down a held invitation, mark an account suspicious | — | ✅ |
+| BLAT DROP date, balance snapshots (take, download, delete) | see only | ✅ |
 | CSV exports | — | ✅ |
 | Audit log | — | ✅ |
 | Create administrators | — | ✅ |
@@ -86,6 +88,8 @@ Recorded actions: `login`, `login_failed`, `logout`, `admin_bootstrap`, `admin_c
 `admin_created_cli`, `player_viewed` (opening a player's card, target = player id),
 `balance_grant` (currency, amount, reason, balance after), `password_reset_link`, `club_delete` (name, tag, members),
 `referral_confirm` (inviter, reward, number) / `referral_reject` (note), `blat_flag` / `blat_unflag` (reason),
+`blat_drop_date` (from → to), `blat_snapshot` (accounts, totals), `export_blat_snapshot` (format, rows),
+`blat_snapshot_delete`,
 `export_players`, `export_matches`, `export_daily` (with row counts / date range). Visible to `admin`
 in the «Аудит» tab (latest 200). Kept 365 days ([PRIVACY.md](PRIVACY.md) §4).
 
@@ -117,6 +121,12 @@ Range parameters (where noted): `range=24h|7d|30d|90d` (default `7d`) or
 | `GET /api/admin/referrals?status=pending\|held\|confirmed\|rejected` | viewer | the last 300 invitations (`AdminReferralRow`) |
 | `POST /api/admin/referrals/:refereeId` | admin | `{action: confirm\|reject, note?}` — a held or pending invitation; confirm pays the inviter at their current tier; `409 not_open` if already decided; the inviter hears it live; audited; 30 actions / 5 min per admin (CSRF) |
 | `POST /api/admin/players/:id/blat-flag` | admin | `{flag: reason (1–200) \| null}` — a suspicious account's invitations wait for a decision; audited (CSRF) |
+| `GET /api/admin/blat/drop` | viewer | the BLAT DROP date, its source (`admin` / `env` / none), who set it and when (`AdminBlatDrop`) |
+| `POST /api/admin/blat/drop` | admin | `{announceAt: ISO-8601 \| null}` (2020 … ten years ahead, `400 bad_date` otherwise); null shows players «not set yet»; audited; 30 actions / 5 min (CSRF) |
+| `GET /api/admin/blat/snapshots` | viewer | the last 50 snapshots (`AdminBlatSnapshot`: moment, who, accounts, eligible, totals, rows left) |
+| `POST /api/admin/blat/snapshots` | admin | `{note?}` — freezes every balance now (one transaction); audited (CSRF) |
+| `GET /api/admin/blat/snapshots/:id/export?format=csv\|json` | admin | the rows (CSV formula-safe; JSON with the rules); audited |
+| `DELETE /api/admin/blat/snapshots/:id` | admin | removes a snapshot; audited (CSRF) |
 | `GET /api/admin/errors?range…` | viewer | errors grouped by fingerprint (≤200 groups) |
 | `GET /api/admin/audit` | admin | latest 200 audit entries |
 | `POST /api/admin/users` | admin | `{username, password, role}` (CSRF) |

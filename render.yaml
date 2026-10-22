@@ -44,6 +44,10 @@ services:
       # (sync: false = never stored in this file); left empty, the feature simply stays off.
       - key: CASES_ENABLED
         value: "true"
+      # V2.0: the BLAT DROP announcement date (ISO 8601, e.g. 2027-04-23T12:00:00Z) — optional; the date
+      # set in /admin → $BLAT wins (docs/BLAT.md §6)
+      - key: BLAT_DROP_ANNOUNCE_AT
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET

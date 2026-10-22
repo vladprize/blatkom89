@@ -1,9 +1,10 @@
 /**
  * $BLAT (V2.0): in-game points in numbers — on hand, paid for levels and invitations (all time and in the
  * period), the biggest balances, and the invitations: an administrator counts or turns down the ones held
- * for a check (more than the daily cap, a flagged account). Every decision goes to the audit log.
+ * for a check (more than the daily cap, a flagged account). Part C: the BLAT DROP announcement date and
+ * balance snapshots (CSV / JSON). Every decision and export goes to the audit log.
  */
-import type { AdminBlatSummary, AdminMe, AdminReferralRow } from '@blatkom/shared';
+import type { AdminBlatDrop, AdminBlatSnapshot, AdminBlatSummary, AdminMe, AdminReferralRow } from '@blatkom/shared';
 import { REFERRAL_RULES } from '@blatkom/shared';
 import { h, clear, toast } from '../dom.js';
 import { apiFetch, rangeQuery } from '../api.js';
@@ -110,6 +111,158 @@ async function referralsCard(host: HTMLElement, me: AdminMe): Promise<void> {
   );
 }
 
+/** BLAT DROP: the announcement date every player counts down to (admin sets it; audited). */
+async function dropCard(host: HTMLElement, me: AdminMe): Promise<void> {
+  clear(host);
+  host.append(h('h3', {}, 'BLAT DROP — дата объявления'), h('div', { class: 'loading' }, 'Загрузка…'));
+  const d = await apiFetch<AdminBlatDrop>('/api/admin/blat/drop');
+  host.lastChild?.remove();
+  const src = d.source === 'admin' ? `задана в панели${d.updatedBy ? ` (${d.updatedBy}` : ''}${d.updatedAt ? `, ${dateTime(d.updatedAt)})` : d.updatedBy ? ')' : ''}` : d.source === 'env' ? 'из настройки сервера BLAT_DROP_ANNOUNCE_AT' : '';
+  host.append(
+    h(
+      'p',
+      { class: 'note' },
+      'Игроки видят во вкладке BLAT DROP эту дату и обратный отсчёт по часам сервера — у всех одинаковый. Это дата объявления, а не обещание: игра не обещает ни токена, ни цены, ни листинга.',
+    ),
+    h('p', { 'data-testid': 'drop-current' }, h('b', {}, d.announceAt ? `Сейчас: ${dateTime(d.announceAt)}` : 'Сейчас: не задана'), d.announceAt ? ` · ${src}` : `${src ? ` · ${src}` : ''} — игроки видят «Дата объявления ещё не установлена»`),
+  );
+  if (me.role !== 'admin') return;
+  // the date in the admin's own time zone; sent as an exact moment (UTC)
+  const local = (iso: string) => {
+    const t = new Date(iso);
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}T${p(t.getHours())}:${p(t.getMinutes())}`;
+  };
+  // no date yet: six months ahead, at noon, as a suggestion (nothing changes until «Сохранить»)
+  const suggest = new Date();
+  suggest.setMonth(suggest.getMonth() + 6);
+  suggest.setHours(12, 0, 0, 0);
+  const input = h('input', { type: 'datetime-local', 'aria-label': 'Дата объявления', 'data-testid': 'drop-input', value: local(d.announceAt ?? suggest.toISOString()) }) as HTMLInputElement;
+  const save = h('button', { class: 'btn', type: 'submit', 'data-testid': 'drop-save' }, 'Сохранить') as HTMLButtonElement;
+  const send = (announceAt: string | null, what: string) => {
+    if (!confirm(what)) return;
+    save.disabled = true;
+    apiFetch<AdminBlatDrop>('/api/admin/blat/drop', { method: 'POST', body: { announceAt } })
+      .then(() => {
+        toast('Дата обновлена — игроки увидят её при следующем открытии вкладки', 'ok');
+        void dropCard(host, me);
+      })
+      .catch((e: Error) => toast(e.message))
+      .finally(() => (save.disabled = false));
+  };
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'местное время';
+  const form = h('form', { class: 'action-form' }, input, save, h('span', { class: 'muted-text' }, `время — по часовому поясу этого компьютера (${zone})`));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const at = new Date(input.value);
+    if (!input.value || Number.isNaN(at.getTime())) return toast('Укажите дату и время');
+    send(at.toISOString(), `Показать игрокам дату объявления BLAT DROP: ${dateTime(at.toISOString())}?`);
+  });
+  host.append(
+    form,
+    h(
+      'div',
+      { class: 'row', style: 'margin-top:8px' },
+      h('button', { class: 'chip', type: 'button', 'data-testid': 'drop-clear', onclick: () => send(null, 'Убрать дату? Игроки увидят «Дата объявления ещё не установлена».') }, 'Убрать дату'),
+    ),
+  );
+}
+
+/** Balance snapshots: one moment, frozen; CSV / JSON (admin; audited). */
+async function snapshotsCard(host: HTMLElement, me: AdminMe): Promise<void> {
+  clear(host);
+  host.append(h('h3', {}, 'Снимки балансов'), h('div', { class: 'loading' }, 'Загрузка…'));
+  const list = await apiFetch<AdminBlatSnapshot[]>('/api/admin/blat/snapshots');
+  host.lastChild?.remove();
+  host.append(
+    h(
+      'p',
+      { class: 'note' },
+      'Снимок замораживает балансы $BLAT всех аккаунтов на один момент (одной транзакцией). Не участвуют: помеченные как подозрительные и аккаунты, чей журнал $BLAT не сходится с балансом. Снимок — только запись: он ничего не создаёт и никуда не переводит. Правила — docs/BLAT.md.',
+    ),
+  );
+  if (me.role === 'admin') {
+    const note = h('input', { type: 'text', maxlength: 200, placeholder: 'Комментарий (необязательно)', 'aria-label': 'Комментарий к снимку', class: 'grow' }) as HTMLInputElement;
+    const take = h('button', { class: 'btn', type: 'submit', 'data-testid': 'snapshot-take' }, 'Сделать снимок') as HTMLButtonElement;
+    const form = h('form', { class: 'action-form' }, note, take);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!confirm('Сделать снимок всех балансов $BLAT прямо сейчас?')) return;
+      take.disabled = true;
+      apiFetch<AdminBlatSnapshot>('/api/admin/blat/snapshots', { method: 'POST', body: note.value.trim() ? { note: note.value.trim() } : {} })
+        .then((s) => {
+          toast(`Снимок готов: ${num(s.accounts)} аккаунтов, ${num(s.total)} $BLAT`, 'ok');
+          void snapshotsCard(host, me);
+        })
+        .catch((err: Error) => toast(err.message))
+        .finally(() => (take.disabled = false));
+    });
+    host.append(form);
+  }
+  if (list.length === 0) {
+    host.append(emptyState('Снимков ещё нет'));
+    return;
+  }
+  host.append(
+    h(
+      'div',
+      { class: 'table-scroll' },
+      h(
+        'table',
+        { class: 'table', 'data-testid': 'snapshots' },
+        h('thead', {}, h('tr', {}, ...['Момент', 'Кто', 'Аккаунтов', 'Участвуют', '$BLAT всего', '$BLAT участвующих', 'Комментарий', ''].map((t) => h('th', {}, t)))),
+        h(
+          'tbody',
+          {},
+          ...list.map((s) =>
+            h(
+              'tr',
+              {},
+              h('td', {}, dateTime(s.takenAt)),
+              h('td', {}, s.takenBy ?? '—'),
+              h('td', { class: 'num' }, s.rowsNow === s.accounts ? num(s.accounts) : `${num(s.accounts)} (сейчас ${num(s.rowsNow)})`),
+              h('td', { class: 'num' }, num(s.eligible)),
+              h('td', { class: 'num' }, num(s.total)),
+              h('td', { class: 'num' }, num(s.eligibleTotal)),
+              h('td', { class: 'msg' }, s.note ?? '—'),
+              h(
+                'td',
+                {},
+                me.role === 'admin'
+                  ? h(
+                      'div',
+                      { class: 'row' },
+                      h('a', { class: 'chip', href: `/api/admin/blat/snapshots/${s.id}/export?format=csv`, download: `blat-snapshot-${s.takenAt.slice(0, 10)}.csv` }, 'CSV'),
+                      h('a', { class: 'chip', href: `/api/admin/blat/snapshots/${s.id}/export?format=json`, download: `blat-snapshot-${s.takenAt.slice(0, 10)}.json` }, 'JSON'),
+                      h(
+                        'button',
+                        {
+                          class: 'chip',
+                          type: 'button',
+                          onclick: () => {
+                            if (!confirm(`Удалить снимок от ${dateTime(s.takenAt)}? Его строки исчезнут.`)) return;
+                            apiFetch(`/api/admin/blat/snapshots/${s.id}`, { method: 'DELETE' })
+                              .then(() => {
+                                toast('Снимок удалён', 'ok');
+                                void snapshotsCard(host, me);
+                              })
+                              .catch((err: Error) => toast(err.message));
+                          },
+                        },
+                        'Удалить',
+                      ),
+                    )
+                  : '',
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+    h('p', { class: 'note' }, '«Сейчас» — сколько строк осталось: удалённые аккаунты уходят из снимков вместе со своими данными.'),
+  );
+}
+
 export async function renderBlat(root: HTMLElement, me: AdminMe): Promise<void> {
   clear(root);
   const body = h('div', { class: 'stack' }, h('div', { class: 'loading' }, 'Загрузка…'));
@@ -173,7 +326,9 @@ export async function renderBlat(root: HTMLElement, me: AdminMe): Promise<void> 
       ),
     ),
   );
+  const dropHost = h('section', { class: 'card', 'data-testid': 'drop-card' });
+  const snapHost = h('section', { class: 'card', 'data-testid': 'snapshots-card' });
   const refHost = h('section', { class: 'card' });
-  body.append(refHost);
-  await referralsCard(refHost, me);
+  body.append(dropHost, snapHost, refHost);
+  await Promise.all([dropCard(dropHost, me), snapshotsCard(snapHost, me), referralsCard(refHost, me)]);
 }

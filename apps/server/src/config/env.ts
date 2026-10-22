@@ -76,6 +76,11 @@ const EnvSchema = z.object({
   NOWPAYMENTS_API_KEY: z.string().optional(),
   NOWPAYMENTS_IPN_SECRET: z.string().optional(),
   NOWPAYMENTS_SANDBOX: bool.default('false'),
+  /**
+   * V2.0: the BLAT DROP announcement date players count down to (ISO 8601, e.g. 2027-04-23T12:00:00Z),
+   * used until an administrator sets one in /admin → $BLAT (docs/BLAT.md §6).
+   */
+  BLAT_DROP_ANNOUNCE_AT: z.string().datetime({ offset: true }).optional(),
   /** Password-reset emails through Resend (https://resend.com); without a key the admin issues reset links. */
   RESEND_API_KEY: z.string().optional(),
   MAIL_FROM: z.string().optional(),

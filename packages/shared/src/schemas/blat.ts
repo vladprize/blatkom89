@@ -45,3 +45,9 @@ export interface BlatResponse {
   /** Credited just now by this request (levels reached before $BLAT existed). */
   justCredited: number;
 }
+
+/** V2.0 part C: BLAT DROP — the announcement date (null: not set yet) and the server's clock. */
+export interface BlatDropInfo {
+  announceAt: string | null;
+  serverNow: string;
+}

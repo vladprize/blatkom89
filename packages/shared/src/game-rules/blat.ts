@@ -82,3 +82,18 @@ export const isRefCode = (v: unknown): v is string => typeof v === 'string' && R
 /** Where a $BLAT credit came from (the ledger's reason). */
 export const BLAT_SOURCES = ['level', 'referral', 'grant'] as const;
 export type BlatSource = (typeof BLAT_SOURCES)[number];
+
+/**
+ * BLAT DROP (V2.0 part C): milliseconds left by the server's clock. `serverNow` came with the answer
+ * that arrived at `fetchedAt` by this device's clock; the difference is kept, so a device whose clock is
+ * wrong still counts down to the same second as everyone.
+ */
+export function dropMsLeft(announceAt: string, serverNow: string, fetchedAt: number, now: number): number {
+  return Date.parse(announceAt) - (now + (Date.parse(serverNow) - fetchedAt));
+}
+
+/** BLAT DROP (V2.0 part C): days, hours, minutes and seconds left (never below zero). */
+export function dropCountdown(msLeft: number): { d: number; h: number; m: number; s: number } {
+  const left = Math.max(0, Math.floor((Number.isFinite(msLeft) ? msLeft : 0) / 1000));
+  return { d: Math.floor(left / 86400), h: Math.floor((left % 86400) / 3600), m: Math.floor((left % 3600) / 60), s: left % 60 };
+}

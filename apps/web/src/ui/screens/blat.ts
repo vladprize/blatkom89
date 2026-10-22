@@ -9,10 +9,14 @@ import { asset, h, toast } from '../dom.js';
 import { getLang, t } from '../../i18n/index.js';
 import { shareInvite } from '../../telegram/tg.js';
 
-/** The pixel coin: 16 px art drawn at a whole multiple (16, 32, 48…) so it stays crisp. */
+/**
+ * The pixel coin: 16 px art (the bigger files are exact 2×/4×/8× copies). The largest file whose size
+ * divides the shown size is scaled by a whole number, so every pixel stays square (48 → the 16 px file
+ * ×3, 96 → 32 ×3, 128 → 128).
+ */
 export function blatCoin(size = 16, alt = ''): HTMLImageElement {
-  const src = size > 32 ? 'assets/ui/blat_coin_128.png' : 'assets/ui/blat_coin_32.png';
-  return h('img', { class: 'blatcoin', src: asset(src), width: String(size), height: String(size), alt, draggable: 'false' }) as HTMLImageElement;
+  const file = [128, 64, 32, 16].find((s) => size % s === 0) ?? 128;
+  return h('img', { class: 'blatcoin', src: asset(`assets/ui/blat_coin_${file}.png`), width: String(size), height: String(size), alt, draggable: 'false' }) as HTMLImageElement;
 }
 
 /** 12 345 678 (Russian) / 12,345,678 (English). */
