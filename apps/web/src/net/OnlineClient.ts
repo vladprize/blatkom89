@@ -6,6 +6,7 @@ import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, Loadout, M
 import { latinName } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { readLoginReturn } from './oauth.js';
+import { captureReferral, clearReferral, pendingReferral } from './referral.js';
 import type { LoginReturn, ProvidersInfo } from './oauth.js';
 import { GameConnection } from './GameConnection.js';
 import { SocialClient } from './SocialClient.js';
@@ -65,7 +66,17 @@ const KEEPALIVE_MS = 4 * 60_000;
 
 export class OnlineClient {
   readonly api = new Api();
-  profile: PublicProfile | null = null;
+  private me: PublicProfile | null = null;
+  /** V2.0: a profile read paid $BLAT for levels (the welcome, levels reached before $BLAT) — say so once. */
+  onBlatCredited: ((amount: number, level: number) => void) | null = null;
+  get profile(): PublicProfile | null {
+    return this.me;
+  }
+  set profile(p: PublicProfile | null) {
+    const credited = p?.blatCredited ?? 0;
+    this.me = p && credited ? { ...p, blatCredited: 0 } : p;
+    if (p && credited > 0) this.onBlatCredited?.(credited, p.level);
+  }
   /** Friends, presence, private messages, invitations (opened once signed in). */
   readonly social = new SocialClient(this.api, () => this.profile?.id ?? null);
   /** Friends invited from the current room (id → when), so the lobby shows «Invited ✓». */
@@ -100,6 +111,8 @@ export class OnlineClient {
   constructor(private readonly cb: OnlineCallbacks) {
     // inside the Mini App Telegram signs the player in; elsewhere a provider may have just sent them back
     if (!tg()) this.loginReturn = readLoginReturn();
+    // V2.0: a referral link (?ref=) — kept until the first sign-in from this browser
+    captureReferral();
   }
 
   /** The sign-in that just came back from a provider: shown once in the menu. */
@@ -130,7 +143,8 @@ export class OnlineClient {
       if (signedIn) return signedIn;
     }
     if (app) {
-      const res = await this.api.authTelegram(app.initData, storageGet(VISITOR_KEY) ?? undefined);
+      const res = await this.api.authTelegram(app.initData, storageGet(VISITOR_KEY) ?? undefined, pendingReferral() ?? undefined);
+      clearReferral();
       this.setToken(res.token);
       this.profile = res.profile;
       return res.profile;
@@ -167,7 +181,8 @@ export class OnlineClient {
     const fallback = `Comrade_${device.slice(0, 3).toUpperCase()}`;
     const name = latinName(telegramUserName() ?? '', fallback);
     try {
-      const res = await this.api.authGuest(name, device, storageGet(VISITOR_KEY) ?? undefined);
+      const res = await this.api.authGuest(name, device, storageGet(VISITOR_KEY) ?? undefined, pendingReferral() ?? undefined);
+      clearReferral();
       this.setToken(res.token);
       storageSet(TOKEN_KEY, res.token);
       this.profile = res.profile;

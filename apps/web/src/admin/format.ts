@@ -129,6 +129,8 @@ export const LEDGER_REASONS: Record<string, string> = {
   topup: 'Пополнения',
   grant: 'Начисления админа',
   refund: 'Возвраты',
+  level: 'За уровни',
+  referral: 'За приглашения',
 };
 export const PAYMENT_STATUSES: Record<string, string> = { created: 'ожидает', paid: 'оплачен', failed: 'ошибка', expired: 'истёк', refunded: 'возврат' };
 export const PAYMENT_PROVIDERS: Record<string, string> = { stripe: 'Карта (Stripe)', nowpayments: 'Крипта (NOWPayments)', telegram: 'Telegram Stars' };

@@ -4,7 +4,68 @@ import { h, clear, toast } from '../dom.js';
 import { apiFetch } from '../api.js';
 import { num, dateTime, playtime, duration, money, itemName, ACHIEVEMENT_NAMES, ACHIEVEMENT_DESCRIPTIONS, MAP_NAMES, CHARACTER_NAMES, PLATFORM_NAMES, ITEM_KINDS, ITEM_SOURCES, LEDGER_REASONS, MOD_NAMES, PAYMENT_PROVIDERS, PAYMENT_STATUSES, SIGN_IN_METHODS, WEAPON_NAMES } from '../format.js';
 
-const CURRENCY_NAMES: Record<string, string> = { tokens: 'талоны', diamonds: 'алмазы' };
+const CURRENCY_NAMES: Record<string, string> = { tokens: 'талоны', diamonds: 'алмазы', blat: '$BLAT' };
+const REF_STATUS: Record<string, string> = { pending: 'ждёт первого матча', held: 'на проверке', confirmed: 'засчитано', rejected: 'отклонено' };
+
+/** V2.0: $BLAT, the referral code, who invited the player and whom they invited; the admin's flag. */
+function blatCard(d: AdminPlayerDetail, me: AdminMe | null | undefined, onChanged: () => void): HTMLElement | null {
+  const b = d.blat;
+  if (!b) return null;
+  const p = d.player;
+  const flagBtn =
+    me?.role === 'admin'
+      ? h(
+          'button',
+          {
+            class: 'chip',
+            type: 'button',
+            onclick: () => {
+              let flag: string | null = null;
+              if (b.flag) {
+                if (!confirm(`Снять пометку с «${p.displayName}»? Его следующие приглашения снова будут засчитываться сами.`)) return;
+              } else {
+                flag = (prompt(`Пометить «${p.displayName}» как подозрительный аккаунт? Приглашения с его участием будут ждать решения, баланс не попадёт в выгрузки. Причина:`) ?? '').trim().slice(0, 200);
+                if (!flag) return;
+              }
+              apiFetch(`/api/admin/players/${encodeURIComponent(p.id)}/blat-flag`, { method: 'POST', body: { flag } })
+                .then(() => {
+                  toast(flag ? 'Аккаунт помечен' : 'Пометка снята', 'ok');
+                  onChanged();
+                })
+                .catch((e: Error) => toast(e.message));
+            },
+          },
+          b.flag ? 'Снять пометку' : 'Пометить как подозрительный',
+        )
+      : null;
+  return h(
+    'section',
+    { class: 'card' },
+    h('h3', {}, '$BLAT и приглашения'),
+    h(
+      'div',
+      { class: 'tiles small' },
+      h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Баланс'), h('div', { class: 'tile-value' }, num(b.balance))),
+      h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Заработано всего'), h('div', { class: 'tile-value' }, num(b.earned))),
+      h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Засчитано приглашений'), h('div', { class: 'tile-value' }, num(b.referrals.confirmed))),
+      h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Ждут / на проверке'), h('div', { class: 'tile-value' }, `${num(b.referrals.pending)} / ${num(b.referrals.held)}`)),
+    ),
+    h('div', { style: 'height:12px' }),
+    h(
+      'dl',
+      { class: 'kv' },
+      h('dt', {}, 'Код приглашения'),
+      h('dd', { class: 'mono' }, b.refCode ?? 'ещё не создан'),
+      h('dt', {}, 'Пригласил'),
+      h('dd', {}, ...(b.referredBy ? [b.referredBy.id ? h('a', { href: `#/players/${b.referredBy.id}` }, b.referredBy.name ?? '—') : 'аккаунт удалён', ` · ${REF_STATUS[b.referredBy.status] ?? b.referredBy.status}`] : ['пришёл сам'])),
+      h('dt', {}, 'Отклонено приглашений'),
+      h('dd', {}, num(b.referrals.rejected)),
+      h('dt', {}, 'Пометка'),
+      h('dd', {}, b.flag ? `подозрительный: ${b.flag}` : 'нет'),
+    ),
+    flagBtn,
+  );
+}
 
 function table(head: string[], rows: Array<Array<string | HTMLElement>>, numeric: number[], empty: string): HTMLElement {
   if (rows.length === 0) return h('div', { class: 'chart-empty' }, empty);
@@ -163,10 +224,11 @@ export async function renderPlayer(root: HTMLElement, id: string, me?: AdminMe |
       ),
       me?.role === 'admin' ? actions(d, () => void renderPlayer(root, id, me)) : h('section', { class: 'card' }, h('h3', {}, 'Действия администратора'), h('p', { class: 'note' }, 'Начисления и ссылки для сброса пароля доступны роли admin.')),
     ),
+    ...[blatCard(d, me, () => void renderPlayer(root, id, me))].filter((x): x is HTMLElement => x !== null),
     h(
       'section',
       { class: 'card' },
-      h('h3', {}, 'Движение талонов и алмазов'),
+      h('h3', {}, 'Движение талонов, алмазов и $BLAT'),
       table(
         ['Время', 'Валюта', 'Изменение', 'Баланс', 'Причина', 'Ссылка / комментарий', 'Админ'],
         d.ledger.map((l) => [dateTime(l.at), CURRENCY_NAMES[l.currency] ?? l.currency, `${l.delta > 0 ? '+' : ''}${num(l.delta)}`, num(l.balanceAfter), LEDGER_REASONS[l.reason] ?? l.reason, l.ref ?? '—', l.admin ?? '—']),

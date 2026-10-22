@@ -34,6 +34,8 @@ export const displayNameSchema = z
  */
 export const signupNameSchema = z.string().trim().min(1).max(64);
 
+/** V2.0: the referral code the browser was opened with (a new account is attached to its inviter). */
+const refSchema = z.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 export const TelegramAuthRequest = z
   .object({
     initData: z.string().min(10).max(8192),
@@ -41,6 +43,7 @@ export const TelegramAuthRequest = z
     clientVersion: z.string().max(32).optional(),
     /** Optional anonymous browser id (see VisitRequest) that links a new player to the visitor funnel. */
     visitorId: z.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
+    ref: refSchema.optional(),
   })
   .strict();
 export const DevAuthRequest = z
@@ -49,6 +52,7 @@ export const DevAuthRequest = z
     deviceId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
     platform: PlatformSchema.optional(),
     clientVersion: z.string().max(32).optional(),
+    ref: refSchema.optional(),
   })
   .strict();
 /**
@@ -62,6 +66,7 @@ export const GuestAuthRequest = z
     platform: PlatformSchema.optional(),
     clientVersion: z.string().max(32).optional(),
     visitorId: z.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
+    ref: refSchema.optional(),
   })
   .strict();
 /** Optional anonymous browser id (see VisitRequest) that links a sign-up to the visitor funnel. */
@@ -144,7 +149,7 @@ export interface LedgerEntry {
   currency: Currency;
   delta: number;
   balanceAfter: number;
-  reason: 'match' | 'purchase' | 'mod' | 'case' | 'topup' | 'grant' | 'refund';
+  reason: 'match' | 'purchase' | 'mod' | 'case' | 'topup' | 'grant' | 'refund' | 'level' | 'referral';
   ref: string | null;
 }
 
@@ -183,6 +188,10 @@ export interface PublicProfile {
   avatar: AvatarId | null;
   tokens: number;
   diamonds: number;
+  /** V2.0: $BLAT — in-game points (game-rules/blat.ts). */
+  blat?: number;
+  /** V2.0: $BLAT paid by this very request for levels not paid before (the welcome, older levels). */
+  blatCredited?: number;
   /** Email sign-in is set up (the account can be restored on another device). */
   email: string | null;
   /** Rating (the Top-100 table; starts at 1000). */
@@ -423,9 +432,49 @@ export interface AdminPlayerDetail {
   items: Array<{ kind: 'weapon' | 'character' | 'gadget'; id: string; source: 'tokens' | 'diamonds' | 'case' | 'grant'; acquiredAt: string }>;
   mods: Array<{ weapon: string; mod: string; acquiredAt: string }>;
   /** Latest balance changes, newest first; `admin` is set for grants. */
-  ledger: Array<{ at: string; currency: 'tokens' | 'diamonds'; delta: number; balanceAfter: number; reason: string; ref: string | null; admin: string | null }>;
+  ledger: Array<{ at: string; currency: 'tokens' | 'diamonds' | 'blat'; delta: number; balanceAfter: number; reason: string; ref: string | null; admin: string | null }>;
   payments: AdminPaymentRow[];
+  /** V2.0: $BLAT, the referral code, who invited the player and whom they invited; an admin's flag. */
+  blat?: {
+    balance: number;
+    earned: number;
+    refCode: string | null;
+    referredBy: { id: string | null; name: string | null; status: AdminReferralRow['status'] } | null;
+    referrals: Record<AdminReferralRow['status'], number>;
+    flag: string | null;
+  };
 }
+
+/** V2.0: an invitation as the admin sees it. */
+export interface AdminReferralRow {
+  refereeId: string;
+  refereeName: string;
+  referrerId: string | null;
+  referrerName: string | null;
+  code: string;
+  attachedAt: string;
+  status: 'pending' | 'confirmed' | 'held' | 'rejected';
+  decidedAt: string | null;
+  ordinal: number | null;
+  reward: number;
+  note: string | null;
+}
+
+/** V2.0: $BLAT in numbers (admin). */
+export interface AdminBlatSummary {
+  totalBalance: number;
+  holders: number;
+  /** All time, by source. */
+  issued: Record<'level' | 'referral' | 'grant', number>;
+  /** In the selected period, by source. */
+  issuedInRange: Record<'level' | 'referral' | 'grant', number>;
+  referrals: Record<AdminReferralRow['status'], number>;
+  top: Array<{ id: string; name: string; balance: number; flagged: boolean }>;
+  flagged: number;
+}
+
+export const AdminReferralDecision = z.object({ action: z.enum(['confirm', 'reject']), note: z.string().trim().max(200).optional() }).strict();
+export const AdminBlatFlagRequest = z.object({ flag: z.string().trim().min(1).max(200).nullable() }).strict();
 
 export interface AdminPaymentRow {
   id: string;

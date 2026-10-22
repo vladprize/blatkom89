@@ -7290,6 +7290,27 @@ var clubMottoSchema = external_exports.string().transform((s) => s.replace(/[\u0
 var CreateClubBody = external_exports.object({ name: clubNameSchema, tag: clubTagSchema, motto: clubMottoSchema.optional(), flag: ClubFlagSchema, emblem: ClubEmblemSchema }).strict();
 var UpdateClubBody = external_exports.object({ motto: clubMottoSchema.optional(), flag: ClubFlagSchema.optional(), emblem: ClubEmblemSchema.optional() }).strict();
 
+// packages/shared/src/game-rules/blat.ts
+var BLAT_LIMITS = Object.freeze({ maxBalance: 2e9, maxCredit: 1e6 });
+var BLAT_LEVEL_STEPS = Object.freeze([
+  { upTo: 10, step: 50 },
+  { upTo: 20, step: 100 },
+  { upTo: 30, step: 200 },
+  { upTo: 40, step: 300 },
+  { upTo: 50, step: 325 }
+]);
+var REFERRAL_TIERS = Object.freeze([
+  { from: 1, reward: 1500 },
+  { from: 5, reward: 3e3 },
+  { from: 10, reward: 5e3 },
+  { from: 25, reward: 7500 },
+  { from: 50, reward: 1e4 },
+  { from: 100, reward: 12500 },
+  { from: 250, reward: 15e3 },
+  { from: 500, reward: 2e4 }
+]);
+var REFERRAL_RULES = Object.freeze({ minMatchSec: 60, dailyCap: 20 });
+
 // packages/shared/src/maps/props.ts
 var P = (w, h, shape, layer, blocksShot, label, extra = {}) => ({ w, h, shape, layer, blocksMove: shape !== "none", blocksShot: shape !== "none" && blocksShot, label, ...extra });
 var PROP_DEFS = {
@@ -7536,25 +7557,29 @@ var EventsBatchSchema = external_exports.object({ events: external_exports.array
 // packages/shared/src/schemas/api.ts
 var displayNameSchema = external_exports.string().trim().min(2).max(MAX_NAME_LENGTH).regex(LATIN_NAME_RE, "A name may contain Latin letters (A\u2013Z), digits, spaces and _ . -");
 var signupNameSchema = external_exports.string().trim().min(1).max(64);
+var refSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 var TelegramAuthRequest = external_exports.object({
   initData: external_exports.string().min(10).max(8192),
   platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional(),
   /** Optional anonymous browser id (see VisitRequest) that links a new player to the visitor funnel. */
-  visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional()
+  visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
+  ref: refSchema.optional()
 }).strict();
 var DevAuthRequest = external_exports.object({
   name: signupNameSchema,
   deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
   platform: PlatformSchema.optional(),
-  clientVersion: external_exports.string().max(32).optional()
+  clientVersion: external_exports.string().max(32).optional(),
+  ref: refSchema.optional()
 }).strict();
 var GuestAuthRequest = external_exports.object({
   name: signupNameSchema,
   deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{20,64}$/),
   platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional(),
-  visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional()
+  visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
+  ref: refSchema.optional()
 }).strict();
 var visitorIdSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/);
 var emailSchema = external_exports.string().trim().toLowerCase().max(254).email("That is not a valid email address");
@@ -7599,6 +7624,8 @@ var AdminCreateUserRequest = external_exports.object({
   password: external_exports.string().min(12).max(256),
   role: external_exports.enum(["admin", "viewer"])
 }).strict();
+var AdminReferralDecision = external_exports.object({ action: external_exports.enum(["confirm", "reject"]), note: external_exports.string().trim().max(200).optional() }).strict();
+var AdminBlatFlagRequest = external_exports.object({ flag: external_exports.string().trim().min(1).max(200).nullable() }).strict();
 var AdminGrantRequest = external_exports.object({
   currency: external_exports.enum(["tokens", "diamonds"]),
   amount: external_exports.number().int().min(-1e6).max(1e6).refine((v) => v !== 0, "amount must not be 0"),

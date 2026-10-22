@@ -44,6 +44,7 @@ import { charText, finishName, gadgetName, modText, weaponName } from '../i18n/c
 import { apiErrorText } from '../net/errors.js';
 import { watchForUpdates } from './updates.js';
 import { renderClubs, renderClub, renderClubEditor, clubLabel } from '../ui/screens/clubs.js';
+import { renderBlat, blatCoin, fmtBlat } from '../ui/screens/blat.js';
 import { PROVIDER_NAME, loginErrorText } from '../ui/screens/signin.js';
 import type { LoginProvider } from '../net/oauth.js';
 import { clubFlag } from '../ui/clubFlag.js';
@@ -53,7 +54,7 @@ import type { UpdateWatch } from './updates.js';
 /** Room capacity shown in the menu. */
 const MAX_ROOM_PLAYERS = DEFAULT_MATCH_CONFIG.maxPlayers;
 
-type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'social' | 'top' | 'clubs' | 'club' | 'clubEdit' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
+type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'social' | 'top' | 'clubs' | 'club' | 'clubEdit' | 'blat' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
 
 /** Profile id whose nickname has been confirmed in the first-launch dialog (online build). */
 const NICK_CONFIRMED_KEY = 'blatkom89.nick-confirmed.v1';
@@ -156,6 +157,8 @@ export class App {
   private lastLocalResult: { matchId: string; personal: PersonalResult } | null = null;
   private nickClose: (() => void) | null = null;
   private stripEl: HTMLElement | null = null;
+  /** V2.0: «+300 $BLAT …» waiting to be shown on the menu. */
+  private blatNote: string | null = null;
   /** Last lobby state and results (to redraw them after a language switch). */
   private lastLobby: LobbyState | null = null;
   private lastResults: ResultsData | null = null;
@@ -207,6 +210,7 @@ export class App {
       case 'friends':
       case 'social':
       case 'top':
+      case 'blat':
       case 'profile':
       case 'settings':
       case 'arsenal':
@@ -263,6 +267,11 @@ export class App {
       });
       this.online.onEmailSessionExpired = (email) =>
         openEmailLogin(this.root, this.online!, { email, note: t('This account’s session has expired — please sign in again.'), onDone: () => this.afterAccountSwitch() });
+      // V2.0: $BLAT paid on sign-in (the level-1 welcome, levels reached before $BLAT) — said on the menu
+      this.online.onBlatCredited = (n, level) => {
+        this.blatNote = level <= 1 ? t('+{n} $BLAT — welcome to the district', { n: fmtBlat(n) }) : t('+{n} $BLAT for the levels you reached', { n: fmtBlat(n) });
+        if (this.screen === 'menu') this.flushBlatNote();
+      };
       this.online.pingVisit();
       this.online.social.on((e) => this.onSocial(e));
       void this.online
@@ -415,6 +424,8 @@ export class App {
         return this.showSocial(push);
       case 'top':
         return this.showTop(push);
+      case 'blat':
+        return this.showBlat(push);
       case 'clubs':
       case 'clubEdit':
         return this.showClubs(push);
@@ -452,6 +463,7 @@ export class App {
     music.setWanted(true);
     // a newer release found while playing: now is the moment (after the menu is on screen)
     setTimeout(() => this.updates?.atMenu(), 0);
+    setTimeout(() => this.flushBlatNote(), 0);
     const onlineNote = ONLINE_AVAILABLE ? null : h('div', { class: 'muted', style: 'font-size:14px' }, t('This is the demo without a server: practice against bots is available. Online matches work in the online version.'));
     this.stripEl = this.profileTile();
     const menu = h(
@@ -621,7 +633,34 @@ export class App {
       ),
       this.clubTile(),
       h('button', { class: 'stile', 'data-testid': 'menu-top', onclick: () => this.showTop() }, socialIcon('top'), h('span', { class: 'stile__txt' }, h('b', null, t('Top-100')), h('small', null, t('rating · level · eliminations')))),
+      // V2.0: $BLAT — the coin, the balance
+      h(
+        'button',
+        { class: 'stile stile--blat', 'data-testid': 'menu-blat', onclick: () => this.showBlat() },
+        h('span', { class: 'stile__coin' }, blatCoin(32, '')),
+        h('span', { class: 'stile__txt' }, h('b', null, '$BLAT'), h('small', { 'data-testid': 'menu-blat-balance' }, fmtBlat(this.online?.profile?.blat ?? 0))),
+      ),
     );
+  }
+
+  /** V2.0: $BLAT — balance, history, level rewards, invitations. */
+  private showBlat(push = true) {
+    const online = this.online;
+    if (!online) return;
+    this.go('blat', push);
+    const wrap = h('div', { class: 'wrap' }, this.topbar('$BLAT'), h('div', { class: 'col center' }, h('div', { class: 'spinner' })));
+    this.render(h('div', { class: 'screen screen--dim' }, wrap));
+    void online.api
+      .blat()
+      .then((d) => {
+        if (this.screen !== 'blat') return;
+        if (online.profile) online.profile = { ...online.profile, blat: d.balance };
+        wrap.replaceChildren(this.topbar('$BLAT'), renderBlat(d));
+        if (d.justCredited > 0) toast(t('+{n} $BLAT for the levels you reached', { n: fmtBlat(d.justCredited) }));
+      })
+      .catch((e) => {
+        if (this.screen === 'blat') wrap.replaceChildren(this.topbar('$BLAT'), h('div', { class: 'panel' }, apiErrorText(e)));
+      });
   }
 
   /** Clubs (v0.3): the player's club flag (or the icon), its tag, and requests waiting for the head. */
@@ -743,7 +782,17 @@ export class App {
     });
   }
 
+  /** V2.0: the $BLAT note waiting for the menu (see `onBlatCredited`). */
+  private flushBlatNote() {
+    if (!this.blatNote) return;
+    toast(this.blatNote);
+    this.blatNote = null;
+  }
+
   private refreshStrip() {
+    // V2.0: the menu's $BLAT tile follows the balance
+    const bal = this.root.querySelector<HTMLElement>('[data-testid="menu-blat-balance"]');
+    if (bal) bal.textContent = fmtBlat(this.online?.profile?.blat ?? 0);
     if (!this.stripEl?.isConnected) return;
     const next = this.profileTile();
     this.stripEl.replaceWith(next);
@@ -1423,6 +1472,13 @@ export class App {
       case 'club_head':
         if (!inGame) toast(t('You are the gang’s boss now'));
         this.afterClubChange();
+        return;
+      // V2.0: an invitation counted (or waits for a check)
+      case 'referral':
+        if (!inGame) toast(e.held ? t('An invitation of yours is being checked — the reward comes after the check') : t('{name} played their first match through your link: +{n} $BLAT', { name: e.name, n: fmtBlat(e.reward) }));
+        if (this.online.profile && e.balance >= 0) this.online.profile = { ...this.online.profile, blat: e.balance };
+        if (this.screen === 'blat') this.showBlat(false);
+        else this.refreshSocialTiles();
         return;
       case 'dm': {
         const me = this.online.profile?.id;

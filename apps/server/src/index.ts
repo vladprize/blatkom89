@@ -11,6 +11,7 @@ import { SocialHub } from './social/hub.js';
 import { createPersistence } from './services/persistence.js';
 import { KeepAwake } from './services/keepAwake.js';
 import { setupBot } from './telegram/bot.js';
+import { notifyReferral } from './api/blat.js';
 
 const env = loadEnv();
 const log = createLogger(env.LOG_LEVEL, { service: 'blatkom-server', version: env.SERVER_VERSION });
@@ -24,6 +25,8 @@ const services = persistence.services;
 const rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env), fillBots: env.MATCH_FILL_BOTS });
 const social = new SocialHub(rooms, log);
 rooms.onPresence((userId) => void social.announce(userId));
+// V2.0: an invitation counted after a match — the inviter hears it live
+if (persistence.recorder) persistence.recorder.onReferral = (r) => notifyReferral(social, r);
 const keepAwake = new KeepAwake(env.PUBLIC_URL, { always: env.KEEP_AWAKE, log });
 const handler = createApp({ env, sql, log, services, rooms, social, keepAwake });
 const server = createServer((req, res) => {

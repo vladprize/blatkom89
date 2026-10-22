@@ -6,6 +6,7 @@ import type { ResultsData } from '../../game/session/types.js';
 import { t, plural, count } from '../../i18n/index.js';
 import { achievementText, mapName } from '../../i18n/content.js';
 import { modeName } from '../modes.js';
+import { blatAmount, fmtBlat } from './blat.js';
 
 const teamLabel = (team: Team) => (team === 0 ? t('RED TEAM') : t('BLUE TEAM'));
 
@@ -78,6 +79,10 @@ export function renderResults(o: {
             h('div', { class: 'row' }, h('b', null, '+', amount(personal.tokensGained, 'tokens')), h('span', { class: 'muted' }, t('{talons} · {total} in total — spend them in the Arsenal', { talons: plural(personal.tokensGained, 'talon'), total: personal.totalTokens ?? 0 }))),
             how ? h('div', { class: 'muted', style: 'font-size:14px', 'data-testid': 'talon-breakdown' }, how) : null,
           )
+        : null,
+      // V2.0: $BLAT for the levels reached in this match
+      personal.blatGained
+        ? h('div', { class: 'row blat-gain', 'data-testid': 'blat-gain' }, blatAmount(personal.blatGained), h('span', { class: 'muted' }, t('$BLAT for the new level · {total} in total', { total: fmtBlat(personal.totalBlat ?? 0) })))
         : null,
       ...personal.newAchievements.map((a) => h('div', { class: 'ach' }, h('div', { class: 'ico' }, '★'), h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 't' }, achievementText(a).title), h('div', { class: 'muted' }, achievementText(a).description)))),
       o.localProfile ? h('div', { class: 'muted', style: 'font-size:14px' }, t('Local profile — kept in this browser.')) : null,

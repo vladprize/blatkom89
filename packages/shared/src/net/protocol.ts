@@ -122,6 +122,9 @@ export interface PersonalResult {
   /** Rating change in this match and the rating after it (the Top-100 table). */
   ratingDelta?: number;
   rating?: number;
+  /** V2.0: $BLAT for the levels reached in this match, and the balance after it. */
+  blatGained?: number;
+  totalBlat?: number;
 }
 
 export type ServerMessage =

@@ -16,7 +16,8 @@ export function inTelegram(): boolean {
 export function telegramStartParam(): string | null {
   const t = tg();
   const p = t?.initDataUnsafe?.start_param;
-  if (p && /^[A-Za-z0-9_-]{1,64}$/.test(p)) return p;
+  // V2.0: `ref_<code>` is a referral (the server reads it from the signed launch data), not a room
+  if (p && /^[A-Za-z0-9_-]{1,64}$/.test(p) && !p.startsWith('ref_')) return p;
   return null;
 }
 

@@ -162,7 +162,45 @@ part 4 the story, chapter by chapter. The version stays 0.2.x until the whole li
 | Sign-in with Google, Telegram, Facebook, Discord, Reddit | **part 3 (v0.2.7).** OAuth 2.0 code flow with a confidential client for Google (`openid profile`), Facebook (`public_profile`), Discord (`identify`), Reddit (`identity`) — `auth/oauth.ts`, `api/oauth.ts`: the page asks for a signed 5-minute *intent* naming its account, `/api/auth/oauth/<p>/start` sets a 10-minute HttpOnly nonce cookie (path `/api/auth/oauth`) and sends the player to the provider with a signed *state* (provider, account, nonce, time); the callback checks state, age, provider and cookie, trades the code server to server (the secret never reaches the page; provider tokens are used once, never stored) for the player's id and first name (transliterated to Latin). The account: the one the id belongs to → else the account the page was on gets it (a guest keeps everything; refused if it already has another account of that provider) → else a new account named after the first name. The page gets a one-time code in the address fragment (`#login=`, 5 minutes, stored as a SHA-256 hash) and trades it for a session — no session token in an address. Telegram on the website: oauth.telegram.org's signed answer (`#tgAuthResult=`) checked with the bot token (`auth/telegramLogin.ts`), the same `telegram_id` as the Mini App, switched on by `TELEGRAM_WEB_LOGIN=true` after BotFather's `/setdomain`. Migration 015 (`user_identities`, `auth_handoffs`, `users.oauth_only`, session method `oauth`); analytics `identity_linked`; account deletion and the retention job clear both tables. UI: plain labelled buttons (no brand marks) in the welcome window («In one tap with … or with an email») and the account panel (linked ones ✓, the email then offered as «one more way in»); a toast on return (linked / signed in / cancelled / expired); a returning account isn't asked for its alias again. A provider appears only when its keys are set (`GET /api/auth/providers`); setup per provider in docs/SIGN_IN.md, privacy texts updated | ✅ 7 DB-backed tests with a fake provider (`api/oauth.test.ts`: the provider list, the redirect/state/cookie and the secret only server to server, a new account and the same one next time, a guest linking + another browser switching to it + a second account of the same provider refused, forged/missing/foreign state, cancel, refused code, an old hand-over, deletion; Telegram: sign-in, linking a guest, the Mini App finding the same account, forgeries/another bot/stale data, off unless switched on), retention test; E2E `signin.mjs` 21 checks (stubbed providers; a phone and a desktop, English and Russian); ⛔ no real provider contacted — the owner creates the apps and adds the keys on Render |
 | The story mode | part 4 | ⏳ |
 
+## 2i. V2.0 (2026-10-23) — the owner's master prompt «BLATKOM ’89 V2.0», delivered in parts
+
+The prompt: keep everything that works (rooms, `invite` links, filled lineups, accounts and progress,
+phones, landscape, the website without Telegram), non-destructive migrations; **$BLAT** — accumulating
+in-game points (red pixel coin; balance, history, sources, level rewards, referral credits; never bought,
+sold, withdrawn, transferred or exchanged; server-only credits with unique operation ids, no duplicates,
+bounds, atomic); **level rewards** (300, 350, 400 … up to 10 000; configurable, to be approved);
+**referrals** (a personal link; the owner's scale by the number of confirmed invitations; counted after
+the new player's first whole match, one inviter for good, no rewards for clicks, existing players or
+bots, no aggressive device tracking); a **BLAT DROP** tab with an announcement countdown set on the
+server; preparation for a possible future token **without** creating one (ledger, history, dedupe,
+snapshots, suspicious-account checks, CSV/JSON export, documented rules); a **«Блатной кон»**
+competitive section (1×1 … 5×5, teams, ratings — safe mode, bets designed but off); Telegram Mini App
+polish (fullscreen, orientation, safe areas, minimise/restore, reconnect, server-side `initData`,
+linking Telegram to an existing account); analytics and admin numbers for all of it.
+
+Order: **B** $BLAT + levels + referrals (v0.2.9) → **C** BLAT DROP + snapshot export → **D** «Блатной
+кон» → **E/F** Telegram polish, account linking, analytics/admin metrics. The story mode (v0.3 part 4)
+waits on the branch `wip/story` and continues after V2.0.
+
+| Request (owner) | Implementation | Status |
+|---|---|---|
+| $BLAT: accumulating points, server-only, unique operation ids, no duplicates, journal, bounds, atomic | **v0.2.9.** Migration 016 (adds only): `profiles.blat / blat_earned / blat_level`, $BLAT rows in the shared `currency_ledger` (`currency = 'blat'`, reasons `level` / `referral`, `grant` reserved) with `ref` = the operation id (`level:<n>`, `referral:<player>`), a unique index per player and operation, CHECKs on bounds; every credit locks the profile, inserts with `ON CONFLICT DO NOTHING`, then moves the balance (`blat/repo.ts`). Nothing can be bought, sold, sent or exchanged; no price anywhere ([docs/BLAT.md](docs/BLAT.md)) | ✅ shared + 7 DB-backed tests (`blat/blat.test.ts`: retries, concurrent requests, re-processed matches) |
+| Level rewards 300, 350, 400 … up to 10 000, once per level, a notice, history, no duplicates on reconnect | `BLAT_LEVEL_*` in `game-rules/blat.ts` — **draft for approval**: 300 at level 1 (the welcome), +50 a level to 10, +100 to 20, +200 to 30, +300 to 40, +325 to 50 = 10 000, then 10 000 a level. Paid with the match results (the results screen line), at sign-in for levels not paid yet (`blatCredited` → «+300 $BLAT — welcome to the district» / «… for the levels you reached») and on the $BLAT screen | ✅ tests above; E2E `blat.mjs` |
+| Referral system: a link per player, the old invites untouched, copy/share, invited/confirmed counts, rewards, history; the owner's tiers; counted after a whole match; one inviter, unchangeable; nothing for clicks/existing players/bots | `users.ref_code` (8 letters/digits), `?ref=` on the site (kept in the browser until the first sign-in, taken out of the address) and `start=ref_<code>` through the bot (read by the server from the signed launch data); attached only to a **new** account (`referrals`, one row per invited player); confirmed after a completed online match ≥ 60 s with damage dealt (checked when results are saved and on the $BLAT screen); the n-th confirmation pays `REFERRAL_TIERS(n)` (1–4 → 1 500 … 500+ → 20 000); > 20 a day per inviter or a flagged account → held for the admin (count / turn down, audited); the inviter is told live. The screen: link + Copy / Share, invited · counted · waiting · being checked, the scale with the current tier, the last 20 invitations, the history | ✅ DB tests (attach rules, short/idle matches, tiers, concurrent confirmations, cap, flags, admin decisions, deletion), E2E `blat.mjs` 24 checks |
+| A $BLAT section from the main menu; red minimalist pixel coin without text | a fourth tile in the menu row (Friends · Gangs · Top-100 · $BLAT) with the coin and the balance; the coin is hand-placed pixel art (16 px, drawn at 32/48/128 with nearest-neighbour); fits phones (E2E `phone.mjs` 40 / 40) | ✅ |
+| Admin: $BLAT credits/totals, referrals, suspicious accounts | «$BLAT» tab (on hand, issued by source all time / in the period, the biggest balances, invitations by status with count / turn-down), the player card's «$BLAT и приглашения» (code, inviter, invitations, flag) and $BLAT rows in its ledger | ✅ admin covered in `blat.test.ts` and E2E |
+| Item 12 of the prompt: the rematch freeze | fixed earlier (commit d0e7432) | ✅ |
+| BLAT DROP tab, snapshot export, «Блатной кон», Telegram polish, account linking, analytics | parts C–F | ⏳ |
+
+Decisions taken (to be confirmed by the owner): the level table above; an invitation counts after a
+whole online match of at least 60 s with damage dealt; more than 20 confirmations a day per inviter
+wait for a check; codes are 8 letters and digits without look-alikes; partner codes (an author's name)
+fit the same format but are not issued yet; admin grants of $BLAT are not offered (the `grant` source is
+reserved for corrections).
+
 ## 3. Open risks / next steps
+
+- $BLAT: approve the level table and the referral rules (docs/BLAT.md); watch the held queue in `/admin → $BLAT` — several guest accounts from different browsers can still farm invitations slowly (documented there).
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).
 - Build and run the Docker stack on the target host; test a backup restore.

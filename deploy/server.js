@@ -2279,7 +2279,7 @@ var require_websocket = __commonJS({
     var http = __require("http");
     var net2 = __require("net");
     var tls2 = __require("tls");
-    var { randomBytes: randomBytes9, createHash: createHash4 } = __require("crypto");
+    var { randomBytes: randomBytes10, createHash: createHash4 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -2817,7 +2817,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes9(16).toString("base64");
+      const key = randomBytes10(16).toString("base64");
       const request = isSecure ? https.request : http.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.8"),
+  SERVER_VERSION: external_exports.string().default("0.2.9"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -11530,6 +11530,49 @@ var clubMottoSchema = external_exports.string().transform((s) => s.replace(/[\u0
 );
 var CreateClubBody = external_exports.object({ name: clubNameSchema, tag: clubTagSchema, motto: clubMottoSchema.optional(), flag: ClubFlagSchema, emblem: ClubEmblemSchema }).strict();
 var UpdateClubBody = external_exports.object({ motto: clubMottoSchema.optional(), flag: ClubFlagSchema.optional(), emblem: ClubEmblemSchema.optional() }).strict();
+
+// packages/shared/src/game-rules/blat.ts
+var BLAT_LIMITS = Object.freeze({ maxBalance: 2e9, maxCredit: 1e6 });
+var BLAT_LEVEL_STEPS = Object.freeze([
+  { upTo: 10, step: 50 },
+  { upTo: 20, step: 100 },
+  { upTo: 30, step: 200 },
+  { upTo: 40, step: 300 },
+  { upTo: 50, step: 325 }
+]);
+var BLAT_LEVEL_FIRST = 300;
+var BLAT_LEVEL_CAP_REWARD = 1e4;
+function blatForLevel(level) {
+  const L = Math.floor(level);
+  if (!Number.isFinite(L) || L < 1) return 0;
+  let reward = BLAT_LEVEL_FIRST;
+  let at = 1;
+  for (const s of BLAT_LEVEL_STEPS) {
+    while (at < L && at < s.upTo) {
+      at++;
+      reward += s.step;
+    }
+  }
+  return Math.min(BLAT_LEVEL_CAP_REWARD, at < L ? BLAT_LEVEL_CAP_REWARD : reward);
+}
+var REFERRAL_TIERS = Object.freeze([
+  { from: 1, reward: 1500 },
+  { from: 5, reward: 3e3 },
+  { from: 10, reward: 5e3 },
+  { from: 25, reward: 7500 },
+  { from: 50, reward: 1e4 },
+  { from: 100, reward: 12500 },
+  { from: 250, reward: 15e3 },
+  { from: 500, reward: 2e4 }
+]);
+function referralReward(ordinal) {
+  let r = 0;
+  for (const t of REFERRAL_TIERS) if (ordinal >= t.from) r = t.reward;
+  return r;
+}
+var REFERRAL_RULES = Object.freeze({ minMatchSec: 60, dailyCap: 20 });
+var REF_CODE_RE = /^[A-Za-z0-9_-]{4,32}$/;
+var isRefCode = (v) => typeof v === "string" && REF_CODE_RE.test(v);
 
 // packages/shared/src/maps/builder.ts
 var MapBuilder = class {
@@ -15736,25 +15779,29 @@ function parseClientEventProps(name, props) {
 // packages/shared/src/schemas/api.ts
 var displayNameSchema = external_exports.string().trim().min(2).max(MAX_NAME_LENGTH).regex(LATIN_NAME_RE, "A name may contain Latin letters (A\u2013Z), digits, spaces and _ . -");
 var signupNameSchema = external_exports.string().trim().min(1).max(64);
+var refSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 var TelegramAuthRequest = external_exports.object({
   initData: external_exports.string().min(10).max(8192),
   platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional(),
   /** Optional anonymous browser id (see VisitRequest) that links a new player to the visitor funnel. */
-  visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional()
+  visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
+  ref: refSchema.optional()
 }).strict();
 var DevAuthRequest = external_exports.object({
   name: signupNameSchema,
   deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
   platform: PlatformSchema.optional(),
-  clientVersion: external_exports.string().max(32).optional()
+  clientVersion: external_exports.string().max(32).optional(),
+  ref: refSchema.optional()
 }).strict();
 var GuestAuthRequest = external_exports.object({
   name: signupNameSchema,
   deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{20,64}$/),
   platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional(),
-  visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional()
+  visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
+  ref: refSchema.optional()
 }).strict();
 var visitorIdSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/);
 var emailSchema = external_exports.string().trim().toLowerCase().max(254).email("That is not a valid email address");
@@ -15799,6 +15846,8 @@ var AdminCreateUserRequest = external_exports.object({
   password: external_exports.string().min(12).max(256),
   role: external_exports.enum(["admin", "viewer"])
 }).strict();
+var AdminReferralDecision = external_exports.object({ action: external_exports.enum(["confirm", "reject"]), note: external_exports.string().trim().max(200).optional() }).strict();
+var AdminBlatFlagRequest = external_exports.object({ flag: external_exports.string().trim().min(1).max(200).nullable() }).strict();
 var AdminGrantRequest = external_exports.object({
   currency: external_exports.enum(["tokens", "diamonds"]),
   amount: external_exports.number().int().min(-1e6).max(1e6).refine((v) => v !== 0, "amount must not be 0"),
@@ -16379,7 +16428,7 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
 };
 
 // apps/server/src/api/auth.ts
-import { createHmac as createHmac5, randomBytes as randomBytes4 } from "node:crypto";
+import { createHmac as createHmac5, randomBytes as randomBytes5 } from "node:crypto";
 
 // apps/server/src/auth/telegram.ts
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -16442,7 +16491,7 @@ function displayNameFromTelegram(u) {
 }
 
 // apps/server/src/services/persistence.ts
-import { randomBytes as randomBytes3 } from "node:crypto";
+import { randomBytes as randomBytes4 } from "node:crypto";
 
 // apps/server/src/auth/activity.ts
 function utcDay(d = /* @__PURE__ */ new Date()) {
@@ -16652,6 +16701,196 @@ var SessionStore = class {
   }
 };
 
+// apps/server/src/blat/repo.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+var CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+async function creditLevels(tx, userId, level) {
+  const [p] = await tx`SELECT blat, blat_earned, blat_level FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+  if (!p) return { gained: 0, balance: 0 };
+  if (p.blat_level >= level) return { gained: 0, balance: p.blat };
+  const paid = new Set((await tx`SELECT ref FROM currency_ledger WHERE user_id = ${userId} AND currency = 'blat' AND reason = 'level'`).map((r) => r.ref));
+  let balance = p.blat;
+  let earned = p.blat_earned;
+  let gained = 0;
+  for (let l = 1; l <= level; l++) {
+    const ref = `level:${l}`;
+    if (paid.has(ref)) continue;
+    const amount = blatForLevel(l);
+    if (amount <= 0 || amount > BLAT_LIMITS.maxCredit || balance + amount > BLAT_LIMITS.maxBalance) continue;
+    const ins = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'blat', ${amount}, ${balance + amount}, 'level', ${ref}) ON CONFLICT DO NOTHING RETURNING id`;
+    if (ins.length === 0) continue;
+    balance += amount;
+    earned += amount;
+    gained += amount;
+  }
+  await tx`UPDATE profiles SET blat = ${balance}, blat_earned = ${earned}, blat_level = GREATEST(blat_level, ${level}), updated_at = now() WHERE user_id = ${userId}`;
+  return { gained, balance };
+}
+var BlatRepo = class {
+  constructor(sql2, links) {
+    this.sql = sql2;
+    this.links = links;
+  }
+  sql;
+  links;
+  /** Pays the levels reached so far (a player who levelled up before $BLAT existed gets them now). */
+  async backfillLevels(userId) {
+    return this.sql.begin(async (tx) => {
+      const [p] = await tx`SELECT level FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+      if (!p) return 0;
+      return (await creditLevels(tx, userId, p.level)).gained;
+    });
+  }
+  /** The player's referral code (made the first time it is asked for). */
+  async ensureCode(userId) {
+    const [u] = await this.sql`SELECT ref_code FROM users WHERE id = ${userId}`;
+    if (u?.ref_code) return u.ref_code;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const bytes = randomBytes2(8);
+      const code = Array.from(bytes, (b2) => CODE_ALPHABET[b2 % CODE_ALPHABET.length]).join("");
+      try {
+        const rows = await this.sql`
+          UPDATE users SET ref_code = COALESCE(ref_code, ${code}) WHERE id = ${userId} RETURNING ref_code`;
+        if (rows[0]) return rows[0].ref_code;
+        throw new Error("no such user");
+      } catch (e2) {
+        if (e2.code !== "23505") throw e2;
+      }
+    }
+    throw new Error("could not make a referral code");
+  }
+  /**
+   * A new account opened with a code: attached to its inviter (once and for good). Unknown codes, one's
+   * own code and accounts that already have an inviter are ignored.
+   */
+  async attach(refereeId, code) {
+    if (!isRefCode(code)) return "unknown";
+    const [r] = await this.sql`SELECT id FROM users WHERE lower(ref_code) = lower(${code}) AND deleted_at IS NULL`;
+    if (!r) return "unknown";
+    if (r.id === refereeId) return "self";
+    const ins = await this.sql`INSERT INTO referrals (referee_id, referrer_id, code) VALUES (${refereeId}, ${r.id}, ${code}) ON CONFLICT DO NOTHING RETURNING referee_id`;
+    return ins.length ? "attached" : "exists";
+  }
+  /** Has this player an invitation waiting for their first whole match? */
+  async hasPending(refereeId) {
+    return (await this.sql`SELECT 1 FROM referrals WHERE referee_id = ${refereeId} AND status = 'pending'`).length > 0;
+  }
+  /**
+   * Counts the invitation of `refereeId` when they have played a whole match: pays the inviter (or holds
+   * it for a check). Safe to call any number of times, from anywhere.
+   */
+  async tryConfirm(refereeId) {
+    return this.sql.begin(async (tx) => {
+      const [r] = await tx`SELECT referrer_id, status FROM referrals WHERE referee_id = ${refereeId} FOR UPDATE`;
+      if (!r || r.status !== "pending" || !r.referrer_id) return null;
+      const played = await tx`
+        SELECT 1 FROM match_participants mp JOIN matches m ON m.id = mp.match_id
+        WHERE mp.user_id = ${refereeId} AND mp.completed AND mp.damage_dealt > 0 AND m.status = 'completed'
+          AND m.duration_ms >= ${REFERRAL_RULES.minMatchSec * 1e3}
+        LIMIT 1`;
+      if (played.length === 0) return null;
+      const [f2] = await tx`
+        SELECT (SELECT blat_flag FROM users WHERE id = ${r.referrer_id}) AS a, (SELECT blat_flag FROM users WHERE id = ${refereeId}) AS b,
+               (SELECT deleted_at IS NOT NULL FROM users WHERE id = ${r.referrer_id}) AS gone`;
+      if (f2?.gone) return null;
+      const [day] = await tx`
+        SELECT count(*)::int AS n FROM referrals WHERE referrer_id = ${r.referrer_id} AND status = 'confirmed' AND decided_at > now() - interval '24 hours'`;
+      const n = day?.n ?? 0;
+      const why = f2?.a ? "inviter flagged" : f2?.b ? "invited player flagged" : n >= REFERRAL_RULES.dailyCap ? `over ${REFERRAL_RULES.dailyCap} a day` : null;
+      if (why) {
+        await tx`UPDATE referrals SET status = 'held', decided_at = now(), note = ${why} WHERE referee_id = ${refereeId}`;
+        return { status: "held", referrerId: r.referrer_id, reason: why };
+      }
+      return { status: "confirmed", paid: await this.pay(tx, refereeId, r.referrer_id) };
+    });
+  }
+  /** An administrator's decision on a held invitation (or one still pending). */
+  async decide(refereeId, action, note) {
+    return this.sql.begin(async (tx) => {
+      const [r] = await tx`SELECT referrer_id, status FROM referrals WHERE referee_id = ${refereeId} FOR UPDATE`;
+      if (!r || !r.referrer_id || r.status !== "held" && r.status !== "pending") return null;
+      if (action === "reject") {
+        await tx`UPDATE referrals SET status = 'rejected', decided_at = now(), note = ${note} WHERE referee_id = ${refereeId}`;
+        return { status: "rejected" };
+      }
+      const paid = await this.pay(tx, refereeId, r.referrer_id);
+      if (note) await tx`UPDATE referrals SET note = ${note} WHERE referee_id = ${refereeId}`;
+      return { status: "confirmed", paid };
+    });
+  }
+  /** Pays the inviter for the next confirmed invitation (the referral row is locked by the caller). */
+  async pay(tx, refereeId, referrerId) {
+    const [p] = await tx`SELECT blat, blat_earned FROM profiles WHERE user_id = ${referrerId} FOR UPDATE`;
+    const [cnt] = await tx`SELECT count(*)::int AS c FROM referrals WHERE referrer_id = ${referrerId} AND status = 'confirmed'`;
+    const ordinal = (cnt?.c ?? 0) + 1;
+    let reward = referralReward(ordinal);
+    let balance = p?.blat ?? 0;
+    if (!p || reward > BLAT_LIMITS.maxCredit || balance + reward > BLAT_LIMITS.maxBalance) reward = 0;
+    if (reward > 0) {
+      const ins = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${referrerId}, 'blat', ${reward}, ${balance + reward}, 'referral', ${`referral:${refereeId}`}) ON CONFLICT DO NOTHING RETURNING id`;
+      if (ins.length) {
+        balance += reward;
+        await tx`UPDATE profiles SET blat = ${balance}, blat_earned = ${(p?.blat_earned ?? 0) + reward}, updated_at = now() WHERE user_id = ${referrerId}`;
+      } else reward = 0;
+    }
+    await tx`UPDATE referrals SET status = 'confirmed', decided_at = now(), ordinal = ${ordinal}, reward = ${reward} WHERE referee_id = ${refereeId}`;
+    const [u] = await tx`SELECT display_name FROM users WHERE id = ${refereeId}`;
+    return { referrerId, refereeId, refereeName: u?.display_name ?? "", reward, ordinal, balance };
+  }
+  /** Everything the $BLAT screen shows (and the levels reached earlier, paid now). */
+  async overview(userId) {
+    const justCredited = await this.backfillLevels(userId);
+    const code = await this.ensureCode(userId);
+    const [p] = await this.sql`SELECT blat, blat_earned, level FROM profiles WHERE user_id = ${userId}`;
+    const sums = await this.sql`
+      SELECT reason, sum(delta)::int AS s FROM currency_ledger WHERE user_id = ${userId} AND currency = 'blat' GROUP BY reason`;
+    const bySource = { level: 0, referral: 0, grant: 0 };
+    for (const r of sums) if (r.reason in bySource) bySource[r.reason] = r.s;
+    const counts = await this.sql`
+      SELECT status, count(*)::int AS n, coalesce(sum(reward), 0)::int AS reward FROM referrals WHERE referrer_id = ${userId} GROUP BY status`;
+    const by = (s) => counts.find((c) => c.status === s);
+    const confirmed = by("confirmed")?.n ?? 0;
+    const recent = await this.sql`
+      SELECT u.display_name, r.attached_at, r.status, r.reward FROM referrals r JOIN users u ON u.id = r.referee_id
+      WHERE r.referrer_id = ${userId} ORDER BY r.attached_at DESC LIMIT 20`;
+    const hist = await this.sql`
+      SELECT l.created_at, l.delta, l.balance_after, l.reason, l.ref, u.display_name AS who
+      FROM currency_ledger l
+      LEFT JOIN users u ON l.reason = 'referral' AND u.id::text = substring(l.ref from 10)
+      WHERE l.user_id = ${userId} AND l.currency = 'blat'
+      ORDER BY l.id DESC LIMIT 50`;
+    const level = p?.level ?? 1;
+    const base2 = this.links.publicUrl.replace(/\/$/, "");
+    const history = hist.map((h) => ({ at: h.created_at.toISOString(), delta: h.delta, balanceAfter: h.balance_after, source: h.reason, ref: h.ref, ...h.reason === "referral" ? { who: h.who } : {} }));
+    return {
+      balance: p?.blat ?? 0,
+      earned: p?.blat_earned ?? 0,
+      bySource,
+      level,
+      nextLevel: blatForLevel(level + 1) > 0 ? { level: level + 1, reward: blatForLevel(level + 1) } : null,
+      referral: {
+        code,
+        link: `${base2}/?ref=${encodeURIComponent(code)}`,
+        telegramLink: this.links.botUsername ? `https://t.me/${this.links.botUsername}?start=ref_${code}` : null,
+        invited: counts.reduce((a, c) => a + c.n, 0),
+        confirmed,
+        pending: by("pending")?.n ?? 0,
+        held: by("held")?.n ?? 0,
+        earned: by("confirmed")?.reward ?? 0,
+        nextReward: referralReward(confirmed + 1),
+        recent: recent.map((r) => ({ name: r.display_name, at: r.attached_at.toISOString(), status: r.status, reward: r.reward }))
+      },
+      history,
+      justCredited
+    };
+  }
+  /** For tests and the admin: the inviter's confirmed count. */
+  async confirmedCount(referrerId, q = this.sql) {
+    const [r] = await q`SELECT count(*)::int AS n FROM referrals WHERE referrer_id = ${referrerId} AND status = 'confirmed'`;
+    return r?.n ?? 0;
+  }
+};
+
 // apps/server/src/profiles/repo.ts
 function toPublicProfile(r) {
   const lv = levelForXp(r.xp);
@@ -16679,6 +16918,7 @@ function toPublicProfile(r) {
     preferredCharacter: r.preferred_character,
     avatar: isAvatarId(r.avatar) ? r.avatar : null,
     tokens: r.tokens,
+    blat: r.blat ?? 0,
     diamonds: r.diamonds,
     email: r.email,
     rating: r.rating,
@@ -16691,7 +16931,23 @@ var ProfileRepo = class {
     this.sql = sql2;
   }
   sql;
+  /**
+   * The player's own profile. V2.0: levels not paid in $BLAT yet — the level-1 welcome and the levels
+   * reached before $BLAT existed — are paid here, once (`blatCredited` tells the client to say so).
+   */
   async get(userId) {
+    const row = await this.row(userId);
+    if (!row) return null;
+    let credited = 0;
+    if (row.has_profile && row.level > (row.blat_level ?? 0)) {
+      const r = await this.sql.begin((tx) => creditLevels(tx, userId, row.level));
+      credited = r.gained;
+      row.blat = r.balance;
+    }
+    const profile = toPublicProfile(row);
+    return credited > 0 ? { ...profile, blatCredited: credited } : profile;
+  }
+  async row(userId) {
     const rows = await this.sql`
       SELECT u.id, u.display_name, u.telegram_id::text AS telegram_id, u.created_at,
              COALESCE(p.level, 1) AS level, COALESCE(p.xp, 0) AS xp,
@@ -16700,14 +16956,15 @@ var ProfileRepo = class {
              COALESCE(p.assists, 0) AS assists,
              COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
-             p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email,
+             p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, COALESCE(p.blat, 0) AS blat, u.email,
+             COALESCE(p.blat_level, 0) AS blat_level, p.user_id IS NOT NULL AS has_profile,
              COALESCE(p.rating, 1000) AS rating,
              c.id AS club_id, c.tag AS club_tag, c.name AS club_name, c.flag AS club_flag, c.emblem AS club_emblem,
              (SELECT array_agg(i.provider ORDER BY i.provider) FROM user_identities i WHERE i.user_id = u.id) AS identities
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
         LEFT JOIN club_members cm ON cm.user_id = u.id LEFT JOIN clubs c ON c.id = cm.club_id
       WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
-    return rows[0] ? toPublicProfile(rows[0]) : null;
+    return rows[0] ?? null;
   }
   async update(userId, patch) {
     await this.sql.begin(async (tx) => {
@@ -17456,6 +17713,8 @@ var PgMatchRecorder = class {
   }
   sql;
   log;
+  /** V2.0: an invitation counted (or held) after a match — the app tells the inviter live. */
+  onReferral = null;
   async matchStarted(m) {
     if (!UUID_RE.test(m.matchId)) return;
     await this.sql.begin(async (tx) => {
@@ -17474,6 +17733,22 @@ var PgMatchRecorder = class {
     });
   }
   async matchCompleted(m) {
+    const out = await this.recordCompletion(m);
+    void this.confirmReferrals(m.participants.filter((p) => p.completed).map((p) => p.userId)).catch((e2) => this.log.warn("referral confirmation failed", { err: e2 }));
+    return out;
+  }
+  async confirmReferrals(userIds) {
+    const blat = new BlatRepo(this.sql, { publicUrl: "" });
+    for (const id of userIds) {
+      if (!UUID_RE.test(id) || !await blat.hasPending(id)) continue;
+      const r = await blat.tryConfirm(id);
+      if (r) {
+        this.log.info("referral", r.status === "confirmed" ? { referee: id, referrer: r.paid.referrerId, reward: r.paid.reward, ordinal: r.paid.ordinal } : { referee: id, referrer: r.referrerId, held: r.reason });
+        this.onReferral?.(r);
+      }
+    }
+  }
+  async recordCompletion(m) {
     if (!UUID_RE.test(m.matchId)) throw new Error("matchId must be a UUID");
     const people = m.peopleAtEnd ?? m.playersAtEnd;
     const fill = m.fillAtEnd ?? 0;
@@ -17523,6 +17798,7 @@ var PgMatchRecorder = class {
           await tx`INSERT INTO player_achievements (user_id, achievement_id, match_id) VALUES (${p.userId}, ${a}, ${m.matchId}) ON CONFLICT DO NOTHING`;
         }
         const totalTokens = await awardMatchTokens(tx, p.userId, m.matchId, tokens);
+        const blat = await creditLevels(tx, p.userId, level);
         await tx`
           INSERT INTO match_participants (match_id, user_id, character, team, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, tokens_awarded, rating_delta, joined_at, left_at)
           VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.team}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${tokens}, ${rDelta}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
@@ -17531,7 +17807,7 @@ var PgMatchRecorder = class {
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
             tokens_awarded = EXCLUDED.tokens_awarded, rating_delta = EXCLUDED.rating_delta, left_at = EXCLUDED.left_at`;
-        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating });
+        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating, blatGained: blat.gained, totalBlat: blat.balance });
         clubDeltas.push({ userId: p.userId, delta: rDelta });
       }
       await moveClubRatings(tx, clubDeltas);
@@ -17726,7 +18002,7 @@ var PgAnalytics = class {
 import { createHmac as createHmac3 } from "node:crypto";
 
 // apps/server/src/admin/password.ts
-import { randomBytes as randomBytes2, scrypt as scryptCb, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { randomBytes as randomBytes3, scrypt as scryptCb, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 var N = 16384;
 var R = 8;
 var P3 = 1;
@@ -17737,7 +18013,7 @@ function scrypt(password, salt, n, r, p) {
   );
 }
 async function hashPassword(password) {
-  const salt = randomBytes2(16);
+  const salt = randomBytes3(16);
   const key = await scrypt(password, salt, N, R, P3);
   return `scrypt$${N}$${R}$${P3}$${salt.toString("base64url")}$${key.toString("base64url")}`;
 }
@@ -18317,7 +18593,7 @@ var NowPaymentsProvider = class {
 };
 
 // apps/server/src/services/persistence.ts
-var CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+var CODE_ALPHABET2 = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 var INVITE_TTL_MS = 24 * 36e5;
 var PgInvites = class {
   constructor(sql2) {
@@ -18327,9 +18603,9 @@ var PgInvites = class {
   async create(roomId2, createdBy) {
     const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
     for (let attempt = 0; attempt < 5; attempt++) {
-      const bytes = randomBytes3(8);
+      const bytes = randomBytes4(8);
       let code = "";
-      for (let i = 0; i < 8; i++) code += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+      for (let i = 0; i < 8; i++) code += CODE_ALPHABET2[bytes[i] % CODE_ALPHABET2.length];
       const rows = await this.sql`
         INSERT INTO invitations (code, room_id, created_by, expires_at)
         SELECT ${code}, ${roomId2}, (SELECT id FROM users WHERE id::text = ${createdBy ?? ""}), ${expiresAt}
@@ -18395,6 +18671,7 @@ async function createPersistence(deps) {
   } : scheduleRetention(deps.sql, deps.log);
   return {
     services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy },
+    recorder: ctx.recorder,
     close: async () => {
       stopRetention();
       await ctx.analytics.close();
@@ -18403,6 +18680,15 @@ async function createPersistence(deps) {
 }
 
 // apps/server/src/api/auth.ts
+async function attachReferral(sql2, log2, userId, isNew, code) {
+  if (!isNew || !code) return;
+  try {
+    await new BlatRepo(sql2, { publicUrl: "" }).attach(userId, code);
+  } catch (e2) {
+    log2.warn("referral attach failed", { err: e2 });
+  }
+}
+var refFromStartParam = (p) => p && /^ref_[A-Za-z0-9_-]{4,32}$/.test(p) ? p.slice(4) : null;
 async function linkVisitor(sql2, visitorId, userId, platform2) {
   await sql2`
     INSERT INTO visitors (visitor_id, platform, user_id) VALUES (${visitorId}, ${platform2}, ${userId})
@@ -18443,6 +18729,7 @@ var registerAuthRoutes = (router, deps) => {
     }
     const platform2 = body.platform ?? null;
     const up = await pg.users.upsertTelegram(v.user, platform2);
+    await attachReferral(deps.sql, deps.log, up.userId, up.isNew, refFromStartParam(v.startParam) ?? body.ref);
     const s = await pg.sessions.issue(up.userId, "telegram", platform2, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform: platform2 };
     services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "telegram" }, evCtx);
@@ -18467,6 +18754,7 @@ var registerAuthRoutes = (router, deps) => {
     const platform2 = body.platform ?? null;
     const up = await pg.users.upsertGuest(deviceKey, latinName(body.name, `Comrade_${deviceKey.slice(3, 7).replace(/[^A-Za-z0-9]/g, "X").toUpperCase()}`), platform2);
     if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform2);
+    await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
     const s = await pg.sessions.issue(up.userId, "guest", platform2, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform: platform2 };
     services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "guest" }, evCtx);
@@ -18481,9 +18769,10 @@ var registerAuthRoutes = (router, deps) => {
     if (!deps.sql) return unavailable();
     const body = await ctx.body(DevAuthRequest, 4 * 1024);
     const pg = pgContext(deps.sql, env2, deps.log);
-    const deviceId = body.deviceId ?? randomBytes4(12).toString("base64url");
+    const deviceId = body.deviceId ?? randomBytes5(12).toString("base64url");
     const platform2 = body.platform ?? null;
     const up = await pg.users.upsertDev(deviceId, latinName(body.name, `Comrade_${deviceId.slice(-4).replace(/[^A-Za-z0-9]/g, "X").toUpperCase()}`), platform2);
+    await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
     const s = await pg.sessions.issue(up.userId, "dev", platform2, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform: platform2 };
     services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "dev" }, evCtx);
@@ -18684,6 +18973,35 @@ var registerEventRoutes = (router, deps) => {
     ctx.json(200, result);
   });
 };
+
+// apps/server/src/api/blat.ts
+var registerBlatRoutes = (router, deps) => {
+  const auth = requireUser(deps.services.sessions);
+  const byUser = (ctx) => currentUser(ctx).userId;
+  const readLimiter = new RateLimiter(60, 1);
+  const repo = () => {
+    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
+    return new BlatRepo(deps.sql, { publicUrl: deps.env.PUBLIC_URL, botUsername: deps.env.TELEGRAM_BOT_USERNAME || null });
+  };
+  router.get("/api/blat", auth, rateLimit(readLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const r = repo();
+    if (await r.hasPending(me.userId)) {
+      const c = await r.tryConfirm(me.userId).catch((e2) => {
+        deps.log.warn("referral confirmation failed", { err: e2 });
+        return null;
+      });
+      if (c) notifyReferral(deps.social, c);
+    }
+    const res = await r.overview(me.userId);
+    ctx.json(200, res, { "cache-control": "no-store" });
+  });
+};
+function notifyReferral(social2, r) {
+  if (!social2) return;
+  if (r.status === "confirmed") social2.push(r.paid.referrerId, { type: "referral", name: r.paid.refereeName, reward: r.paid.reward, balance: r.paid.balance, held: false });
+  else social2.push(r.referrerId, { type: "referral", name: "", reward: 0, balance: -1, held: true });
+}
 
 // apps/server/src/admin/csv.ts
 function csvCell(v) {
@@ -19277,6 +19595,14 @@ var registerAdminRoutes = (router, deps) => {
     const payments = await p.sql`
       SELECT id, created_at, paid_at, provider, pack_id, diamonds, amount_cents, currency, status
       FROM payments WHERE user_id = ${id} ORDER BY created_at DESC LIMIT 30`;
+    const [b2] = await p.sql`
+      SELECT COALESCE(pr.blat, 0) AS blat, COALESCE(pr.blat_earned, 0) AS blat_earned, u.ref_code, u.blat_flag
+      FROM users u LEFT JOIN profiles pr ON pr.user_id = u.id WHERE u.id = ${id}`;
+    const [by] = await p.sql`
+      SELECT r.referrer_id, u.display_name AS name, r.status FROM referrals r LEFT JOIN users u ON u.id = r.referrer_id WHERE r.referee_id = ${id}`;
+    const theirs = await p.sql`SELECT status, count(*)::int AS n FROM referrals WHERE referrer_id = ${id} GROUP BY status`;
+    const refCounts = { pending: 0, confirmed: 0, held: 0, rejected: 0 };
+    for (const t of theirs) refCounts[t.status] = t.n;
     await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: "player_viewed", target: id, ip: ctx.ip });
     const lv = levelForXp(r.xp);
     const detail = {
@@ -19300,9 +19626,77 @@ var registerAdminRoutes = (router, deps) => {
       items: items.map((i) => ({ kind: i.kind, id: i.item_id, source: i.source, acquiredAt: i.acquired_at.toISOString() })),
       mods: mods.map((m) => ({ weapon: m.weapon_id, mod: m.mod_id, acquiredAt: m.acquired_at.toISOString() })),
       ledger: ledger.map((l) => ({ at: l.created_at.toISOString(), currency: l.currency, delta: l.delta, balanceAfter: l.balance_after, reason: l.reason, ref: l.ref, admin: l.admin })),
-      payments: payments.map((x) => ({ id: x.id, createdAt: x.created_at.toISOString(), paidAt: x.paid_at?.toISOString() ?? null, provider: x.provider, packId: x.pack_id, diamonds: x.diamonds, amountCents: x.amount_cents, currency: x.currency, status: x.status }))
+      payments: payments.map((x) => ({ id: x.id, createdAt: x.created_at.toISOString(), paidAt: x.paid_at?.toISOString() ?? null, provider: x.provider, packId: x.pack_id, diamonds: x.diamonds, amountCents: x.amount_cents, currency: x.currency, status: x.status })),
+      blat: {
+        balance: b2?.blat ?? 0,
+        earned: b2?.blat_earned ?? 0,
+        refCode: b2?.ref_code ?? null,
+        referredBy: by ? { id: by.referrer_id, name: by.name, status: by.status } : null,
+        referrals: refCounts,
+        flag: b2?.blat_flag ?? null
+      }
     };
     ctx.json(200, detail);
+  });
+  router.get("/api/admin/blat", viewer, async (ctx) => {
+    const r = range(ctx);
+    const sql2 = pg().sql;
+    const [tot] = await sql2`
+      SELECT COALESCE(sum(p.blat), 0)::float8 AS total, count(*) FILTER (WHERE p.blat > 0)::int AS holders,
+             (SELECT count(*)::int FROM users WHERE blat_flag IS NOT NULL AND deleted_at IS NULL) AS flagged
+      FROM profiles p`;
+    const issued = await sql2`
+      SELECT reason, COALESCE(sum(delta), 0)::float8 AS all,
+             COALESCE(sum(delta) FILTER (WHERE created_at >= ${r.from} AND created_at <= ${r.to}), 0)::float8 AS range
+      FROM currency_ledger WHERE currency = 'blat' AND delta > 0 GROUP BY reason`;
+    const refs = await sql2`SELECT status, count(*)::int AS n FROM referrals GROUP BY status`;
+    const top = await sql2`
+      SELECT u.id, u.display_name AS name, p.blat AS balance, (u.blat_flag IS NOT NULL) AS flagged
+      FROM profiles p JOIN users u ON u.id = p.user_id WHERE p.blat > 0 AND u.deleted_at IS NULL ORDER BY p.blat DESC LIMIT 20`;
+    const zero = () => ({ level: 0, referral: 0, grant: 0 });
+    const out = { totalBalance: Number(tot?.total ?? 0), holders: tot?.holders ?? 0, flagged: tot?.flagged ?? 0, issued: zero(), issuedInRange: zero(), referrals: { pending: 0, confirmed: 0, held: 0, rejected: 0 }, top };
+    for (const i of issued) if (i.reason in out.issued) {
+      out.issued[i.reason] = Number(i.all);
+      out.issuedInRange[i.reason] = Number(i.range);
+    }
+    for (const x of refs) out.referrals[x.status] = x.n;
+    ctx.json(200, out);
+  });
+  router.get("/api/admin/referrals", viewer, async (ctx) => {
+    const st = ctx.query.get("status");
+    const status = st === "pending" || st === "confirmed" || st === "held" || st === "rejected" ? st : null;
+    const rows = await pg().sql`
+      SELECT r.referee_id, a.display_name AS referee_name, r.referrer_id, b.display_name AS referrer_name, r.code, r.attached_at, r.status, r.decided_at, r.ordinal, r.reward, r.note
+      FROM referrals r JOIN users a ON a.id = r.referee_id LEFT JOIN users b ON b.id = r.referrer_id
+      WHERE ${status === null ? pg().sql`TRUE` : pg().sql`r.status = ${status}`}
+      ORDER BY r.attached_at DESC LIMIT 300`;
+    const out = rows.map((x) => ({ refereeId: x.referee_id, refereeName: x.referee_name, referrerId: x.referrer_id, referrerName: x.referrer_name, code: x.code, attachedAt: x.attached_at.toISOString(), status: x.status, decidedAt: x.decided_at?.toISOString() ?? null, ordinal: x.ordinal, reward: x.reward, note: x.note }));
+    ctx.json(200, out);
+  });
+  router.post("/api/admin/referrals/:id", admin, async (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID_RE3.test(id)) throw new HttpError(400, "bad_id", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440");
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
+    const body = await ctx.body(AdminReferralDecision, 1024);
+    const p = pg();
+    const done = await new BlatRepo(p.sql, { publicUrl: deps.env.PUBLIC_URL }).decide(id, body.action, body.note ?? null);
+    if (!done) throw new HttpError(409, "not_open", "\u042D\u0442\u043E \u043F\u0440\u0438\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435 \u0443\u0436\u0435 \u0440\u0435\u0448\u0435\u043D\u043E \u0438\u043B\u0438 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E");
+    if (done.status === "confirmed") notifyReferral(deps.social, done);
+    await audit(p.sql, deps.log, { adminId: a.id, action: body.action === "confirm" ? "referral_confirm" : "referral_reject", target: id, details: done.status === "confirmed" ? { referrer: done.paid.referrerId, reward: done.paid.reward, ordinal: done.paid.ordinal } : { note: body.note ?? null }, ip: ctx.ip });
+    ctx.json(200, done.status === "confirmed" ? { status: "confirmed", reward: done.paid.reward, ordinal: done.paid.ordinal } : { status: "rejected" });
+  });
+  router.post("/api/admin/players/:id/blat-flag", admin, async (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID_RE3.test(id)) throw new HttpError(400, "bad_id", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440");
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
+    const body = await ctx.body(AdminBlatFlagRequest, 1024);
+    const p = pg();
+    const rows = await p.sql`UPDATE users SET blat_flag = ${body.flag} WHERE id = ${id} AND deleted_at IS NULL RETURNING id`;
+    if (rows.length === 0) throw new HttpError(404, "not_found", "\u0418\u0433\u0440\u043E\u043A \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    await audit(p.sql, deps.log, { adminId: a.id, action: body.flag ? "blat_flag" : "blat_unflag", target: id, details: { flag: body.flag }, ip: ctx.ip });
+    ctx.json(200, { flag: body.flag });
   });
   router.post("/api/admin/players/:id/grant", admin, async (ctx) => {
     const id = ctx.params.id ?? "";
@@ -19980,6 +20374,7 @@ var TEXT = {
     hello: "<b>\u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989</b> \u043D\u0430 \u0441\u0432\u044F\u0437\u0438 \u2014 \u0441\u0435\u0440\u0432\u0435\u0440 \u043F\u0440\u043E\u0433\u0440\u0435\u0442, \u0437\u0430\u0445\u043E\u0434\u0438.\n\u0420\u0430\u0439\u043E\u043D\u043D\u044B\u0435 \u0434\u0435\u043B\u0430 \u2014 \u0441\u0435\u0440\u044C\u0451\u0437\u043D\u044B\u0435 \u0434\u0435\u043B\u0430.",
     invite: (code) => `<b>\u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989</b>: \u0442\u0435\u0431\u044F \u0437\u043E\u0432\u0443\u0442 \u0432 \u043A\u043E\u043C\u043D\u0430\u0442\u0443 <code>${code}</code>.
 \u0421\u0435\u0440\u0432\u0435\u0440 \u043F\u0440\u043E\u0433\u0440\u0435\u0442 \u2014 \u0437\u0430\u0445\u043E\u0434\u0438.`,
+    invited: "<b>\u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989</b>: \u0442\u0435\u0431\u044F \u043F\u043E\u0437\u0432\u0430\u043B\u0438 \u0432 \u0440\u0430\u0439\u043E\u043D. \u0421\u0435\u0440\u0432\u0435\u0440 \u043F\u0440\u043E\u0433\u0440\u0435\u0442 \u2014 \u0437\u0430\u0445\u043E\u0434\u0438.\n\u0420\u0430\u0439\u043E\u043D\u043D\u044B\u0435 \u0434\u0435\u043B\u0430 \u2014 \u0441\u0435\u0440\u044C\u0451\u0437\u043D\u044B\u0435 \u0434\u0435\u043B\u0430.",
     play: "\u{1F3AE} \u0418\u0433\u0440\u0430\u0442\u044C \u0432 Telegram",
     join: "\u{1F3AE} \u0412\u043E\u0439\u0442\u0438 \u0432 \u043A\u043E\u043C\u043D\u0430\u0442\u0443",
     browser: "\u{1F310} \u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0432 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0435",
@@ -19995,6 +20390,7 @@ var TEXT = {
     hello: "<b>BLATKOM \u201989</b> is on the line \u2014 the server is warmed up, come on in.\nDistrict business is serious business.",
     invite: (code) => `<b>BLATKOM \u201989</b>: you\u2019re invited to room <code>${code}</code>.
 The server is warmed up \u2014 come on in.`,
+    invited: "<b>BLATKOM \u201989</b>: someone called you into the district. The server is warmed up \u2014 come on in.\nDistrict business is serious business.",
     play: "\u{1F3AE} Play in Telegram",
     join: "\u{1F3AE} Join the room",
     browser: "\u{1F310} Open in the browser",
@@ -20035,14 +20431,15 @@ function botAnswer(update, publicUrl, botUsername) {
   }
   const lang = langOf(m.from?.language_code);
   const T = TEXT[lang];
-  const code = cmd?.[3] && CODE.test(cmd[3]) ? cmd[3] : null;
+  const ref = cmd?.[3] && /^ref_[A-Za-z0-9_-]{4,32}$/.test(cmd[3]) ? cmd[3].slice(4) : null;
+  const code = !ref && cmd?.[3] && CODE.test(cmd[3]) ? cmd[3] : null;
   const base2 = publicUrl.replace(/\/$/, "");
-  const url = code ? `${base2}/?invite=${encodeURIComponent(code)}` : `${base2}/`;
+  const url = ref ? `${base2}/?ref=${encodeURIComponent(ref)}` : code ? `${base2}/?invite=${encodeURIComponent(code)}` : `${base2}/`;
   const keyboard = isPrivate ? [[{ text: code ? T.join : T.play, web_app: { url } }], [{ text: T.browser, url }]] : [[{ text: T.groups, url }]];
   return {
     method: "sendMessage",
     chat_id: m.chat.id,
-    text: code ? T.invite(code) : T.hello,
+    text: ref ? T.invited : code ? T.invite(code) : T.hello,
     parse_mode: "HTML",
     link_preview_options: { is_disabled: true },
     reply_markup: { inline_keyboard: keyboard }
@@ -20295,10 +20692,10 @@ var registerClubRoutes = (router, deps) => {
 };
 
 // apps/server/src/api/oauth.ts
-import { randomBytes as randomBytes6 } from "node:crypto";
+import { randomBytes as randomBytes7 } from "node:crypto";
 
 // apps/server/src/auth/oauth.ts
-import { createHash as createHash2, createHmac as createHmac7, randomBytes as randomBytes5, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
+import { createHash as createHash2, createHmac as createHmac7, randomBytes as randomBytes6, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
 var OAUTH_PROVIDERS = ["google", "facebook", "discord", "reddit"];
 var isOAuthProvider = (v) => OAUTH_PROVIDERS.includes(v);
 var str = (v) => typeof v === "string" ? v : typeof v === "number" ? String(v) : "";
@@ -20384,11 +20781,11 @@ function verify(secret, kind, token, maxAgeMs, now = Date.now()) {
     return null;
   }
 }
-var intentToken = (secret, userId, now = Date.now()) => sign(secret, "intent", { u: userId, t: now, r: b64(randomBytes5(6)) });
+var intentToken = (secret, userId, now = Date.now()) => sign(secret, "intent", { u: userId, t: now, r: b64(randomBytes6(6)) });
 var readIntent = (secret, token, now = Date.now()) => verify(secret, "intent", token, 5 * 6e4, now);
 var stateToken = (secret, s, now = Date.now()) => sign(secret, "state", { ...s, t: now });
 var readState = (secret, token, now = Date.now()) => verify(secret, "state", token, 10 * 6e4, now);
-var newNonce = () => b64(randomBytes5(18));
+var newNonce = () => b64(randomBytes6(18));
 var handoffHash = (code) => createHash2("sha256").update(code).digest("hex");
 function authorizeUrl(spec, clientId, redirectUri, state) {
   const u = new URL(spec.authorize);
@@ -20533,7 +20930,7 @@ var registerOAuthRoutes = (router, deps) => {
     const sql2 = db();
     const { userId, isNew, linked, refused } = await resolveAccount(sql2, provider, profile, state.u);
     if (refused) return fail(ctx, "already_linked");
-    const handoff = randomBytes6(24).toString("base64url");
+    const handoff = randomBytes7(24).toString("base64url");
     await sql2`DELETE FROM auth_handoffs WHERE created_at < now() - interval '10 minutes'`;
     await sql2`INSERT INTO auth_handoffs (code_hash, user_id, provider, is_new, linked) VALUES (${handoffHash(handoff)}, ${userId}, ${provider}, ${isNew}, ${linked})`;
     deps.log.info("oauth sign-in", { provider, isNew, linked });
@@ -20623,7 +21020,7 @@ async function resolveAccount(sql2, provider, profile, current) {
 }
 
 // apps/server/src/app.ts
-var ROUTE_MODULES = [registerAuthRoutes, registerOAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerClubRoutes, registerTelegramRoutes, registerAdminRoutes];
+var ROUTE_MODULES = [registerAuthRoutes, registerOAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerClubRoutes, registerBlatRoutes, registerTelegramRoutes, registerAdminRoutes];
 function createApp(deps, modules = ROUTE_MODULES) {
   const router = new Router();
   const startedAt = Date.now();
@@ -20683,10 +21080,10 @@ function createApp(deps, modules = ROUTE_MODULES) {
 }
 
 // apps/server/src/rooms/RoomManager.ts
-import { randomBytes as randomBytes8 } from "node:crypto";
+import { randomBytes as randomBytes9 } from "node:crypto";
 
 // apps/server/src/rooms/MatchRoom.ts
-import { randomBytes as randomBytes7, randomUUID as randomUUID3 } from "node:crypto";
+import { randomBytes as randomBytes8, randomUUID as randomUUID3 } from "node:crypto";
 var between = (a, b2) => a + Math.random() * Math.max(0, b2 - a);
 var NAV = /* @__PURE__ */ new Map();
 function navFor(mapId, world) {
@@ -20844,7 +21241,7 @@ var MatchRoom = class {
       queue: [],
       tokens: INPUT_BUCKET_MAX,
       lastQueuedSeq: 0,
-      reconnectToken: randomBytes7(18).toString("base64url"),
+      reconnectToken: randomBytes8(18).toString("base64url"),
       joinedAt: Date.now(),
       matchTimeMs: 0,
       violations: 0,
@@ -21584,7 +21981,7 @@ var MatchRoom = class {
 // apps/server/src/rooms/RoomManager.ts
 var ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 function newRoomId(len = 10) {
-  const bytes = randomBytes8(len);
+  const bytes = randomBytes9(len);
   let s = "";
   for (let i = 0; i < len; i++) s += ID_ALPHABET[bytes[i] % ID_ALPHABET.length];
   return s;
@@ -21879,6 +22276,7 @@ var services = persistence.services;
 var rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env), fillBots: env.MATCH_FILL_BOTS });
 var social = new SocialHub(rooms, log);
 rooms.onPresence((userId) => void social.announce(userId));
+if (persistence.recorder) persistence.recorder.onReferral = (r) => notifyReferral(social, r);
 var keepAwake = new KeepAwake(env.PUBLIC_URL, { always: env.KEEP_AWAKE, log });
 var handler = createApp({ env, sql, log, services, rooms, social, keepAwake });
 var server = createServer((req, res) => {

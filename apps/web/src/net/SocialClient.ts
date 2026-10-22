@@ -262,6 +262,7 @@ export class SocialClient {
       case 'club_declined':
       case 'club_left':
       case 'club_head':
+      case 'referral':
         break;
       case 'dm_read':
       case 'pong':

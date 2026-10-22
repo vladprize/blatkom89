@@ -1,6 +1,8 @@
 /** /api/admin/* — secure analytics dashboard API (see docs/ADMIN.md). */
-import { AdminCreateUserRequest, AdminGrantRequest, AdminLoginRequest, getMap, isMapId, levelForXp } from '@blatkom/shared';
-import type { AdminMe, AdminPaymentRow, AdminPlayerDetail, AdminResetLink, CharacterId } from '@blatkom/shared';
+import { AdminBlatFlagRequest, AdminCreateUserRequest, AdminGrantRequest, AdminLoginRequest, AdminReferralDecision, getMap, isMapId, levelForXp } from '@blatkom/shared';
+import type { AdminBlatSummary, AdminMe, AdminPaymentRow, AdminPlayerDetail, AdminReferralRow, AdminResetLink, CharacterId } from '@blatkom/shared';
+import { BlatRepo } from '../blat/repo.js';
+import { notifyReferral } from '../api/blat.js';
 import type { RouteModule } from '../app.js';
 import { HttpError } from '../http/router.js';
 import type { Ctx } from '../http/router.js';
@@ -130,13 +132,22 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
       SELECT kind, item_id, source, acquired_at FROM user_items WHERE user_id = ${id} ORDER BY acquired_at DESC`;
     const mods = await p.sql<Array<{ weapon_id: string; mod_id: string; acquired_at: Date }>>`
       SELECT weapon_id, mod_id, acquired_at FROM weapon_mods WHERE user_id = ${id} ORDER BY acquired_at DESC`;
-    const ledger = await p.sql<Array<{ created_at: Date; currency: 'tokens' | 'diamonds'; delta: number; balance_after: number; reason: string; ref: string | null; admin: string | null }>>`
+    const ledger = await p.sql<Array<{ created_at: Date; currency: 'tokens' | 'diamonds' | 'blat'; delta: number; balance_after: number; reason: string; ref: string | null; admin: string | null }>>`
       SELECT l.created_at, l.currency, l.delta, l.balance_after, l.reason, l.ref, a.username AS admin
       FROM currency_ledger l LEFT JOIN admin_users a ON a.id = l.admin_id
       WHERE l.user_id = ${id} ORDER BY l.id DESC LIMIT 50`;
     const payments = await p.sql<Array<{ id: string; created_at: Date; paid_at: Date | null; provider: string; pack_id: string; diamonds: number; amount_cents: number; currency: string; status: AdminPaymentRow['status'] }>>`
       SELECT id, created_at, paid_at, provider, pack_id, diamonds, amount_cents, currency, status
       FROM payments WHERE user_id = ${id} ORDER BY created_at DESC LIMIT 30`;
+    // V2.0: $BLAT and the referral programme
+    const [b] = await p.sql<Array<{ blat: number; blat_earned: number; ref_code: string | null; blat_flag: string | null }>>`
+      SELECT COALESCE(pr.blat, 0) AS blat, COALESCE(pr.blat_earned, 0) AS blat_earned, u.ref_code, u.blat_flag
+      FROM users u LEFT JOIN profiles pr ON pr.user_id = u.id WHERE u.id = ${id}`;
+    const [by] = await p.sql<Array<{ referrer_id: string | null; name: string | null; status: AdminReferralRow['status'] }>>`
+      SELECT r.referrer_id, u.display_name AS name, r.status FROM referrals r LEFT JOIN users u ON u.id = r.referrer_id WHERE r.referee_id = ${id}`;
+    const theirs = await p.sql<Array<{ status: AdminReferralRow['status']; n: number }>>`SELECT status, count(*)::int AS n FROM referrals WHERE referrer_id = ${id} GROUP BY status`;
+    const refCounts: Record<AdminReferralRow['status'], number> = { pending: 0, confirmed: 0, held: 0, rejected: 0 };
+    for (const t of theirs) refCounts[t.status] = t.n;
     // Viewing an individual player's record (incl. Telegram ID) is audited like exports.
     await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: 'player_viewed', target: id, ip: ctx.ip });
     const lv = levelForXp(r.xp);
@@ -162,8 +173,83 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
       mods: mods.map((m) => ({ weapon: m.weapon_id, mod: m.mod_id, acquiredAt: m.acquired_at.toISOString() })),
       ledger: ledger.map((l) => ({ at: l.created_at.toISOString(), currency: l.currency, delta: l.delta, balanceAfter: l.balance_after, reason: l.reason, ref: l.ref, admin: l.admin })),
       payments: payments.map((x) => ({ id: x.id, createdAt: x.created_at.toISOString(), paidAt: x.paid_at?.toISOString() ?? null, provider: x.provider, packId: x.pack_id, diamonds: x.diamonds, amountCents: x.amount_cents, currency: x.currency, status: x.status })),
+      blat: {
+        balance: b?.blat ?? 0,
+        earned: b?.blat_earned ?? 0,
+        refCode: b?.ref_code ?? null,
+        referredBy: by ? { id: by.referrer_id, name: by.name, status: by.status } : null,
+        referrals: refCounts,
+        flag: b?.blat_flag ?? null,
+      },
     };
     ctx.json(200, detail);
+  });
+
+  // ── V2.0: $BLAT and referrals ─────────────────────────────────────────────
+  router.get('/api/admin/blat', viewer, async (ctx) => {
+    const r = range(ctx);
+    const sql = pg().sql;
+    const [tot] = await sql<Array<{ total: number; holders: number; flagged: number }>>`
+      SELECT COALESCE(sum(p.blat), 0)::float8 AS total, count(*) FILTER (WHERE p.blat > 0)::int AS holders,
+             (SELECT count(*)::int FROM users WHERE blat_flag IS NOT NULL AND deleted_at IS NULL) AS flagged
+      FROM profiles p`;
+    const issued = await sql<Array<{ reason: 'level' | 'referral' | 'grant'; all: number; range: number }>>`
+      SELECT reason, COALESCE(sum(delta), 0)::float8 AS all,
+             COALESCE(sum(delta) FILTER (WHERE created_at >= ${r.from} AND created_at <= ${r.to}), 0)::float8 AS range
+      FROM currency_ledger WHERE currency = 'blat' AND delta > 0 GROUP BY reason`;
+    const refs = await sql<Array<{ status: AdminReferralRow['status']; n: number }>>`SELECT status, count(*)::int AS n FROM referrals GROUP BY status`;
+    const top = await sql<Array<{ id: string; name: string; balance: number; flagged: boolean }>>`
+      SELECT u.id, u.display_name AS name, p.blat AS balance, (u.blat_flag IS NOT NULL) AS flagged
+      FROM profiles p JOIN users u ON u.id = p.user_id WHERE p.blat > 0 AND u.deleted_at IS NULL ORDER BY p.blat DESC LIMIT 20`;
+    const zero = () => ({ level: 0, referral: 0, grant: 0 });
+    const out: AdminBlatSummary = { totalBalance: Number(tot?.total ?? 0), holders: tot?.holders ?? 0, flagged: tot?.flagged ?? 0, issued: zero(), issuedInRange: zero(), referrals: { pending: 0, confirmed: 0, held: 0, rejected: 0 }, top };
+    for (const i of issued) if (i.reason in out.issued) {
+      out.issued[i.reason] = Number(i.all);
+      out.issuedInRange[i.reason] = Number(i.range);
+    }
+    for (const x of refs) out.referrals[x.status] = x.n;
+    ctx.json(200, out);
+  });
+
+  router.get('/api/admin/referrals', viewer, async (ctx) => {
+    const st = ctx.query.get('status');
+    const status = st === 'pending' || st === 'confirmed' || st === 'held' || st === 'rejected' ? st : null;
+    const rows = await pg().sql<Array<{ referee_id: string; referee_name: string; referrer_id: string | null; referrer_name: string | null; code: string; attached_at: Date; status: AdminReferralRow['status']; decided_at: Date | null; ordinal: number | null; reward: number; note: string | null }>>`
+      SELECT r.referee_id, a.display_name AS referee_name, r.referrer_id, b.display_name AS referrer_name, r.code, r.attached_at, r.status, r.decided_at, r.ordinal, r.reward, r.note
+      FROM referrals r JOIN users a ON a.id = r.referee_id LEFT JOIN users b ON b.id = r.referrer_id
+      WHERE ${status === null ? pg().sql`TRUE` : pg().sql`r.status = ${status}`}
+      ORDER BY r.attached_at DESC LIMIT 300`;
+    const out: AdminReferralRow[] = rows.map((x) => ({ refereeId: x.referee_id, refereeName: x.referee_name, referrerId: x.referrer_id, referrerName: x.referrer_name, code: x.code, attachedAt: x.attached_at.toISOString(), status: x.status, decidedAt: x.decided_at?.toISOString() ?? null, ordinal: x.ordinal, reward: x.reward, note: x.note }));
+    ctx.json(200, out);
+  });
+
+  /** A held (or pending) invitation: count it — the inviter is paid at the current rate — or turn it down. */
+  router.post('/api/admin/referrals/:id', admin, async (ctx) => {
+    const id = ctx.params.id ?? '';
+    if (!UUID_RE.test(id)) throw new HttpError(400, 'bad_id', 'Неверный идентификатор');
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, 'rate_limited', 'Слишком много операций подряд, подождите', { 'retry-after': '60' });
+    const body = await ctx.body(AdminReferralDecision, 1024);
+    const p = pg();
+    const done = await new BlatRepo(p.sql, { publicUrl: deps.env.PUBLIC_URL }).decide(id, body.action, body.note ?? null);
+    if (!done) throw new HttpError(409, 'not_open', 'Это приглашение уже решено или не найдено');
+    if (done.status === 'confirmed') notifyReferral(deps.social, done);
+    await audit(p.sql, deps.log, { adminId: a.id, action: body.action === 'confirm' ? 'referral_confirm' : 'referral_reject', target: id, details: done.status === 'confirmed' ? { referrer: done.paid.referrerId, reward: done.paid.reward, ordinal: done.paid.ordinal } : { note: body.note ?? null }, ip: ctx.ip });
+    ctx.json(200, done.status === 'confirmed' ? { status: 'confirmed', reward: done.paid.reward, ordinal: done.paid.ordinal } : { status: 'rejected' });
+  });
+
+  /** Marks an account as suspicious (no referral rewards, left out of balance exports) or clears the mark. */
+  router.post('/api/admin/players/:id/blat-flag', admin, async (ctx) => {
+    const id = ctx.params.id ?? '';
+    if (!UUID_RE.test(id)) throw new HttpError(400, 'bad_id', 'Неверный идентификатор');
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, 'rate_limited', 'Слишком много операций подряд, подождите', { 'retry-after': '60' });
+    const body = await ctx.body(AdminBlatFlagRequest, 1024);
+    const p = pg();
+    const rows = await p.sql`UPDATE users SET blat_flag = ${body.flag} WHERE id = ${id} AND deleted_at IS NULL RETURNING id`;
+    if (rows.length === 0) throw new HttpError(404, 'not_found', 'Игрок не найден');
+    await audit(p.sql, deps.log, { adminId: a.id, action: body.flag ? 'blat_flag' : 'blat_unflag', target: id, details: { flag: body.flag }, ip: ctx.ip });
+    ctx.json(200, { flag: body.flag });
   });
 
   /** Audited balance adjustment (support compensation, corrections). Never below zero. */

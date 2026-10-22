@@ -11,6 +11,8 @@ export * from './game-rules/skins.js';
 export * from './game-rules/match.js';
 export * from './game-rules/progression.js';
 export * from './game-rules/clubs.js';
+export * from './game-rules/blat.js';
+export * from './schemas/blat.js';
 export * from './maps/index.js';
 export * from './sim/math.js';
 export * from './sim/rng.js';

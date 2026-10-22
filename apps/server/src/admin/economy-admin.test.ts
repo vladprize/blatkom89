@@ -180,10 +180,13 @@ describe('admin http: funnel, economy, grants and reset links', () => {
     assert.equal(inv.body.diamonds, 100, 'the player sees the new balance');
     const det = await api(app.base, `/api/admin/players/${p.userId}`, { cookie });
     assert.deepEqual(det.body.wallet, { tokens: 0, diamonds: 100 });
-    assert.equal(det.body.ledger.length, 2);
+    // V2.0: the $BLAT welcome paid at sign-up is in the same ledger, under its own currency
+    assert.equal(det.body.ledger.length, 3);
     assert.equal(det.body.ledger[0].delta, -50);
     assert.equal(det.body.ledger[0].admin, 'root');
     assert.equal(det.body.ledger[1].ref, 'compensation for a lost match');
+    assert.deepEqual([det.body.ledger[2].currency, det.body.ledger[2].reason, det.body.ledger[2].ref, det.body.ledger[2].delta], ['blat', 'level', 'level:1', 300]);
+    assert.equal(det.body.blat.balance, 300);
     const audits = await app.db.sql<Array<{ details: { amount: number } }>>`SELECT details FROM admin_audit_log WHERE action = 'balance_grant' AND target = ${p.userId} ORDER BY id`;
     assert.deepEqual(audits.map((a) => a.details.amount), [150, -50]);
   });

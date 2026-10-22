@@ -10,6 +10,24 @@ import { validateInitData } from '../auth/telegram.js';
 import { pgContext } from '../services/persistence.js';
 import { sendResetMail } from '../auth/email.js';
 import type { Sql } from '../database/db.js';
+import { BlatRepo } from '../blat/repo.js';
+
+/**
+ * V2.0: a NEW account opened through a referral link is attached to its inviter (it counts once the new
+ * player has played a whole match — blat/repo.ts). Existing accounts are never re-attached. Never fails
+ * the sign-in.
+ */
+export async function attachReferral(sql: Sql, log: { warn(m: string, f?: Record<string, unknown>): void }, userId: string, isNew: boolean, code: string | null | undefined): Promise<void> {
+  if (!isNew || !code) return;
+  try {
+    await new BlatRepo(sql, { publicUrl: '' }).attach(userId, code);
+  } catch (e) {
+    log.warn('referral attach failed', { err: e as Error });
+  }
+}
+
+/** A Telegram start parameter `ref_<code>` (the bot's referral link) → the code. */
+export const refFromStartParam = (p: string | null | undefined): string | null => (p && /^ref_[A-Za-z0-9_-]{4,32}$/.test(p) ? p.slice(4) : null);
 
 /**
  * Links a new account to the anonymous visitor id of the browser it was created in (admin funnel).
@@ -61,6 +79,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     }
     const platform = body.platform ?? null;
     const up = await pg.users.upsertTelegram(v.user, platform);
+    await attachReferral(deps.sql, deps.log, up.userId, up.isNew, refFromStartParam(v.startParam) ?? body.ref);
     const s = await pg.sessions.issue(up.userId, 'telegram', platform, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform };
     services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'telegram' }, evCtx);
@@ -88,6 +107,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     const up = await pg.users.upsertGuest(deviceKey, latinName(body.name, `Comrade_${deviceKey.slice(3, 7).replace(/[^A-Za-z0-9]/g, 'X').toUpperCase()}`), platform);
     // the visitor funnel: link the anonymous visit to the account it became
     if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform);
+    await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
     const s = await pg.sessions.issue(up.userId, 'guest', platform, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform };
     services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'guest' }, evCtx);
@@ -106,6 +126,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     const deviceId = body.deviceId ?? randomBytes(12).toString('base64url');
     const platform = body.platform ?? null;
     const up = await pg.users.upsertDev(deviceId, latinName(body.name, `Comrade_${deviceId.slice(-4).replace(/[^A-Za-z0-9]/g, 'X').toUpperCase()}`), platform);
+    await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
     const s = await pg.sessions.issue(up.userId, 'dev', platform, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform };
     services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'dev' }, evCtx);

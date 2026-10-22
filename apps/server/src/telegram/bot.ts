@@ -39,6 +39,7 @@ const TEXT = {
   ru: {
     hello: '<b>БЛАТКОМ ’89</b> на связи — сервер прогрет, заходи.\nРайонные дела — серьёзные дела.',
     invite: (code: string) => `<b>БЛАТКОМ ’89</b>: тебя зовут в комнату <code>${code}</code>.\nСервер прогрет — заходи.`,
+    invited: '<b>БЛАТКОМ ’89</b>: тебя позвали в район. Сервер прогрет — заходи.\nРайонные дела — серьёзные дела.',
     play: '🎮 Играть в Telegram',
     join: '🎮 Войти в комнату',
     browser: '🌐 Открыть в браузере',
@@ -53,6 +54,7 @@ const TEXT = {
   en: {
     hello: '<b>BLATKOM ’89</b> is on the line — the server is warmed up, come on in.\nDistrict business is serious business.',
     invite: (code: string) => `<b>BLATKOM ’89</b>: you’re invited to room <code>${code}</code>.\nThe server is warmed up — come on in.`,
+    invited: '<b>BLATKOM ’89</b>: someone called you into the district. The server is warmed up — come on in.\nDistrict business is serious business.',
     play: '🎮 Play in Telegram',
     join: '🎮 Join the room',
     browser: '🌐 Open in the browser',
@@ -121,14 +123,16 @@ export function botAnswer(update: TelegramUpdate, publicUrl: string, botUsername
   }
   const lang = langOf(m.from?.language_code);
   const T = TEXT[lang];
-  const code = cmd?.[3] && CODE.test(cmd[3]) ? cmd[3] : null;
+  // V2.0: `/start ref_<code>` is a referral link (the game opens with ?ref=); anything else is a room
+  const ref = cmd?.[3] && /^ref_[A-Za-z0-9_-]{4,32}$/.test(cmd[3]) ? cmd[3].slice(4) : null;
+  const code = !ref && cmd?.[3] && CODE.test(cmd[3]) ? cmd[3] : null;
   const base = publicUrl.replace(/\/$/, '');
-  const url = code ? `${base}/?invite=${encodeURIComponent(code)}` : `${base}/`;
+  const url = ref ? `${base}/?ref=${encodeURIComponent(ref)}` : code ? `${base}/?invite=${encodeURIComponent(code)}` : `${base}/`;
   const keyboard = isPrivate ? [[{ text: code ? T.join : T.play, web_app: { url } }], [{ text: T.browser, url }]] : [[{ text: T.groups, url }]];
   return {
     method: 'sendMessage',
     chat_id: m.chat.id,
-    text: code ? T.invite(code) : T.hello,
+    text: ref ? T.invited : code ? T.invite(code) : T.hello,
     parse_mode: 'HTML',
     link_preview_options: { is_disabled: true },
     reply_markup: { inline_keyboard: keyboard },

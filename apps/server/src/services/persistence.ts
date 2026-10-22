@@ -24,6 +24,8 @@ import { ClubRepo } from '../clubs/repo.js';
 
 export interface Persistence {
   services: Services;
+  /** The PostgreSQL recorder itself (V2.0: the app hooks its referral notices). */
+  recorder?: PgMatchRecorder;
   close?(): Promise<void>;
 }
 
@@ -128,6 +130,7 @@ export async function createPersistence(deps: { sql: Sql; env: Env; log: Logger 
   const stopRetention = deps.env.NODE_ENV === 'test' ? () => {} : scheduleRetention(deps.sql, deps.log);
   return {
     services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy },
+    recorder: ctx.recorder,
     close: async () => {
       stopRetention();
       await ctx.analytics.close();

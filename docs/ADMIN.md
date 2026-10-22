@@ -10,7 +10,11 @@ Tabs: «Обзор» (KPIs and charts), «Воронка» (visitors → account
 «Экономика» (talons, diamonds, revenue, purchases, modifications, cases), «Игроки» (search, player
 card with wallet, purchases, ledger, payments and admin actions), «ОПГ» (v0.3 clubs, called gangs —
 «ОПГ» — since v0.2.8: every gang — the game's own marked «игры» — with its rating, people, boss and
-requests; an admin removes a player's gang, e.g. for an offensive name or flag), «Ошибки», «Экспорт», «Аудит».
+requests; an admin removes a player's gang, e.g. for an offensive name or flag), «$BLAT» (V2.0: points
+on hand, issued for levels / invitations in all time and in the period, the biggest balances, invitations
+by status — an admin counts or turns down the ones held for a check; [BLAT.md](BLAT.md)), «Ошибки»,
+«Экспорт», «Аудит». The player card has a «$BLAT и приглашения» block (balance, code, who invited the
+player, their invitations; an admin marks or clears «suspicious»).
 
 The page itself is public (it contains no data); **every** data request is authorised on the server.
 Hiding the URL is not part of the security model.
@@ -53,6 +57,7 @@ Passwords: minimum 12 characters; stored as `scrypt$N$r$p$salt$hash` (N=16384, r
 | Overview, charts, live rooms, players list & detail, errors | ✅ | ✅ |
 | Funnel and economy panels | ✅ | ✅ |
 | Balance grants / corrections, password-reset links | — | ✅ |
+| $BLAT: count / turn down a held invitation, mark an account suspicious | — | ✅ |
 | CSV exports | — | ✅ |
 | Audit log | — | ✅ |
 | Create administrators | — | ✅ |
@@ -80,6 +85,7 @@ what the role cannot use.
 Recorded actions: `login`, `login_failed`, `logout`, `admin_bootstrap`, `admin_created`,
 `admin_created_cli`, `player_viewed` (opening a player's card, target = player id),
 `balance_grant` (currency, amount, reason, balance after), `password_reset_link`, `club_delete` (name, tag, members),
+`referral_confirm` (inviter, reward, number) / `referral_reject` (note), `blat_flag` / `blat_unflag` (reason),
 `export_players`, `export_matches`, `export_daily` (with row counts / date range). Visible to `admin`
 in the «Аудит» tab (latest 200). Kept 365 days ([PRIVACY.md](PRIVACY.md) §4).
 
@@ -102,11 +108,15 @@ Range parameters (where noted): `range=24h|7d|30d|90d` (default `7d`) or
 | `GET /api/admin/funnel?range…` | viewer | visitor and new-player cohorts, referrers, daily visitors (`AdminFunnel`) |
 | `GET /api/admin/economy?range…` | viewer | currency flows, revenue, purchases, modifications, cases (`AdminEconomy`) |
 | `GET /api/admin/players?q=&sort=&dir=&page=&pageSize=` | viewer | search by name (case-insensitive, Cyrillic-safe), exact Telegram ID, internal UUID or exact email (the address itself is never listed); `sort` ∈ `created, last_seen, name, level, xp, matches, wins, losses, kills, assists, playtime`; `pageSize` 5–100 |
-| `GET /api/admin/players/:id` | viewer | profile, progression, sessions summary, sign-in methods, masked email, wallet, owned items and modifications, last 50 ledger rows, last 30 payments, achievements, last 50 matches, last 50 errors (audited) |
+| `GET /api/admin/players/:id` | viewer | profile, progression, sessions summary, sign-in methods, masked email, wallet, owned items and modifications, last 50 ledger rows (talons, diamonds, $BLAT), last 30 payments, achievements, last 50 matches, last 50 errors, `blat` (balance, total, code, invited by, invitations by status, flag) (audited) |
 | `POST /api/admin/players/:id/grant` | admin | `{currency: tokens\|diamonds, amount: ±1…1 000 000, note: 3–120 chars}` → `{balance}`; never below zero (`409 insufficient_balance`); ledger reason `grant` with the admin id; audited; 30 actions / 5 min per admin (CSRF) |
 | `POST /api/admin/players/:id/reset-link` | admin | one-time password-reset link (valid 1 h) for a player with a registered email → `{link, expiresAt}`; `404 no_email` otherwise; audited; hand it over only to the account owner (CSRF) |
 | `GET /api/admin/clubs` | viewer | every club (`AdminClubRow`: rank, tag, name, motto, rating, people, real members, head, requests, recruiting, `house`, created) |
 | `DELETE /api/admin/clubs/:id` | admin | removes a player club; its people get `club_left` (disbanded); `409 house_club` for the game's own clubs; audited; 30 actions / 5 min per admin (CSRF) |
+| `GET /api/admin/blat?range…` | viewer | $BLAT: on hand, holders, issued all time / in range by source (`level`, `referral`, `grant`), invitations by status, flagged accounts, the 20 biggest balances (`AdminBlatSummary`) |
+| `GET /api/admin/referrals?status=pending\|held\|confirmed\|rejected` | viewer | the last 300 invitations (`AdminReferralRow`) |
+| `POST /api/admin/referrals/:refereeId` | admin | `{action: confirm\|reject, note?}` — a held or pending invitation; confirm pays the inviter at their current tier; `409 not_open` if already decided; the inviter hears it live; audited; 30 actions / 5 min per admin (CSRF) |
+| `POST /api/admin/players/:id/blat-flag` | admin | `{flag: reason (1–200) \| null}` — a suspicious account's invitations wait for a decision; audited (CSRF) |
 | `GET /api/admin/errors?range…` | viewer | errors grouped by fingerprint (≤200 groups) |
 | `GET /api/admin/audit` | admin | latest 200 audit entries |
 | `POST /api/admin/users` | admin | `{username, password, role}` (CSRF) |

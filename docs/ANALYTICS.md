@@ -177,6 +177,19 @@ All amounts come from `currency_ledger`, `user_items`, `weapon_mods`, `case_open
 | Modifications, cases | `weapon_mods.acquired_at` / `case_openings.created_at` in range; cases by rarity and diamonds spent |
 | Daily chart | the same ledger sums and paid revenue per UTC day |
 
+## 7a. $BLAT (dashboard «$BLAT», V2.0)
+
+From `profiles`, `currency_ledger` (`currency = 'blat'`) and `referrals` (rules: [BLAT.md](BLAT.md)).
+$BLAT rows never enter the talon / diamond numbers of §7.
+
+| Metric | Definition |
+|---|---|
+| On hand | sum of `profiles.blat` at request time, and how many players hold > 0 (not range-dependent) |
+| Issued all time / in the period | sum of positive `delta` of $BLAT rows by `reason` (`level`, `referral`, `grant`), all time and with `created_at ∈ [from, to]` |
+| Invitations by status | `referrals` rows per `status` (pending, held, confirmed, rejected), all time |
+| Flagged accounts | existing users with `blat_flag` set |
+| Biggest balances | the 20 highest `profiles.blat` of existing users, flagged ones marked |
+
 ## 8. Exports
 
 `players.csv`, `matches_<from>_<to>.csv`, `daily_<from>_<to>.csv` (registrations, DAU, matches

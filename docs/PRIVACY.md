@@ -12,7 +12,7 @@
 
 ## Part 1 — Privacy policy (player-facing text)
 
-**BLATKOM ’89 — privacy policy.** Revised 22 October 2026.
+**BLATKOM ’89 — privacy policy.** Revised 23 October 2026.
 
 **In short.** The game is free to play; purchases are optional and there are no ads. We keep only
 what the game, your profile and its statistics need. We never get your phone number, and we don’t
@@ -53,6 +53,12 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
    join date), the gangs you asked to join, and the name, tag, motto, flag and emblem of a gang you
    started — removed when you leave, withdraw or delete the
    profile.
+7b. **$BLAT and invitations (V2.0):** your $BLAT balance (in-game points — not money, they can't be
+   bought, sold or withdrawn) and every credit (for levels, for invitations); your personal invitation
+   code; who invited you, if you came through someone's link, and the people who came through yours
+   (their in-game names, whether the invitation counted); if an administrator marked your account as
+   suspicious, that mark and its reason. The person who invited you sees your in-game name and whether
+   your invitation counted.
 8. **Visit statistics:** a random visitor identifier created by your browser, first/last visit, days
    with visits, platform type and the domain of the site you came from — to count how many visitors
    become players; linked to your profile once you sign in.
@@ -89,6 +95,7 @@ Google, Discord, Facebook and Reddit when you sign in with them (on their page).
 | Private messages with friends | 180 days |
 | Friend list and requests | until removed by you or the friend, or the profile is deleted |
 | Gang membership and join requests | until you leave (or are shown out), withdraw, or the profile is deleted |
+| $BLAT balance and its history, your invitation code, who invited you | until you delete the profile |
 | Error reports | 90 days |
 | Sign-in session records | 90 days after the session ends |
 | Password-reset links | valid 1 hour, deleted 7 days later |
@@ -99,8 +106,10 @@ Google, Discord, Facebook and Reddit when you sign in with them (on their page).
 
 ### 6. How to delete your data
 **Settings → “Delete my data”** — immediate and irreversible: profile, statistics, match history,
-achievements, balances and owned items (bought ones included), email and password hash, the sign-ins
-with Google / Discord / Facebook / Reddit, days active and all sessions. Usage events and error reports lose the link to you and expire on schedule; payment
+achievements, balances and owned items (bought ones included), $BLAT and its history, your invitation
+code and who invited you, email and password hash, the sign-ins
+with Google / Discord / Facebook / Reddit, days active and all sessions. A reward your inviter already
+received for you stays with them (as a number in their history, no longer linked to you). Usage events and error reports lose the link to you and expire on schedule; payment
 records stay as accounting records without the link. Without access to the game, write to the operator
 from the same Telegram account or email.
 
@@ -115,14 +124,15 @@ When this policy changes, we update the revision date.
 
 | Table | Personal fields | Purpose | Retention |
 |---|---|---|---|
-| `users` | `telegram_id`, `display_name` (+ `name_key`, its case-folded form for uniqueness), `language_code`, `platform`, `dev_device_id` (dev mode, or `g1:` + HMAC of a guest browser secret), `email`, `password_hash` (scrypt), `email_linked_at`, `created_at`, `last_seen_at` | identity, display, sign-in, analytics | until account deletion |
-| `currency_ledger`, `user_items`, `weapon_mods`, `case_openings` | balance changes (with admin id for grants), owned items (weapon skins included), modifications, case draws (weapons and skins) | economy, support | until account deletion (cascade) |
+| `users` | `telegram_id`, `display_name` (+ `name_key`, its case-folded form for uniqueness), `language_code`, `platform`, `dev_device_id` (dev mode, or `g1:` + HMAC of a guest browser secret), `email`, `password_hash` (scrypt), `email_linked_at`, `created_at`, `last_seen_at`; V2.0: `ref_code` (the player's invitation code), `blat_flag` (an admin's «suspicious» mark with its reason) | identity, display, sign-in, analytics, referral programme | until account deletion |
+| `currency_ledger`, `user_items`, `weapon_mods`, `case_openings` | balance changes (with admin id for grants; V2.0: $BLAT credits `level:<n>` / `referral:<invited player's id>`), owned items (weapon skins included), modifications, case draws (weapons and skins) | economy, support, no double credits | until account deletion (cascade); an inviter's `referral:<id>` row stays with the inviter after the invited player is deleted (the id no longer resolves) |
+| `referrals` (V2.0) | invited player (`referee_id`, cascade), inviter (`referrer_id`, SET NULL on deletion), the code used, attach/decision times, status, number, reward, an admin's note | referral programme ([BLAT.md](BLAT.md)) | until the invited player's account is deleted |
 | `payments` | `user_id` (SET NULL on deletion), provider and its reference, pack, amount, status, times | accounting, crediting diamonds once | **[accounting retention period]** — not purged automatically |
 | `user_identities` (v0.3) | provider (`google`/`facebook`/`discord`/`reddit`), the provider's id for the player (`provider_uid`), user id, first/last use | sign-in with a provider | until account deletion (cascade) |
 | `auth_handoffs` (v0.3) | SHA-256 of a one-time code, user id, provider, whether the account is new/linked | handing a provider sign-in back to the page | valid 5 minutes; deleted on use, by the next sign-in once 10 minutes old, by the daily retention job after 1 day; immediately on account deletion (cascade) |
 | `password_resets` | HMAC of the one-time token, user id, who created it (`email`/`admin`) | password reset | 7 days after expiry; immediately on account deletion |
 | `visitors`, `visitor_days` | random browser id, first/last visit, platform, referring domain, `user_id` (SET NULL on deletion) | visitor funnel | 400 days after the last visit |
-| `profiles` | counters, XP/level, rating, streaks, preferred character, avatar id | progression, Top-100 | until account deletion (cascade) |
+| `profiles` | counters, XP/level, rating, streaks, preferred character, avatar id; V2.0: `blat`, `blat_earned`, `blat_level` | progression, Top-100, $BLAT | until account deletion (cascade) |
 | `friendships` | pairs of user ids, request/accept times | friends, presence | until removed; immediately on account deletion (cascade) |
 | `direct_messages` | sender, recipient, text (≤ 500 chars), sent/read times | private messages between friends | 180 days; immediately on account deletion (cascade) |
 | `clubs`, `club_members`, `club_requests` | a club's name/tag/motto/flag/emblem and `head_id` (SET NULL on deletion); membership (club, user, role, join time); requests (club, user, time) | clubs, the club table | membership and requests until left/withdrawn, immediately on account deletion (the head hands the club over first); a club until disbanded, closed by its last member or removed by an admin (audited) |
@@ -168,7 +178,7 @@ update the table in Part 1 §5.
 1. revokes all of the player's sessions;
 2. `DELETE FROM users WHERE id = …` — cascades to `profiles`, `sessions`, `user_daily_activity`,
    `match_participants`, `player_achievements`, `currency_ledger`, `user_items`, `weapon_mods`,
-   `case_openings`, `password_resets`, `user_identities`, `auth_handoffs`, `friendships`, `direct_messages`, `club_members`, `club_requests` (before that the
+   `case_openings`, `password_resets`, `user_identities`, `auth_handoffs`, `friendships`, `direct_messages`, `club_members`, `club_requests`, `referrals` (the player's own row; as an inviter, `referrer_id` becomes `NULL`) (before that the
    player leaves their club like a player who quits: a head hands it to the longest-standing member, a last member closes it);
    sets `user_id`/`session_id`/`created_by` to `NULL` in
    `analytics_events`, `app_errors`, `invitations`, `payments`, `visitors`;

@@ -1,6 +1,7 @@
 /** HTTP API client (same origin). Never handles secrets other than the player's own session token. */
 import type {
   AuthResponse,
+  BlatResponse,
   AvatarId,
   CreateRoomResponse,
   InviteInfo,
@@ -79,12 +80,16 @@ export class Api {
     return data as T;
   }
 
-  authTelegram(initData: string, visitorId?: string) {
-    return this.req<AuthResponse>('POST', '/api/auth/telegram', { initData, platform: platform(), clientVersion: VERSION, ...(visitorId ? { visitorId } : {}) });
+  authTelegram(initData: string, visitorId?: string, ref?: string) {
+    return this.req<AuthResponse>('POST', '/api/auth/telegram', { initData, platform: platform(), clientVersion: VERSION, ...(visitorId ? { visitorId } : {}), ...(ref ? { ref } : {}) });
   }
   /** Public website: device-bound guest account (the server stores only an HMAC of `deviceId`). */
-  authGuest(name: string, deviceId: string, visitorId?: string) {
-    return this.req<AuthResponse>('POST', '/api/auth/guest', { name, deviceId, platform: platform(), clientVersion: VERSION, ...(visitorId ? { visitorId } : {}) });
+  authGuest(name: string, deviceId: string, visitorId?: string, ref?: string) {
+    return this.req<AuthResponse>('POST', '/api/auth/guest', { name, deviceId, platform: platform(), clientVersion: VERSION, ...(visitorId ? { visitorId } : {}), ...(ref ? { ref } : {}) });
+  }
+  /** V2.0: $BLAT — balance, history, level rewards, the referral programme. */
+  blat() {
+    return this.req<BlatResponse>('GET', '/api/blat');
   }
   /** Anonymous «opened the site» ping for the admin funnel (random per-browser id only). */
   visit(visitorId: string, referrer?: string) {

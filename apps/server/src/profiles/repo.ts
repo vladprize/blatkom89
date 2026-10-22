@@ -2,6 +2,7 @@
 import { ACHIEVEMENTS, ACHIEVEMENT_IDS, ClubEmblemSchema, ClubFlagSchema, isAvatarId, levelForXp, nameKey } from '@blatkom/shared';
 import type { AchievementId, AchievementStatus, AvatarId, CharacterId, MapId, MatchHistoryEntry, PublicProfile } from '@blatkom/shared';
 import type { Sql } from '../database/db.js';
+import { creditLevels } from '../blat/repo.js';
 
 interface ProfileRow {
   id: string;
@@ -24,6 +25,10 @@ interface ProfileRow {
   avatar: string | null;
   tokens: number;
   diamonds: number;
+  blat: number;
+  /** V2.0: the highest level paid in $BLAT, and whether the profile row exists (only in `get`). */
+  blat_level?: number;
+  has_profile?: boolean;
   email: string | null;
   rating: number;
   club_id?: string | null;
@@ -60,6 +65,7 @@ export function toPublicProfile(r: ProfileRow): PublicProfile {
     preferredCharacter: r.preferred_character,
     avatar: isAvatarId(r.avatar) ? r.avatar : null,
     tokens: r.tokens,
+    blat: r.blat ?? 0,
     diamonds: r.diamonds,
     email: r.email,
     rating: r.rating,
@@ -71,7 +77,24 @@ export function toPublicProfile(r: ProfileRow): PublicProfile {
 export class ProfileRepo {
   constructor(private readonly sql: Sql) {}
 
+  /**
+   * The player's own profile. V2.0: levels not paid in $BLAT yet — the level-1 welcome and the levels
+   * reached before $BLAT existed — are paid here, once (`blatCredited` tells the client to say so).
+   */
   async get(userId: string): Promise<PublicProfile | null> {
+    const row = await this.row(userId);
+    if (!row) return null;
+    let credited = 0;
+    if (row.has_profile && row.level > (row.blat_level ?? 0)) {
+      const r = await this.sql.begin((tx) => creditLevels(tx, userId, row.level));
+      credited = r.gained;
+      row.blat = r.balance;
+    }
+    const profile = toPublicProfile(row);
+    return credited > 0 ? { ...profile, blatCredited: credited } : profile;
+  }
+
+  private async row(userId: string): Promise<ProfileRow | null> {
     const rows = await this.sql<ProfileRow[]>`
       SELECT u.id, u.display_name, u.telegram_id::text AS telegram_id, u.created_at,
              COALESCE(p.level, 1) AS level, COALESCE(p.xp, 0) AS xp,
@@ -80,14 +103,15 @@ export class ProfileRepo {
              COALESCE(p.assists, 0) AS assists,
              COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
-             p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email,
+             p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, COALESCE(p.blat, 0) AS blat, u.email,
+             COALESCE(p.blat_level, 0) AS blat_level, p.user_id IS NOT NULL AS has_profile,
              COALESCE(p.rating, 1000) AS rating,
              c.id AS club_id, c.tag AS club_tag, c.name AS club_name, c.flag AS club_flag, c.emblem AS club_emblem,
              (SELECT array_agg(i.provider ORDER BY i.provider) FROM user_identities i WHERE i.user_id = u.id) AS identities
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
         LEFT JOIN club_members cm ON cm.user_id = u.id LEFT JOIN clubs c ON c.id = cm.club_id
       WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
-    return rows[0] ? toPublicProfile(rows[0]) : null;
+    return rows[0] ?? null;
   }
 
   async update(userId: string, patch: { displayName?: string | undefined; preferredCharacter?: CharacterId | undefined; avatar?: AvatarId | null | undefined }): Promise<void> {

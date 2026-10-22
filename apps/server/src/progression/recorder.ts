@@ -15,6 +15,8 @@ import type { Logger } from '../logging/logger.js';
 import type { MatchCompletion, MatchRecorder, MatchStart } from '../services/contracts.js';
 import { awardMatchTokens } from '../economy/repo.js';
 import { moveClubRatings } from '../clubs/repo.js';
+import { BlatRepo, creditLevels } from '../blat/repo.js';
+import type { ConfirmResult } from '../blat/repo.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -37,6 +39,9 @@ async function existingUsers(tx: Tx, ids: string[]): Promise<Set<string>> {
 }
 
 export class PgMatchRecorder implements MatchRecorder {
+  /** V2.0: an invitation counted (or held) after a match — the app tells the inviter live. */
+  onReferral: ((r: ConfirmResult) => void) | null = null;
+
   constructor(
     private readonly sql: Sql,
     private readonly log: Logger,
@@ -61,6 +66,25 @@ export class PgMatchRecorder implements MatchRecorder {
   }
 
   async matchCompleted(m: MatchCompletion): Promise<Map<string, PersonalResult>> {
+    const out = await this.recordCompletion(m);
+    // V2.0: a new player invited by someone who has now played a whole match counts for the inviter
+    void this.confirmReferrals(m.participants.filter((p) => p.completed).map((p) => p.userId)).catch((e: Error) => this.log.warn('referral confirmation failed', { err: e }));
+    return out;
+  }
+
+  private async confirmReferrals(userIds: string[]): Promise<void> {
+    const blat = new BlatRepo(this.sql, { publicUrl: '' });
+    for (const id of userIds) {
+      if (!UUID_RE.test(id) || !(await blat.hasPending(id))) continue;
+      const r = await blat.tryConfirm(id);
+      if (r) {
+        this.log.info('referral', r.status === 'confirmed' ? { referee: id, referrer: r.paid.referrerId, reward: r.paid.reward, ordinal: r.paid.ordinal } : { referee: id, referrer: r.referrerId, held: r.reason });
+        this.onReferral?.(r);
+      }
+    }
+  }
+
+  private async recordCompletion(m: MatchCompletion): Promise<Map<string, PersonalResult>> {
     if (!UUID_RE.test(m.matchId)) throw new Error('matchId must be a UUID');
     const people = m.peopleAtEnd ?? m.playersAtEnd;
     const fill = m.fillAtEnd ?? 0;
@@ -112,6 +136,8 @@ export class PgMatchRecorder implements MatchRecorder {
           await tx`INSERT INTO player_achievements (user_id, achievement_id, match_id) VALUES (${p.userId}, ${a}, ${m.matchId}) ON CONFLICT DO NOTHING`;
         }
         const totalTokens = await awardMatchTokens(tx, p.userId, m.matchId, tokens);
+        // V2.0: $BLAT for every level reached (each level once — a unique operation id per level)
+        const blat = await creditLevels(tx, p.userId, level);
         await tx`
           INSERT INTO match_participants (match_id, user_id, character, team, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, tokens_awarded, rating_delta, joined_at, left_at)
           VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.team}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${tokens}, ${rDelta}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
@@ -120,7 +146,7 @@ export class PgMatchRecorder implements MatchRecorder {
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
             tokens_awarded = EXCLUDED.tokens_awarded, rating_delta = EXCLUDED.rating_delta, left_at = EXCLUDED.left_at`;
-        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof!.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating });
+        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof!.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating, blatGained: blat.gained, totalBlat: blat.balance });
         clubDeltas.push({ userId: p.userId, delta: rDelta });
       }
       // the clubs of the people who played (v0.3): their rating moves with their members'

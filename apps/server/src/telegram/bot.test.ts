@@ -42,6 +42,17 @@ test('bot: /start <room code> answers with a «join the room» button; junk payl
   assert.equal(junk.reply_markup.inline_keyboard[0]![0]!.web_app!.url, `${URL_}/`);
 });
 
+test('bot: /start ref_<code> (V2.0 referral link) opens the game with ?ref= — not a room', () => {
+  const a = botAnswer(msg('/start ref_Ab12Cd34', { lang: 'ru' }), URL_)!;
+  const urls = a.reply_markup.inline_keyboard.flat().map((b) => b.web_app?.url ?? b.url);
+  assert.deepEqual(urls, [`${URL_}/?ref=Ab12Cd34`, `${URL_}/?ref=Ab12Cd34`]);
+  assert.match(a.text, /позвали в район/);
+  assert.doesNotMatch(a.text, /комнату/);
+  const en = botAnswer(msg('/start ref_streamer_vasya'), URL_)!;
+  assert.match(en.text, /called you into the district/);
+  assert.ok(en.reply_markup.inline_keyboard.flat().every((b) => (b.web_app?.url ?? b.url)!.endsWith('?ref=streamer_vasya')));
+});
+
 test('bot: groups get commands only (their own or bare), with a plain link; bots get nothing', () => {
   assert.equal(botAnswer(msg('hello', { chat: 'group' }), URL_), null);
   assert.equal(botAnswer(msg('/start@other_bot', { chat: 'supergroup' }), URL_, 'blatkom_bot'), null);

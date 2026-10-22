@@ -111,7 +111,7 @@ test('clubs: anyone starts a gang (v0.2.8: level 1, free) with a free name and t
   assert.equal(first.status, 200, JSON.stringify(first.body));
   const [w] = await app.db.sql<Array<{ tokens: number }>>`SELECT tokens FROM profiles WHERE user_id = ${fresh.userId}`;
   assert.equal(w!.tokens, 0, 'nothing paid');
-  assert.equal((await app.db.sql`SELECT 1 FROM currency_ledger WHERE user_id = ${fresh.userId}`).length, 0, 'no ledger row for a free gang');
+  assert.equal((await app.db.sql`SELECT 1 FROM currency_ledger WHERE user_id = ${fresh.userId} AND currency <> 'blat'`).length, 0, 'no talon ledger row for a free gang');
   const a = await player('Основатель');
   const bad = await found(a.token, 'X', 'Q');
   assert.equal(bad.status, 400, 'a one-letter name or tag is refused');

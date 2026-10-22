@@ -105,6 +105,8 @@ export type SocialEvent =
   | { type: 'club_declined'; clubId: string; name: string }
   | { type: 'club_left'; clubId: string; reason: 'removed' | 'disbanded' }
   | { type: 'club_head'; clubId: string }
+  /** V2.0: an invitation counted — `reward` $BLAT for the inviter (0 while it waits for a check). */
+  | { type: 'referral'; name: string; reward: number; balance: number; held: boolean }
   /** The answer to a client `ping` (keep-alive through proxies that drop idle sockets). */
   | { type: 'pong'; t: number };
 
