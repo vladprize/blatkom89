@@ -733,6 +733,8 @@ export const RU: Record<string, string> = {
   'Register an email: your level, talons and everything you unlock stay with you on any device. As a guest, the account lives only in this browser.': 'Привяжи почту — уровень, талоны и всё открытое останутся с тобой на любом устройстве. У гостя аккаунт живёт только в этом браузере.',
   'With this email and password the account opens on any device — your progress stays on the books.': 'С этой почтой и паролем аккаунт открывается на любом устройстве — прогресс останется на учёте.',
   'Register an email so the account doesn’t go missing: without it, your progress lives only in this browser.': 'Привяжи почту, чтобы аккаунт не потерялся: без неё прогресс живёт только в этом браузере.',
+  // ── v0.3
+  'Updating the game to the new version…': 'Обновляю игру до новой версии…',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)

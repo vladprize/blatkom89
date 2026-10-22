@@ -42,6 +42,8 @@ import { music } from '../game/audio/Music.js';
 import { t, count, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
 import { charText, finishName, gadgetName, modText, weaponName } from '../i18n/content.js';
 import { apiErrorText } from '../net/errors.js';
+import { watchForUpdates } from './updates.js';
+import type { UpdateWatch } from './updates.js';
 
 /** Room capacity shown in the menu. */
 const MAX_ROOM_PLAYERS = DEFAULT_MATCH_CONFIG.maxPlayers;
@@ -159,6 +161,8 @@ export class App {
   private chatPanel: ChatPanel | null = null;
   private chatPanelRoom: string | null = null;
   private chatOverlay: ChatOverlay | null = null;
+  /** A newer release on the server: reload in the main menu (app/updates.ts). */
+  private updates: UpdateWatch | null = null;
 
   constructor() {
     const saved = storageGet('blatkom89.character');
@@ -167,6 +171,11 @@ export class App {
     hudBus.on('pause', () => this.togglePause());
     hudBus.on('match-end', () => setTimeout(() => this.onMatchFinished(), 2200));
     onLangChange(() => this.relocalize());
+    if (ONLINE_AVAILABLE)
+      this.updates = watchForUpdates({
+        canReload: () => this.screen === 'menu' && !this.pauseEl && !document.querySelector('.overlay, .sheet, .modal'),
+        notify: () => toast(t('Updating the game to the new version…')),
+      });
     // the chat switched off or on in the settings (also from the pause menu during a match)
     onSettings((st) => {
       if (!st.chat && this.chatOverlay) {
@@ -415,6 +424,8 @@ export class App {
     this.host.showPreview();
     this.go('menu', false);
     music.setWanted(true);
+    // a newer release found while playing: now is the moment (after the menu is on screen)
+    setTimeout(() => this.updates?.atMenu(), 0);
     const onlineNote = ONLINE_AVAILABLE ? null : h('div', { class: 'muted', style: 'font-size:14px' }, t('This is the demo without a server: practice against bots is available. Online matches work in the online version.'));
     this.stripEl = this.profileTile();
     const menu = h(
@@ -821,7 +832,7 @@ export class App {
     const root = this.root;
     draw();
     if (this.online) void this.online.loadInventory().then(() => this.screen === 'characters' && draw()).catch(() => {});
-    this.render(h('div', { class: 'screen screen--dim screen--chars' }, h('div', { class: 'wrap charsel' }, this.topbar(t('Choose a Character')), grid, summary, dossier, actions)));
+    this.render(h('div', { class: 'screen screen--dim screen--chars' }, h('div', { class: 'wrap wrap--vcenter charsel' }, this.topbar(t('Choose a Character')), grid, summary, dossier, actions)));
   }
 
   // ── arsenal (loadout, shop, case, diamonds) ─────────────────────────────
@@ -865,7 +876,7 @@ export class App {
     note();
     const content = h(
       'div',
-      { class: 'wrap' },
+      { class: 'wrap wrap--vcenter' },
       this.topbar(t('Practice')),
       h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Map')), mapField({ selected: mapId, onPick: (m) => (mapId = m) })),
       h(
@@ -1116,7 +1127,7 @@ export class App {
     const code = h('input', { class: 'input', placeholder: t('Invite code'), maxlength: '16', autocapitalize: 'off', autocomplete: 'off', inputmode: 'text', 'aria-label': t('Invite code') });
     const content = h(
       'div',
-      { class: 'wrap' },
+      { class: 'wrap wrap--vcenter' },
       this.topbar(t('Play with Friends')),
       h(
         'div',

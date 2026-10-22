@@ -1,13 +1,50 @@
 # Telegram Mini App
 
 The same web build runs inside Telegram (Mini App) and in a normal browser. Inside Telegram the player
-is authenticated by Telegram itself; in a browser, online play is only available when the operator
-enables the development login (never in production).
+is authenticated by Telegram itself; in a browser players sign in as guests (`GUEST_AUTH_ENABLED=true`)
+or with an email.
+
+## 0. Quick start: the bot on Render (v0.3)
+
+The simplest bot: the player presses **Start** (or writes anything) and gets the game's link — a
+**🎮 Play in Telegram** button (the game opens inside Telegram) and a **🌐 Open in the browser** link.
+
+1. In Telegram, open **@BotFather** → `/newbot` → a name (e.g. `BLATKOM ’89`) and a username ending in
+   `bot` (e.g. `blatkom89_bot`). BotFather replies with a token like `7000000001:AAH…`.
+2. Render → the `blatkom89` service → **Environment** → add `TELEGRAM_BOT_TOKEN` = the token and
+   `TELEGRAM_BOT_USERNAME` = the username without `@` → **Save** (the service redeploys).
+3. Nothing else: on start-up the server registers its webhook
+   (`https://<service>.onrender.com/api/telegram/webhook`), the commands `/start` and `/play`, the
+   bot's descriptions (Russian and English) and the **Play** button next to the message field. The log
+   shows `telegram webhook registered`; on later starts `telegram bot {"setup":"unchanged"}`.
+4. Open `t.me/<username>` → **Start**.
+
+How «warm» works: the free Render service sleeps after 15 minutes without visitors. Telegram's call to
+the webhook wakes it, and the bot can only answer once the server is running — so the link in the answer
+always opens a server that is up, and for `BOT_WARM_MINUTES` (default 20) after an answer the server
+keeps itself awake (it asks its own address every 5 minutes), so a link tapped a few minutes later is
+still warm. The price: after a sleep the first answer takes up to about a minute. With
+`KEEP_AWAKE=true` the server never sleeps and the bot answers at once — a free Render workspace has 750
+instance hours a month, enough for this one service running non-stop (not for two).
+
+Invitations from the game (`«Call the lads»`) use `t.me/<bot>?start=<room code>`: the friend presses
+**Start**, the bot answers with **🎮 Join the room**. With a direct-link Mini App (§1 step 4) they open the
+game straight away instead.
+
+Webhook security: Telegram repeats a secret (derived from the bot token; `X-Telegram-Bot-Api-Secret-Token`)
+on every call, anything without it gets 401; the answer is sent in the webhook's own response
+(`{"method":"sendMessage",…}`), each update is answered once, a flooding chat gets at most 6 answers a
+minute, and groups only get an answer to `/start` or `/play`. Code: `apps/server/src/telegram/bot.ts`,
+`apps/server/src/services/keepAwake.ts`; tests: `bot.test.ts`.
+
+One bot token has one webhook: a second server started with the same token and an `https` address takes
+the webhook over (use a separate test bot for that).
 
 ## 1. Bot and Mini App setup (BotFather)
 
 1. `/newbot` → choose a name and username. Put the token into `TELEGRAM_BOT_TOKEN` and the username
-   (without `@`) into `TELEGRAM_BOT_USERNAME`. The token stays on the server only.
+   (without `@`) into `TELEGRAM_BOT_USERNAME`. The token stays on the server only. The webhook, the
+   commands, the descriptions and the menu button are set up by the server itself (§0).
 2. Deploy the game on an HTTPS domain first (Telegram requires a valid certificate) — see
    [DEPLOYMENT.md](DEPLOYMENT.md). `PUBLIC_URL` must be that origin, e.g. `https://blatkom.example.com`.
 3. **Main Mini App** (opened by Telegram’s own «Open» button in the bot profile and by `t.me/<bot>?startapp=`):
@@ -16,7 +53,8 @@ enables the development login (never in production).
 4. Optional **direct link app** with a short name: `/newapp` → select the bot → title, description,
    640×360 image → URL `https://<domain>/` → short name, e.g. `play`. Put it into
    `TELEGRAM_MINIAPP_SHORT_NAME`; invitations then use `https://t.me/<bot>/play?startapp=<code>`.
-5. Optional menu button: *Bot Settings* → *Menu Button* → URL `https://<domain>/`, title «Play».
+5. The menu button («Play», next to the message field) is set by the server; BotFather → *Bot Settings*
+   → *Menu Button* changes it by hand.
 6. Restart the server after changing the variables.
 
 ## 2. What the client does inside Telegram
@@ -67,6 +105,9 @@ disabled in production).
 
 ## 4. Launch checklist
 
+- [ ] v0.3: `t.me/<bot>` → **Start** → the bot answers (after a sleep: within about a minute) with
+      «Play in Telegram» and «Open in the browser»; both open the game.
+- [ ] v0.3: «Call the lads» in a room → the friend's **Start** → «Join the room» → the same lobby.
 - [ ] Domain with HTTPS serves the game (`/api/health` → `ok`).
 - [ ] `NODE_ENV=production`, `DEV_AUTH_ENABLED=false`, real `SESSION_SECRET`, `TELEGRAM_BOT_TOKEN` set.
 - [ ] BotFather Mini App URL points to the domain; the bot's «Open» button opens the menu.

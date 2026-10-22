@@ -9,6 +9,8 @@ import { RoomManager } from './rooms/RoomManager.js';
 import { attachGateway } from './rooms/gateway.js';
 import { SocialHub } from './social/hub.js';
 import { createPersistence } from './services/persistence.js';
+import { KeepAwake } from './services/keepAwake.js';
+import { setupBot } from './telegram/bot.js';
 
 const env = loadEnv();
 const log = createLogger(env.LOG_LEVEL, { service: 'blatkom-server', version: env.SERVER_VERSION });
@@ -22,7 +24,8 @@ const services = persistence.services;
 const rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env), fillBots: env.MATCH_FILL_BOTS });
 const social = new SocialHub(rooms, log);
 rooms.onPresence((userId) => void social.announce(userId));
-const handler = createApp({ env, sql, log, services, rooms, social });
+const keepAwake = new KeepAwake(env.PUBLIC_URL, { always: env.KEEP_AWAKE, log });
+const handler = createApp({ env, sql, log, services, rooms, social, keepAwake });
 const server = createServer((req, res) => {
   handler(req, res).catch((e: Error) => log.error('fatal request error', { err: e }));
 });
@@ -36,7 +39,12 @@ attachGateway(server, rooms, services, log, {
   trustProxy: env.TRUST_PROXY,
 }, social);
 rooms.start();
-server.listen(env.PORT, env.HOST, () => log.info('listening', { host: env.HOST, port: env.PORT, publicUrl: env.PUBLIC_URL, devAuth: env.DEV_AUTH_ENABLED }));
+server.listen(env.PORT, env.HOST, () => {
+  log.info('listening', { host: env.HOST, port: env.PORT, publicUrl: env.PUBLIC_URL, devAuth: env.DEV_AUTH_ENABLED });
+  keepAwake.start();
+  // the Telegram bot (TELEGRAM_BOT_TOKEN + an https PUBLIC_URL): webhook and settings, once per address
+  void setupBot(env, log).then((r) => r !== 'off' && log.info('telegram bot', { setup: r }));
+});
 
 let stopping = false;
 async function shutdown(signal: string) {
@@ -44,6 +52,7 @@ async function shutdown(signal: string) {
   stopping = true;
   log.info('shutting down', { signal });
   rooms.stop();
+  keepAwake.stop();
   server.close();
   await persistence.close?.();
   await sql.end({ timeout: 5 });

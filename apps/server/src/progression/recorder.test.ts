@@ -176,7 +176,7 @@ test('recorder: team match — the whole winning team wins, mode/teams are store
   const pb = await profile(b1!);
   assert.equal(pb.wins, 0);
   assert.equal(pb.losses, 1);
-  assert.equal(res.get(r2!)!.xpGained, XP_RULES.completion + XP_RULES.teamWin + ACHIEVEMENTS.first_match.xpReward + ACHIEVEMENTS.first_win.xpReward);
+  assert.equal(res.get(r2!)!.xpGained, XP_RULES.completion + XP_RULES.teamWin + ACHIEVEMENTS.first_match.xpReward + ACHIEVEMENTS.first_win.xpReward + ACHIEVEMENTS.team_win.xpReward);
   assert.equal(res.get(b2!)!.xpGained, XP_RULES.completion + ACHIEVEMENTS.first_match.xpReward);
   // talons: 5 per elimination + 5 for finishing
   assert.equal(res.get(r1!)!.tokensGained, 4 * 5 + 5);

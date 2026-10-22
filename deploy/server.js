@@ -7771,6 +7771,10 @@ var EnvSchema = external_exports.object({
   TELEGRAM_MINIAPP_SHORT_NAME: external_exports.string().optional(),
   /** Maximum age of Telegram initData (seconds). */
   TELEGRAM_AUTH_MAX_AGE_SEC: external_exports.coerce.number().int().min(60).max(7 * 86400).default(86400),
+  /** After the bot hands out a link, the server keeps itself awake this long (free hosts sleep; 0 = off). */
+  BOT_WARM_MINUTES: external_exports.coerce.number().int().min(0).max(240).default(20),
+  /** Ask the own public address every 5 minutes so a free host never puts the server to sleep. */
+  KEEP_AWAKE: bool.default("false"),
   DEV_AUTH_ENABLED: bool.default("false"),
   /** Public website without Telegram: players sign in as guests with a nickname (device-bound). */
   GUEST_AUTH_ENABLED: bool.default("false"),
@@ -7784,7 +7788,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.0"),
+  SERVER_VERSION: external_exports.string().default("0.2.5"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -7816,6 +7820,7 @@ var EnvSchema = external_exports.object({
   MAIL_FROM: external_exports.string().optional()
 });
 function loadEnv(source = process.env) {
+  source = Object.fromEntries(Object.entries(source).filter(([, v]) => v !== void 0 && v.trim() !== ""));
   const publicUrlSet = !!source.PUBLIC_URL || !!source.RENDER_EXTERNAL_URL;
   if (!source.PUBLIC_URL && source.RENDER_EXTERNAL_URL) source = { ...source, PUBLIC_URL: source.RENDER_EXTERNAL_URL };
   const parsed = EnvSchema.safeParse(source);
@@ -11271,10 +11276,26 @@ var ACHIEVEMENT_IDS = [
   "ten_matches",
   "win_streak",
   "multi_kill",
-  "played_with_friends"
+  "played_with_friends",
+  // v0.3: fourteen more — long-term goals, match feats, team and objective play, levels
+  "matches_50",
+  "matches_100",
+  "wins_10",
+  "wins_50",
+  "streak_5",
+  "kills_10",
+  "flawless",
+  "comeback",
+  "assists_5",
+  "team_win",
+  "objective",
+  "objectives_3",
+  "level_10",
+  "level_25"
 ];
 var WIN_STREAK_TARGET = 3;
 var MULTI_KILL_TARGET = 5;
+var ACHIEVEMENT_TARGETS = Object.freeze({ matches: [50, 100], wins: [10, 50], longStreak: 5, bigKill: 10, assists: 5, comebackDeaths: 5, objectives: 3, levels: [10, 25] });
 var ACHIEVEMENTS = {
   first_match: { id: "first_match", title: "First Job", description: "Finish your first match.", xpReward: 25 },
   first_win: { id: "first_win", title: "Avtoritet", description: "Win a match.", xpReward: 50 },
@@ -11296,8 +11317,26 @@ var ACHIEVEMENTS = {
     title: "Our Crowd",
     description: "Play a match with friends you invited.",
     xpReward: 25
-  }
+  },
+  matches_50: { id: "matches_50", title: "Regular", description: `Finish ${ACHIEVEMENT_TARGETS.matches[0]} matches.`, xpReward: 150 },
+  matches_100: { id: "matches_100", title: "Old Hand", description: `Finish ${ACHIEVEMENT_TARGETS.matches[1]} matches.`, xpReward: 250 },
+  wins_10: { id: "wins_10", title: "Respected", description: `Win ${ACHIEVEMENT_TARGETS.wins[0]} matches.`, xpReward: 150 },
+  wins_50: { id: "wins_50", title: "District Legend", description: `Win ${ACHIEVEMENT_TARGETS.wins[1]} matches.`, xpReward: 300 },
+  streak_5: { id: "streak_5", title: "Unstoppable", description: `Win ${ACHIEVEMENT_TARGETS.longStreak} matches in a row.`, xpReward: 200 },
+  kills_10: { id: "kills_10", title: "No Limits", description: `${ACHIEVEMENT_TARGETS.bigKill} eliminations in one match.`, xpReward: 100 },
+  flawless: { id: "flawless", title: "Untouchable", description: "Win a match without being eliminated once.", xpReward: 100 },
+  comeback: { id: "comeback", title: "Second Wind", description: `Win a match after being eliminated ${ACHIEVEMENT_TARGETS.comebackDeaths} times.`, xpReward: 100 },
+  assists_5: { id: "assists_5", title: "Helping Hand", description: `${ACHIEVEMENT_TARGETS.assists} assists in one match.`, xpReward: 50 },
+  team_win: { id: "team_win", title: "All for One", description: "Win a team match.", xpReward: 50 },
+  objective: { id: "objective", title: "Job Done", description: "Capture a flag or a base.", xpReward: 50 },
+  objectives_3: { id: "objectives_3", title: "Raider", description: `Capture ${ACHIEVEMENT_TARGETS.objectives} flags or bases in one match.`, xpReward: 100 },
+  level_10: { id: "level_10", title: "Big Name", description: `Reach level ${ACHIEVEMENT_TARGETS.levels[0]}.`, xpReward: 100 },
+  level_25: { id: "level_25", title: "Boss of the District", description: `Reach level ${ACHIEVEMENT_TARGETS.levels[1]}.`, xpReward: 250 }
 };
+var LEVEL_ACHIEVEMENTS = [
+  ["level_10", ACHIEVEMENT_TARGETS.levels[0]],
+  ["level_25", ACHIEVEMENT_TARGETS.levels[1]]
+];
 function evaluateAchievements(after, match, owned) {
   const out = [];
   const add = (id, cond) => {
@@ -11309,6 +11348,21 @@ function evaluateAchievements(after, match, owned) {
   add("win_streak", after.currentWinStreak >= WIN_STREAK_TARGET);
   add("multi_kill", match.kills >= MULTI_KILL_TARGET);
   add("played_with_friends", match.completed && match.withFriends);
+  const T = ACHIEVEMENT_TARGETS;
+  const won = isWin(match);
+  add("matches_50", after.matchesCompleted >= T.matches[0]);
+  add("matches_100", after.matchesCompleted >= T.matches[1]);
+  add("wins_10", after.wins >= T.wins[0]);
+  add("wins_50", after.wins >= T.wins[1]);
+  add("streak_5", after.currentWinStreak >= T.longStreak);
+  add("kills_10", match.kills >= T.bigKill);
+  add("flawless", won && match.deaths === 0);
+  add("comeback", won && match.deaths >= T.comebackDeaths);
+  add("assists_5", (match.assists ?? 0) >= T.assists);
+  add("team_win", won && !!match.teamOutcome);
+  add("objective", match.completed && (match.objectives ?? 0) >= 1);
+  add("objectives_3", match.completed && (match.objectives ?? 0) >= T.objectives);
+  if (after.level !== void 0) for (const [id, lvl] of LEVEL_ACHIEVEMENTS) add(id, after.level >= lvl);
   return out;
 }
 function applyMatchProgress(prev, perf, owned) {
@@ -11316,8 +11370,13 @@ function applyMatchProgress(prev, perf, owned) {
   const lost = perf.completed && !won && perf.playersAtEnd >= 2;
   const streak = won ? prev.currentWinStreak + 1 : perf.completed && perf.playersAtEnd < 2 ? prev.currentWinStreak : 0;
   const after = { matchesCompleted: prev.matchesCompleted + (perf.completed ? 1 : 0), wins: prev.wins + (won ? 1 : 0), currentWinStreak: streak };
+  const reward = (ids) => ids.reduce((sum, a) => sum + ACHIEVEMENTS[a].xpReward, 0);
   const unlocked = evaluateAchievements(after, perf, owned);
-  const xpGained = xpForMatch(perf) + unlocked.reduce((sum, a) => sum + ACHIEVEMENTS[a].xpReward, 0);
+  let xpGained = xpForMatch(perf) + reward(unlocked);
+  const reached = levelForXp(prev.xp + xpGained).level;
+  const byLevel = evaluateAchievements({ ...after, level: reached }, perf, /* @__PURE__ */ new Set([...owned, ...unlocked]));
+  unlocked.push(...byLevel);
+  xpGained += reward(byLevel);
   const totalXp = prev.xp + xpGained;
   const level = levelForXp(totalXp).level;
   return { won, lost, streak, unlocked, xpGained, totalXp, level, leveledUp: level > prev.level };
@@ -16068,7 +16127,7 @@ function rateLimit(limiter, key = (ctx) => ctx.ip) {
 // apps/server/src/api/rooms.ts
 function inviteUrls(env2, code) {
   const web = `${env2.PUBLIC_URL.replace(/\/$/, "")}/?invite=${encodeURIComponent(code)}`;
-  const tg = env2.TELEGRAM_BOT_USERNAME ? env2.TELEGRAM_MINIAPP_SHORT_NAME ? `https://t.me/${env2.TELEGRAM_BOT_USERNAME}/${env2.TELEGRAM_MINIAPP_SHORT_NAME}?startapp=${encodeURIComponent(code)}` : `https://t.me/${env2.TELEGRAM_BOT_USERNAME}?startapp=${encodeURIComponent(code)}` : null;
+  const tg = env2.TELEGRAM_BOT_USERNAME ? env2.TELEGRAM_MINIAPP_SHORT_NAME ? `https://t.me/${env2.TELEGRAM_BOT_USERNAME}/${env2.TELEGRAM_MINIAPP_SHORT_NAME}?startapp=${encodeURIComponent(code)}` : `https://t.me/${env2.TELEGRAM_BOT_USERNAME}?start=${encodeURIComponent(code)}` : null;
   return { web, tg };
 }
 var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms2 }) => {
@@ -17504,9 +17563,9 @@ import { createHmac as createHmac4, timingSafeEqual as timingSafeEqual4 } from "
 var ProviderError = class extends Error {
 };
 var StripeProvider = class {
-  constructor(secretKey, webhookSecret, fetchImpl = fetch) {
+  constructor(secretKey, webhookSecret2, fetchImpl = fetch) {
     this.secretKey = secretKey;
-    this.webhookSecret = webhookSecret;
+    this.webhookSecret = webhookSecret2;
     this.fetchImpl = fetchImpl;
   }
   secretKey;
@@ -19227,8 +19286,164 @@ var registerSocialRoutes = (router, deps) => {
   });
 };
 
+// apps/server/src/telegram/bot.ts
+import { createHmac as createHmac6, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
+var BOT_SETTINGS_VERSION = 1;
+var RU_CODES = /* @__PURE__ */ new Set(["ru", "be", "kk", "ky"]);
+var langOf = (code) => code && RU_CODES.has(code.toLowerCase().split("-")[0]) ? "ru" : "en";
+var CODE = /^[A-Za-z0-9_-]{4,32}$/;
+var TEXT = {
+  ru: {
+    hello: "<b>\u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989</b> \u043D\u0430 \u0441\u0432\u044F\u0437\u0438 \u2014 \u0441\u0435\u0440\u0432\u0435\u0440 \u043F\u0440\u043E\u0433\u0440\u0435\u0442, \u0437\u0430\u0445\u043E\u0434\u0438.\n\u0420\u0430\u0439\u043E\u043D\u043D\u044B\u0435 \u0434\u0435\u043B\u0430 \u2014 \u0441\u0435\u0440\u044C\u0451\u0437\u043D\u044B\u0435 \u0434\u0435\u043B\u0430.",
+    invite: (code) => `<b>\u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989</b>: \u0442\u0435\u0431\u044F \u0437\u043E\u0432\u0443\u0442 \u0432 \u043A\u043E\u043C\u043D\u0430\u0442\u0443 <code>${code}</code>.
+\u0421\u0435\u0440\u0432\u0435\u0440 \u043F\u0440\u043E\u0433\u0440\u0435\u0442 \u2014 \u0437\u0430\u0445\u043E\u0434\u0438.`,
+    play: "\u{1F3AE} \u0418\u0433\u0440\u0430\u0442\u044C \u0432 Telegram",
+    join: "\u{1F3AE} \u0412\u043E\u0439\u0442\u0438 \u0432 \u043A\u043E\u043C\u043D\u0430\u0442\u0443",
+    browser: "\u{1F310} \u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0432 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0435",
+    groups: "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0438\u0433\u0440\u0443",
+    commands: [
+      { command: "start", description: "\u0421\u0441\u044B\u043B\u043A\u0430 \u043D\u0430 \u0438\u0433\u0440\u0443" },
+      { command: "play", description: "\u0418\u0433\u0440\u0430\u0442\u044C \u0432 \u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989" }
+    ],
+    short: "\u0420\u0430\u0439\u043E\u043D\u043D\u044B\u0435 \u0434\u0435\u043B\u0430 \u2014 \u0441\u0435\u0440\u044C\u0451\u0437\u043D\u044B\u0435 \u0434\u0435\u043B\u0430. \u0411\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u044B\u0439 \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u0448\u0443\u0442\u0435\u0440 \u0441 \u0432\u0438\u0434\u043E\u043C \u0441\u0432\u0435\u0440\u0445\u0443.",
+    description: "\u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989 \u2014 \u0431\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u044B\u0439 \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u0448\u0443\u0442\u0435\u0440 \u0441 \u0432\u0438\u0434\u043E\u043C \u0441\u0432\u0435\u0440\u0445\u0443 \u043F\u0440\u043E \u0440\u0430\u0439\u043E\u043D\u043D\u044B\u0435 \u0440\u0430\u0437\u0431\u043E\u0440\u043A\u0438 1989 \u0433\u043E\u0434\u0430. \u0416\u043C\u0438 \xAB\u0421\u0442\u0430\u0440\u0442\xBB \u2014 \u0431\u043E\u0442 \u0440\u0430\u0437\u0431\u0443\u0434\u0438\u0442 \u0441\u0435\u0440\u0432\u0435\u0440 \u0438 \u043F\u0440\u0438\u0448\u043B\u0451\u0442 \u0441\u0441\u044B\u043B\u043A\u0443 \u043D\u0430 \u0438\u0433\u0440\u0443. \u041D\u0438\u0447\u0435\u0433\u043E \u0443\u0441\u0442\u0430\u043D\u0430\u0432\u043B\u0438\u0432\u0430\u0442\u044C \u043D\u0435 \u043D\u0443\u0436\u043D\u043E."
+  },
+  en: {
+    hello: "<b>BLATKOM \u201989</b> is on the line \u2014 the server is warmed up, come on in.\nDistrict business is serious business.",
+    invite: (code) => `<b>BLATKOM \u201989</b>: you\u2019re invited to room <code>${code}</code>.
+The server is warmed up \u2014 come on in.`,
+    play: "\u{1F3AE} Play in Telegram",
+    join: "\u{1F3AE} Join the room",
+    browser: "\u{1F310} Open in the browser",
+    groups: "Open the game",
+    commands: [
+      { command: "start", description: "Get the game link" },
+      { command: "play", description: "Play BLATKOM \u201989" }
+    ],
+    short: "District business is serious business. A free online top-down shooter.",
+    description: "BLATKOM \u201989 is a free online top-down shooter about neighbourhood turf wars in 1989. Press Start: the bot wakes the server and sends you the game link. Nothing to install."
+  }
+};
+function webhookSecret(botToken) {
+  return createHmac6("sha256", botToken).update("blatkom89 telegram webhook").digest("base64url");
+}
+function webhookUrl(publicUrl) {
+  return `${publicUrl.replace(/\/$/, "")}/api/telegram/webhook?v=${BOT_SETTINGS_VERSION}`;
+}
+function botEnabled(env2) {
+  return !!env2.TELEGRAM_BOT_TOKEN && env2.PUBLIC_URL.startsWith("https://") && env2.NODE_ENV !== "test";
+}
+var Update = external_exports.object({
+  update_id: external_exports.number().int(),
+  message: external_exports.object({
+    text: external_exports.string().max(4096).optional(),
+    chat: external_exports.object({ id: external_exports.number().int(), type: external_exports.string() }).passthrough(),
+    from: external_exports.object({ id: external_exports.number().int(), is_bot: external_exports.boolean().optional(), language_code: external_exports.string().max(35).optional() }).passthrough().optional()
+  }).passthrough().optional()
+}).passthrough();
+function botAnswer(update, publicUrl, botUsername) {
+  const m = update.message;
+  if (!m || m.from?.is_bot) return null;
+  const text = (m.text ?? "").trim();
+  const cmd = /^\/(start|play)(?:@([A-Za-z0-9_]+))?(?:\s+(\S+))?/i.exec(text);
+  const isPrivate = m.chat.type === "private";
+  if (!isPrivate) {
+    if (!cmd || cmd[2] && botUsername && cmd[2].toLowerCase() !== botUsername.toLowerCase()) return null;
+  }
+  const lang = langOf(m.from?.language_code);
+  const T = TEXT[lang];
+  const code = cmd?.[3] && CODE.test(cmd[3]) ? cmd[3] : null;
+  const base2 = publicUrl.replace(/\/$/, "");
+  const url = code ? `${base2}/?invite=${encodeURIComponent(code)}` : `${base2}/`;
+  const keyboard = isPrivate ? [[{ text: code ? T.join : T.play, web_app: { url } }], [{ text: T.browser, url }]] : [[{ text: T.groups, url }]];
+  return {
+    method: "sendMessage",
+    chat_id: m.chat.id,
+    text: code ? T.invite(code) : T.hello,
+    parse_mode: "HTML",
+    link_preview_options: { is_disabled: true },
+    reply_markup: { inline_keyboard: keyboard }
+  };
+}
+var registerTelegramRoutes = (router, deps) => {
+  const { env: env2, log: log2 } = deps;
+  const token = env2.TELEGRAM_BOT_TOKEN;
+  const secret = token ? Buffer.from(webhookSecret(token)) : null;
+  const perChat = new RateLimiter(6, 6 / 60);
+  const seen = /* @__PURE__ */ new Set();
+  const remember = (id) => {
+    seen.add(id);
+    if (seen.size > 2e3) for (const old of [...seen].slice(0, 1e3)) seen.delete(old);
+  };
+  router.post("/api/telegram/webhook", async (ctx) => {
+    if (!secret) throw new HttpError(404, "not_found", "Not found");
+    const got = Buffer.from(String(ctx.req.headers["x-telegram-bot-api-secret-token"] ?? ""));
+    if (got.length !== secret.length || !timingSafeEqual5(got, secret)) throw new HttpError(401, "unauthorized", "Unauthorized");
+    let update;
+    try {
+      update = await ctx.body(Update, 256 * 1024);
+    } catch {
+      return ctx.json(200, {});
+    }
+    if (seen.has(update.update_id)) return ctx.json(200, {});
+    remember(update.update_id);
+    const answer = botAnswer(update, env2.PUBLIC_URL, env2.TELEGRAM_BOT_USERNAME);
+    if (!answer || !perChat.take(String(answer.chat_id))) return ctx.json(200, {});
+    log2.info("telegram bot answered", { chatType: update.message?.chat.type, invite: answer.text.includes("<code>") });
+    deps.keepAwake?.extend(env2.BOT_WARM_MINUTES * 6e4);
+    ctx.json(200, answer);
+  });
+};
+async function botApi(token, method, params, fetchImpl = fetch) {
+  const res = await fetchImpl(`https://api.telegram.org/bot${token}/${method}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(params),
+    signal: AbortSignal.timeout(1e4)
+  });
+  const data = await res.json().catch(() => null);
+  if (!data?.ok) throw new Error(`${method}: ${data?.description ?? `HTTP ${res.status}`}`);
+  return data.result;
+}
+async function setupBot(env2, log2, fetchImpl = fetch) {
+  if (!botEnabled(env2)) return "off";
+  const token = env2.TELEGRAM_BOT_TOKEN;
+  const url = webhookUrl(env2.PUBLIC_URL);
+  try {
+    const info = await botApi(token, "getWebhookInfo", {}, fetchImpl);
+    if (info.url === url) {
+      if (info.last_error_message) log2.warn("telegram webhook reports an error", { error: info.last_error_message });
+      return "unchanged";
+    }
+    await botApi(token, "setWebhook", { url, secret_token: webhookSecret(token), allowed_updates: ["message"], max_connections: 20 }, fetchImpl);
+    const app = `${env2.PUBLIC_URL.replace(/\/$/, "")}/`;
+    const cosmetic = [
+      ["setMyCommands", { commands: TEXT.en.commands }],
+      ["setMyCommands", { commands: TEXT.ru.commands, language_code: "ru" }],
+      ["setMyShortDescription", { short_description: TEXT.en.short }],
+      ["setMyShortDescription", { short_description: TEXT.ru.short, language_code: "ru" }],
+      ["setMyDescription", { description: TEXT.en.description }],
+      ["setMyDescription", { description: TEXT.ru.description, language_code: "ru" }],
+      // the button beside the message field opens the game; its label can't depend on the language
+      ["setChatMenuButton", { menu_button: { type: "web_app", text: "Play", web_app: { url: app } } }]
+    ];
+    for (const [method, params] of cosmetic) {
+      try {
+        await botApi(token, method, params, fetchImpl);
+      } catch (e) {
+        log2.warn("telegram bot setting not applied", { method, err: e });
+      }
+    }
+    log2.info("telegram webhook registered", { url: url.replace(/\?.*$/, "") });
+    return "registered";
+  } catch (e) {
+    log2.warn("telegram webhook not registered", { err: e });
+    return "failed";
+  }
+}
+
 // apps/server/src/app.ts
-var ROUTE_MODULES = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerAdminRoutes];
+var ROUTE_MODULES = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerTelegramRoutes, registerAdminRoutes];
 function createApp(deps, modules = ROUTE_MODULES) {
   const router = new Router();
   const startedAt = Date.now();
@@ -20419,6 +20634,60 @@ function attachGateway(server2, rooms2, services2, log2, opts, social2) {
   return wss;
 }
 
+// apps/server/src/services/keepAwake.ts
+var KeepAwake = class {
+  constructor(publicUrl, opts) {
+    this.publicUrl = publicUrl;
+    this.opts = opts;
+  }
+  publicUrl;
+  opts;
+  until = 0;
+  timer = null;
+  /** Only an https address on the internet is worth asking (a local or http address never sleeps). */
+  get usable() {
+    return /^https:\/\//.test(this.publicUrl) && !/^https:\/\/(localhost|127\.|\[::1\])/.test(this.publicUrl);
+  }
+  start() {
+    if (this.opts.always && this.usable) this.run();
+  }
+  /** Stays awake at least `ms` from now. */
+  extend(ms) {
+    if (ms <= 0 || !this.usable) return;
+    this.until = Math.max(this.until, this.now() + ms);
+    this.run();
+  }
+  get active() {
+    return this.timer !== null;
+  }
+  stop() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+  /** One round: asks for the health check unless the time is up; exposed for the tests. */
+  async tick() {
+    if (!this.opts.always && this.now() > this.until) {
+      this.stop();
+      return false;
+    }
+    const f = this.opts.fetchImpl ?? fetch;
+    try {
+      await f(`${this.publicUrl.replace(/\/$/, "")}/api/health`, { signal: AbortSignal.timeout(15e3), headers: { "user-agent": "blatkom89-keep-awake" } });
+    } catch (e) {
+      this.opts.log.debug("keep-awake request failed", { err: e });
+    }
+    return true;
+  }
+  now() {
+    return this.opts.now ? this.opts.now() : Date.now();
+  }
+  run() {
+    if (this.timer) return;
+    this.timer = setInterval(() => void this.tick(), this.opts.everyMs ?? 5 * 6e4);
+    this.timer.unref?.();
+  }
+};
+
 // apps/server/src/index.ts
 var env = loadEnv();
 var log = createLogger(env.LOG_LEVEL, { service: "blatkom-server", version: env.SERVER_VERSION });
@@ -20430,7 +20699,8 @@ var services = persistence.services;
 var rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env), fillBots: env.MATCH_FILL_BOTS });
 var social = new SocialHub(rooms, log);
 rooms.onPresence((userId) => void social.announce(userId));
-var handler = createApp({ env, sql, log, services, rooms, social });
+var keepAwake = new KeepAwake(env.PUBLIC_URL, { always: env.KEEP_AWAKE, log });
+var handler = createApp({ env, sql, log, services, rooms, social, keepAwake });
 var server = createServer((req, res) => {
   handler(req, res).catch((e) => log.error("fatal request error", { err: e }));
 });
@@ -20444,13 +20714,18 @@ attachGateway(server, rooms, services, log, {
   trustProxy: env.TRUST_PROXY
 }, social);
 rooms.start();
-server.listen(env.PORT, env.HOST, () => log.info("listening", { host: env.HOST, port: env.PORT, publicUrl: env.PUBLIC_URL, devAuth: env.DEV_AUTH_ENABLED }));
+server.listen(env.PORT, env.HOST, () => {
+  log.info("listening", { host: env.HOST, port: env.PORT, publicUrl: env.PUBLIC_URL, devAuth: env.DEV_AUTH_ENABLED });
+  keepAwake.start();
+  void setupBot(env, log).then((r) => r !== "off" && log.info("telegram bot", { setup: r }));
+});
 var stopping = false;
 async function shutdown(signal) {
   if (stopping) return;
   stopping = true;
   log.info("shutting down", { signal });
   rooms.stop();
+  keepAwake.stop();
   server.close();
   await persistence.close?.();
   await sql.end({ timeout: 5 });

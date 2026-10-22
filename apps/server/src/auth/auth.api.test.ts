@@ -1,5 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { ACHIEVEMENT_IDS } from '@blatkom/shared';
 import { startTestApp, api, devLogin, TEST_BOT_TOKEN } from '../admin/testkit.js';
 import type { TestApp } from '../admin/testkit.js';
 import { signInitData } from './telegram.js';
@@ -133,7 +134,7 @@ test('auth: dev login keyed by deviceId; profile update validation', async () =>
   const ach = await api(app.base, '/api/me/achievements', { token: b.token });
   assert.equal(ach.status, 200);
   // Response shapes match the web client (apps/web/src/net/api.ts): { achievements } and { matches }.
-  assert.equal(ach.body.achievements.length, 6);
+  assert.equal(ach.body.achievements.length, ACHIEVEMENT_IDS.length);
   assert.ok(ach.body.achievements.every((x: { unlockedAt: string | null }) => x.unlockedAt === null));
   assert.deepEqual((await api(app.base, '/api/me/history', { token: b.token })).body, { matches: [] });
 });

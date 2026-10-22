@@ -21,6 +21,9 @@ nickname and play as guests (`GUEST_AUTH_ENABLED=true`); Telegram is not needed.
 4. Optional, any time later in the service's *Environment* tab: payment keys (Stripe / NOWPayments)
    and mail keys (Resend) — see the table in §2 and [ECONOMY.md](ECONOMY.md). Empty values keep the
    feature off; nothing is simulated.
+5. Optional (v0.3): the Telegram bot — `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` in the same tab;
+   `/start` then answers with the game's link ([TELEGRAM.md](TELEGRAM.md) §0). `KEEP_AWAKE=true` keeps
+   the free service from sleeping (instant answers, no first-visit minute).
 
 Free-tier limits (Render, 2026): the service sleeps after 15 minutes without traffic and the first
 visit then takes about a minute (the client pings `/api/health` every 4 minutes while in a room);
@@ -52,7 +55,9 @@ Copy `.env.example` to `.env` and set at least:
 | `DOMAIN` | e.g. `blatkom.example.com` (compose builds `PUBLIC_URL=https://$DOMAIN`) |
 | `POSTGRES_PASSWORD` | random, long; used by the `db` service and the app's `DATABASE_URL` |
 | `SESSION_SECRET` | ≥ 32 random chars: `openssl rand -base64 48` (rotating it logs everyone out) |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_MINIAPP_SHORT_NAME` | from BotFather |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_MINIAPP_SHORT_NAME` | from BotFather; with a token and an `https` `PUBLIC_URL` the server registers the bot's webhook itself (TELEGRAM.md §0) |
+| `BOT_WARM_MINUTES` | after the bot hands out a link the server keeps itself awake this long (default 20, `0` = off) |
+| `KEEP_AWAKE` | `true`: the server asks its own address every 5 minutes, so a free host (Render) never puts it to sleep |
 | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD` | optional first admin, created on start only when no admin exists — remove after first start (or use the CLI below) |
 | `MATCH_DURATION_SEC`, `MATCH_SCORE_LIMIT`, `MATCH_MIN_PLAYERS`, `MATCH_MAX_PLAYERS` | match rules (defaults 240 s, 50 points, 2, 10; at most 10 players per room) |
 | `MATCH_TEAM_SCORE_LIMIT`, `MATCH_CAPTURE_LIMIT`, `MATCH_BASE_SCORE_LIMIT` | team modes: eliminations in «red vs blue» (40), flags in capture the flag (3), points in base capture (250) |

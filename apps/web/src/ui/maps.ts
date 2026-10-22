@@ -12,7 +12,9 @@ import { t } from '../i18n/index.js';
 import { openSheet } from './sheet.js';
 
 export function mapThumb(id: MapId): HTMLImageElement {
-  return h('img', { class: 'maptile__img', src: asset(`assets/maps/${id}.jpg`), alt: '', draggable: 'false', width: 320, height: 220, loading: 'lazy' });
+  // no lazy loading: iOS Safari never loads lazy pictures inside a sheet (a fixed overlay) — the
+  // ten small JPEGs are cheap to load at once
+  return h('img', { class: 'maptile__img', src: asset(`assets/maps/${id}.jpg`), alt: '', draggable: 'false', width: 320, height: 220 });
 }
 
 /**
@@ -76,7 +78,6 @@ export function mapField(o: { selected: MapId; onPick?: (m: MapId) => void; show
   const draw = () => {
     if (o.variant !== 'line') grid.replaceChildren(mapPicker({ selected, ...(pick ? { onPick: pick } : {}), ...(o.showBlurb === false ? { showBlurb: false } : {}) }));
     const thumb = mapThumb(selected);
-    thumb.loading = 'eager';
     line.replaceChildren(h('span', { class: 'mapfield__pic' }, thumb), h('span', { class: 'mapfield__txt' }, h('b', null, mapName(selected)), h('small', { class: 'muted' }, mapBlurb(selected))));
     const btn = pick
         ? h(

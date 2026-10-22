@@ -6,12 +6,18 @@ import { HttpError } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
 import { RateLimiter, rateLimit } from '../security/rateLimit.js';
 
+/**
+ * Invitation links. In Telegram: straight into the game with a direct-link app (`/newapp`, short name in
+ * TELEGRAM_MINIAPP_SHORT_NAME); otherwise through the bot — `?start=<code>` opens the chat, «Start» sends
+ * `/start <code>` and the bot answers with a «join the room» button (telegram/bot.ts), which needs no
+ * Mini App set up in BotFather.
+ */
 export function inviteUrls(env: { PUBLIC_URL: string; TELEGRAM_BOT_USERNAME?: string; TELEGRAM_MINIAPP_SHORT_NAME?: string }, code: string) {
   const web = `${env.PUBLIC_URL.replace(/\/$/, '')}/?invite=${encodeURIComponent(code)}`;
   const tg = env.TELEGRAM_BOT_USERNAME
     ? env.TELEGRAM_MINIAPP_SHORT_NAME
       ? `https://t.me/${env.TELEGRAM_BOT_USERNAME}/${env.TELEGRAM_MINIAPP_SHORT_NAME}?startapp=${encodeURIComponent(code)}`
-      : `https://t.me/${env.TELEGRAM_BOT_USERNAME}?startapp=${encodeURIComponent(code)}`
+      : `https://t.me/${env.TELEGRAM_BOT_USERNAME}?start=${encodeURIComponent(code)}`
     : null;
   return { web, tg };
 }

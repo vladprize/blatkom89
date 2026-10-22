@@ -553,7 +553,21 @@ export const RU_ACHIEVEMENTS: Record<AchievementId, { title: string; description
   played_with_friends: {
     title: 'Свои люди',
     description: 'Сыграть матч с друзьями по приглашению.'
-  }
+  },
+  matches_50: { title: 'Завсегдатай', description: 'Доиграть 50 матчей.' },
+  matches_100: { title: 'Старожил', description: 'Доиграть 100 матчей.' },
+  wins_10: { title: 'Уважаемый человек', description: 'Победить в 10 матчах.' },
+  wins_50: { title: 'Легенда района', description: 'Победить в 50 матчах.' },
+  streak_5: { title: 'Не остановить', description: 'Победить 5 матчей подряд.' },
+  kills_10: { title: 'Беспредел', description: '10 устранений за один матч.' },
+  flawless: { title: 'Неприкасаемый', description: 'Победить в матче, ни разу не погибнув.' },
+  comeback: { title: 'Второе дыхание', description: 'Победить в матче, погибнув 5 раз.' },
+  assists_5: { title: 'Подсобил', description: '5 помощей в устранениях за один матч.' },
+  team_win: { title: 'Один за всех', description: 'Победить в командном матче.' },
+  objective: { title: 'Дело сделано', description: 'Захватить флаг или базу.' },
+  objectives_3: { title: 'Налётчик', description: 'Захватить 3 флага или базы за один матч.' },
+  level_10: { title: 'Человек с положением', description: 'Дойти до 10-го уровня.' },
+  level_25: { title: 'Хозяин района', description: 'Дойти до 25-го уровня.' }
 };
 
 /** Weapon skins' finishes (v0.23). */

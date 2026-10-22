@@ -26,6 +26,9 @@
 }
 
 * { box-sizing: border-box; }
+/* Safari's own stylesheet gives every button «align-items: flex-start», so a button laid out as a flex
+   column (map tiles, cards) shrink-wraps and left-aligns its parts there; make it behave like Chrome */
+button { align-items: normal; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--beige); overflow: hidden; overscroll-behavior: none; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16px; }
 #game { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #0b0908; }
@@ -216,7 +219,10 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .stat span { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .xpbar { height: 12px; background: #241e19; border: 1px solid var(--line); }
 .xpbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--red), #e8603a); }
-.ach { display: flex; gap: 10px; align-items: center; background: var(--panel-2); border: 1px solid var(--line); padding: 10px; }
+/* achievements (v0.3: twenty): a grid of compact cards with the experience they give */
+.achs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 8px; }
+.ach { display: flex; gap: 10px; align-items: center; background: var(--panel-2); border: 1px solid var(--line); padding: 10px; min-width: 0; }
+.ach__xp { margin-left: auto; flex: none; font-family: Oswald, sans-serif; font-size: 12px; letter-spacing: .04em; color: var(--gold); white-space: nowrap; }
 .ach .ico { width: 38px; height: 38px; display: grid; place-items: center; font-family: Oswald, sans-serif; font-size: 20px; background: #241e19; border: 1px solid var(--line); }
 .ach.locked { opacity: .45; filter: grayscale(1); }
 .ach .t { font-family: Oswald, sans-serif; font-size: 17px; }
@@ -359,7 +365,7 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 /* map picker: square tiles — the map picture centred above a caption band that is the same on every
    tile; ui/fit.ts gives all captions one font size that fits the longest name */
 .maps { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; margin-top: 8px; }
-.maptile { position: relative; aspect-ratio: 1 / 1; padding: 0; overflow: hidden; display: flex; flex-direction: column; background: #0d0b0a; border: 2px solid var(--line); cursor: pointer; color: var(--beige); font: inherit; box-shadow: 0 3px 0 rgba(0,0,0,.4); transition: transform .06s, border-color .15s; }
+.maptile { position: relative; aspect-ratio: 1 / 1; padding: 0; overflow: hidden; display: flex; flex-direction: column; align-items: stretch; background: #0d0b0a; border: 2px solid var(--line); cursor: pointer; color: var(--beige); font: inherit; box-shadow: 0 3px 0 rgba(0,0,0,.4); transition: transform .06s, border-color .15s; }
 .maptile:hover:not([disabled]) { border-color: var(--tape); }
 .maptile:active:not([disabled]) { transform: translateY(2px); }
 .maptile[aria-pressed='true'] { border-color: var(--red); box-shadow: 0 0 0 2px rgba(200,49,42,.4), 0 3px 0 rgba(0,0,0,.4); }
@@ -583,6 +589,9 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 @media (max-width: 560px) {
   .screen { padding: calc(10px + var(--safe-top)) calc(10px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(10px + var(--safe-left)); }
   .wrap { gap: 10px; }
+  /* screens with room to spare: the top bar stays on top, the rest sits in the middle of what's left */
+  .wrap--vcenter > .topbar + * { margin-top: auto; }
+  .wrap--vcenter > :last-child { margin-bottom: auto; }
   .panel { padding: 12px 10px 10px; }
   .topbar .h1 { font-size: 26px; }
   .back { min-height: 36px; padding: 6px 10px; font-size: 14px; white-space: nowrap; flex: none; }
@@ -595,12 +604,15 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .corner .seg--tiny button { min-height: 32px; padding: 5px 8px; font-size: 13px; }
   .corner .iconbtn { width: 34px; height: 32px; }
   .corner__gear { display: grid; }
-  .wrap--menu .logo { width: min(74%, 300px); margin: -4px auto 14px; transform: translateX(7.5%); }
+  .wrap--menu .logo { width: min(74%, 300px); margin: 0 auto; transform: translateX(7.5%); }
   /* the star and the word sit left of the picture's middle (the ’89 hangs out right): shift the
      picture so the word is centred on the screen */
   .wrap--menu .logo[src*='logo_ru'] { transform: translateX(7.15%); }
-  /* the logo and the panels in the middle of the screen, the switches stay on top */
-  .wrap--menu > .menu-center { margin-top: auto; margin-bottom: auto; }
+  /* v0.3: the panels sit low and the logo in the middle of the room above them — the free height is
+     split 1 : 1 : ½ (over the logo, between the logo and the panels, under the panels) */
+  .wrap--menu > .menu-center { flex: 1 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(6px, 1fr) auto minmax(26px, 1fr) auto minmax(0, .5fr); gap: 0; margin: 0; }
+  .wrap--menu > .menu-center > .logo { grid-row: 2; }
+  .wrap--menu > .menu-center > .menu { grid-row: 4; margin-top: 0; }
   .wrap--menu > .footer { margin-top: 0; }
   .menu { gap: 10px; margin-top: 2px; }
   .menu__play { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 18px 10px 10px; }
@@ -692,6 +704,8 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .mapfield__txt b { font-family: Oswald, sans-serif; font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .mapfield__txt small { font-size: 12px; line-height: 1.15; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .mapfield__btn { flex: none; }
+  /* the map sheet: always three across (two on a 360 px phone made five tall rows and a scroll) */
+  .sheet .maps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .lobby__actions { gap: 6px; flex-wrap: nowrap; }
   .lobby__actions .btn { flex: 1 1 0; min-width: 0; min-height: 46px; padding: 8px 6px; font-size: 14px; letter-spacing: .03em; line-height: 1.1; white-space: normal; text-align: center; }
   .lobby__note { font-size: 13px; margin-top: -4px; }
@@ -719,6 +733,16 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .rchat.rchat--quick .rchat__qbtn { border-color: var(--tape); background: #3a3128; }
   .panel--insheet { border: 0; box-shadow: none; padding: 0; background: none; }
   .panel--insheet::before, .panel--insheet > .tag { display: none; }
+
+  /* the profile's achievements: two columns of small cards — the star and the title on top, the
+     condition under them across the whole card, the experience at the foot */
+  .achs { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+  .ach { display: grid; grid-template-columns: 26px minmax(0, 1fr); grid-template-rows: auto auto 1fr; grid-template-areas: 'ico t' 'd d' 'xp xp'; gap: 5px 8px; padding: 8px; align-items: center; }
+  .ach .ico { grid-area: ico; width: 26px; height: 26px; font-size: 14px; }
+  .ach .col { display: contents; }
+  .ach .t { grid-area: t; font-size: 15px; line-height: 1.05; }
+  .ach .col > .muted { grid-area: d; font-size: 12.5px; line-height: 1.25; align-self: start; }
+  .ach__xp { grid-area: xp; margin: 0; font-size: 11px; align-self: end; justify-self: start; }
 
   /* the avatar picker: 24 portraits in 5 columns, the whole window on one screen */
   .avamodal { gap: 8px; padding: 16px 10px 10px; margin-top: 0; }
@@ -764,7 +788,7 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 }
 /* shorter phones (≤ 700 px tall): a little tighter everywhere */
 @media (max-width: 560px) and (max-height: 700px) {
-  .wrap--menu .logo { margin-bottom: 10px; }
+  .wrap--menu > .menu-center { grid-template-rows: minmax(4px, 1fr) auto minmax(16px, 1fr) auto minmax(0, .5fr); }
   .charsel { gap: 7px; }
   .chars button { font-size: 9.5px; }
   .charsum { grid-template-columns: 78px minmax(0, 1fr); padding-top: 13px; }

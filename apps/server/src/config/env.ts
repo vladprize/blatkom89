@@ -20,6 +20,10 @@ const EnvSchema = z.object({
   TELEGRAM_MINIAPP_SHORT_NAME: z.string().optional(),
   /** Maximum age of Telegram initData (seconds). */
   TELEGRAM_AUTH_MAX_AGE_SEC: z.coerce.number().int().min(60).max(7 * 86400).default(86400),
+  /** After the bot hands out a link, the server keeps itself awake this long (free hosts sleep; 0 = off). */
+  BOT_WARM_MINUTES: z.coerce.number().int().min(0).max(240).default(20),
+  /** Ask the own public address every 5 minutes so a free host never puts the server to sleep. */
+  KEEP_AWAKE: bool.default('false'),
   DEV_AUTH_ENABLED: bool.default('false'),
   /** Public website without Telegram: players sign in as guests with a nickname (device-bound). */
   GUEST_AUTH_ENABLED: bool.default('false'),
@@ -68,6 +72,9 @@ const EnvSchema = z.object({
 export type Env = z.infer<typeof EnvSchema>;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  // a variable added in a dashboard but left empty counts as not set (a blank KEEP_AWAKE is «false»,
+  // not an error that stops the server)
+  source = Object.fromEntries(Object.entries(source).filter(([, v]) => v !== undefined && v.trim() !== ''));
   // Render (and similar hosts) publish the service URL as RENDER_EXTERNAL_URL
   const publicUrlSet = !!source.PUBLIC_URL || !!source.RENDER_EXTERNAL_URL;
   if (!source.PUBLIC_URL && source.RENDER_EXTERNAL_URL) source = { ...source, PUBLIC_URL: source.RENDER_EXTERNAL_URL };

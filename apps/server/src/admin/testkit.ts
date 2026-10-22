@@ -62,6 +62,8 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     TELEGRAM_BOT_USERNAME: 'blatkom_test_bot',
     TELEGRAM_MINIAPP_SHORT_NAME: 'play',
     TELEGRAM_AUTH_MAX_AGE_SEC: 86400,
+    BOT_WARM_MINUTES: 20,
+    KEEP_AWAKE: false,
     DEV_AUTH_ENABLED: true,
     GUEST_AUTH_ENABLED: false,
     CORS_ORIGINS: '',

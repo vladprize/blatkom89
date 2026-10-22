@@ -72,7 +72,8 @@ test('every plural unit has Russian forms', () => {
 
 test('player-facing English messages of the server have Russian translations', () => {
   const messages = new Set<string>();
-  for (const file of tsFiles(serverSrc, (p) => /[\\/]admin([\\/]|$)/.test(relative(serverSrc, p)))) {
+  // the admin's and the Telegram webhook's refusals are read by the operator and by Telegram, not by players
+  for (const file of tsFiles(serverSrc, (p) => /^(admin|telegram)([\\/]|$)/.test(relative(serverSrc, p)))) {
     const text = readFileSync(file, 'utf8');
     for (const m of text.matchAll(/new HttpError\(\d+, '[a-z_]+', '((?:[^'\\]|\\.)+)'/g)) messages.add(m[1]!);
     for (const m of text.matchAll(/this\.error\(c, '[a-z_]+', '((?:[^'\\]|\\.)+)'/g)) messages.add(m[1]!);

@@ -1,6 +1,7 @@
 // Phones end-to-end (v0.24, the owner's mobile pass): on an emulated phone every screen fits without
-// scrolling — the menu, the character screen and its personal file, the avatar picker, the practice
-// screen, and the Arsenal: «Экипировка» (the dressing room and the four slots) and every shop tab
+// scrolling — the menu (v0.3: the panels low, the logo in the middle of the room above them), the
+// character screen and its personal file, the practice screen and its map sheet (v0.3: every picture
+// loaded, the captions the same on both sides), the profile's twenty achievements, and the Arsenal: «Экипировка» (the dressing room and the four slots) and every shop tab
 // (weapons, equipment, characters, cases) — with no diamonds, no «Top up» and no diamonds tab (the game
 // is free); the Arsenal's sheets (a slot's own items, an item's card) open and fit. Two sizes and both
 // languages: 393×680 in Russian, 360×640 in English.
@@ -79,6 +80,12 @@ for (const [w, hgt, lang] of [
   };
 
   await screen('the menu');
+  const gaps = await page.evaluate(() => {
+    const r = (q) => document.querySelector(q)?.getBoundingClientRect();
+    const corner = r('.corner'), logo = r('.logo'), menu = r('.menu'), foot = r('.wrap--menu > .footer');
+    return { above: Math.round(logo.top - corner.bottom), between: Math.round(menu.top - logo.bottom), below: Math.round(foot.top - menu.bottom) };
+  });
+  check(gaps.between >= 24 && gaps.below < gaps.above && gaps.below <= gaps.between, `${size}: the menu sits low, the logo clear of it (${JSON.stringify(gaps)})`);
   const wallet = await page.locator('.tile__wallet').innerText().catch(() => '');
   check(!/💎/.test(wallet) && (await page.locator('.tile__wallet .cur--diamonds').count()) === 0, `${size}: the menu's wallet shows talons only («${wallet.trim()}»)`);
 
@@ -128,6 +135,43 @@ for (const [w, hgt, lang] of [
   await page.getByTestId('dossier-open').click();
   await page.getByTestId('dossier-sheet').waitFor({ timeout: 5000 });
   await sheetFits('personal file');
+  await page.locator('.back').click();
+  await page.getByTestId('menu-nick').waitFor({ timeout: 10000 });
+
+  // practice and its map sheet: pictures loaded (eager — iOS Safari never loads lazy ones in a sheet),
+  // captions spanning the tile
+  await page.locator('.menu__play .btn', { hasText: ru ? 'Тренировка' : 'Practice' }).first().click();
+  await page.getByTestId('map-line').waitFor({ timeout: 10000 });
+  await page.waitForTimeout(400);
+  await screen('the practice');
+  await page.getByTestId('map-change').click();
+  await page.getByTestId('map-sheet').waitFor({ timeout: 5000 });
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-testid=map-sheet] .maptile img')].every((i) => i.complete), null, { timeout: 15000 }).catch(() => {});
+  const tiles = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid=map-sheet] .maptile')].map((t) => {
+      const img = t.querySelector('img');
+      const tr = t.getBoundingClientRect();
+      const cr = t.querySelector('.maptile__name').getBoundingClientRect();
+      return { lazy: img.loading === 'lazy', loaded: img.complete && img.naturalWidth > 0, l: Math.round(cr.left - tr.left), r: Math.round(tr.right - cr.right) };
+    }),
+  );
+  check(tiles.length >= 10 && tiles.every((x) => x.loaded && !x.lazy && x.l === x.r), `${size}: the map sheet shows ${tiles.filter((x) => x.loaded).length}/${tiles.length} pictures, captions symmetric (${[...new Set(tiles.map((x) => x.l + '/' + x.r))].join(' ')})`);
+  await sheetFits('maps');
+  await page.locator('.back').click();
+  await page.getByTestId('menu-nick').waitFor({ timeout: 10000 });
+
+  // the profile: twenty achievements in two readable columns
+  await page.getByTestId('menu-nick').click();
+  await page.locator('.ach').first().waitFor({ timeout: 15000 });
+  const achs = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('.ach')];
+    const xs = new Set(cards.map((c) => Math.round(c.getBoundingClientRect().left)));
+    const narrow = cards.filter((c) => c.querySelector('.col > .muted').getBoundingClientRect().width < c.getBoundingClientRect().width * 0.7).length;
+    return { n: cards.length, columns: xs.size, narrow };
+  });
+  check(achs.n === 20 && achs.columns === 2 && achs.narrow === 0, `${size}: the profile lists 20 achievements in 2 columns, conditions across the card (${JSON.stringify(achs)})`);
+  await page.locator('.achs').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${outDir}/phone_${w}x${hgt}_${lang}_achievements.png` });
   await page.locator('.back').click();
   await page.getByTestId('menu-nick').waitFor({ timeout: 10000 });
   check(errors.length === 0, `${size}: no page errors (${errors.join(' | ')})`);

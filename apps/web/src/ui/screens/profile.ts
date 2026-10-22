@@ -2,7 +2,7 @@
 import { h, fmtDuration } from '../dom.js';
 import { fitAlias, whenSized } from '../fit.js';
 import { avatarButton } from '../avatars.js';
-import { isCharacterId } from '@blatkom/shared';
+import { ACHIEVEMENTS, isCharacterId } from '@blatkom/shared';
 import type { AchievementStatus, MatchHistoryEntry, PublicProfile } from '@blatkom/shared';
 import type { OnlineClient } from '../../net/OnlineClient.js';
 import { t, num } from '../../i18n/index.js';
@@ -77,10 +77,20 @@ export function renderProfileView(d: ProfileData, o: { local: boolean; onRename:
       h('span', { class: 'tag' }, t('Achievements · {n}/{total}', { n: unlocked, total: d.achievements.length })),
       h('div', { style: 'height:4px' }),
       d.achievements.length === 0 ? h('div', { class: 'muted' }, t('No data')) : null,
-      ...d.achievements.map((a) => {
-        const text = achievementText(a.id);
-        return h('div', { class: `ach ${a.unlockedAt ? '' : 'locked'}` }, h('div', { class: 'ico' }, a.unlockedAt ? '★' : '☆'), h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 't' }, text.title), h('div', { class: 'muted' }, text.description)));
-      }),
+      h(
+        'div',
+        { class: 'achs' },
+        ...d.achievements.map((a) => {
+          const text = achievementText(a.id);
+          return h(
+            'div',
+            { class: `ach ${a.unlockedAt ? '' : 'locked'}`, 'data-ach': a.id },
+            h('div', { class: 'ico' }, a.unlockedAt ? '★' : '☆'),
+            h('div', { class: 'col', style: 'gap:2px;min-width:0' }, h('div', { class: 't' }, text.title), h('div', { class: 'muted' }, text.description)),
+            h('span', { class: 'ach__xp' }, `+${ACHIEVEMENTS[a.id]?.xpReward ?? 0} XP`),
+          );
+        }),
+      ),
     ),
     h(
       'div',

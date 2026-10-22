@@ -5,7 +5,8 @@ import { makeWorld, startDuel, input, BTN } from './helpers.js';
 import { getMap, getCollision, MAP_ORDER } from '../maps/index.js';
 import { NavGrid } from '../sim/nav.js';
 import { PLAYER_RADIUS } from '../constants/game.js';
-import { levelForXp, totalXpForLevel, xpForMatch, evaluateAchievements, XP_RULES, rankPlaces, isWin, applyMatchProgress, ACHIEVEMENTS } from '../game-rules/progression.js';
+import { levelForXp, totalXpForLevel, xpForMatch, evaluateAchievements, XP_RULES, rankPlaces, isWin, applyMatchProgress, ACHIEVEMENTS, ACHIEVEMENT_IDS } from '../game-rules/progression.js';
+import type { AchievementId } from '../game-rules/progression.js';
 import { World } from '../sim/world.js';
 import { BotBrain } from '../sim/bots.js';
 import { ClientMessageSchema } from '../net/protocol.js';
@@ -143,7 +144,8 @@ test('progression: xp, levels and achievements', () => {
     { kills: 5, deaths: 0, place: 1, playersAtEnd: 2, completed: true, withFriends: true },
     new Set(),
   );
-  assert.deepEqual(got.sort(), ['first_match', 'first_win', 'multi_kill', 'played_with_friends']);
+  // v0.3: a win without a death is «Untouchable» too
+  assert.deepEqual(got.sort(), ['first_match', 'first_win', 'flawless', 'multi_kill', 'played_with_friends']);
   const again = evaluateAchievements({ matchesCompleted: 2, wins: 2, currentWinStreak: 2 }, { kills: 0, deaths: 0, place: 1, playersAtEnd: 2, completed: true, withFriends: false }, new Set(got));
   assert.deepEqual(again, []);
 });
@@ -210,4 +212,38 @@ test('progression: applyMatchProgress (shared by the server recorder and the dem
   assert.equal(left.xpGained, 0);
   assert.equal(left.streak, 0);
   assert.equal(left.lost, false);
+});
+
+test('achievements v0.3: twenty, each with a title, a description and a reward; feats, team play and levels unlock as described', () => {
+  assert.equal(ACHIEVEMENT_IDS.length, 20);
+  for (const id of ACHIEVEMENT_IDS) {
+    const a = ACHIEVEMENTS[id];
+    assert.ok(a && a.id === id && a.title && a.description && a.xpReward > 0, id);
+  }
+  const base = { kills: 0, assists: 0, deaths: 0, place: 2, playersAtEnd: 4, completed: true, withFriends: false };
+  const none = new Set<AchievementId>();
+  const after = { matchesCompleted: 1, wins: 0, currentWinStreak: 0 };
+  // a flawless solo win with ten eliminations
+  let got = evaluateAchievements({ ...after, wins: 1, currentWinStreak: 1 }, { ...base, place: 1, kills: 10 }, none);
+  assert.ok(got.includes('kills_10') && got.includes('flawless') && got.includes('first_win') && !got.includes('comeback'), got.join());
+  // a comeback: won after five deaths
+  got = evaluateAchievements({ ...after, wins: 1 }, { ...base, place: 1, deaths: 5 }, none);
+  assert.ok(got.includes('comeback') && !got.includes('flawless'));
+  // team win, objectives, assists
+  got = evaluateAchievements(after, { ...base, teamOutcome: 'win', objectives: 3, assists: 5 }, none);
+  assert.ok(['team_win', 'objective', 'objectives_3', 'assists_5'].every((id) => got.includes(id as AchievementId)), got.join());
+  // a loss gives neither the team win nor «untouchable»
+  got = evaluateAchievements(after, { ...base, teamOutcome: 'loss' }, none);
+  assert.ok(!got.includes('team_win') && !got.includes('flawless'));
+  // long-term counters
+  got = evaluateAchievements({ matchesCompleted: 100, wins: 50, currentWinStreak: 5 }, base, none);
+  assert.ok(['matches_50', 'matches_100', 'wins_10', 'wins_50', 'streak_5'].every((id) => got.includes(id as AchievementId)), got.join());
+  // levels: reached through the match's experience in applyMatchProgress
+  const prev = { xp: totalXpForLevel(10) - 60, level: 9, matchesCompleted: 3, wins: 0, currentWinStreak: 0 };
+  const o = applyMatchProgress(prev, { ...base }, new Set<AchievementId>(['first_match']));
+  assert.ok(o.unlocked.includes('level_10') && o.level >= 10, JSON.stringify(o));
+  assert.equal(o.xpGained, xpForMatch(base) + ACHIEVEMENTS.level_10.xpReward);
+  // already owned achievements are never given twice
+  const again = applyMatchProgress({ ...prev, xp: o.totalXp, level: o.level }, base, new Set<AchievementId>(['first_match', 'level_10']));
+  assert.ok(!again.unlocked.includes('level_10'));
 });

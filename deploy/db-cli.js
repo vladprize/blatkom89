@@ -3064,6 +3064,7 @@ function ratingDelta(p) {
 }
 var WIN_STREAK_TARGET = 3;
 var MULTI_KILL_TARGET = 5;
+var ACHIEVEMENT_TARGETS = Object.freeze({ matches: [50, 100], wins: [10, 50], longStreak: 5, bigKill: 10, assists: 5, comebackDeaths: 5, objectives: 3, levels: [10, 25] });
 var ACHIEVEMENTS = {
   first_match: { id: "first_match", title: "First Job", description: "Finish your first match.", xpReward: 25 },
   first_win: { id: "first_win", title: "Avtoritet", description: "Win a match.", xpReward: 50 },
@@ -3085,8 +3086,26 @@ var ACHIEVEMENTS = {
     title: "Our Crowd",
     description: "Play a match with friends you invited.",
     xpReward: 25
-  }
+  },
+  matches_50: { id: "matches_50", title: "Regular", description: `Finish ${ACHIEVEMENT_TARGETS.matches[0]} matches.`, xpReward: 150 },
+  matches_100: { id: "matches_100", title: "Old Hand", description: `Finish ${ACHIEVEMENT_TARGETS.matches[1]} matches.`, xpReward: 250 },
+  wins_10: { id: "wins_10", title: "Respected", description: `Win ${ACHIEVEMENT_TARGETS.wins[0]} matches.`, xpReward: 150 },
+  wins_50: { id: "wins_50", title: "District Legend", description: `Win ${ACHIEVEMENT_TARGETS.wins[1]} matches.`, xpReward: 300 },
+  streak_5: { id: "streak_5", title: "Unstoppable", description: `Win ${ACHIEVEMENT_TARGETS.longStreak} matches in a row.`, xpReward: 200 },
+  kills_10: { id: "kills_10", title: "No Limits", description: `${ACHIEVEMENT_TARGETS.bigKill} eliminations in one match.`, xpReward: 100 },
+  flawless: { id: "flawless", title: "Untouchable", description: "Win a match without being eliminated once.", xpReward: 100 },
+  comeback: { id: "comeback", title: "Second Wind", description: `Win a match after being eliminated ${ACHIEVEMENT_TARGETS.comebackDeaths} times.`, xpReward: 100 },
+  assists_5: { id: "assists_5", title: "Helping Hand", description: `${ACHIEVEMENT_TARGETS.assists} assists in one match.`, xpReward: 50 },
+  team_win: { id: "team_win", title: "All for One", description: "Win a team match.", xpReward: 50 },
+  objective: { id: "objective", title: "Job Done", description: "Capture a flag or a base.", xpReward: 50 },
+  objectives_3: { id: "objectives_3", title: "Raider", description: `Capture ${ACHIEVEMENT_TARGETS.objectives} flags or bases in one match.`, xpReward: 100 },
+  level_10: { id: "level_10", title: "Big Name", description: `Reach level ${ACHIEVEMENT_TARGETS.levels[0]}.`, xpReward: 100 },
+  level_25: { id: "level_25", title: "Boss of the District", description: `Reach level ${ACHIEVEMENT_TARGETS.levels[1]}.`, xpReward: 250 }
 };
+var LEVEL_ACHIEVEMENTS = [
+  ["level_10", ACHIEVEMENT_TARGETS.levels[0]],
+  ["level_25", ACHIEVEMENT_TARGETS.levels[1]]
+];
 
 // packages/shared/src/maps/props.ts
 var P = (w, h, shape, layer, blocksShot, label, extra = {}) => ({ w, h, shape, layer, blocksMove: shape !== "none", blocksShot: shape !== "none" && blocksShot, label, ...extra });

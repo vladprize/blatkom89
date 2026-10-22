@@ -1,5 +1,6 @@
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { ACHIEVEMENT_IDS } from '@blatkom/shared';
 import { randomUUID } from 'node:crypto';
 import { startTestApp, api, cookieFrom, testDb } from './testkit.js';
 import type { TestApp, TestDb } from './testkit.js';
@@ -138,7 +139,7 @@ describe('admin http', () => {
     const det = await api(app.base, `/api/admin/players/${ids[3]}`, { cookie });
     assert.equal(det.status, 200);
     assert.equal(det.body.player.displayName, 'Михалыч');
-    assert.equal(det.body.achievements.length, 6);
+    assert.equal(det.body.achievements.length, ACHIEVEMENT_IDS.length);
     const [viewed] = await app.db.sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM admin_audit_log WHERE action = 'player_viewed' AND target = ${ids[3]!}`;
     assert.equal(viewed!.n, 1, 'opening a player record is audited');
     assert.equal((await api(app.base, '/api/admin/players/not-a-uuid', { cookie })).status, 400);

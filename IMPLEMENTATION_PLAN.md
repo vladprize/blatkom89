@@ -130,11 +130,41 @@ instructions win; the original criteria are re-evaluated in §4.
 | The logo shouldn't touch the boxes around it | 14 px under the logo on phones (10 px on short screens) | ✅ screenshots |
 | «Let's remove real-money monetisation for now» | `REAL_MONEY = false`: nothing is sold for money. The ten weapons and eleven characters that cost diamonds joined the talon ladder (weapons 300–1000 talons at levels 4–19, characters 1300–2200 at levels 16–26); the rare-weapon case costs 600 talons, the skin case 150 — no money in them, so no adult checkbox (`confirmAge` is required only for a diamond price); `case_openings.currency` (migration 012). The server offers no packs and refuses checkouts (`403 payments_off`); the client shows no diamonds, no «Top up», no diamonds tab, no case banner with a diamond price; texts and the privacy policy say the game is free. The payment code stays, switched off, for a later Telegram Stars shop | ✅ economy tests (every price in talons, diamonds buy nothing, cases for talons with their currency recorded, checkout refused), admin economy test, E2E demo / skins / roster / online |
 
+## 2h. v0.3 (2026-10-22) — the owner's list «Правки v0.3.0», delivered in parts
+
+The owner's list: (1) a story mode, 4–5 hours, told as a comic (characters pop up with their lines):
+2089, people fight over districts in simulations and go a hundred years back, to a post-Soviet
+cyberpunk 1989; two campaigns to start with — Петя (the streets) and Участковый (the police), at war
+with each other — meeting all 22 other characters, each with a lore and a role; missions give
+achievements with talons and unlock 3–4 characters and 2–3 skins; the final reward is a legendary skin
+(the owner dropped the 200 diamonds: «без алмазов, легендари скин лучше»); (2) clubs with flags and
+emblems, join requests the creator approves, a club rating, at least 20 clubs already there (not
+labelled as bots); (3) sign-in with Google, Telegram, Facebook, Discord and Reddit besides email;
+(4) a Telegram bot: /start → a warm, working link to the game on Render; (5) the phone screens: the menu
+lower, the logo centred and further from the menu; the character and practice screens lower; map
+pictures missing (black) in the map picker on an iPhone, captions not symmetric; 15–20 achievements
+instead of 6.
+
+Order agreed with the owner: part 1 (5 + 4 + automatic updates) → part 2 clubs → part 3 sign-in →
+part 4 the story, chapter by chapter. The version stays 0.2.x until the whole list is in (0.2.5 = part 1).
+
+| Request (owner) | Implementation | Status |
+|---|---|---|
+| Phone menu: the menu lower, the logo centred, not so close above the menu | the menu column on phones is a grid: the free height is split 1 : 1 : ½ — over the logo, between the logo and the panels (at least 26 px; 16 px on screens ≤ 700 px tall), under the panels; the logo's word stays on the screen's centre line | ✅ measured at 393×680, 390×760, 430×830, 360×640 (e.g. 47 / 39 / 27 px at 393×680), no overflow; E2E `phone.mjs` checks the order of the gaps |
+| The character screen and Practice lower (also «Play with friends») | `wrap--vcenter`: the top bar stays on top, the content sits in the middle of the remaining height (no change where the screen is full) | ✅ screenshots at four sizes, no overflow |
+| Map picker on the iPhone: no pictures (black), captions not symmetric | two WebKit causes: Safari's own stylesheet gives every `<button>` `align-items: flex-start`, so the tile's picture box and caption shrink-wrapped to the left (a percentage-wide picture in a shrink-wrapped box collapses — a black tile); and lazy-loaded pictures inside a sheet (a fixed overlay) are not loaded by iOS Safari. Buttons now get `align-items: normal`, tiles stretch their parts, the ten small pictures load at once; the phone sheet is always three across | ✅ Chromium: 10/10 pictures, captions 2 px from both edges, sheet fits at 393×680 and 360×640 (E2E `phone.mjs`); ⛔ WebKit itself is not available here — to be confirmed on the owner's iPhone |
+| 15–20 achievements instead of 6 | 20: the old six plus Regular (50 matches), Old Hand (100), Respected (10 wins), District Legend (50 wins), Unstoppable (5 wins in a row), No Limits (10 eliminations in a match), Untouchable (a win without dying), Second Wind (a win after dying 5 times), Helping Hand (5 assists in a match), All for One (a team win), Job Done (a flag or a base), Raider (3 in a match), Big Name (level 10), Boss of the District (level 25); XP 50–300 each; shared rules (`game-rules/progression.ts`) used by the server's recorder and the demo's local profile; level achievements count the level reached with this match's XP; the profile shows them as a two-column grid of cards with the XP each gives | ✅ shared, recorder, auth and admin tests; E2E `phone.mjs` (20 cards, 2 columns) |
+| A Telegram bot: /start → a warm working link to the game on Render | `apps/server/src/telegram/bot.ts`: a webhook (`/api/telegram/webhook`, secret header derived from the bot token) answering in its own response — «🎮 Play in Telegram» (the Mini App) and «🌐 Open in the browser», in Russian or English by the Telegram language; `/start <room code>` → «Join the room» (game invitations now use `t.me/<bot>?start=<code>` unless a direct-link app is configured); groups only on `/start` `/play`; each update answered once, 6 answers a minute per chat. On start-up the server registers the webhook, commands, descriptions and the «Play» menu button (once per address). The webhook wakes a sleeping free Render service, so the answer only goes out from a running server; `BOT_WARM_MINUTES` (20) keeps it awake afterwards, `KEEP_AWAKE=true` always (`services/keepAwake.ts`). Blank dashboard variables now count as unset | ✅ unit/HTTP tests (`bot.test.ts`: answers, secret, duplicates, flood, groups, set-up with a fake Bot API, keep-awake); ⛔ not tried with a real bot — the owner adds `TELEGRAM_BOT_TOKEN` / `TELEGRAM_BOT_USERNAME` on Render (docs/TELEGRAM.md §0) |
+| (found while checking the owner's screenshots: the phone showed a version from before v0.24) | automatic updates (`apps/web/src/app/updates.ts`): when the game returns to the foreground and every 15 minutes it asks for its page (never cached) and compares the bundle; a newer build reloads the page in the main menu, never in a match or a lobby, once per build | ✅ unit tests (menu / in a match / no loop / unreachable server) |
+| Clubs | part 2 | ⏳ |
+| Sign-in with Google, Telegram, Facebook, Discord, Reddit | part 3 (the owner registers the apps and adds the keys) | ⏳ |
+| The story mode | part 4 | ⏳ |
+
 ## 3. Open risks / next steps
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).
 - Build and run the Docker stack on the target host; test a backup restore.
-- Live Telegram verification on iOS/Android/Desktop/Web (checklist in `docs/TELEGRAM.md` §4).
+- Live Telegram verification on iOS/Android/Desktop/Web (checklist in `docs/TELEGRAM.md` §4), including the v0.3 bot (/start, invitations through `?start=`, the first answer after a sleep).
 - Real-device performance pass (only software-GL headless Chromium was available; JS cost per frame measured at ~6 ms there).
 - Fill the operator placeholders in `apps/web/public/privacy.html` (operator, contact, email provider, payment-record and backup retention).
 - Payments are off since v0.24 (`REAL_MONEY = false`, the owner's decision). Before selling again: Telegram Stars inside the Mini App (docs/TELEGRAM.md, «Payments inside Telegram»), a provider for the website (the Stripe / NOWPayments code is kept; Paddle was considered and needs written approval), real test purchases and refunds, the privacy-policy paragraph about payments, consumer-law and loot-box rules for the target markets.
@@ -163,7 +193,7 @@ instructions win; the original criteria are re-evaluated in §4.
 | Match results are consistent | ✅ | identical `results` on both clients; identical results tables in E2E |
 | XP is awarded correctly | ✅ | recorder tests (once under retries/concurrency, draws are not wins); E2E profile check |
 | Profiles persist | ✅ | E2E reads `/api/me` after the match (matchesPlayed, XP, level) |
-| Players can invite friends | 🟡 | invite code/link → join verified in browsers; Telegram share sheet/`startapp` not tried in Telegram |
+| Players can invite friends | 🟡 | invite code/link → join verified in browsers; in Telegram the link goes through the bot (`?start=<code>` → «Join the room», tested with fixtures) — not tried in Telegram |
 | Mobile controls work | 🟡 | emulated-phone multi-touch test (move, aim, fire) passes; layouts checked portrait/landscape; no physical device |
 | Telegram authentication is validated server-side | ✅ | HMAC algorithm per official docs; tests with signed fixtures, tampering, stale/future data |
 | The application opens through its configured Mini App URL | ⛔ | needs a real bot + HTTPS domain (steps in `docs/TELEGRAM.md`) |
@@ -176,7 +206,7 @@ instructions win; the original criteria are re-evaluated in §4.
 | Critical tests pass | ✅ | 169/169 unit+integration; browser E2E (development and production mode) — see `docs/TESTING.md` §3 |
 | No real secrets are exposed | ✅ | `.env*` ignored; bot token/DB/session secrets server-only; logger redaction |
 | Deployment instructions match the actual project | 🟡 | non-Docker path executed locally; Docker/compose/Caddy not executed |
-| The first release is completely free | ⚠️ changed by the owner | free to play with optional purchases (owner's request): talons from matches, diamonds for money on the website; fight-changing extras (modifications, equipment) cost talons only; paid weapons are sidegrades |
+| The first release is completely free | ✅ (again since v0.24) | nothing is sold for money (`REAL_MONEY = false`): everything is unlocked with talons earned in matches; checkouts are refused (`403 payments_off`) |
 | Real payments work end-to-end | ⛔ | Stripe / NOWPayments code, signatures and credit-once are tested with fixtures; no live provider account, so no real purchase has been made |
 | Diamonds inside Telegram (Stars, `XTR`) | ⛔ | not implemented; card/crypto disabled inside Telegram (UI + server) |
 | Password-reset letters | 🟡 | Resend integration written; not sent live (no key). Admin one-time reset links work (tested) |
