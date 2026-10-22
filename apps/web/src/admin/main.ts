@@ -56,7 +56,7 @@ const NAV: Array<[string, string, 'viewer' | 'admin']> = [
   ['#/funnel', 'Воронка', 'viewer'],
   ['#/economy', 'Экономика', 'viewer'],
   ['#/players', 'Игроки', 'viewer'],
-  ['#/clubs', 'Клубы', 'viewer'],
+  ['#/clubs', 'ОПГ', 'viewer'],
   ['#/errors', 'Ошибки', 'viewer'],
   ['#/exports', 'Экспорт', 'viewer'],
   ['#/audit', 'Аудит', 'admin'],

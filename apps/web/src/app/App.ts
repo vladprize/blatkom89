@@ -632,7 +632,7 @@ export class App {
       'button',
       { class: 'stile stile--club', 'data-testid': 'menu-clubs', onclick: () => this.showClubs() },
       club ? h('span', { class: 'stile__flag' }, clubFlag(club.flag, club.emblem, { size: 40 })) : socialIcon('clubs'),
-      h('span', { class: 'stile__txt' }, h('b', null, t('Clubs')), h('small', null, club ? clubLabel(club) : t('crews and their table'))),
+      h('span', { class: 'stile__txt' }, h('b', null, t('Gangs')), h('small', null, club ? clubLabel(club) : t('crews and their table'))),
       waiting > 0 ? h('span', { class: 'nbadge stile__badge', 'data-testid': 'clubs-badge', 'aria-label': t('{n} new', { n: waiting }) }, String(waiting)) : null,
     );
   }
@@ -649,7 +649,7 @@ export class App {
         h(
           'div',
           { class: 'wrap' },
-          this.topbar(t('Clubs')),
+          this.topbar(t('Gangs')),
           renderClubs({
             api: online.api,
             level: p?.level ?? 1,
@@ -676,7 +676,7 @@ export class App {
         h(
           'div',
           { class: 'wrap' },
-          this.topbar(t('Club')),
+          this.topbar(t('Gang')),
           renderClub({
             api: online.api,
             id,
@@ -701,7 +701,7 @@ export class App {
         h(
           'div',
           { class: 'wrap' },
-          this.topbar(club ? t('Flag and motto') : t('Found a club')),
+          this.topbar(club ? t('Flag and motto') : t('Start a gang')),
           renderClubEditor({
             api: online.api,
             ...(club ? { club } : {}),
@@ -1405,7 +1405,7 @@ export class App {
         return;
       // clubs (v0.3): the news, and the club pages on screen redrawn
       case 'club_request':
-        if (!inGame) toast(t('{name} asks to join your club', { name: e.from.name }));
+        if (!inGame) toast(t('{name} asks to join your gang', { name: e.from.name }));
         if (this.screen === 'club' && this.clubId === e.clubId) this.showClub(e.clubId, false);
         return;
       case 'club_joined':
@@ -1417,11 +1417,11 @@ export class App {
         this.afterClubChange();
         return;
       case 'club_left':
-        if (!inGame) toast(e.reason === 'disbanded' ? t('Your club was disbanded') : t('You were shown out of the club'));
+        if (!inGame) toast(e.reason === 'disbanded' ? t('Your gang was disbanded') : t('You were shown out of the gang'));
         this.afterClubChange();
         return;
       case 'club_head':
-        if (!inGame) toast(t('You are the head of the club now'));
+        if (!inGame) toast(t('You are the gang’s boss now'));
         this.afterClubChange();
         return;
       case 'dm': {

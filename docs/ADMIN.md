@@ -8,9 +8,9 @@ names weapons, characters and maps the way the owner's sheets do). API: `/api/ad
 
 Tabs: «Обзор» (KPIs and charts), «Воронка» (visitors → account → match → return, sources),
 «Экономика» (talons, diamonds, revenue, purchases, modifications, cases), «Игроки» (search, player
-card with wallet, purchases, ledger, payments and admin actions), «Клубы» (v0.3: every club — the
-game's own marked «игры» — with its rating, people, head and requests; an admin removes a player club,
-e.g. for an offensive name or flag), «Ошибки», «Экспорт», «Аудит».
+card with wallet, purchases, ledger, payments and admin actions), «ОПГ» (v0.3 clubs, called gangs —
+«ОПГ» — since v0.2.8: every gang — the game's own marked «игры» — with its rating, people, boss and
+requests; an admin removes a player's gang, e.g. for an offensive name or flag), «Ошибки», «Экспорт», «Аудит».
 
 The page itself is public (it contains no data); **every** data request is authorised on the server.
 Hiding the URL is not part of the security model.

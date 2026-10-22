@@ -49,8 +49,9 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
    addresses and long identifiers are removed before saving).
 7. **Friends and messages:** your friend list and friend requests; private messages with friends (text,
    time, read or not) — deleted 180 days after sending, and at once with the profile.
-7a. **Clubs (v0.3):** the club you are in (role, join date), the clubs you asked to join, and the name,
-   tag, motto, flag and emblem of a club you founded — removed when you leave, withdraw or delete the
+7a. **Gangs (v0.3 clubs, called gangs — «ОПГ» in Russian — since v0.2.8):** the gang you are in (role,
+   join date), the gangs you asked to join, and the name, tag, motto, flag and emblem of a gang you
+   started — removed when you leave, withdraw or delete the
    profile.
 8. **Visit statistics:** a random visitor identifier created by your browser, first/last visit, days
    with visits, platform type and the domain of the site you came from — to count how many visitors
@@ -69,8 +70,8 @@ and fix bugs and protect against abuse; and for aggregated statistics to make th
 Other players see your in-game name, avatar, character and results. Anyone who knows your in-game name
 can send you a friend request; friends see whether you are online, in a lobby or in a match; only you and
 the friend you write to see your private messages. Players with at least one finished online match are
-listed in the public Top-100 (name, avatar, level, rating, eliminations, wins). A club's name, tag, motto,
-flag, rating and people (name, avatar, level, role) are public; join requests are seen by the club's head
+listed in the public Top-100 (name, avatar, level, rating, eliminations, wins). A gang's name, tag, motto,
+flag, rating and people (name, avatar, level, role) are public; join requests are seen by the gang's boss
 only. Administrators work with the statistics
 panel; every sign-in, look at a player’s card, balance adjustment, password-reset link and export is
 audited. Data is shared only with the hosting provider, the payment provider you choose when you buy,
@@ -87,7 +88,7 @@ Google, Discord, Facebook and Reddit when you sign in with them (on their page).
 | Visit statistics | 400 days after the last visit |
 | Private messages with friends | 180 days |
 | Friend list and requests | until removed by you or the friend, or the profile is deleted |
-| Club membership and join requests | until you leave (or are shown out), withdraw, or the profile is deleted |
+| Gang membership and join requests | until you leave (or are shown out), withdraw, or the profile is deleted |
 | Error reports | 90 days |
 | Sign-in session records | 90 days after the session ends |
 | Password-reset links | valid 1 hour, deleted 7 days later |

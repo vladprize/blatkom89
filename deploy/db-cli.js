@@ -7267,13 +7267,16 @@ var CLUB_RULES = Object.freeze({
   maxOutgoingRequests: 3,
   /** Requests waiting for one club's head. */
   maxIncomingRequests: 50,
-  /** Founding a club: a level and a fee in talons (keeps the table free of throwaway clubs). */
-  createLevel: 3,
-  createTokens: 300,
+  /**
+   * Starting a gang (v0.2.8, the owner: «anyone can start one»): from level 1 and free. One gang per
+   * player and a limit on startings per hour keep the table tidy; raise these to bring a fee back.
+   */
+  createLevel: 1,
+  createTokens: 0,
   startRating: 1e3
 });
 var clubNameSchema = external_exports.string().transform((s) => s.normalize("NFKC").replace(/\s+/g, " ").trim()).pipe(
-  external_exports.string().min(CLUB_RULES.nameMin).max(CLUB_RULES.nameMax).regex(/^[A-Za-z0-9 _.\-’'#!&]+$/, "A club name may contain Latin letters (A\u2013Z), digits, spaces and _ . - # ! &").regex(/[A-Za-z0-9]/, "A club name needs a letter or a digit")
+  external_exports.string().min(CLUB_RULES.nameMin).max(CLUB_RULES.nameMax).regex(/^[A-Za-z0-9 _.\-’'#!&]+$/, "A gang name may contain Latin letters (A\u2013Z), digits, spaces and _ . - # ! &").regex(/[A-Za-z0-9]/, "A gang name needs a letter or a digit")
 );
 var clubTagSchema = external_exports.string().transform((s) => s.normalize("NFKC").trim().toUpperCase()).pipe(
   external_exports.string().min(CLUB_RULES.tagMin).max(CLUB_RULES.tagMax).regex(/^[A-Z0-9]+$/, "A tag is 2\u20134 Latin letters or digits")

@@ -104,11 +104,14 @@ test('clubs: the table opens with the house clubs — twenty and more, ranked by
   for (const c of t.clubs) assert.match(`${c.name} ${c.tag}`, /^[A-Za-z0-9 _.\-’'#!&]+$/);
 });
 
-test('clubs: founding needs level 3 and 300 talons, a free name and tag; the founder is the head', async () => {
-  const low = await player('Новичок', { level: 2 });
-  assert.equal((await found(low.token, 'Low Start', 'LS2')).body.error.code, 'level_required');
-  const poor = await player('Бедный', { tokens: 100 });
-  assert.equal((await found(poor.token, 'Empty Wallet', 'EW')).body.error.code, 'insufficient_funds');
+test('clubs: anyone starts a gang (v0.2.8: level 1, free) with a free name and tag; the founder is the head', async () => {
+  assert.deepEqual([CLUB_RULES.createLevel, CLUB_RULES.createTokens], [1, 0]);
+  const fresh = await player('Новичок', { level: 1, tokens: 0 });
+  const first = await found(fresh.token, 'Fresh Start', 'FS1');
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  const [w] = await app.db.sql<Array<{ tokens: number }>>`SELECT tokens FROM profiles WHERE user_id = ${fresh.userId}`;
+  assert.equal(w!.tokens, 0, 'nothing paid');
+  assert.equal((await app.db.sql`SELECT 1 FROM currency_ledger WHERE user_id = ${fresh.userId}`).length, 0, 'no ledger row for a free gang');
   const a = await player('Основатель');
   const bad = await found(a.token, 'X', 'Q');
   assert.equal(bad.status, 400, 'a one-letter name or tag is refused');
@@ -129,8 +132,6 @@ test('clubs: founding needs level 3 and 300 talons, a free name and tag; the fou
   assert.equal(club.members, 1);
   const [p] = await app.db.sql<Array<{ tokens: number }>>`SELECT tokens FROM profiles WHERE user_id = ${a.userId}`;
   assert.equal(p!.tokens, 1000 - CLUB_RULES.createTokens);
-  const [l] = await app.db.sql<Array<{ delta: number; ref: string }>>`SELECT delta, ref FROM currency_ledger WHERE user_id = ${a.userId} ORDER BY id DESC LIMIT 1`;
-  assert.deepEqual([l!.delta, l!.ref], [-CLUB_RULES.createTokens, `club:${club.id}`]);
   assert.equal((await found(a.token, 'Second Club', 'SC')).body.error.code, 'in_club', 'one club at a time');
   const b = await player('Копирщик');
   assert.equal((await found(b.token, 'tape KINGS', 'ZZ')).body.error.code, 'name_taken');

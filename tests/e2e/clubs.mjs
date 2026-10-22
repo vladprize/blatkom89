@@ -60,7 +60,10 @@ try {
   const A = await player('Founder', 'en', { width: 1280, height: 760 });
   const B = await player('Recruit', 'ru', { width: 393, height: 680 });
   const tiles = await A.page.locator('.stiles .stile').count();
-  check(tiles === 3 && (await A.page.getByTestId('menu-clubs').count()) === 1, `the menu has Friends · Clubs · Top-100 (${tiles} tiles)`);
+  check(tiles === 3 && (await A.page.getByTestId('menu-clubs').count()) === 1, `the menu has Friends · Gangs · Top-100 (${tiles} tiles)`);
+  const tileA = (await A.page.getByTestId('menu-clubs').innerText()).replace(/\s+/g, ' ').trim();
+  const tileRu = (await B.page.getByTestId('menu-clubs').innerText()).replace(/\s+/g, ' ').trim();
+  check(/^GANGS/i.test(tileA) && /^ОПГ/.test(tileRu), `v0.2.8: the tile says «${tileA}» in English and «${tileRu}» in Russian`);
 
   // ── the table and a club's page ─────────────────────────────────────────
   await A.page.getByTestId('menu-clubs').click();
@@ -83,11 +86,11 @@ try {
   await A.page.locator('.back').click();
 
   // ── founding ────────────────────────────────────────────────────────────
+  // v0.2.8: a brand-new player (level 1, no talons) starts a gang — free
   const userA = await A.page.evaluate(() => window.__blatkom.app.online.profile.id);
-  await sql`UPDATE profiles SET level = 4, xp = 1200, tokens = 800 WHERE user_id = ${userA}`;
-  await A.page.reload();
-  await A.page.getByTestId('menu-nick').waitFor({ timeout: 60000 });
-  await A.page.getByTestId('menu-clubs').click();
+  const [p0] = await sql`SELECT level, tokens FROM profiles WHERE user_id = ${userA}`;
+  const foundBtn = await A.page.getByTestId('club-found').evaluate((b) => ({ disabled: b.disabled, text: b.innerText.replace(/\s+/g, ' ').trim() }));
+  check(!foundBtn.disabled && /free/i.test(foundBtn.text), `a level-${p0.level} player with ${p0.tokens} talons can start a gang («${foundBtn.text}»)`);
   await A.page.getByTestId('club-found').click();
   await A.page.getByTestId('club-editor').waitFor({ timeout: 10000 });
   await A.page.getByTestId('club-name').fill(`Ночные кассеты ${RUN}`);
@@ -109,7 +112,7 @@ try {
   const head = await A.page.evaluate(() => ({ name: document.querySelector('.clubhead__name')?.textContent ?? '', role: document.querySelector('.clubmember .clubrole')?.textContent ?? '', edit: !!document.querySelector('[data-testid=club-edit]') }));
   check(head.name.includes(NAME) && head.name.includes(`[${TAG}]`) && head.edit, `«${head.name}» founded; the founder is its ${head.role}`);
   const [p] = await sql`SELECT tokens FROM profiles WHERE user_id = ${userA}`;
-  check(p.tokens === 500, `300 talons paid for it (${p.tokens} left)`);
+  check(p.tokens === p0.tokens, `nothing paid for it (${p.tokens} talons, as before)`);
 
   // ── B asks to join, A takes B in (live) ─────────────────────────────────
   await B.page.getByTestId('menu-clubs').click();

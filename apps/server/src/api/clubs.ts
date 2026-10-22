@@ -17,20 +17,20 @@ import { SocialRepo } from '../social/repo.js';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const REFUSALS: Record<ClubError['code'], [number, string]> = {
-  not_found: [404, 'No such club'],
-  in_club: [409, 'You are already in a club — leave it first'],
-  not_member: [403, 'You are not in this club'],
-  not_head: [403, 'Only the head of the club can do that'],
-  level: [403, 'Founding a club needs level 3'],
-  funds: [409, 'Not enough talons to found a club'],
-  name_taken: [409, 'A club with that name already exists'],
-  tag_taken: [409, 'That tag is taken by another club'],
-  full: [409, 'The club is full'],
-  closed: [409, 'The club isn’t taking anyone right now'],
+  not_found: [404, 'No such gang'],
+  in_club: [409, 'You are already in a gang — leave it first'],
+  not_member: [403, 'You are not in this gang'],
+  not_head: [403, 'Only the gang’s boss can do that'],
+  level: [403, 'Starting a gang needs a higher level'],
+  funds: [409, 'Not enough talons to start a gang'],
+  name_taken: [409, 'A gang with that name already exists'],
+  tag_taken: [409, 'That tag is taken by another gang'],
+  full: [409, 'The gang is full'],
+  closed: [409, 'The gang isn’t taking anyone right now'],
   already_requested: [409, 'You have already asked to join'],
-  too_many_requests: [409, 'You can ask three clubs at a time — wait for an answer or withdraw a request'],
+  too_many_requests: [409, 'You can ask three gangs at a time — wait for an answer or withdraw a request'],
   no_request: [404, 'No such request'],
-  house: [403, 'This club can’t be changed'],
+  house: [403, 'This gang can’t be changed'],
 };
 
 export const registerClubRoutes: RouteModule = (router, deps) => {
@@ -76,7 +76,7 @@ export const registerClubRoutes: RouteModule = (router, deps) => {
   }
   const clubId = (ctx: Ctx) => {
     const id = ctx.params.id ?? '';
-    if (!UUID.test(id)) throw new HttpError(400, 'bad_id', 'Invalid club id');
+    if (!UUID.test(id)) throw new HttpError(400, 'bad_id', 'Invalid gang id');
     return id;
   };
   const userParam = (ctx: Ctx) => {
@@ -99,7 +99,7 @@ export const registerClubRoutes: RouteModule = (router, deps) => {
     const me = currentUser(ctx);
     await house().catch(() => {});
     const d = await repo().details(clubId(ctx), me.userId);
-    if (!d) throw new HttpError(404, 'not_found', 'No such club');
+    if (!d) throw new HttpError(404, 'not_found', 'No such gang');
     ctx.json(200, d);
   });
 

@@ -191,9 +191,11 @@ export class ClubRepo {
       }
       await tx`INSERT INTO club_members (club_id, user_id, role) VALUES (${id}, ${userId}, 'head')`;
       await tx`DELETE FROM club_requests WHERE user_id = ${userId}`;
-      const after = p!.tokens - CLUB_RULES.createTokens;
-      await tx`UPDATE profiles SET tokens = ${after}, updated_at = now() WHERE user_id = ${userId}`;
-      await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${-CLUB_RULES.createTokens}, ${after}, 'purchase', ${`club:${id}`})`;
+      if (CLUB_RULES.createTokens > 0) {
+        const after = p!.tokens - CLUB_RULES.createTokens;
+        await tx`UPDATE profiles SET tokens = ${after}, updated_at = now() WHERE user_id = ${userId}`;
+        await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${-CLUB_RULES.createTokens}, ${after}, 'purchase', ${`club:${id}`})`;
+      }
       return id;
     });
   }

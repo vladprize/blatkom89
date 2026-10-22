@@ -71,28 +71,28 @@ export function renderClubs(o: { api: ClubsApi; level: number; tokens: number; o
     const my = data?.mine ?? null;
     const canFound = o.level >= CLUB_RULES.createLevel && o.tokens >= CLUB_RULES.createTokens;
     mine.replaceChildren(
-      h('span', { class: 'tag' }, t('My club')),
+      h('span', { class: 'tag' }, t('My gang')),
       my
         ? h('div', { class: 'col', style: 'gap:6px;margin-top:4px' }, row(my, true), data && data.incoming > 0 ? h('div', { class: 'clubnote' }, t('Requests waiting for your answer: {n}', { n: data.incoming })) : null)
         : h(
             'div',
             { class: 'col', style: 'gap:8px;margin-top:4px' },
-            h('div', { class: 'muted' }, data?.requested.length ? t('Your requests are waiting for an answer. Meanwhile you can found your own club.') : t('You are not in a club yet. Ask to join one from the table — or found your own.')),
+            h('div', { class: 'muted' }, data?.requested.length ? t('Your requests are waiting for an answer. Meanwhile you can start your own gang.') : t('You are not in a gang yet. Ask to join one from the table — or start your own.')),
             h(
               'button',
               { class: 'btn btn--red', 'data-testid': 'club-found', disabled: !canFound, onclick: () => o.onFound() },
-              t('Found a club'),
-              h('span', { class: 'sub' }, canFound ? count(CLUB_RULES.createTokens, 'talon') : t('from level {l} · {talons}', { l: CLUB_RULES.createLevel, talons: count(CLUB_RULES.createTokens, 'talon') })),
+              t('Start a gang'),
+              h('span', { class: 'sub' }, !canFound ? t('from level {l} · {talons}', { l: CLUB_RULES.createLevel, talons: count(CLUB_RULES.createTokens, 'talon') }) : CLUB_RULES.createTokens > 0 ? count(CLUB_RULES.createTokens, 'talon') : t('free')),
             ),
           ),
     );
-    if (error) return void list.replaceChildren(h('span', { class: 'tag' }, t('Club table')), h('div', { class: 'muted' }, error));
-    if (!data) return void list.replaceChildren(h('span', { class: 'tag' }, t('Club table')), h('div', { class: 'muted' }, t('Loading…')));
+    if (error) return void list.replaceChildren(h('span', { class: 'tag' }, t('Gang table')), h('div', { class: 'muted' }, error));
+    if (!data) return void list.replaceChildren(h('span', { class: 'tag' }, t('Gang table')), h('div', { class: 'muted' }, t('Loading…')));
     list.replaceChildren(
-      h('span', { class: 'tag' }, query.length >= 2 ? t('Search') : t('Club table')),
+      h('span', { class: 'tag' }, query.length >= 2 ? t('Search') : t('Gang table')),
       search,
-      data.clubs.length ? h('div', { class: 'clubrows' }, ...data.clubs.map((c) => row(c, c.id === my?.id))) : h('div', { class: 'muted' }, t('No clubs found.')),
-      h('div', { class: 'muted', style: 'font-size:13px' }, t('A club’s rating rises and falls with its people’s results: every rating point a member wins or loses in a match counts for the club too.')),
+      data.clubs.length ? h('div', { class: 'clubrows' }, ...data.clubs.map((c) => row(c, c.id === my?.id))) : h('div', { class: 'muted' }, t('No gangs found.')),
+      h('div', { class: 'muted', style: 'font-size:13px' }, t('A gang’s rating rises and falls with its people’s results: every rating point a member wins or loses in a match counts for the gang too.')),
     );
     if (query && document.activeElement !== search) search.focus();
   };
@@ -142,17 +142,17 @@ export function renderClub(o: { api: ClubsApi; id: string; myId: string | null; 
       { class: `clubmember ${m.id === o.myId ? 'me' : ''}`, 'data-member': m.name },
       avatarImg(m.avatar, m.character ?? 'petya', 'clubmember__ava'),
       h('span', { class: 'clubmember__txt' }, h('b', null, m.name), h('small', { class: 'muted' }, t('level {l}', { l: m.level }))),
-      m.role === 'head' ? h('span', { class: 'clubrole' }, t('Head')) : null,
+      m.role === 'head' ? h('span', { class: 'clubrole' }, t('Boss')) : null,
       club.me === 'head' && m.role !== 'head' && club.memberList.some((x) => x.id === o.myId && x.role === 'head')
         ? h(
             'button',
             {
               class: 'btn btn--small btn--ghost',
-              'aria-label': t('Show {name} out of the club', { name: m.name }),
+              'aria-label': t('Show {name} out of the gang', { name: m.name }),
               onclick: () =>
                 void (async () => {
-                  if (!(await confirmAsync(t('Show {name} out of the club?', { name: m.name })))) return;
-                  await act(() => o.api.kickFromClub(club.id, m.id), t('{name} is out of the club', { name: m.name }));
+                  if (!(await confirmAsync(t('Show {name} out of the gang?', { name: m.name })))) return;
+                  await act(() => o.api.kickFromClub(club.id, m.id), t('{name} is out of the gang', { name: m.name }));
                 })(),
             },
             '✕',
@@ -166,21 +166,21 @@ export function renderClub(o: { api: ClubsApi; id: string; myId: string | null; 
         box.append(
           club.recruiting
             ? h('button', { class: 'btn btn--red', 'data-testid': 'club-join', onclick: () => void act(() => o.api.requestClub(club.id), t('Request sent to «{name}»', { name: club.name })) }, t('Ask to join'))
-            : h('button', { class: 'btn', disabled: true }, club.members >= CLUB_RULES.maxMembers ? t('The club is full') : t('Not recruiting')),
+            : h('button', { class: 'btn', disabled: true }, club.members >= CLUB_RULES.maxMembers ? t('The gang is full') : t('Not recruiting')),
         );
         break;
       case 'requested':
-        box.append(h('div', { class: 'clubnote', 'data-testid': 'club-requested' }, t('Request sent — the head of the club decides.')), h('button', { class: 'btn btn--small', onclick: () => void act(() => o.api.cancelClubRequest(club.id)) }, t('Withdraw')));
+        box.append(h('div', { class: 'clubnote', 'data-testid': 'club-requested' }, t('Request sent — the gang’s boss decides.')), h('button', { class: 'btn btn--small', onclick: () => void act(() => o.api.cancelClubRequest(club.id)) }, t('Withdraw')));
         break;
       case 'member':
-        box.append(h('button', { class: 'btn', 'data-testid': 'club-leave', onclick: () => void leave(club) }, t('Leave the club')));
+        box.append(h('button', { class: 'btn', 'data-testid': 'club-leave', onclick: () => void leave(club) }, t('Leave the gang')));
         break;
       case 'head':
         box.classList.add('clubactions--head');
         box.append(
           h('button', { class: 'btn btn--small', 'data-testid': 'club-edit', onclick: () => o.onEdit(club) }, t('Flag and motto')),
           h('button', { class: 'btn btn--small', 'data-testid': 'club-recruiting', onclick: () => void act(() => o.api.setClubRecruiting(club.id, !club.recruiting)) }, club.recruiting ? t('Close recruiting') : t('Open recruiting')),
-          h('button', { class: 'btn btn--small btn--ghost', onclick: () => void leave(club) }, t('Leave the club')),
+          h('button', { class: 'btn btn--small btn--ghost', onclick: () => void leave(club) }, t('Leave the gang')),
           h(
             'button',
             {
@@ -188,10 +188,10 @@ export function renderClub(o: { api: ClubsApi; id: string; myId: string | null; 
               'data-testid': 'club-disband',
               onclick: () =>
                 void (async () => {
-                  if (!(await confirmAsync(t('Disband «{name}»? Everybody leaves the club, its rating is lost.', { name: club.name })))) return;
+                  if (!(await confirmAsync(t('Disband «{name}»? Everybody leaves the gang, its rating is lost.', { name: club.name })))) return;
                   try {
                     await o.api.disbandClub(club.id);
-                    toast(t('The club is disbanded'));
+                    toast(t('The gang is disbanded'));
                     o.onChanged?.();
                     o.onGone();
                   } catch (e) {
@@ -209,7 +209,7 @@ export function renderClub(o: { api: ClubsApi; id: string; myId: string | null; 
   const leave = async (club: ClubDetails) => {
     const head = club.me === 'head';
     const others = club.memberList.filter((m) => m.id !== o.myId).length;
-    const text = head && others === 0 ? t('Leave «{name}»? You are its last member: the club closes.', { name: club.name }) : head ? t('Leave «{name}»? The longest-standing member becomes its head.', { name: club.name }) : t('Leave «{name}»?', { name: club.name });
+    const text = head && others === 0 ? t('Leave «{name}»? You are its last member: the gang closes.', { name: club.name }) : head ? t('Leave «{name}»? The longest-standing member becomes its boss.', { name: club.name }) : t('Leave «{name}»?', { name: club.name });
     if (!(await confirmAsync(text))) return;
     try {
       await o.api.leaveClub();
@@ -243,7 +243,7 @@ export function renderClub(o: { api: ClubsApi; id: string; myId: string | null; 
                 { class: 'clubmember', 'data-request': r.name },
                 avatarImg(r.avatar, r.character ?? 'petya', 'clubmember__ava'),
                 h('span', { class: 'clubmember__txt' }, h('b', null, r.name), h('small', { class: 'muted' }, t('level {l}', { l: r.level }))),
-                h('button', { class: 'btn btn--small btn--red', 'aria-label': t('Take {name} in', { name: r.name }), onclick: () => void act(() => o.api.answerClubRequest(club.id, r.id, true), t('{name} is in the club', { name: r.name })) }, t('Accept')),
+                h('button', { class: 'btn btn--small btn--red', 'aria-label': t('Take {name} in', { name: r.name }), onclick: () => void act(() => o.api.answerClubRequest(club.id, r.id, true), t('{name} is in the gang', { name: r.name })) }, t('Accept')),
                 h('button', { class: 'btn btn--small', 'aria-label': t('Turn {name} down', { name: r.name }), onclick: () => void act(() => o.api.answerClubRequest(club.id, r.id, false)) }, '✕'),
               ),
             ),
@@ -302,7 +302,7 @@ export function renderClubEditor(o: { api: ClubsApi; club?: ClubDetails; onDone:
   const emblem: ClubEmblem = o.club ? { ...o.club.emblem } : { icon: 'star', color: 9 };
   let slot: 0 | 1 | 2 | 3 = 0; // which colour the palette paints: 0–2 the field, 3 the emblem
   let busy = false;
-  const name = h('input', { class: 'input', maxlength: CLUB_RULES.nameMax, placeholder: t('Club name'), 'aria-label': t('Club name'), 'data-testid': 'club-name', value: o.club?.name ?? '', disabled: editing });
+  const name = h('input', { class: 'input', maxlength: CLUB_RULES.nameMax, placeholder: t('Gang name'), 'aria-label': t('Gang name'), 'data-testid': 'club-name', value: o.club?.name ?? '', disabled: editing });
   const tag = h('input', { class: 'input clubtaginput', maxlength: CLUB_RULES.tagMax, placeholder: t('TAG'), 'aria-label': t('Tag (2–4 letters)'), 'data-testid': 'club-tag', value: o.club?.tag ?? '', disabled: editing });
   const motto = h('input', { class: 'input', maxlength: CLUB_RULES.mottoMax, placeholder: t('Motto (optional)'), 'aria-label': t('Motto'), 'data-testid': 'club-motto', value: o.club?.motto ?? '' });
   const preview = h('div', { class: 'clubeditor__preview' });
@@ -389,11 +389,15 @@ export function renderClubEditor(o: { api: ClubsApi; club?: ClubDetails; onDone:
   const submit = async () => {
     if (busy) return;
     err.textContent = '';
+    // Cyrillic typed and the Latin offer not taken: saving takes it (a gang is written in Latin letters)
+    if (!editing && /[^\x20-\x7E’]/.test(name.value)) name.value = toLatin(name.value);
+    if (/[^\x20-\x7E’‘“”«»—–…]/.test(motto.value)) motto.value = transliterate(motto.value).replace(/[^\x20-\x7E’‘“”«»—–…]/g, '').slice(0, CLUB_RULES.mottoMax);
+    offerLatin();
     let body: CreateClubBody | UpdateClubBody;
     if (!clubMottoSchema.safeParse(motto.value).success) return void (err.textContent = t('A motto is written in Latin letters.'));
     if (!editing) {
       const n = clubNameSchema.safeParse(name.value);
-      if (!n.success) return void (err.textContent = t('A club name is 3–24 Latin letters, digits or spaces.'));
+      if (!n.success) return void (err.textContent = t('A gang name is 3–24 Latin letters, digits or spaces.'));
       const tg = clubTagSchema.safeParse(tag.value);
       if (!tg.success) return void (err.textContent = t('A tag is 2–4 Latin letters or digits.'));
       body = { name: n.data, tag: tg.data, motto: motto.value, flag, emblem };
@@ -421,8 +425,8 @@ export function renderClubEditor(o: { api: ClubsApi; club?: ClubDetails; onDone:
     h(
       'button',
       { class: 'btn btn--red', 'data-testid': 'club-save', onclick: () => void submit() },
-      editing ? t('Save') : t('Found the club'),
-      editing ? null : h('span', { class: 'sub' }, count(CLUB_RULES.createTokens, 'talon')),
+      editing ? t('Save') : t('Start the gang'),
+      editing ? null : h('span', { class: 'sub' }, CLUB_RULES.createTokens > 0 ? count(CLUB_RULES.createTokens, 'talon') : t('free')),
     ),
   );
 }

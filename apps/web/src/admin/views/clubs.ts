@@ -1,4 +1,4 @@
-/** Clubs (v0.3): every club with its people and rating; an admin can remove a player club (audited). */
+/** Gangs — «ОПГ» (v0.3 clubs, renamed in v0.2.8): every gang with its people and rating; an admin can remove a player's gang (audited). */
 import type { AdminClubRow, AdminMe } from '@blatkom/shared';
 import { h, clear, toast } from '../dom.js';
 import { apiFetch } from '../api.js';
@@ -7,7 +7,7 @@ import { dateTime, num } from '../format.js';
 export async function renderClubs(root: HTMLElement, me: AdminMe): Promise<void> {
   clear(root);
   const host = h('section', { class: 'card' }, h('div', { class: 'loading' }, 'Загрузка…'));
-  root.append(h('div', { class: 'toolbar' }, h('h2', {}, 'Клубы')), host);
+  root.append(h('div', { class: 'toolbar' }, h('h2', {}, 'ОПГ')), host);
   const rows = await apiFetch<AdminClubRow[]>('/api/admin/clubs');
   clear(host);
   const own = rows.filter((r) => !r.house);
@@ -15,7 +15,7 @@ export async function renderClubs(root: HTMLElement, me: AdminMe): Promise<void>
     h(
       'p',
       { class: 'note' },
-      `Всего клубов: ${num(rows.length)}, из них созданы игроками: ${num(own.length)}. Клубы игры (отмечены «игры») держат таблицу живой: их люди и рейтинг вычисляются сервером, игрокам они ничем не отличаются. Клуб игрока можно удалить — например, за оскорбительное название или флаг; его участники получат уведомление, что клуб распущен.`,
+      `Всего ОПГ: ${num(rows.length)}, из них созданы игроками: ${num(own.length)}. ОПГ игры (отмечены «игры») держат таблицу живой: их люди и рейтинг вычисляются сервером, игрокам они ничем не отличаются. ОПГ игрока можно удалить — например, за оскорбительное название или флаг; её участники получат уведомление, что ОПГ распущена.`,
     ),
     h(
       'div',
@@ -23,7 +23,7 @@ export async function renderClubs(root: HTMLElement, me: AdminMe): Promise<void>
       h(
         'table',
         { class: 'table' },
-        h('thead', {}, h('tr', {}, ...['№', 'Тег', 'Название', 'Девиз', 'Рейтинг', 'Людей', 'Игроков', 'Глава', 'Заявки', 'Набор', 'Создан', ''].map((t) => h('th', {}, t)))),
+        h('thead', {}, h('tr', {}, ...['№', 'Тег', 'Название', 'Девиз', 'Рейтинг', 'Людей', 'Игроков', 'Главарь', 'Заявки', 'Набор', 'Создан', ''].map((t) => h('th', {}, t)))),
         h(
           'tbody',
           {},
@@ -51,10 +51,10 @@ export async function renderClubs(root: HTMLElement, me: AdminMe): Promise<void>
                       {
                         class: 'chip',
                         onclick: () => {
-                          if (!confirm(`Удалить клуб «${r.name}» [${r.tag}]? Его участники (${r.realMembers}) окажутся без клуба. Действие записывается в аудит.`)) return;
+                          if (!confirm(`Удалить ОПГ «${r.name}» [${r.tag}]? Её участники (${r.realMembers}) окажутся без ОПГ. Действие записывается в аудит.`)) return;
                           apiFetch('/api/admin/clubs/' + r.id, { method: 'DELETE' })
                             .then(() => {
-                              toast('Клуб удалён', 'ok');
+                              toast('ОПГ удалена', 'ok');
                               void renderClubs(root, me);
                             })
                             .catch((e: Error) => toast(e.message));

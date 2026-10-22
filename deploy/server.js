@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.7"),
+  SERVER_VERSION: external_exports.string().default("0.2.8"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -11511,13 +11511,16 @@ var CLUB_RULES = Object.freeze({
   maxOutgoingRequests: 3,
   /** Requests waiting for one club's head. */
   maxIncomingRequests: 50,
-  /** Founding a club: a level and a fee in talons (keeps the table free of throwaway clubs). */
-  createLevel: 3,
-  createTokens: 300,
+  /**
+   * Starting a gang (v0.2.8, the owner: «anyone can start one»): from level 1 and free. One gang per
+   * player and a limit on startings per hour keep the table tidy; raise these to bring a fee back.
+   */
+  createLevel: 1,
+  createTokens: 0,
   startRating: 1e3
 });
 var clubNameSchema = external_exports.string().transform((s) => s.normalize("NFKC").replace(/\s+/g, " ").trim()).pipe(
-  external_exports.string().min(CLUB_RULES.nameMin).max(CLUB_RULES.nameMax).regex(/^[A-Za-z0-9 _.\-’'#!&]+$/, "A club name may contain Latin letters (A\u2013Z), digits, spaces and _ . - # ! &").regex(/[A-Za-z0-9]/, "A club name needs a letter or a digit")
+  external_exports.string().min(CLUB_RULES.nameMin).max(CLUB_RULES.nameMax).regex(/^[A-Za-z0-9 _.\-’'#!&]+$/, "A gang name may contain Latin letters (A\u2013Z), digits, spaces and _ . - # ! &").regex(/[A-Za-z0-9]/, "A gang name needs a letter or a digit")
 );
 var clubTagSchema = external_exports.string().transform((s) => s.normalize("NFKC").trim().toUpperCase()).pipe(
   external_exports.string().min(CLUB_RULES.tagMin).max(CLUB_RULES.tagMax).regex(/^[A-Z0-9]+$/, "A tag is 2\u20134 Latin letters or digits")
@@ -17207,9 +17210,11 @@ var ClubRepo = class {
       }
       await tx`INSERT INTO club_members (club_id, user_id, role) VALUES (${id}, ${userId}, 'head')`;
       await tx`DELETE FROM club_requests WHERE user_id = ${userId}`;
-      const after = p.tokens - CLUB_RULES.createTokens;
-      await tx`UPDATE profiles SET tokens = ${after}, updated_at = now() WHERE user_id = ${userId}`;
-      await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${-CLUB_RULES.createTokens}, ${after}, 'purchase', ${`club:${id}`})`;
+      if (CLUB_RULES.createTokens > 0) {
+        const after = p.tokens - CLUB_RULES.createTokens;
+        await tx`UPDATE profiles SET tokens = ${after}, updated_at = now() WHERE user_id = ${userId}`;
+        await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${-CLUB_RULES.createTokens}, ${after}, 'purchase', ${`club:${id}`})`;
+      }
       return id;
     });
   }
@@ -19340,8 +19345,8 @@ var registerAdminRoutes = (router, deps) => {
     if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
     const p = pg();
     const gone = await new ClubRepo(p.sql).adminDelete(id);
-    if (gone === "not_found") throw new HttpError(404, "not_found", "\u041A\u043B\u0443\u0431 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
-    if (gone === "house") throw new HttpError(409, "house_club", "\u041A\u043B\u0443\u0431\u044B \u0438\u0433\u0440\u044B \u043D\u0435 \u0443\u0434\u0430\u043B\u044F\u044E\u0442\u0441\u044F");
+    if (gone === "not_found") throw new HttpError(404, "not_found", "\u041E\u041F\u0413 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u0430");
+    if (gone === "house") throw new HttpError(409, "house_club", "\u041E\u041F\u0413 \u0438\u0433\u0440\u044B \u043D\u0435 \u0443\u0434\u0430\u043B\u044F\u044E\u0442\u0441\u044F");
     for (const userId of gone.members) deps.social?.push(userId, { type: "club_left", clubId: id, reason: "disbanded" });
     await audit(p.sql, deps.log, { adminId: a.id, action: "club_delete", target: id, details: { name: gone.name, tag: gone.tag, members: gone.members.length }, ip: ctx.ip });
     ctx.json(200, { deleted: id });
@@ -20123,20 +20128,20 @@ async function setupBot(env2, log2, fetchImpl = fetch) {
 // apps/server/src/api/clubs.ts
 var UUID2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var REFUSALS = {
-  not_found: [404, "No such club"],
-  in_club: [409, "You are already in a club \u2014 leave it first"],
-  not_member: [403, "You are not in this club"],
-  not_head: [403, "Only the head of the club can do that"],
-  level: [403, "Founding a club needs level 3"],
-  funds: [409, "Not enough talons to found a club"],
-  name_taken: [409, "A club with that name already exists"],
-  tag_taken: [409, "That tag is taken by another club"],
-  full: [409, "The club is full"],
-  closed: [409, "The club isn\u2019t taking anyone right now"],
+  not_found: [404, "No such gang"],
+  in_club: [409, "You are already in a gang \u2014 leave it first"],
+  not_member: [403, "You are not in this gang"],
+  not_head: [403, "Only the gang\u2019s boss can do that"],
+  level: [403, "Starting a gang needs a higher level"],
+  funds: [409, "Not enough talons to start a gang"],
+  name_taken: [409, "A gang with that name already exists"],
+  tag_taken: [409, "That tag is taken by another gang"],
+  full: [409, "The gang is full"],
+  closed: [409, "The gang isn\u2019t taking anyone right now"],
   already_requested: [409, "You have already asked to join"],
-  too_many_requests: [409, "You can ask three clubs at a time \u2014 wait for an answer or withdraw a request"],
+  too_many_requests: [409, "You can ask three gangs at a time \u2014 wait for an answer or withdraw a request"],
   no_request: [404, "No such request"],
-  house: [403, "This club can\u2019t be changed"]
+  house: [403, "This gang can\u2019t be changed"]
 };
 var registerClubRoutes = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
@@ -20179,7 +20184,7 @@ var registerClubRoutes = (router, deps) => {
   }
   const clubId = (ctx) => {
     const id = ctx.params.id ?? "";
-    if (!UUID2.test(id)) throw new HttpError(400, "bad_id", "Invalid club id");
+    if (!UUID2.test(id)) throw new HttpError(400, "bad_id", "Invalid gang id");
     return id;
   };
   const userParam = (ctx) => {
@@ -20202,7 +20207,7 @@ var registerClubRoutes = (router, deps) => {
     await house().catch(() => {
     });
     const d = await repo().details(clubId(ctx), me.userId);
-    if (!d) throw new HttpError(404, "not_found", "No such club");
+    if (!d) throw new HttpError(404, "not_found", "No such gang");
     ctx.json(200, d);
   });
   router.post("/api/clubs", auth, rateLimit(writeLimiter, byUser), rateLimit(foundLimiter, byUser), async (ctx) => {

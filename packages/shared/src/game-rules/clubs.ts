@@ -53,9 +53,12 @@ export const CLUB_RULES = Object.freeze({
   maxOutgoingRequests: 3,
   /** Requests waiting for one club's head. */
   maxIncomingRequests: 50,
-  /** Founding a club: a level and a fee in talons (keeps the table free of throwaway clubs). */
-  createLevel: 3,
-  createTokens: 300,
+  /**
+   * Starting a gang (v0.2.8, the owner: «anyone can start one»): from level 1 and free. One gang per
+   * player and a limit on startings per hour keep the table tidy; raise these to bring a fee back.
+   */
+  createLevel: 1,
+  createTokens: 0,
   startRating: 1000,
 });
 
@@ -68,8 +71,8 @@ export const clubNameSchema = z
       .string()
       .min(CLUB_RULES.nameMin)
       .max(CLUB_RULES.nameMax)
-      .regex(/^[A-Za-z0-9 _.\-’'#!&]+$/, 'A club name may contain Latin letters (A–Z), digits, spaces and _ . - # ! &')
-      .regex(/[A-Za-z0-9]/, 'A club name needs a letter or a digit'),
+      .regex(/^[A-Za-z0-9 _.\-’'#!&]+$/, 'A gang name may contain Latin letters (A–Z), digits, spaces and _ . - # ! &')
+      .regex(/[A-Za-z0-9]/, 'A gang name needs a letter or a digit'),
   );
 
 /** The tag in square brackets next to the name: 2–4 Latin letters or digits, kept in capitals. */

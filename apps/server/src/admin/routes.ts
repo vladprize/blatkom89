@@ -214,8 +214,8 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
     if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, 'rate_limited', 'Слишком много операций подряд, подождите', { 'retry-after': '60' });
     const p = pg();
     const gone = await new ClubRepo(p.sql).adminDelete(id);
-    if (gone === 'not_found') throw new HttpError(404, 'not_found', 'Клуб не найден');
-    if (gone === 'house') throw new HttpError(409, 'house_club', 'Клубы игры не удаляются');
+    if (gone === 'not_found') throw new HttpError(404, 'not_found', 'ОПГ не найдена');
+    if (gone === 'house') throw new HttpError(409, 'house_club', 'ОПГ игры не удаляются');
     for (const userId of gone.members) deps.social?.push(userId, { type: 'club_left', clubId: id, reason: 'disbanded' });
     await audit(p.sql, deps.log, { adminId: a.id, action: 'club_delete', target: id, details: { name: gone.name, tag: gone.tag, members: gone.members.length }, ip: ctx.ip });
     ctx.json(200, { deleted: id });
