@@ -685,7 +685,7 @@ export class World {
 
   /** Evens the teams out (difference of at most one): the latest arrivals move, bots first. */
   balanceTeams(): void {
-    if (!this.teams) return;
+    if (!this.teams || this.config.fixedTeams) return;
     for (const p of this.players.values()) if (p.team === null) p.team = this.smallerTeam();
     for (let guard = 0; guard < 16; guard++) {
       const a = this.teamSize(0);

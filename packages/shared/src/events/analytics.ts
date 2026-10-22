@@ -34,6 +34,8 @@ export const ANALYTICS_EVENTS = [
   'payment_completed',
   'email_linked',
   'identity_linked',
+  'story_started',
+  'story_completed',
 ] as const;
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];
 
@@ -96,6 +98,9 @@ export const SERVER_EVENT_PROPS = {
   email_linked: z.object({}),
   /** v0.3: a provider attached to an account (google, facebook, discord, reddit, telegram). */
   identity_linked: z.object({ provider: z.enum(['google', 'facebook', 'discord', 'reddit', 'telegram']) }),
+  /** v0.3 part 4: a story mission started / reported done (first: its rewards were paid now). */
+  story_started: z.object({ mission: z.string().max(16) }),
+  story_completed: z.object({ mission: z.string().max(16), ms: z.number().int(), first: z.boolean() }),
 } as const;
 
 export const ClientEventEnvelopeSchema = z

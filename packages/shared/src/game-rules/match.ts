@@ -89,6 +89,8 @@ export interface MatchConfig {
   supplyFirstMs: number;
   supplyIntervalMs: number;
   supplyTtlMs: number;
+  /** Story missions: the sides are set by the mission and never evened out (one hero against five). */
+  fixedTeams?: boolean;
 }
 
 /**

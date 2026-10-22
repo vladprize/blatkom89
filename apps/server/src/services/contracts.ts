@@ -93,6 +93,8 @@ export interface InviteRegistry {
 }
 
 export type ServerEventName =
+  | 'story_started'
+  | 'story_completed'
   | 'session_started'
   | 'profile_created'
   | 'lobby_created'
