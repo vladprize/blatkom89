@@ -189,6 +189,8 @@ export interface PublicProfile {
   rating: number;
   /** The player's club (v0.3), if any. */
   club?: ClubBadge | null;
+  /** v0.3: the providers the account signs in with besides email and Telegram (google, facebook, discord, reddit). */
+  identities?: string[];
 }
 
 export interface AuthResponse {

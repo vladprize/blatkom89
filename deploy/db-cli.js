@@ -7499,8 +7499,8 @@ var CLIENT_EVENT_PROPS = {
   }).strict()
 };
 var SERVER_EVENT_PROPS = {
-  session_started: external_exports.object({ platform, method: external_exports.enum(["telegram", "dev", "guest", "email"]) }),
-  profile_created: external_exports.object({ method: external_exports.enum(["telegram", "dev", "guest"]) }),
+  session_started: external_exports.object({ platform, method: external_exports.enum(["telegram", "dev", "guest", "email", "oauth"]) }),
+  profile_created: external_exports.object({ method: external_exports.enum(["telegram", "dev", "guest", "oauth"]) }),
   lobby_created: external_exports.object({ roomId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean(), mode: external_exports.enum(GAME_MODES).optional() }),
   lobby_joined: external_exports.object({ roomId: external_exports.string(), viaInvite: external_exports.boolean() }),
   lobby_left: external_exports.object({ roomId: external_exports.string(), phase: external_exports.string() }),
@@ -7515,7 +7515,9 @@ var SERVER_EVENT_PROPS = {
   /** The weapon case and (v0.23) the skin case: `kind` skin carries the finish. */
   case_opened: external_exports.object({ weapon: external_exports.string(), rarity: external_exports.enum(["common", "rare", "epic", "legendary"]), price: external_exports.number().int(), kind: external_exports.enum(["weapon", "skin"]).optional(), finish: external_exports.string().max(24).optional() }),
   payment_completed: external_exports.object({ provider: external_exports.string(), packId: external_exports.string(), diamonds: external_exports.number().int(), amountCents: external_exports.number().int() }),
-  email_linked: external_exports.object({})
+  email_linked: external_exports.object({}),
+  /** v0.3: a provider attached to an account (google, facebook, discord, reddit, telegram). */
+  identity_linked: external_exports.object({ provider: external_exports.enum(["google", "facebook", "discord", "reddit", "telegram"]) })
 };
 var ClientEventEnvelopeSchema = external_exports.object({
   id: external_exports.string().uuid(),

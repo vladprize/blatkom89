@@ -44,6 +44,8 @@ import { charText, finishName, gadgetName, modText, weaponName } from '../i18n/c
 import { apiErrorText } from '../net/errors.js';
 import { watchForUpdates } from './updates.js';
 import { renderClubs, renderClub, renderClubEditor, clubLabel } from '../ui/screens/clubs.js';
+import { PROVIDER_NAME, loginErrorText } from '../ui/screens/signin.js';
+import type { LoginProvider } from '../net/oauth.js';
 import { clubFlag } from '../ui/clubFlag.js';
 import type { ClubDetails } from '@blatkom/shared';
 import type { UpdateWatch } from './updates.js';
@@ -267,6 +269,15 @@ export class App {
         .ensureAuth()
         .then(() => {
           this.refreshStrip();
+          // v0.3: a provider just sent the player back — say how it went
+          const back = this.online!.takeLoginOutcome();
+          if (back) {
+            // the account of another device: its alias was settled there, so it isn't asked again here
+            const me = this.online!.profile;
+            if (back.ok && !back.isNew && !back.linked && me) storageSet(NICK_CONFIRMED_KEY, me.id);
+            const name = PROVIDER_NAME[back.ok ? (back.provider as LoginProvider) : 'google'] ?? (back.ok ? back.provider : '');
+            toast(back.ok ? (back.linked ? t('{provider} is linked — your progress is safe', { provider: name }) : t('Signed in with {provider}', { provider: name })) : loginErrorText(back.reason));
+          }
           this.maybeWelcome();
           void this.online!.loadInventory().then(() => this.refreshStrip()).catch(() => {});
         })

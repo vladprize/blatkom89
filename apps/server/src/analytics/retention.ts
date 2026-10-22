@@ -28,6 +28,8 @@ export const RETENTION_DAYS = {
   visitors: 400,
   /** Direct messages between friends, by created_at. */
   directMessages: 180,
+  /** v0.3: one-time provider sign-in codes (valid 5 minutes; each new sign-in also clears those over 10 minutes old). */
+  authHandoffs: 1,
 } as const;
 
 export type RetentionDays = { [K in keyof typeof RETENTION_DAYS]: number };
@@ -60,6 +62,7 @@ export async function purgeExpired(sql: Sql, now = new Date(), days: RetentionDa
   const visitorDay = cutoff(days.visitors).toISOString().slice(0, 10);
   const visitors = cutoff(days.visitors);
   const messages = cutoff(days.directMessages);
+  const handoffs = cutoff(days.authHandoffs);
   return {
     analyticsEvents: await batched(
       async () => (await sql`DELETE FROM analytics_events WHERE ctid IN (SELECT ctid FROM analytics_events WHERE occurred_at < ${events} LIMIT ${BATCH})`).count,
@@ -89,6 +92,7 @@ export async function purgeExpired(sql: Sql, now = new Date(), days: RetentionDa
     directMessages: await batched(
       async () => (await sql`DELETE FROM direct_messages WHERE ctid IN (SELECT ctid FROM direct_messages WHERE created_at < ${messages} LIMIT ${BATCH})`).count,
     ),
+    authHandoffs: await batched(async () => (await sql`DELETE FROM auth_handoffs WHERE ctid IN (SELECT ctid FROM auth_handoffs WHERE created_at < ${handoffs} LIMIT ${BATCH})`).count),
   };
 }
 

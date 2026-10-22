@@ -39,7 +39,7 @@
       <header>
         <a class="brand" href="./">BLATKOM ’89</a>
         <h1>Privacy policy</h1>
-        <div class="muted">Revised 20 October 2026 · <a href="privacy-ru.html" lang="ru">Русский</a></div>
+        <div class="muted">Revised 22 October 2026 · <a href="privacy-ru.html" lang="ru">Русский</a></div>
       </header>
 
       <div class="tldr">
@@ -69,6 +69,13 @@
           password itself is never stored). When you ask for a password reset, the letter with a one-time link (valid for an hour) is sent
           through our email delivery provider, <span class="fill">[Resend, or the provider you configure]</span>, which receives your
           address and the letter.
+        </li>
+        <li>
+          <strong>Signing in with Google, Discord, Facebook, Reddit or Telegram on the website (optional).</strong> The provider tells
+          the server who you are; we keep only the provider’s identifier for you (for Telegram — your numeric Telegram ID, the same one
+          the Mini App uses) and when you last signed in with it. Your first name from the provider becomes the starting in-game name
+          (in Latin letters; you can change it). We <strong>don’t keep</strong> your email address, picture, friends or the provider’s
+          access tokens, and we ask the provider for nothing more than your basic profile.
         </li>
         <li>
           <strong>Game data:</strong> the chosen character and profile avatar, match participation (map, place, eliminations, assists, deaths, damage, time),
@@ -132,7 +139,8 @@
         players; join requests are seen only by the club’s head. The game’s administrators work with the
         statistics panel; every sign-in, look at a player’s card, balance adjustment, password-reset link and data export is written to an
         audit log. We share data with no one except the hosting provider whose servers run the game and the email provider when you ask for a
-        password reset. Telegram processes data under its own rules.
+        password reset. Telegram processes data under its own rules; so do Google, Discord, Facebook and Reddit when you sign in
+        with them (the sign-in happens on their page).
       </p>
 
       <h2>5. How long we keep it</h2>
@@ -141,6 +149,7 @@
         <tbody>
           <tr><td>Profile, statistics, match history, achievements, balances and owned items</td><td>until you delete the profile</td></tr>
           <tr><td>Email address and password hash</td><td>until you delete the profile</td></tr>
+          <tr><td>Sign-ins with Google, Discord, Facebook, Reddit (the provider’s identifier for you)</td><td>until you delete the profile</td></tr>
           <tr><td>Usage events and days active</td><td>up to 400 days</td></tr>
           <tr><td>Visit statistics</td><td>400 days after the last visit</td></tr>
           <tr><td>Private messages to and from friends</td><td>180 days</td></tr>
@@ -149,6 +158,7 @@
           <tr><td>Error reports</td><td>90 days</td></tr>
           <tr><td>Sign-in session records</td><td>90 days after the session ends</td></tr>
           <tr><td>Password-reset links</td><td>valid for 1 hour, deleted 7 days later</td></tr>
+          <tr><td>One-time sign-in codes (from a provider back to the game)</td><td>valid for 5 minutes, deleted once used or within 2 days</td></tr>
           <tr><td>Room invitations</td><td>valid for 24 hours, deleted 7 days later</td></tr>
           <tr><td>Payment records</td><td><span class="fill">[the period your accounting rules require]</span>; no longer linked to you once the profile is deleted</td></tr>
           <tr><td>Database backups</td><td><span class="fill">[backup rotation period]</span></td></tr>
@@ -158,8 +168,8 @@
       <h2>6. How to delete your data</h2>
       <p>
         In the game: <strong>Settings → “Delete my data”</strong>. Deletion is immediate and cannot be undone: the profile, statistics,
-        match history, achievements, balances and owned items, the email address and password hash, days active and all sign-in sessions
-        are deleted. Diamonds and items you bought are lost with the profile. Usage events and error reports lose their link to you and
+        match history, achievements, balances and owned items, the email address and password hash, the sign-ins with Google, Discord,
+        Facebook or Reddit, days active and all sign-in sessions are deleted. Diamonds and items you bought are lost with the profile. Usage events and error reports lose their link to you and
         expire on schedule; payment records stay as accounting records without a link to you. If you open the game again, a new empty
         profile is created. If you can’t get into the game, write to the operator (section 1) from the same Telegram account or email.
       </p>

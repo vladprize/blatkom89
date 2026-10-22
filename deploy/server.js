@@ -2279,7 +2279,7 @@ var require_websocket = __commonJS({
     var http = __require("http");
     var net2 = __require("net");
     var tls2 = __require("tls");
-    var { randomBytes: randomBytes7, createHash: createHash2 } = __require("crypto");
+    var { randomBytes: randomBytes9, createHash: createHash4 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -2817,7 +2817,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes7(16).toString("base64");
+      const key = randomBytes9(16).toString("base64");
       const request = isSecure ? https.request : http.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -2947,7 +2947,7 @@ var require_websocket = __commonJS({
           abortHandshake(websocket, socket, "Invalid Upgrade header");
           return;
         }
-        const digest = createHash2("sha1").update(key + GUID).digest("base64");
+        const digest = createHash4("sha1").update(key + GUID).digest("base64");
         if (res.headers["sec-websocket-accept"] !== digest) {
           abortHandshake(websocket, socket, "Invalid Sec-WebSocket-Accept header");
           return;
@@ -3316,7 +3316,7 @@ var require_websocket_server = __commonJS({
     var EventEmitter = __require("events");
     var http = __require("http");
     var { Duplex } = __require("stream");
-    var { createHash: createHash2 } = __require("crypto");
+    var { createHash: createHash4 } = __require("crypto");
     var extension2 = require_extension();
     var PerMessageDeflate2 = require_permessage_deflate();
     var subprotocol2 = require_subprotocol();
@@ -3623,7 +3623,7 @@ var require_websocket_server = __commonJS({
           );
         }
         if (this._state > RUNNING) return abortHandshake(socket, 503);
-        const digest = createHash2("sha1").update(key + GUID).digest("base64");
+        const digest = createHash4("sha1").update(key + GUID).digest("base64");
         const headers = [
           "HTTP/1.1 101 Switching Protocols",
           "Upgrade: websocket",
@@ -7775,6 +7775,18 @@ var EnvSchema = external_exports.object({
   BOT_WARM_MINUTES: external_exports.coerce.number().int().min(0).max(240).default(20),
   /** Ask the own public address every 5 minutes so a free host never puts the server to sleep. */
   KEEP_AWAKE: bool.default("false"),
+  /** v0.3: «Log in with Telegram» on the website (needs /setdomain for the bot in @BotFather). */
+  TELEGRAM_WEB_LOGIN: bool.default("false"),
+  /** v0.3: sign-in with Google, Facebook, Discord, Reddit (docs/SIGN_IN.md); a provider is on when both keys are set. */
+  GOOGLE_CLIENT_ID: external_exports.string().optional(),
+  GOOGLE_CLIENT_SECRET: external_exports.string().optional(),
+  FACEBOOK_APP_ID: external_exports.string().optional(),
+  FACEBOOK_APP_SECRET: external_exports.string().optional(),
+  FACEBOOK_GRAPH_VERSION: external_exports.string().regex(/^v\d{1,3}\.\d$/).default("v23.0"),
+  DISCORD_CLIENT_ID: external_exports.string().optional(),
+  DISCORD_CLIENT_SECRET: external_exports.string().optional(),
+  REDDIT_CLIENT_ID: external_exports.string().optional(),
+  REDDIT_CLIENT_SECRET: external_exports.string().optional(),
   DEV_AUTH_ENABLED: bool.default("false"),
   /** Public website without Telegram: players sign in as guests with a nickname (device-bound). */
   GUEST_AUTH_ENABLED: bool.default("false"),
@@ -7788,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.6"),
+  SERVER_VERSION: external_exports.string().default("0.2.7"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -8244,8 +8256,8 @@ function typeHandlers(types2) {
 function escapeIdentifiers(xs, { transform: { column } }) {
   return xs.map((x) => escapeIdentifier(column.to ? column.to(x) : x)).join(",");
 }
-var escapeIdentifier = function escape(str) {
-  return '"' + str.replace(/"/g, '""').replace(/\./g, '"."') + '"';
+var escapeIdentifier = function escape(str2) {
+  return '"' + str2.replace(/"/g, '""').replace(/\./g, '"."') + '"';
 };
 var inferType = function inferType2(x) {
   return x instanceof Parameter ? x.type : x instanceof Date ? 1184 : x instanceof Uint8Array ? 17 : x === true || x === false ? 16 : typeof x === "bigint" ? 20 : Array.isArray(x) ? inferType2(x[0]) : 0;
@@ -8320,16 +8332,16 @@ function arrayParserLoop(s, x, parser, typarray) {
   return xs;
 }
 var toCamel = (x) => {
-  let str = x[0];
+  let str2 = x[0];
   for (let i = 1; i < x.length; i++)
-    str += x[i] === "_" ? x[++i].toUpperCase() : x[i];
-  return str;
+    str2 += x[i] === "_" ? x[++i].toUpperCase() : x[i];
+  return str2;
 };
 var toPascal = (x) => {
-  let str = x[0].toUpperCase();
+  let str2 = x[0].toUpperCase();
   for (let i = 1; i < x.length; i++)
-    str += x[i] === "_" ? x[++i].toUpperCase() : x[i];
-  return str;
+    str2 += x[i] === "_" ? x[++i].toUpperCase() : x[i];
+  return str2;
 };
 var toKebab = (x) => x.replace(/_/g, "-");
 var fromCamel = (x) => x.replace(/([A-Z])/g, "_$1").toLowerCase();
@@ -9240,8 +9252,8 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
     bytes_default.i16(0);
     return bytes_default.end();
   }
-  function Parse(str, parameters, types2, name = "") {
-    bytes_default().P().str(name + bytes_default.N).str(str + bytes_default.N).i16(parameters.length);
+  function Parse(str2, parameters, types2, name = "") {
+    bytes_default().P().str(name + bytes_default.N).str(str2 + bytes_default.N).i16(parameters.length);
     parameters.forEach((x, i) => bytes_default.i32(types2[i] || 0));
     return bytes_default.end();
   }
@@ -15686,8 +15698,8 @@ var CLIENT_EVENT_PROPS = {
   }).strict()
 };
 var SERVER_EVENT_PROPS = {
-  session_started: external_exports.object({ platform, method: external_exports.enum(["telegram", "dev", "guest", "email"]) }),
-  profile_created: external_exports.object({ method: external_exports.enum(["telegram", "dev", "guest"]) }),
+  session_started: external_exports.object({ platform, method: external_exports.enum(["telegram", "dev", "guest", "email", "oauth"]) }),
+  profile_created: external_exports.object({ method: external_exports.enum(["telegram", "dev", "guest", "oauth"]) }),
   lobby_created: external_exports.object({ roomId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean(), mode: external_exports.enum(GAME_MODES).optional() }),
   lobby_joined: external_exports.object({ roomId: external_exports.string(), viaInvite: external_exports.boolean() }),
   lobby_left: external_exports.object({ roomId: external_exports.string(), phase: external_exports.string() }),
@@ -15702,7 +15714,9 @@ var SERVER_EVENT_PROPS = {
   /** The weapon case and (v0.23) the skin case: `kind` skin carries the finish. */
   case_opened: external_exports.object({ weapon: external_exports.string(), rarity: external_exports.enum(["common", "rare", "epic", "legendary"]), price: external_exports.number().int(), kind: external_exports.enum(["weapon", "skin"]).optional(), finish: external_exports.string().max(24).optional() }),
   payment_completed: external_exports.object({ provider: external_exports.string(), packId: external_exports.string(), diamonds: external_exports.number().int(), amountCents: external_exports.number().int() }),
-  email_linked: external_exports.object({})
+  email_linked: external_exports.object({}),
+  /** v0.3: a provider attached to an account (google, facebook, discord, reddit, telegram). */
+  identity_linked: external_exports.object({ provider: external_exports.enum(["google", "facebook", "discord", "reddit", "telegram"]) })
 };
 var ClientEventEnvelopeSchema = external_exports.object({
   id: external_exports.string().uuid(),
@@ -16665,7 +16679,8 @@ function toPublicProfile(r) {
     diamonds: r.diamonds,
     email: r.email,
     rating: r.rating,
-    club: r.club_id && r.club_tag && r.club_name && flag.success && emblem.success ? { id: r.club_id, tag: r.club_tag, name: r.club_name, flag: flag.data, emblem: emblem.data } : null
+    club: r.club_id && r.club_tag && r.club_name && flag.success && emblem.success ? { id: r.club_id, tag: r.club_tag, name: r.club_name, flag: flag.data, emblem: emblem.data } : null,
+    identities: r.identities ?? []
   };
 }
 var ProfileRepo = class {
@@ -16684,7 +16699,8 @@ var ProfileRepo = class {
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
              p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email,
              COALESCE(p.rating, 1000) AS rating,
-             c.id AS club_id, c.tag AS club_tag, c.name AS club_name, c.flag AS club_flag, c.emblem AS club_emblem
+             c.id AS club_id, c.tag AS club_tag, c.name AS club_name, c.flag AS club_flag, c.emblem AS club_emblem,
+             (SELECT array_agg(i.provider ORDER BY i.provider) FROM user_identities i WHERE i.user_id = u.id) AS identities
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
         LEFT JOIN club_members cm ON cm.user_id = u.id LEFT JOIN clubs c ON c.id = cm.club_id
       WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
@@ -17887,7 +17903,9 @@ var RETENTION_DAYS = {
   /** Anonymous visitor funnel: visitor_days by day, visitors by their last visit. */
   visitors: 400,
   /** Direct messages between friends, by created_at. */
-  directMessages: 180
+  directMessages: 180,
+  /** v0.3: one-time provider sign-in codes (valid 5 minutes; each new sign-in also clears those over 10 minutes old). */
+  authHandoffs: 1
 };
 var BATCH = 5e3;
 var DAY_MS = 864e5;
@@ -17913,6 +17931,7 @@ async function purgeExpired(sql2, now = /* @__PURE__ */ new Date(), days = RETEN
   const visitorDay = cutoff(days.visitors).toISOString().slice(0, 10);
   const visitors = cutoff(days.visitors);
   const messages2 = cutoff(days.directMessages);
+  const handoffs = cutoff(days.authHandoffs);
   return {
     analyticsEvents: await batched(
       async () => (await sql2`DELETE FROM analytics_events WHERE ctid IN (SELECT ctid FROM analytics_events WHERE occurred_at < ${events} LIMIT ${BATCH})`).count
@@ -17937,7 +17956,8 @@ async function purgeExpired(sql2, now = /* @__PURE__ */ new Date(), days = RETEN
     ),
     directMessages: await batched(
       async () => (await sql2`DELETE FROM direct_messages WHERE ctid IN (SELECT ctid FROM direct_messages WHERE created_at < ${messages2} LIMIT ${BATCH})`).count
-    )
+    ),
+    authHandoffs: await batched(async () => (await sql2`DELETE FROM auth_handoffs WHERE ctid IN (SELECT ctid FROM auth_handoffs WHERE created_at < ${handoffs} LIMIT ${BATCH})`).count)
   };
 }
 function scheduleRetention(sql2, log2, opts = {}) {
@@ -20269,8 +20289,336 @@ var registerClubRoutes = (router, deps) => {
   });
 };
 
+// apps/server/src/api/oauth.ts
+import { randomBytes as randomBytes6 } from "node:crypto";
+
+// apps/server/src/auth/oauth.ts
+import { createHash as createHash2, createHmac as createHmac7, randomBytes as randomBytes5, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
+var OAUTH_PROVIDERS = ["google", "facebook", "discord", "reddit"];
+var isOAuthProvider = (v) => OAUTH_PROVIDERS.includes(v);
+var str = (v) => typeof v === "string" ? v : typeof v === "number" ? String(v) : "";
+var UA = { "user-agent": "web:blatkom89:0.3 (game sign-in)" };
+function providerSpec(p, env2) {
+  switch (p) {
+    case "google":
+      return {
+        authorize: "https://accounts.google.com/o/oauth2/v2/auth",
+        token: "https://oauth2.googleapis.com/token",
+        profile: "https://openidconnect.googleapis.com/v1/userinfo",
+        scope: "openid profile",
+        extra: { prompt: "select_account" },
+        tokenAuth: "body",
+        parse: (j) => str(j.sub) ? { uid: str(j.sub), name: str(j.given_name) || str(j.name) } : null
+      };
+    case "facebook": {
+      const v = env2.FACEBOOK_GRAPH_VERSION;
+      return {
+        authorize: `https://www.facebook.com/${v}/dialog/oauth`,
+        token: `https://graph.facebook.com/${v}/oauth/access_token`,
+        profile: `https://graph.facebook.com/${v}/me?fields=id,first_name,name`,
+        scope: "public_profile",
+        tokenAuth: "body",
+        parse: (j) => str(j.id) ? { uid: str(j.id), name: str(j.first_name) || str(j.name) } : null
+      };
+    }
+    case "discord":
+      return {
+        authorize: "https://discord.com/oauth2/authorize",
+        token: "https://discord.com/api/oauth2/token",
+        profile: "https://discord.com/api/users/@me",
+        scope: "identify",
+        tokenAuth: "body",
+        parse: (j) => str(j.id) ? { uid: str(j.id), name: str(j.global_name) || str(j.username) } : null
+      };
+    case "reddit":
+      return {
+        authorize: "https://www.reddit.com/api/v1/authorize",
+        token: "https://www.reddit.com/api/v1/access_token",
+        profile: "https://oauth.reddit.com/api/v1/me",
+        scope: "identity",
+        extra: { duration: "temporary" },
+        tokenAuth: "basic",
+        headers: UA,
+        parse: (j) => str(j.id) ? { uid: str(j.id), name: str(j.name) } : null
+      };
+  }
+}
+function credentials(p, env2) {
+  const pair = {
+    google: [env2.GOOGLE_CLIENT_ID, env2.GOOGLE_CLIENT_SECRET],
+    facebook: [env2.FACEBOOK_APP_ID, env2.FACEBOOK_APP_SECRET],
+    discord: [env2.DISCORD_CLIENT_ID, env2.DISCORD_CLIENT_SECRET],
+    reddit: [env2.REDDIT_CLIENT_ID, env2.REDDIT_CLIENT_SECRET]
+  };
+  const [id, secret] = pair[p];
+  return id && secret ? { id, secret } : null;
+}
+function enabledProviders(env2) {
+  return OAUTH_PROVIDERS.filter((p) => credentials(p, env2) !== null);
+}
+function callbackUrl(env2, p) {
+  return `${env2.PUBLIC_URL.replace(/\/$/, "")}/api/auth/oauth/${p}/callback`;
+}
+var b64 = (b2) => Buffer.from(b2).toString("base64url");
+function sign(secret, kind, payload) {
+  const body = b64(JSON.stringify(payload));
+  const mac = createHmac7("sha256", secret).update(`${kind}.${body}`).digest("base64url");
+  return `${body}.${mac}`;
+}
+function verify(secret, kind, token, maxAgeMs, now = Date.now()) {
+  const [body, mac] = token.split(".");
+  if (!body || !mac) return null;
+  const want = Buffer.from(createHmac7("sha256", secret).update(`${kind}.${body}`).digest("base64url"));
+  const got = Buffer.from(mac);
+  if (want.length !== got.length || !timingSafeEqual6(want, got)) return null;
+  try {
+    const p = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    if (typeof p.t !== "number" || p.t > now + 6e4 || now - p.t > maxAgeMs) return null;
+    return p;
+  } catch {
+    return null;
+  }
+}
+var intentToken = (secret, userId, now = Date.now()) => sign(secret, "intent", { u: userId, t: now, r: b64(randomBytes5(6)) });
+var readIntent = (secret, token, now = Date.now()) => verify(secret, "intent", token, 5 * 6e4, now);
+var stateToken = (secret, s, now = Date.now()) => sign(secret, "state", { ...s, t: now });
+var readState = (secret, token, now = Date.now()) => verify(secret, "state", token, 10 * 6e4, now);
+var newNonce = () => b64(randomBytes5(18));
+var handoffHash = (code) => createHash2("sha256").update(code).digest("hex");
+function authorizeUrl(spec, clientId, redirectUri, state) {
+  const u = new URL(spec.authorize);
+  u.searchParams.set("client_id", clientId);
+  u.searchParams.set("redirect_uri", redirectUri);
+  u.searchParams.set("response_type", "code");
+  u.searchParams.set("scope", spec.scope);
+  u.searchParams.set("state", state);
+  for (const [k, v] of Object.entries(spec.extra ?? {})) u.searchParams.set(k, v);
+  return u.toString();
+}
+var OAuthError = class extends Error {
+  constructor(step, detail) {
+    super(`${step}: ${detail}`);
+    this.step = step;
+  }
+  step;
+};
+async function fetchProfile(spec, creds, redirectUri, code, fetchImpl = fetch) {
+  const form = new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectUri });
+  const headers = { "content-type": "application/x-www-form-urlencoded", accept: "application/json", ...spec.headers ?? {} };
+  if (spec.tokenAuth === "basic") headers.authorization = `Basic ${Buffer.from(`${creds.id}:${creds.secret}`).toString("base64")}`;
+  else {
+    form.set("client_id", creds.id);
+    form.set("client_secret", creds.secret);
+  }
+  const tr = await fetchImpl(spec.token, { method: "POST", headers, body: form.toString(), signal: AbortSignal.timeout(1e4) });
+  const tj = await tr.json().catch(() => null);
+  const access = tj && str(tj.access_token);
+  if (!tr.ok || !access) throw new OAuthError("token", `${tr.status} ${str(tj?.error) || ""}`.trim());
+  const pr = await fetchImpl(spec.profile, { headers: { authorization: `Bearer ${access}`, accept: "application/json", ...spec.headers ?? {} }, signal: AbortSignal.timeout(1e4) });
+  const pj = await pr.json().catch(() => null);
+  const profile = pr.ok && pj ? spec.parse(pj) : null;
+  if (!profile) throw new OAuthError("profile", String(pr.status));
+  return { uid: profile.uid.slice(0, 200), name: profile.name.slice(0, 100) };
+}
+
+// apps/server/src/auth/telegramLogin.ts
+import { createHash as createHash3, createHmac as createHmac8, timingSafeEqual as timingSafeEqual7 } from "node:crypto";
+var TelegramLoginData = external_exports.record(external_exports.string().max(32), external_exports.union([external_exports.string().max(512), external_exports.number()])).refine((r) => Object.keys(r).length <= 16, "too many fields");
+function validateTelegramLogin(data, botToken, maxAgeSec, nowSec = Math.floor(Date.now() / 1e3)) {
+  const hash = String(data.hash ?? "");
+  if (!/^[0-9a-f]{64}$/.test(hash)) return { ok: false, reason: "missing_hash" };
+  const check = Object.keys(data).filter((k) => k !== "hash").sort().map((k) => `${k}=${String(data[k])}`).join("\n");
+  const secret = createHash3("sha256").update(botToken).digest();
+  const want = Buffer.from(createHmac8("sha256", secret).update(check).digest("hex"));
+  const got = Buffer.from(hash);
+  if (want.length !== got.length || !timingSafeEqual7(want, got)) return { ok: false, reason: "bad_signature" };
+  const at = Number(data.auth_date);
+  if (!Number.isFinite(at)) return { ok: false, reason: "stale" };
+  if (at > nowSec + 60) return { ok: false, reason: "future" };
+  if (nowSec - at > maxAgeSec) return { ok: false, reason: "stale" };
+  const id = Number(data.id);
+  if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, reason: "no_user" };
+  const first = String(data.first_name ?? "").slice(0, 64);
+  const last = data.last_name !== void 0 ? String(data.last_name).slice(0, 64) : null;
+  return { ok: true, user: { id, firstName: first, lastName: last } };
+}
+function botIdOf(token) {
+  const id = token.split(":")[0] ?? "";
+  return /^\d{5,15}$/.test(id) ? id : null;
+}
+
+// apps/server/src/api/oauth.ts
+var NONCE_COOKIE = "blk_oauth";
+var HANDOFF_TTL_MS = 5 * 6e4;
+var FinishBody = external_exports.object({ code: external_exports.string().regex(/^[A-Za-z0-9_-]{20,80}$/), platform: PlatformSchema.optional(), clientVersion: external_exports.string().max(32).optional() }).strict();
+var TelegramWebBody = external_exports.object({ data: TelegramLoginData, platform: PlatformSchema.optional(), clientVersion: external_exports.string().max(32).optional() }).strict();
+async function createAccount(sql2, name) {
+  for (let attempt = 0; ; attempt++) {
+    const candidate = await freeName(sql2, name);
+    try {
+      const [u] = await sql2`
+        INSERT INTO users (display_name, name_key, oauth_only) VALUES (${candidate}, ${nameKey(candidate)}, true) RETURNING id`;
+      await sql2`INSERT INTO profiles (user_id) VALUES (${u.id}) ON CONFLICT DO NOTHING`;
+      return u.id;
+    } catch (e2) {
+      if (!isNameConflict(e2) || attempt >= 4) throw e2;
+    }
+  }
+}
+var registerOAuthRoutes = (router, deps) => {
+  const { env: env2 } = deps;
+  const intentLimiter = new RateLimiter(30, 30 / 60);
+  const startLimiter = new RateLimiter(30, 30 / 60);
+  const callbackLimiter = new RateLimiter(30, 30 / 60);
+  const finishLimiter = new RateLimiter(30, 30 / 60);
+  const telegramLimiter = new RateLimiter(20, 20 / 60);
+  const secure = env2.PUBLIC_URL.startsWith("https://");
+  const home = env2.PUBLIC_URL.replace(/\/$/, "");
+  const db = () => {
+    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
+    return deps.sql;
+  };
+  const back = (ctx, where) => {
+    ctx.res.writeHead(302, { location: `${home}/${where}`, "set-cookie": `${NONCE_COOKIE}=; Path=/api/auth/oauth; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}; Max-Age=0`, "cache-control": "no-store" });
+    ctx.res.end();
+  };
+  const fail = (ctx, why) => back(ctx, `?login_error=${encodeURIComponent(why)}`);
+  const currentUserId = async (ctx) => {
+    const token = bearerToken(ctx);
+    if (!token) return null;
+    return (await deps.services.sessions.verify(token))?.userId ?? null;
+  };
+  router.get("/api/auth/providers", (ctx) => {
+    const botId = env2.TELEGRAM_BOT_TOKEN ? botIdOf(env2.TELEGRAM_BOT_TOKEN) : null;
+    ctx.json(200, { providers: enabledProviders(env2), telegram: env2.TELEGRAM_WEB_LOGIN && botId ? { botId } : null });
+  });
+  router.post("/api/auth/oauth/intent", rateLimit(intentLimiter), async (ctx) => {
+    ctx.json(200, { intent: intentToken(env2.SESSION_SECRET, await currentUserId(ctx)) });
+  });
+  router.get("/api/auth/oauth/:provider/start", rateLimit(startLimiter), (ctx) => {
+    const provider = ctx.params.provider ?? "";
+    if (!isOAuthProvider(provider)) throw new HttpError(404, "not_found", "Not found");
+    const creds = credentials(provider, env2);
+    if (!creds) return fail(ctx, "not_configured");
+    const intent = readIntent(env2.SESSION_SECRET, ctx.query.get("intent") ?? "");
+    if (!intent) return fail(ctx, "expired");
+    const nonce = newNonce();
+    const state = stateToken(env2.SESSION_SECRET, { p: provider, u: intent.u, n: nonce });
+    const url = authorizeUrl(providerSpec(provider, env2), creds.id, callbackUrl(env2, provider), state);
+    ctx.res.writeHead(302, { location: url, "set-cookie": `${NONCE_COOKIE}=${nonce}; Path=/api/auth/oauth; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}; Max-Age=600`, "cache-control": "no-store" });
+    ctx.res.end();
+  });
+  router.get("/api/auth/oauth/:provider/callback", rateLimit(callbackLimiter), async (ctx) => {
+    const provider = ctx.params.provider ?? "";
+    if (!isOAuthProvider(provider)) throw new HttpError(404, "not_found", "Not found");
+    const creds = credentials(provider, env2);
+    if (!creds) return fail(ctx, "not_configured");
+    if (ctx.query.get("error")) return fail(ctx, "cancelled");
+    const state = readState(env2.SESSION_SECRET, ctx.query.get("state") ?? "");
+    if (!state || state.p !== provider || !state.n || ctx.cookies[NONCE_COOKIE] !== state.n) return fail(ctx, "state");
+    const code = ctx.query.get("code") ?? "";
+    if (!code || code.length > 2048) return fail(ctx, "state");
+    let profile;
+    try {
+      profile = await fetchProfile(providerSpec(provider, env2), creds, callbackUrl(env2, provider), code, deps.oauthFetch ?? fetch);
+    } catch (e2) {
+      deps.log.warn("oauth sign-in failed", { provider, step: e2 instanceof OAuthError ? e2.step : "network", err: e2 });
+      return fail(ctx, "provider");
+    }
+    const sql2 = db();
+    const { userId, isNew, linked, refused } = await resolveAccount(sql2, provider, profile, state.u);
+    if (refused) return fail(ctx, "already_linked");
+    const handoff = randomBytes6(24).toString("base64url");
+    await sql2`DELETE FROM auth_handoffs WHERE created_at < now() - interval '10 minutes'`;
+    await sql2`INSERT INTO auth_handoffs (code_hash, user_id, provider, is_new, linked) VALUES (${handoffHash(handoff)}, ${userId}, ${provider}, ${isNew}, ${linked})`;
+    deps.log.info("oauth sign-in", { provider, isNew, linked });
+    back(ctx, `#login=${handoff}`);
+  });
+  router.post("/api/auth/oauth/finish", rateLimit(finishLimiter), async (ctx) => {
+    const body = await ctx.body(FinishBody, 2048);
+    const sql2 = db();
+    const [h] = await sql2`
+      DELETE FROM auth_handoffs WHERE code_hash = ${handoffHash(body.code)} RETURNING user_id, provider, is_new, linked, created_at`;
+    if (!h || Date.now() - h.created_at.getTime() > HANDOFF_TTL_MS) throw new HttpError(401, "login_expired", "The sign-in has expired \u2014 try again");
+    const pg = pgContext(sql2, env2, deps.log);
+    const platform2 = body.platform ?? null;
+    const s = await pg.sessions.issue(h.user_id, "oauth", platform2, body.clientVersion ?? null);
+    const evCtx = { userId: h.user_id, sessionId: s.sessionId, platform: platform2 };
+    deps.services.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "oauth" }, evCtx);
+    if (h.is_new) deps.services.analytics.server("profile_created", { method: "oauth" }, evCtx);
+    if (h.linked) deps.services.analytics.server("identity_linked", { provider: h.provider }, evCtx);
+    const profile = await pg.profiles.get(h.user_id);
+    if (!profile) throw new HttpError(401, "login_expired", "The sign-in has expired \u2014 try again");
+    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: h.is_new, linked: h.linked, provider: h.provider };
+    ctx.json(200, res);
+  });
+  router.post("/api/auth/telegram/web", rateLimit(telegramLimiter), async (ctx) => {
+    if (!env2.TELEGRAM_BOT_TOKEN || !env2.TELEGRAM_WEB_LOGIN) throw new HttpError(503, "telegram_not_configured", "Telegram sign-in isn\u2019t set up on this server");
+    const body = await ctx.body(TelegramWebBody, 8 * 1024);
+    const v = validateTelegramLogin(body.data, env2.TELEGRAM_BOT_TOKEN, env2.TELEGRAM_AUTH_MAX_AGE_SEC);
+    if (!v.ok) {
+      deps.log.info("telegram web login rejected", { reason: v.reason, ip: ctx.ip });
+      throw new HttpError(401, "invalid_init_data", "The Telegram signature didn\u2019t check out");
+    }
+    const sql2 = db();
+    const current = await currentUserId(ctx);
+    const tgId = String(v.user.id);
+    let userId;
+    let isNew = false;
+    let linked = false;
+    const [owner] = await sql2`SELECT id FROM users WHERE telegram_id = ${tgId}::bigint AND deleted_at IS NULL`;
+    if (owner) userId = owner.id;
+    else if (current && (await sql2`UPDATE users SET telegram_id = ${tgId}::bigint WHERE id = ${current} AND telegram_id IS NULL AND deleted_at IS NULL RETURNING id`).length) {
+      userId = current;
+      linked = true;
+    } else {
+      const name = latinName(`${v.user.firstName} ${v.user.lastName ?? ""}`, `Comrade ${tgId.slice(-4)}`);
+      for (let attempt = 0; ; attempt++) {
+        const candidate = await freeName(sql2, name);
+        try {
+          const [u] = await sql2`INSERT INTO users (telegram_id, display_name, name_key) VALUES (${tgId}::bigint, ${candidate}, ${nameKey(candidate)}) RETURNING id`;
+          await sql2`INSERT INTO profiles (user_id) VALUES (${u.id}) ON CONFLICT DO NOTHING`;
+          userId = u.id;
+          isNew = true;
+          break;
+        } catch (e2) {
+          if (!isNameConflict(e2) || attempt >= 4) throw e2;
+        }
+      }
+    }
+    const pg = pgContext(sql2, env2, deps.log);
+    const platform2 = body.platform ?? null;
+    const s = await pg.sessions.issue(userId, "telegram", platform2, body.clientVersion ?? null);
+    const evCtx = { userId, sessionId: s.sessionId, platform: platform2 };
+    deps.services.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "telegram" }, evCtx);
+    if (isNew) deps.services.analytics.server("profile_created", { method: "telegram" }, evCtx);
+    if (linked) deps.services.analytics.server("identity_linked", { provider: "telegram" }, evCtx);
+    const profile = await pg.profiles.get(userId);
+    if (!profile) throw new HttpError(500, "internal", "Profile not found");
+    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew, linked, provider: "telegram" };
+    ctx.json(200, res);
+  });
+};
+async function resolveAccount(sql2, provider, profile, current) {
+  const [known] = await sql2`
+    UPDATE user_identities SET last_used_at = now() WHERE provider = ${provider} AND provider_uid = ${profile.uid} RETURNING user_id`;
+  if (known) return { userId: known.user_id, isNew: false, linked: false, refused: false };
+  if (current) {
+    const [alive] = await sql2`SELECT id FROM users WHERE id = ${current} AND deleted_at IS NULL`;
+    if (alive) {
+      const [other] = await sql2`SELECT 1 FROM user_identities WHERE user_id = ${current} AND provider = ${provider}`;
+      if (other) return { userId: current, isNew: false, linked: false, refused: true };
+      await sql2`INSERT INTO user_identities (provider, provider_uid, user_id) VALUES (${provider}, ${profile.uid}, ${current}) ON CONFLICT DO NOTHING`;
+      return { userId: current, isNew: false, linked: true, refused: false };
+    }
+  }
+  const userId = await createAccount(sql2, latinName(profile.name, `Comrade ${profile.uid.replace(/\D/g, "").slice(-4).padStart(4, "0")}`));
+  await sql2`INSERT INTO user_identities (provider, provider_uid, user_id) VALUES (${provider}, ${profile.uid}, ${userId})`;
+  return { userId, isNew: true, linked: false, refused: false };
+}
+
 // apps/server/src/app.ts
-var ROUTE_MODULES = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerClubRoutes, registerTelegramRoutes, registerAdminRoutes];
+var ROUTE_MODULES = [registerAuthRoutes, registerOAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerClubRoutes, registerTelegramRoutes, registerAdminRoutes];
 function createApp(deps, modules = ROUTE_MODULES) {
   const router = new Router();
   const startedAt = Date.now();
@@ -20330,10 +20678,10 @@ function createApp(deps, modules = ROUTE_MODULES) {
 }
 
 // apps/server/src/rooms/RoomManager.ts
-import { randomBytes as randomBytes6 } from "node:crypto";
+import { randomBytes as randomBytes8 } from "node:crypto";
 
 // apps/server/src/rooms/MatchRoom.ts
-import { randomBytes as randomBytes5, randomUUID as randomUUID3 } from "node:crypto";
+import { randomBytes as randomBytes7, randomUUID as randomUUID3 } from "node:crypto";
 var between = (a, b2) => a + Math.random() * Math.max(0, b2 - a);
 var NAV = /* @__PURE__ */ new Map();
 function navFor(mapId, world) {
@@ -20491,7 +20839,7 @@ var MatchRoom = class {
       queue: [],
       tokens: INPUT_BUCKET_MAX,
       lastQueuedSeq: 0,
-      reconnectToken: randomBytes5(18).toString("base64url"),
+      reconnectToken: randomBytes7(18).toString("base64url"),
       joinedAt: Date.now(),
       matchTimeMs: 0,
       violations: 0,
@@ -21231,7 +21579,7 @@ var MatchRoom = class {
 // apps/server/src/rooms/RoomManager.ts
 var ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 function newRoomId(len = 10) {
-  const bytes = randomBytes6(len);
+  const bytes = randomBytes8(len);
   let s = "";
   for (let i = 0; i < len; i++) s += ID_ALPHABET[bytes[i] % ID_ALPHABET.length];
   return s;

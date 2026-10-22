@@ -24,6 +24,8 @@ nickname and play as guests (`GUEST_AUTH_ENABLED=true`); Telegram is not needed.
 5. Optional (v0.3): the Telegram bot — `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` in the same tab;
    `/start` then answers with the game's link ([TELEGRAM.md](TELEGRAM.md) §0). `KEEP_AWAKE=true` keeps
    the free service from sleeping (instant answers, no first-visit minute).
+6. Optional (v0.3): sign-in with Google, Telegram, Discord, Facebook and Reddit — each provider's keys in
+   the same tab, step by step in [SIGN_IN.md](SIGN_IN.md). A provider without keys is simply not shown.
 
 Free-tier limits (Render, 2026): the service sleeps after 15 minutes without traffic and the first
 visit then takes about a minute (the client pings `/api/health` every 4 minutes while in a room);
@@ -63,6 +65,8 @@ Copy `.env.example` to `.env` and set at least:
 | `MATCH_TEAM_SCORE_LIMIT`, `MATCH_CAPTURE_LIMIT`, `MATCH_BASE_SCORE_LIMIT` | team modes: eliminations in «red vs blue» (40), flags in capture the flag (3), points in base capture (250) |
 | `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` | not needed since v0.24 (the game is free, `REAL_MONEY = false`); for later: diamonds by card (Stripe Checkout); webhook `https://$DOMAIN/api/pay/stripe/webhook` — events in [ECONOMY.md](ECONOMY.md) §5 |
 | `NOWPAYMENTS_API_KEY` + `NOWPAYMENTS_IPN_SECRET` | not needed since v0.24; for later: diamonds by crypto (NOWPayments invoices; `NOWPAYMENTS_SANDBOX=true` for the sandbox) |
+| `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`, `DISCORD_CLIENT_ID` + `DISCORD_CLIENT_SECRET`, `FACEBOOK_APP_ID` + `FACEBOOK_APP_SECRET`, `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` | optional: «sign in with …» for that provider; redirect URI `https://$DOMAIN/api/auth/oauth/<provider>/callback` ([SIGN_IN.md](SIGN_IN.md)). `FACEBOOK_GRAPH_VERSION` (default `v23.0`) |
+| `TELEGRAM_WEB_LOGIN` | `true`: «sign in with Telegram» on the website (needs the bot token and the bot's `/setdomain`); the Mini App signs in by itself either way |
 | `RESEND_API_KEY` + `MAIL_FROM` | optional: password-reset letters (Resend; the sender domain must be verified there). Without them admins issue one-time reset links in `/admin` |
 | `CASES_ENABLED` | `true` (default) / `false` — paid rare-weapon cases |
 | `MATCH_FILL_BOTS` | complete small lineups with players the server runs itself (default `true`: 4 in free-for-all, 3 a side in team modes; Quick Match after a 5 s head start, rooms with friends at kick-off; see docs/NETCODE.md §2a) |

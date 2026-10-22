@@ -12,7 +12,7 @@
 
 ## Part 1 — Privacy policy (player-facing text)
 
-**BLATKOM ’89 — privacy policy.** Revised 20 October 2026.
+**BLATKOM ’89 — privacy policy.** Revised 22 October 2026.
 
 **In short.** The game is free to play; purchases are optional and there are no ads. We keep only
 what the game, your profile and its statistics need. We never get your phone number, and we don’t
@@ -33,6 +33,11 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
 3. **Email sign-in (optional).** If you register an email, we keep the address and a hash of your
    password (scrypt; never the password itself). Password-reset letters with a one-time link (valid
    for an hour) are sent through our email provider, **[Resend, or the provider you configure]**.
+3a. **Signing in with Google, Discord, Facebook, Reddit or Telegram on the website (optional, v0.3):**
+   only the provider’s identifier for you (for Telegram — the numeric Telegram ID, the same as in the
+   Mini App) and the time of the last sign-in with it; your first name from the provider becomes the
+   starting in-game name (Latin letters, changeable). No email, picture, friends or provider tokens are
+   kept; only the basic profile is requested (`openid profile`, `public_profile`, `identify`, `identity`).
 4. **Game data:** character, profile avatar (one of the game's portraits, by id), match participation (map, place, eliminations, assists, deaths, damage,
    time), XP, level, achievements, streaks, time in game, match history; talon and diamond balances and
    every change to them, owned weapons, characters, equipment, modifications and weapon skins, loadout, case openings.
@@ -69,13 +74,15 @@ flag, rating and people (name, avatar, level, role) are public; join requests ar
 only. Administrators work with the statistics
 panel; every sign-in, look at a player’s card, balance adjustment, password-reset link and export is
 audited. Data is shared only with the hosting provider, the payment provider you choose when you buy,
-and the email provider when you ask for a password reset. Telegram processes data under its own rules.
+and the email provider when you ask for a password reset. Telegram processes data under its own rules; so do
+Google, Discord, Facebook and Reddit when you sign in with them (on their page).
 
 ### 5. How long we keep it
 | Data | Period |
 |---|---|
 | Profile, statistics, match history, achievements, balances and owned items | until you delete the profile |
 | Email address and password hash | until you delete the profile |
+| Sign-ins with Google, Discord, Facebook, Reddit (the provider’s id for you) | until you delete the profile |
 | Usage events and days active | up to 400 days |
 | Visit statistics | 400 days after the last visit |
 | Private messages with friends | 180 days |
@@ -84,14 +91,15 @@ and the email provider when you ask for a password reset. Telegram processes dat
 | Error reports | 90 days |
 | Sign-in session records | 90 days after the session ends |
 | Password-reset links | valid 1 hour, deleted 7 days later |
+| One-time sign-in codes (provider → game) | valid 5 minutes, deleted once used or within 2 days |
 | Room invitations | valid 24 hours, deleted 7 days later |
 | Payment records | **[period your accounting rules require]**; unlinked from you once the profile is deleted |
 | Database backups | **[backup rotation period]** |
 
 ### 6. How to delete your data
 **Settings → “Delete my data”** — immediate and irreversible: profile, statistics, match history,
-achievements, balances and owned items (bought ones included), email and password hash, days active
-and all sessions. Usage events and error reports lose the link to you and expire on schedule; payment
+achievements, balances and owned items (bought ones included), email and password hash, the sign-ins
+with Google / Discord / Facebook / Reddit, days active and all sessions. Usage events and error reports lose the link to you and expire on schedule; payment
 records stay as accounting records without the link. Without access to the game, write to the operator
 from the same Telegram account or email.
 
@@ -109,6 +117,8 @@ When this policy changes, we update the revision date.
 | `users` | `telegram_id`, `display_name` (+ `name_key`, its case-folded form for uniqueness), `language_code`, `platform`, `dev_device_id` (dev mode, or `g1:` + HMAC of a guest browser secret), `email`, `password_hash` (scrypt), `email_linked_at`, `created_at`, `last_seen_at` | identity, display, sign-in, analytics | until account deletion |
 | `currency_ledger`, `user_items`, `weapon_mods`, `case_openings` | balance changes (with admin id for grants), owned items (weapon skins included), modifications, case draws (weapons and skins) | economy, support | until account deletion (cascade) |
 | `payments` | `user_id` (SET NULL on deletion), provider and its reference, pack, amount, status, times | accounting, crediting diamonds once | **[accounting retention period]** — not purged automatically |
+| `user_identities` (v0.3) | provider (`google`/`facebook`/`discord`/`reddit`), the provider's id for the player (`provider_uid`), user id, first/last use | sign-in with a provider | until account deletion (cascade) |
+| `auth_handoffs` (v0.3) | SHA-256 of a one-time code, user id, provider, whether the account is new/linked | handing a provider sign-in back to the page | valid 5 minutes; deleted on use, by the next sign-in once 10 minutes old, by the daily retention job after 1 day; immediately on account deletion (cascade) |
 | `password_resets` | HMAC of the one-time token, user id, who created it (`email`/`admin`) | password reset | 7 days after expiry; immediately on account deletion |
 | `visitors`, `visitor_days` | random browser id, first/last visit, platform, referring domain, `user_id` (SET NULL on deletion) | visitor funnel | 400 days after the last visit |
 | `profiles` | counters, XP/level, rating, streaks, preferred character, avatar id | progression, Top-100 | until account deletion (cascade) |
@@ -132,7 +142,10 @@ or its hash/signature, session tokens or reset tokens in plain text, plain-text 
 or wallet credentials (payments happen on the providers' hosted pages; we send them only an internal
 payment id). Admins see emails only masked. Client error messages are sanitised (ANALYTICS.md §2.3).
 Processors: hosting provider; Stripe / NOWPayments only for players who buy diamonds; Resend only for
-players who request a password-reset letter.
+players who request a password-reset letter. Google / Discord / Facebook / Reddit / Telegram act as
+sign-in providers only for players who choose them (the server sends them the code it got back and its
+own client secret; it asks for the basic profile only and keeps the id; provider access tokens are used
+once and never stored).
 
 Application logs (stdout, JSON): internal user ids (room joins, protocol violations), the IP of
 **rejected** Telegram logins, request ids/paths (debug level). The application does not write tokens,
@@ -154,7 +167,7 @@ update the table in Part 1 §5.
 1. revokes all of the player's sessions;
 2. `DELETE FROM users WHERE id = …` — cascades to `profiles`, `sessions`, `user_daily_activity`,
    `match_participants`, `player_achievements`, `currency_ledger`, `user_items`, `weapon_mods`,
-   `case_openings`, `password_resets`, `friendships`, `direct_messages`, `club_members`, `club_requests` (before that the
+   `case_openings`, `password_resets`, `user_identities`, `auth_handoffs`, `friendships`, `direct_messages`, `club_members`, `club_requests` (before that the
    player leaves their club like a player who quits: a head hands it to the longest-standing member, a last member closes it);
    sets `user_id`/`session_id`/`created_by` to `NULL` in
    `analytics_events`, `app_errors`, `invitations`, `payments`, `visitors`;
@@ -162,8 +175,8 @@ update the table in Part 1 §5.
    rows without player references. Admin audit entries may still contain the former internal UUID,
    which no longer resolves to anything.
 
-Covered by `auth/auth.api.test.ts` («account deletion removes the user and personal data») and
-`social/social.test.ts` (friendships and messages).
+Covered by `auth/auth.api.test.ts` («account deletion removes the user and personal data»),
+`social/social.test.ts` (friendships and messages) and `api/oauth.test.ts` (provider sign-ins).
 
 **Operator-assisted** (player has no access, or a written request):
 

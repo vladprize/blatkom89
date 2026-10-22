@@ -8,16 +8,34 @@ import { h, toast } from '../dom.js';
 import type { OnlineClient } from '../../net/OnlineClient.js';
 import { t } from '../../i18n/index.js';
 import { apiErrorText } from '../../net/errors.js';
+import { PROVIDER_NAME, providerButtons } from './signin.js';
+import type { LoginProvider } from '../../net/oauth.js';
 
 const field = (type: string, placeholder: string, autocomplete: string, value = '') =>
   h('input', { class: 'input', type, placeholder, autocomplete, value, autocapitalize: 'off', spellcheck: 'false', 'aria-label': placeholder }) as HTMLInputElement;
 
 const errText = (e: unknown) => (e instanceof Error ? apiErrorText(e) : t('Didn’t work out, comrade'));
 
+/** v0.3: the providers the account signs in with (✓) and buttons for the others. */
+function providersBlock(online: OnlineClient): HTMLElement {
+  const p = online.profile;
+  const linked = [...(p?.identities ?? []), ...(p?.telegramLinked ? ['telegram'] : [])];
+  const box = h('div', { class: 'col', hidden: true, style: 'margin-top:8px', 'data-testid': 'account-providers' });
+  void online.providers().then((info) => {
+    const buttons = providerButtons(online, info, { linked, testid: 'account-provider-buttons' });
+    if (!buttons.childElementCount) return;
+    buttons.classList.add('providers--start');
+    const names = linked.map((x) => PROVIDER_NAME[x as LoginProvider] ?? x).join(', ');
+    box.append(h('div', { class: 'muted' }, names ? t('Signs in with: {list}. Add another way:', { list: names }) : t('Sign in with one tap — your progress stays with this account:')), buttons);
+    box.hidden = false;
+  });
+  return box;
+}
+
 /** Profile panel: link an email, or show the linked one with a password change. */
 export function renderAccountPanel(online: OnlineClient, o: { root: HTMLElement; onChanged: () => void }): HTMLElement {
   const p = online.profile;
-  const panel = h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Account')));
+  const panel = h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Account')), providersBlock(online));
   if (p?.email) {
     const cur = field('password', t('Current password'), 'current-password');
     const next = field('password', t('New password (8+ characters)'), 'new-password');
@@ -54,8 +72,18 @@ export function renderAccountPanel(online: OnlineClient, o: { root: HTMLElement;
   const email = field('email', t('Email'), 'email');
   const pass = field('password', t('Password (8+ characters)'), 'new-password');
   const pass2 = field('password', t('Password again'), 'new-password');
+  // with Google, Telegram… attached the account is already safe: the email is just one more way in
+  const safe = (p?.identities?.length ?? 0) > 0 || !!p?.telegramLinked;
   panel.append(
-    h('div', { style: 'margin-top:8px' }, REAL_MONEY ? t('Register an email so the account doesn’t go missing: without it, progress and purchases live only in this browser.') : t('Register an email so the account doesn’t go missing: without it, your progress lives only in this browser.')),
+    h(
+      'div',
+      { style: 'margin-top:8px' },
+      safe
+        ? t('An email and a password: one more way into this account, on any device.')
+        : REAL_MONEY
+          ? t('Register an email so the account doesn’t go missing: without it, progress and purchases live only in this browser.')
+          : t('Register an email so the account doesn’t go missing: without it, your progress lives only in this browser.'),
+    ),
     email,
     pass,
     pass2,

@@ -11,6 +11,7 @@ import { t } from '../../i18n/index.js';
 import { apiErrorText } from '../../net/errors.js';
 import { storageGet, storageSet } from '../../app/settings.js';
 import { openEmailLogin } from './account.js';
+import { providerButtons } from './signin.js';
 
 /** When the player last chose «continue as guest» (ms since epoch). */
 export const WELCOME_KEY = 'blatkom89.welcome.v1';
@@ -21,7 +22,7 @@ export type WelcomeOutcome = 'linked' | 'signed_in' | 'guest';
 /** A guest account in a browser that hasn't been asked today. */
 export function needsWelcome(online: OnlineClient, inTelegram: boolean): boolean {
   const p = online.profile;
-  if (!p || inTelegram || p.email || p.telegramLinked) return false;
+  if (!p || inTelegram || p.email || p.telegramLinked || (p.identities?.length ?? 0) > 0) return false;
   const later = Number(storageGet(WELCOME_KEY) ?? 0);
   return !(later > 0 && Date.now() - later < ASK_AGAIN_MS);
 }
@@ -58,6 +59,22 @@ export function openWelcome(root: HTMLElement, online: OnlineClient, onDone: (o:
   };
   pass2.addEventListener('keydown', (e) => (e as KeyboardEvent).key === 'Enter' && void register());
   const btn = h('button', { class: 'btn btn--red', 'data-testid': 'welcome-register', onclick: () => void register() }, t('Create an account'));
+  // v0.3: one tap with a provider (the guest's progress is attached to it); shown once the server says which are set up
+  const quick = h('div', { class: 'col welcome__providers', hidden: true });
+  const intro = h(
+    'div',
+    { class: 'muted' },
+    REAL_MONEY
+      ? t('Register an email: your level, talons, diamonds and everything you buy stay with you on any device. As a guest, the account lives only in this browser.')
+      : t('Register an email: your level, talons and everything you unlock stay with you on any device. As a guest, the account lives only in this browser.'),
+  );
+  void online.providers().then((info) => {
+    const buttons = providerButtons(online, info, { testid: 'welcome-providers' });
+    if (!buttons.childElementCount) return;
+    quick.append(h('div', { class: 'muted welcome__or' }, t('In one tap with')), buttons, h('div', { class: 'muted welcome__or' }, t('or with an email')));
+    quick.hidden = false;
+    if (!REAL_MONEY) intro.textContent = t('Sign in with one tap or register an email: your level, talons and everything you unlock stay with you on any device. As a guest, the account lives only in this browser.');
+  });
   const ov = h(
     'div',
     { class: 'overlay overlay--top', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('Keep your progress'), 'data-testid': 'welcome' },
@@ -66,13 +83,8 @@ export function openWelcome(root: HTMLElement, online: OnlineClient, onDone: (o:
       { class: 'panel modal col welcome' },
       h('span', { class: 'tag' }, t('Account')),
       h('div', { class: 'h2', style: 'margin-top:8px' }, t('Keep your progress')),
-      h(
-        'div',
-        { class: 'muted' },
-        REAL_MONEY
-          ? t('Register an email: your level, talons, diamonds and everything you buy stay with you on any device. As a guest, the account lives only in this browser.')
-          : t('Register an email: your level, talons and everything you unlock stay with you on any device. As a guest, the account lives only in this browser.'),
-      ),
+      intro,
+      quick,
       email,
       pass,
       pass2,

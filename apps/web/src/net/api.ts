@@ -202,6 +202,20 @@ export class Api {
     return this.req<LeaderboardResponse>('GET', `/api/leaderboard?by=${by}`);
   }
 
+  // ── sign-in with a provider (v0.3) ──
+  providers() {
+    return this.req<import('./oauth.js').ProvidersInfo>('GET', '/api/auth/providers');
+  }
+  oauthIntent() {
+    return this.req<{ intent: string }>('POST', '/api/auth/oauth/intent', {});
+  }
+  oauthFinish(code: string) {
+    return this.req<AuthResponse & { linked: boolean; provider: string }>('POST', '/api/auth/oauth/finish', { code, platform: platform(), clientVersion: VERSION });
+  }
+  telegramWebLogin(data: Record<string, string | number>) {
+    return this.req<AuthResponse & { linked: boolean; provider: string }>('POST', '/api/auth/telegram/web', { data, platform: platform(), clientVersion: VERSION });
+  }
+
   // ── clubs (v0.3) ──
   clubs(q?: string) {
     return this.req<ClubsResponse>('GET', `/api/clubs${q ? `?q=${encodeURIComponent(q)}` : ''}`);

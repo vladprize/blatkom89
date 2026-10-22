@@ -107,7 +107,8 @@ export type ServerEventName =
   | 'mod_bought'
   | 'case_opened'
   | 'payment_completed'
-  | 'email_linked';
+  | 'email_linked'
+  | 'identity_linked';
 
 export interface EventContext {
   userId?: string | null;

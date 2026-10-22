@@ -1159,3 +1159,22 @@ button.chatline__name:hover { text-decoration: underline; }
   .clubeditor > .btn--red { min-height: 46px; }
   .clubactions--head .btn { padding: 7px 9px; font-size: 13px; min-height: 34px; }
 }
+
+/* ── sign-in with a provider (v0.3) ───────────────────────────────────────────────────────────────── */
+.welcome__providers[hidden], [data-testid='account-providers'][hidden] { display: none; }
+/* a wide panel: one row; a window or a phone: three to a row, a shorter last row centred (5 = 3 + 2) */
+.providers { --pgap: 6px; display: flex; flex-wrap: wrap; justify-content: center; gap: var(--pgap); }
+.providers--start { justify-content: flex-start; }
+.provider { flex: 1 1 110px; max-width: calc((100% - 2 * var(--pgap)) / 3); justify-content: center; text-align: center; font-size: 15px; letter-spacing: .03em; text-transform: none; color: #fff; border-color: rgba(255,255,255,.18); }
+.provider--google { background: #2f2f2f; }
+.provider--telegram { background: #2a7fb8; }
+.provider--discord { background: #4f5bd5; }
+.provider--facebook { background: #2d5fae; }
+.provider--reddit { background: #d2491f; }
+.provider:hover:not([disabled]) { filter: brightness(1.12); }
+.provider--done { opacity: .7; }
+.welcome__or { font-size: 13px; text-align: center; }
+@media (max-width: 560px) {
+  .providers { --pgap: 5px; }
+  .provider { flex-basis: calc((100% - 2 * var(--pgap)) / 3); font-size: 13px; padding: 7px 4px; min-height: 36px; }
+}

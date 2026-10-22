@@ -33,6 +33,7 @@ export const ANALYTICS_EVENTS = [
   'case_opened',
   'payment_completed',
   'email_linked',
+  'identity_linked',
 ] as const;
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];
 
@@ -76,8 +77,8 @@ export const CLIENT_EVENT_PROPS = {
 } satisfies Record<ClientEventName, z.ZodTypeAny>;
 
 export const SERVER_EVENT_PROPS = {
-  session_started: z.object({ platform, method: z.enum(['telegram', 'dev', 'guest', 'email']) }),
-  profile_created: z.object({ method: z.enum(['telegram', 'dev', 'guest']) }),
+  session_started: z.object({ platform, method: z.enum(['telegram', 'dev', 'guest', 'email', 'oauth']) }),
+  profile_created: z.object({ method: z.enum(['telegram', 'dev', 'guest', 'oauth']) }),
   lobby_created: z.object({ roomId: z.string(), mapId: z.enum(MAP_IDS), isPrivate: z.boolean(), mode: z.enum(GAME_MODES).optional() }),
   lobby_joined: z.object({ roomId: z.string(), viaInvite: z.boolean() }),
   lobby_left: z.object({ roomId: z.string(), phase: z.string() }),
@@ -93,6 +94,8 @@ export const SERVER_EVENT_PROPS = {
   case_opened: z.object({ weapon: z.string(), rarity: z.enum(['common', 'rare', 'epic', 'legendary']), price: z.number().int(), kind: z.enum(['weapon', 'skin']).optional(), finish: z.string().max(24).optional() }),
   payment_completed: z.object({ provider: z.string(), packId: z.string(), diamonds: z.number().int(), amountCents: z.number().int() }),
   email_linked: z.object({}),
+  /** v0.3: a provider attached to an account (google, facebook, discord, reddit, telegram). */
+  identity_linked: z.object({ provider: z.enum(['google', 'facebook', 'discord', 'reddit', 'telegram']) }),
 } as const;
 
 export const ClientEventEnvelopeSchema = z

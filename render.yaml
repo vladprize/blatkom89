@@ -64,6 +64,27 @@ services:
         sync: false
       - key: KEEP_AWAKE
         sync: false
+      # Sign-in with Google / Discord / Facebook / Reddit and Telegram on the website (docs/SIGN_IN.md):
+      # a provider appears in the game only when its keys are set; TELEGRAM_WEB_LOGIN=true after the
+      # bot's /setdomain.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: REDDIT_CLIENT_ID
+        sync: false
+      - key: REDDIT_CLIENT_SECRET
+        sync: false
+      - key: TELEGRAM_WEB_LOGIN
+        sync: false
 
 databases:
   - name: blatkom89-db

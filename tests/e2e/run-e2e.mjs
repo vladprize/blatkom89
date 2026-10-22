@@ -115,11 +115,33 @@ const server = startServer(env);
 const fillPort = port + 1;
 const fillBase = `http://localhost:${fillPort}`;
 let fillServer = null;
+// v0.3: the same build and database with every sign-in provider set up — fake keys, no provider is contacted
+const signPort = port + 2;
+const signBase = `http://localhost:${signPort}`;
+const E2E_TG_BOT_TOKEN = '7000000002:AAE2E-fake-bot-token-for-the-signin-test';
+let signServer = null;
 if (prod) console.log('[e2e] production mode: deploy/server.js with guest login');
 let failed = false;
 try {
   await ready(base);
   fillServer = startServer({ ...env, PORT: String(fillPort), MATCH_FILL_BOTS: 'true', ...(prod ? { RENDER_EXTERNAL_URL: fillBase } : { PUBLIC_URL: fillBase }), ADMIN_BOOTSTRAP_USERNAME: '', ADMIN_BOOTSTRAP_PASSWORD: '' });
+  signServer = startServer({
+    ...env,
+    PORT: String(signPort),
+    ...(prod ? { RENDER_EXTERNAL_URL: signBase } : { PUBLIC_URL: signBase }),
+    ADMIN_BOOTSTRAP_USERNAME: '',
+    ADMIN_BOOTSTRAP_PASSWORD: '',
+    GOOGLE_CLIENT_ID: 'e2e-google-id',
+    GOOGLE_CLIENT_SECRET: 'e2e-google-secret',
+    DISCORD_CLIENT_ID: 'e2e-discord-id',
+    DISCORD_CLIENT_SECRET: 'e2e-discord-secret',
+    FACEBOOK_APP_ID: 'e2e-facebook-id',
+    FACEBOOK_APP_SECRET: 'e2e-facebook-secret',
+    REDDIT_CLIENT_ID: 'e2e-reddit-id',
+    REDDIT_CLIENT_SECRET: 'e2e-reddit-secret',
+    TELEGRAM_BOT_TOKEN: E2E_TG_BOT_TOKEN,
+    TELEGRAM_WEB_LOGIN: 'true',
+  });
   console.log('\n[e2e] offline practice');
   const offline = spawnSync(process.execPath, ['tests/e2e/play.mjs', `${base}/?play=offline&map=factory&bots=3`, join(out, 'offline')], { stdio: 'inherit' });
   if (offline.status !== 0) failed = true;
@@ -158,6 +180,10 @@ try {
   console.log('\n[e2e] equipment: grenades, mines, C4, turret (demo build)');
   const gadgets = spawnSync(process.execPath, ['tests/e2e/gadgets.mjs', 'apps/web/dist-demo/blatkom89-demo.html', join(out, 'gadgets')], { stdio: 'inherit' });
   if (gadgets.status !== 0) failed = true;
+  console.log('\n[e2e] sign-in with Google, Telegram, Discord (third server with every provider set up; providers stubbed)');
+  await ready(signBase);
+  const signin = spawnSync(process.execPath, ['tests/e2e/signin.mjs', signBase, join(out, 'signin'), base], { stdio: 'inherit', env: { ...process.env, E2E_TG_BOT_TOKEN } });
+  if (signin.status !== 0) failed = true;
   console.log('\n[e2e] filled lineups (second server, MATCH_FILL_BOTS=true): one person always plays');
   await ready(fillBase);
   const fill = spawnSync(process.execPath, ['tests/e2e/fill.mjs', fillBase, join(out, 'fill')], { stdio: 'inherit' });
@@ -168,6 +194,7 @@ try {
 } finally {
   server.kill('SIGTERM');
   fillServer?.kill('SIGTERM');
+  signServer?.kill('SIGTERM');
 }
 console.log(failed ? '\n[e2e] FAILED' : `\n[e2e] passed — screenshots in ${out}`);
 process.exit(failed ? 1 : 0);

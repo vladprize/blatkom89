@@ -87,7 +87,7 @@ test('010 keeps every alias with its oldest living holder and numbers the later 
     // 014 (v0.3): every living alias in Latin letters; a transliteration already taken gets a number
     await sql`INSERT INTO users (dev_device_id, display_name, name_key, created_at) VALUES ('dev-mig-z', 'Pyotr', 'pyotr', ${new Date(Date.UTC(2026, 0, 30))})`;
     const later = await migrate(sql);
-    assert.deepEqual(later, ['014_latin_names.sql']);
+    assert.equal(later[0], '014_latin_names.sql', 'the migrations after 013, 014 first');
     const after = new Map((await sql<Array<{ id: string; display_name: string; name_key: string }>>`SELECT id, display_name, name_key FROM users`).map((r) => [r.id, r]));
     assert.deepEqual(
       ids.map((id) => after.get(id)!.display_name),

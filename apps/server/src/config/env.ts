@@ -24,6 +24,18 @@ const EnvSchema = z.object({
   BOT_WARM_MINUTES: z.coerce.number().int().min(0).max(240).default(20),
   /** Ask the own public address every 5 minutes so a free host never puts the server to sleep. */
   KEEP_AWAKE: bool.default('false'),
+  /** v0.3: «Log in with Telegram» on the website (needs /setdomain for the bot in @BotFather). */
+  TELEGRAM_WEB_LOGIN: bool.default('false'),
+  /** v0.3: sign-in with Google, Facebook, Discord, Reddit (docs/SIGN_IN.md); a provider is on when both keys are set. */
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  FACEBOOK_APP_ID: z.string().optional(),
+  FACEBOOK_APP_SECRET: z.string().optional(),
+  FACEBOOK_GRAPH_VERSION: z.string().regex(/^v\d{1,3}\.\d$/).default('v23.0'),
+  DISCORD_CLIENT_ID: z.string().optional(),
+  DISCORD_CLIENT_SECRET: z.string().optional(),
+  REDDIT_CLIENT_ID: z.string().optional(),
+  REDDIT_CLIENT_SECRET: z.string().optional(),
   DEV_AUTH_ENABLED: bool.default('false'),
   /** Public website without Telegram: players sign in as guests with a nickname (device-bound). */
   GUEST_AUTH_ENABLED: bool.default('false'),

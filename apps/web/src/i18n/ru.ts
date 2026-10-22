@@ -834,6 +834,19 @@ export const RU: Record<string, string> = {
   'A club name is 3–24 Latin letters, digits or spaces.': 'Название клуба — от 3 до 24 латинских букв, цифр или пробелов.',
   'A tag is 2–4 Latin letters or digits.': 'Тег — 2–4 латинские буквы или цифры.',
   'A motto is written in Latin letters.': 'Девиз пишется латиницей.',
+  'In one tap with': 'В одно касание через',
+  'or with an email': 'или по почте',
+  'Signs in with: {list}. Add another way:': 'Вход через: {list}. Добавить ещё способ:',
+  'Sign in with one tap — your progress stays with this account:': 'Вход в одно касание — прогресс останется с этим аккаунтом:',
+  '{provider} is linked — your progress is safe': '{provider} привязан — прогресс в сохранности',
+  'Signed in with {provider}': 'Вход через {provider}',
+  'Sign-in cancelled': 'Вход отменён',
+  'This account already has another sign-in of that kind': 'К этому аккаунту уже привязан другой вход того же вида',
+  'This sign-in isn’t set up on the server yet': 'Этот способ входа ещё не настроен на сервере',
+  'The sign-in took too long — try again': 'Вход занял слишком много времени — попробуй ещё раз',
+  'The sign-in didn’t work — try again': 'Вход не удался — попробуй ещё раз',
+  'Sign in with one tap or register an email: your level, talons and everything you unlock stay with you on any device. As a guest, the account lives only in this browser.': 'Войди в одно касание или привяжи почту — уровень, талоны и всё открытое останутся с тобой на любом устройстве. У гостя аккаунт живёт только в этом браузере.',
+  'An email and a password: one more way into this account, on any device.': 'Почта и пароль — ещё один способ войти в этот аккаунт с любого устройства.',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)
@@ -911,6 +924,8 @@ export const RU: Record<string, string> = {
   'A club name needs a letter or a digit': 'В названии клуба нужна буква или цифра',
   'A tag is 2–4 Latin letters or digits': 'Тег — 2–4 латинские буквы или цифры',
   'A motto is written in Latin letters': 'Девиз пишется латиницей',
+  'The sign-in has expired — try again': 'Вход устарел — попробуй ещё раз',
+  'The Telegram signature didn’t check out': 'Подпись Telegram не сошлась',
 };
 
 /** Russian plural forms [one, few, many] keyed by the English singular passed to plural() / count(). */

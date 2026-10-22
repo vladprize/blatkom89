@@ -5,6 +5,8 @@
 import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, WeaponId } from '@blatkom/shared';
 import { latinName } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
+import { readLoginReturn } from './oauth.js';
+import type { LoginReturn, ProvidersInfo } from './oauth.js';
 import { GameConnection } from './GameConnection.js';
 import { SocialClient } from './SocialClient.js';
 import { OnlineSession } from '../game/session/OnlineSession.js';
@@ -53,6 +55,8 @@ const TOKEN_KEY = 'blatkom89.token';
 const DEVICE_KEY = 'blatkom89.device';
 /** Signed in with email on this browser: when the session expires, ask for the password instead of creating a guest. */
 const EMAIL_MODE_KEY = 'blatkom89.email-account';
+/** v0.3: this browser signs in through a provider (google, telegram…): when that session runs out, the welcome window offers it again. */
+const PROVIDER_MODE_KEY = 'blatkom89.provider-account';
 /** Anonymous per-browser id for the visitor funnel (no other data). */
 const VISITOR_KEY = 'blatkom89.visitor';
 const VISIT_DAY_KEY = 'blatkom89.visit-day';
@@ -73,6 +77,12 @@ export class OnlineClient {
   inventory: Inventory | null = null;
   /** Called when the stored email session has expired and the player has to sign in again. */
   onEmailSessionExpired: ((email: string) => void) | null = null;
+  /** v0.3: what came back from a provider in the address (read once, the address cleaned). */
+  private loginReturn: LoginReturn | null = null;
+  /** v0.3: how that sign-in went, for the menu to say so (taken once by `takeLoginOutcome`). */
+  private loginOutcome: { ok: true; provider: string; linked: boolean; isNew: boolean } | { ok: false; reason: string } | null = null;
+  /** v0.3: the providers this server offers (loaded once). */
+  private providersInfo: Promise<ProvidersInfo | null> | null = null;
   private conn: GameConnection | null = null;
   private session: OnlineSession | null = null;
   private roomId: string | null = null;
@@ -87,7 +97,23 @@ export class OnlineClient {
   private keepAlive: ReturnType<typeof setInterval> | null = null;
   lastResults: ResultsData | null = null;
 
-  constructor(private readonly cb: OnlineCallbacks) {}
+  constructor(private readonly cb: OnlineCallbacks) {
+    // inside the Mini App Telegram signs the player in; elsewhere a provider may have just sent them back
+    if (!tg()) this.loginReturn = readLoginReturn();
+  }
+
+  /** The sign-in that just came back from a provider: shown once in the menu. */
+  takeLoginOutcome() {
+    const o = this.loginOutcome;
+    this.loginOutcome = null;
+    return o;
+  }
+
+  /** Google, Facebook, Discord, Reddit and Telegram on the website — the ones set up on this server. */
+  providers(): Promise<ProvidersInfo | null> {
+    if (!this.providersInfo) this.providersInfo = this.api.providers().catch(() => null);
+    return this.providersInfo;
+  }
 
   ensureAuth(): Promise<PublicProfile> {
     if (this.profile && this.api.token) return Promise.resolve(this.profile);
@@ -97,6 +123,12 @@ export class OnlineClient {
 
   private async doAuth(): Promise<PublicProfile> {
     const app = tg();
+    const back = this.loginReturn;
+    this.loginReturn = null;
+    if (!app && back) {
+      const signedIn = await this.finishProviderLogin(back);
+      if (signedIn) return signedIn;
+    }
     if (app) {
       const res = await this.api.authTelegram(app.initData, storageGet(VISITOR_KEY) ?? undefined);
       this.setToken(res.token);
@@ -112,6 +144,11 @@ export class OnlineClient {
         return this.profile;
       } catch (e) {
         this.api.token = null;
+        // a provider's account on this browser: the new guest's welcome window offers that provider again
+        if (storageGet(PROVIDER_MODE_KEY) && e instanceof ApiError && e.status === 401) {
+          storageSet(PROVIDER_MODE_KEY, null);
+          storageSet('blatkom89.welcome.v1', null);
+        }
         // an email account on this browser: never silently replace it with a fresh guest
         const email = storageGet(EMAIL_MODE_KEY);
         if (email && e instanceof ApiError && e.status === 401) {
@@ -141,11 +178,43 @@ export class OnlineClient {
     }
   }
 
+  /**
+   * A provider sent the player back: the one-time code (or Telegram's signed data, with the session of
+   * the account the page was on, so that account gets Telegram attached) is traded for a session.
+   */
+  private async finishProviderLogin(back: LoginReturn): Promise<PublicProfile | null> {
+    if (back.kind === 'error') {
+      this.loginOutcome = { ok: false, reason: back.reason };
+      return null;
+    }
+    try {
+      let res;
+      if (back.kind === 'oauth') res = await this.api.oauthFinish(back.code);
+      else {
+        const saved = storageGet(TOKEN_KEY);
+        this.api.token = saved && saved.length >= 16 ? saved : null;
+        res = await this.api.telegramWebLogin(back.data);
+      }
+      this.setToken(res.token);
+      storageSet(TOKEN_KEY, res.token);
+      storageSet(PROVIDER_MODE_KEY, res.provider);
+      this.profile = res.profile;
+      this.inventory = null;
+      this.loginOutcome = { ok: true, provider: res.provider, linked: res.linked, isNew: res.isNew };
+      return res.profile;
+    } catch (e) {
+      this.api.token = null;
+      this.loginOutcome = { ok: false, reason: e instanceof ApiError && e.code === 'login_expired' ? 'expired' : 'failed' };
+      return null;
+    }
+  }
+
   /** Drops the locally stored session token and device id (used after account deletion). */
   forgetLocalSession(): void {
     storageSet(TOKEN_KEY, null);
     storageSet(DEVICE_KEY, null);
     storageSet(EMAIL_MODE_KEY, null);
+    storageSet(PROVIDER_MODE_KEY, null);
     this.social.stop();
     this.api.token = null;
     this.profile = null;

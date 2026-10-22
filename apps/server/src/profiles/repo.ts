@@ -31,6 +31,7 @@ interface ProfileRow {
   club_name?: string | null;
   club_flag?: unknown;
   club_emblem?: unknown;
+  identities?: string[] | null;
 }
 
 export function toPublicProfile(r: ProfileRow): PublicProfile {
@@ -63,6 +64,7 @@ export function toPublicProfile(r: ProfileRow): PublicProfile {
     email: r.email,
     rating: r.rating,
     club: r.club_id && r.club_tag && r.club_name && flag.success && emblem.success ? { id: r.club_id, tag: r.club_tag, name: r.club_name, flag: flag.data, emblem: emblem.data } : null,
+    identities: r.identities ?? [],
   };
 }
 
@@ -80,7 +82,8 @@ export class ProfileRepo {
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
              p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email,
              COALESCE(p.rating, 1000) AS rating,
-             c.id AS club_id, c.tag AS club_tag, c.name AS club_name, c.flag AS club_flag, c.emblem AS club_emblem
+             c.id AS club_id, c.tag AS club_tag, c.name AS club_name, c.flag AS club_flag, c.emblem AS club_emblem,
+             (SELECT array_agg(i.provider ORDER BY i.provider) FROM user_identities i WHERE i.user_id = u.id) AS identities
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
         LEFT JOIN club_members cm ON cm.user_id = u.id LEFT JOIN clubs c ON c.id = cm.club_id
       WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
