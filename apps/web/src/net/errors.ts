@@ -36,7 +36,7 @@ export function errorText(code: string, serverMessage?: string | null, status?: 
   // the code is generic for several situations: keep the server's (more precise) message
   if (code === 'rate_limited' && serverMessage) return t(serverMessage);
   // schema validation: «field: message»; the alias rules have their own text
-  if (code === 'validation_error') return /name/i.test(serverMessage ?? '') ? t('A name may contain letters, digits, spaces and _ . -') : t('Check what you entered.');
+  if (code === 'validation_error') return /name/i.test(serverMessage ?? '') ? t('A name may contain Latin letters (A–Z), digits, spaces and _ . -') : t('Check what you entered.');
   const fixed = CODE_TEXT[code];
   if (fixed) return fixed();
   if (serverMessage) return t(serverMessage);

@@ -3,6 +3,7 @@
  * match/invites over HTTP, the game WebSocket, lobby state and the OnlineSession lifecycle.
  */
 import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, WeaponId } from '@blatkom/shared';
+import { latinName } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { GameConnection } from './GameConnection.js';
 import { SocialClient } from './SocialClient.js';
@@ -125,7 +126,9 @@ export class OnlineClient {
       device = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
       storageSet(DEVICE_KEY, device);
     }
-    const name = telegramUserName() ?? `Comrade_${device.slice(0, 3).toUpperCase()}`;
+    // v0.3: aliases are Latin — a Telegram name is transliterated («Влад» → «Vlad»)
+    const fallback = `Comrade_${device.slice(0, 3).toUpperCase()}`;
+    const name = latinName(telegramUserName() ?? '', fallback);
     try {
       const res = await this.api.authGuest(name, device, storageGet(VISITOR_KEY) ?? undefined);
       this.setToken(res.token);

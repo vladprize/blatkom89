@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DirectMessageBody, MAX_NAME_LENGTH, RATING_RULES, nameKey, numberedAlias, ratingDelta, sameAlias } from '../index.js';
+import { DirectMessageBody, LATIN_NAME_RE, MAX_NAME_LENGTH, PRACTICE_NAMES, RATING_RULES, displayNameSchema, fillNickname, latinName, mulberry32, nameKey, numberedAlias, randomNickname, ratingDelta, sameAlias, toLatin, transliterate } from '../index.js';
 
 test('alias identity ignores letter case, spacing, Ё/Е and Cyrillic look-alikes of Latin letters', () => {
   assert.ok(sameAlias('Петя', 'ПЕТЯ'));
@@ -43,4 +43,27 @@ test('direct messages are trimmed, lose control characters and keep line breaks;
   assert.ok(!DirectMessageBody.safeParse({ text: ' \u0007 ' }).success);
   assert.ok(!DirectMessageBody.safeParse({ text: 'я'.repeat(501) }).success);
   assert.ok(!DirectMessageBody.safeParse({ text: 'ok', extra: 1 }).success);
+});
+
+test('aliases in Latin letters (v0.3): the rule, transliteration, suggestions and filled players', () => {
+  for (const ok of ['Petya', 'Quiet Quartermaster', 'Garik_89', 'Dok Jr', 'O’Neil', 'x-ray.7']) assert.equal(displayNameSchema.safeParse(ok).success, true, ok);
+  for (const bad of ['Петя', 'José', 'Müller', '王小明', 'Vasya🙂', 'a<b>']) assert.equal(displayNameSchema.safeParse(bad).success, false, bad);
+  assert.equal(toLatin('Петя Уникум'), 'Petya Unikum');
+  assert.equal(toLatin('ВАСЯ ПУПКИН'), 'VASYA PUPKIN');
+  assert.equal(toLatin('Щукарь Ёжиков_89'), 'Shchukar Yozhikov_89');
+  assert.equal(toLatin('Їжак Ґава'), 'Yizhak Gava');
+  assert.equal(toLatin('José Müller-Łukasz'), 'Jose Muller-Lukasz');
+  assert.equal(toLatin('Тёмыч из 5-го 🙂'), 'Tyomych iz 5-go');
+  assert.ok(toLatin('А'.repeat(60)).length <= 24);
+  assert.equal(latinName('王小明', 'Comrade 1234'), 'Comrade 1234', 'another script: the fallback');
+  assert.equal(latinName('Ъ', 'Comrade'), 'Comrade', 'nothing left: the fallback');
+  assert.equal(latinName('Ж', 'Comrade'), 'Zh');
+  assert.equal(transliterate('Двор — наш, лавочки — общие!'), 'Dvor — nash, lavochki — obshchie!', 'punctuation kept for longer texts');
+  const rnd = mulberry32(7);
+  for (let i = 0; i < 500; i++) {
+    for (const lang of ['en', 'ru'] as const) {
+      for (const name of [randomNickname(rnd, lang), fillNickname(rnd, lang)]) assert.equal(displayNameSchema.safeParse(name).success, true, `${lang}: ${name}`);
+    }
+  }
+  for (const name of [...PRACTICE_NAMES.en, ...PRACTICE_NAMES.ru]) assert.match(name, LATIN_NAME_RE, name);
 });

@@ -52,7 +52,7 @@ for (const [w, hgt, lang] of [
   if (await page.getByTestId('boot-play').count()) await page.getByTestId('boot-play').click();
   const nick = page.getByRole('textbox', { name: ru ? 'Кличка' : 'Alias' });
   await nick.waitFor({ timeout: 60000 });
-  await nick.fill(`${ru ? 'Мобила' : 'Phone'} ${Math.random().toString(36).slice(2, 6)}`);
+  await nick.fill(`${ru ? 'Mobila' : 'Phone'} ${Math.random().toString(36).slice(2, 6)}`);
   await page.getByRole('button', { name: ru ? 'Готово' : 'Done' }).click();
   await page.getByTestId('menu-nick').waitFor({ timeout: 20000 });
   await page.waitForTimeout(800);

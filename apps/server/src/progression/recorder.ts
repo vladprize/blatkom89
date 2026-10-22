@@ -14,6 +14,7 @@ import type { Sql } from '../database/db.js';
 import type { Logger } from '../logging/logger.js';
 import type { MatchCompletion, MatchRecorder, MatchStart } from '../services/contracts.js';
 import { awardMatchTokens } from '../economy/repo.js';
+import { moveClubRatings } from '../clubs/repo.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -74,6 +75,7 @@ export class PgMatchRecorder implements MatchRecorder {
       if (locked[0]?.results_processed_at) return this.readResults(tx, m.matchId, participants.map((p) => p.userId));
 
       const out = new Map<string, PersonalResult>();
+      const clubDeltas: Array<{ userId: string; delta: number }> = [];
       for (const p of participants) {
         await tx`INSERT INTO profiles (user_id) VALUES (${p.userId}) ON CONFLICT DO NOTHING`;
         const [prof] = await tx<Array<{ xp: number; level: number; matches_completed: number; wins: number; current_win_streak: number; best_win_streak: number; rating: number }>>`
@@ -119,7 +121,10 @@ export class PgMatchRecorder implements MatchRecorder {
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
             tokens_awarded = EXCLUDED.tokens_awarded, rating_delta = EXCLUDED.rating_delta, left_at = EXCLUDED.left_at`;
         out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof!.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating });
+        clubDeltas.push({ userId: p.userId, delta: rDelta });
       }
+      // the clubs of the people who played (v0.3): their rating moves with their members'
+      await moveClubRatings(tx, clubDeltas);
       await tx`
         UPDATE matches SET status = 'completed', ended_at = ${m.endedAt}, duration_ms = ${Math.max(0, Math.round(m.durationMs))},
           end_reason = ${m.endReason}, player_count = ${people}, bot_count = ${fill}, mode = ${m.mode}, winner_team = ${m.winnerTeam}, results_processed_at = now()

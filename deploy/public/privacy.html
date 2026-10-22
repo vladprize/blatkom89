@@ -89,6 +89,11 @@
           (text, time, whether it was read). Messages are deleted 180 days after they are sent, and at once with the profile.
         </li>
         <li>
+          <strong>Clubs:</strong> the club you are in (with your role and the date you joined), the clubs you asked to join, and the
+          name, tag, motto, flag and emblem of a club you founded. Removed when you leave the club, withdraw the request or delete the
+          profile.
+        </li>
+        <li>
           <strong>Room chat:</strong> what you write in a room’s chat (in the lobby, during the match and on the results) the server passes
           to the players of that room — or only to your team when you write to your team — and keeps nowhere: neither in the database nor
           in logs. Other players can mute you on their own screen.
@@ -123,7 +128,8 @@
         you write in its chat. Anyone who knows your in-game name can
         send you a friend request; your friends see whether you are online, in a lobby or in a match, and only you and the friend you write
         to see your private messages. Players with at least one finished online match appear in the public Top-100 (name, avatar, level,
-        rating, eliminations, wins). The game’s administrators work with the
+        rating, eliminations, wins). A club’s name, tag, motto, flag, rating and its people (name, avatar, level, role) are seen by all
+        players; join requests are seen only by the club’s head. The game’s administrators work with the
         statistics panel; every sign-in, look at a player’s card, balance adjustment, password-reset link and data export is written to an
         audit log. We share data with no one except the hosting provider whose servers run the game and the email provider when you ask for a
         password reset. Telegram processes data under its own rules.
@@ -139,6 +145,7 @@
           <tr><td>Visit statistics</td><td>400 days after the last visit</td></tr>
           <tr><td>Private messages to and from friends</td><td>180 days</td></tr>
           <tr><td>Friend list and friend requests</td><td>until you or your friend remove them, or the profile is deleted</td></tr>
+          <tr><td>Club membership and join requests</td><td>until you leave the club (or are shown out), withdraw the request, or the profile is deleted</td></tr>
           <tr><td>Error reports</td><td>90 days</td></tr>
           <tr><td>Sign-in session records</td><td>90 days after the session ends</td></tr>
           <tr><td>Password-reset links</td><td>valid for 1 hour, deleted 7 days later</td></tr>

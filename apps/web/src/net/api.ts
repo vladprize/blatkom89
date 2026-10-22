@@ -30,6 +30,10 @@ import type {
   LeaderboardBy,
   LeaderboardResponse,
   NameCheckResponse,
+  ClubDetails,
+  ClubsResponse,
+  CreateClubBody,
+  UpdateClubBody,
 } from '@blatkom/shared';
 import { platform } from '../telegram/tg.js';
 import { VERSION } from '../app/config.js';
@@ -196,5 +200,40 @@ export class Api {
   }
   leaderboard(by: LeaderboardBy) {
     return this.req<LeaderboardResponse>('GET', `/api/leaderboard?by=${by}`);
+  }
+
+  // ── clubs (v0.3) ──
+  clubs(q?: string) {
+    return this.req<ClubsResponse>('GET', `/api/clubs${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+  }
+  club(id: string) {
+    return this.req<ClubDetails>('GET', `/api/clubs/${encodeURIComponent(id)}`);
+  }
+  createClub(body: CreateClubBody) {
+    return this.req<ClubDetails>('POST', '/api/clubs', body);
+  }
+  updateClub(id: string, body: UpdateClubBody) {
+    return this.req<ClubDetails>('PATCH', `/api/clubs/${encodeURIComponent(id)}`, body);
+  }
+  setClubRecruiting(id: string, recruiting: boolean) {
+    return this.req<ClubDetails>('POST', `/api/clubs/${encodeURIComponent(id)}/recruiting`, { recruiting });
+  }
+  requestClub(id: string) {
+    return this.req<ClubDetails>('POST', `/api/clubs/${encodeURIComponent(id)}/request`, {});
+  }
+  cancelClubRequest(id: string) {
+    return this.req<ClubDetails>('DELETE', `/api/clubs/${encodeURIComponent(id)}/request`);
+  }
+  answerClubRequest(id: string, userId: string, accept: boolean) {
+    return this.req<ClubDetails>('POST', `/api/clubs/${encodeURIComponent(id)}/requests/${encodeURIComponent(userId)}`, { accept });
+  }
+  kickFromClub(id: string, userId: string) {
+    return this.req<ClubDetails>('POST', `/api/clubs/${encodeURIComponent(id)}/kick/${encodeURIComponent(userId)}`, {});
+  }
+  leaveClub() {
+    return this.req<{ left: string; closed: boolean }>('POST', '/api/clubs/leave', {});
+  }
+  disbandClub(id: string) {
+    return this.req<{ disbanded: string }>('DELETE', `/api/clubs/${encodeURIComponent(id)}`);
   }
 }

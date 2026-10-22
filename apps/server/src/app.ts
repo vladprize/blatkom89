@@ -18,6 +18,7 @@ import { registerAdminRoutes } from './admin/routes.js';
 import { registerShopRoutes } from './api/shop.js';
 import { registerSocialRoutes } from './api/social.js';
 import { registerTelegramRoutes } from './telegram/bot.js';
+import { registerClubRoutes } from './api/clubs.js';
 import type { KeepAwake } from './services/keepAwake.js';
 
 export interface AppDeps {
@@ -34,7 +35,7 @@ export interface AppDeps {
 
 export type RouteModule = (router: Router, deps: AppDeps) => void;
 
-export const ROUTE_MODULES: RouteModule[] = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerTelegramRoutes, registerAdminRoutes];
+export const ROUTE_MODULES: RouteModule[] = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerClubRoutes, registerTelegramRoutes, registerAdminRoutes];
 
 export function createApp(deps: AppDeps, modules: RouteModule[] = ROUTE_MODULES) {
   const router = new Router();

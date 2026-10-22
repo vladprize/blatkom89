@@ -120,7 +120,7 @@ try {
   // ── B: Quick Match alone ────────────────────────────────────────────────
   await B.page.goto(base + '/');
   await pressPlay(B.page);
-  await nickname(B, `Одиночка ${RUN}`);
+  await nickname(B, `Odinochka ${RUN}`);
   await B.page.getByRole('button', { name: /Быстрый матч/ }).click({ timeout: 30000 });
   await B.page.locator('.quickmode[data-mode="ffa"]').click();
   await B.page.getByText(/Игроки 1\//).waitFor({ timeout: 30000 });

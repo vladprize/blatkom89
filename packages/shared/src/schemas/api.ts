@@ -1,4 +1,5 @@
 /** HTTP API request/response contracts shared by server and client. */
+import type { ClubBadge } from '../game-rules/clubs.js';
 import { z } from 'zod';
 import { CHARACTER_IDS } from '../game-rules/characters.js';
 import type { CharacterId } from '../game-rules/characters.js';
@@ -16,14 +17,22 @@ import type { GameMode } from '../game-rules/match.js';
 import type { MapId } from '../maps/types.js';
 import type { AchievementId } from '../game-rules/progression.js';
 import { MAX_NAME_LENGTH } from '../constants/game.js';
+import { LATIN_NAME_RE } from '../game-rules/aliases.js';
 import { PlatformSchema } from '../events/analytics.js';
 
+/** Aliases (v0.3): Latin letters only — see game-rules/aliases.ts (`LATIN_NAME_RE`, `toLatin`). */
 export const displayNameSchema = z
   .string()
   .trim()
   .min(2)
   .max(MAX_NAME_LENGTH)
-  .regex(/^[\p{L}\p{N} _.\-’']+$/u, 'A name may contain letters, digits, spaces and _ . -');
+  .regex(LATIN_NAME_RE, 'A name may contain Latin letters (A–Z), digits, spaces and _ . -');
+
+/**
+ * The first name a new account brings (guest and development sign-up): anything readable — the server
+ * keeps it in Latin letters (`latinName`; an older client may still send a Cyrillic suggestion).
+ */
+export const signupNameSchema = z.string().trim().min(1).max(64);
 
 export const TelegramAuthRequest = z
   .object({
@@ -36,7 +45,7 @@ export const TelegramAuthRequest = z
   .strict();
 export const DevAuthRequest = z
   .object({
-    name: displayNameSchema,
+    name: signupNameSchema,
     deviceId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
     platform: PlatformSchema.optional(),
     clientVersion: z.string().max(32).optional(),
@@ -48,7 +57,7 @@ export const DevAuthRequest = z
  */
 export const GuestAuthRequest = z
   .object({
-    name: displayNameSchema,
+    name: signupNameSchema,
     deviceId: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/),
     platform: PlatformSchema.optional(),
     clientVersion: z.string().max(32).optional(),
@@ -178,6 +187,8 @@ export interface PublicProfile {
   email: string | null;
   /** Rating (the Top-100 table; starts at 1000). */
   rating: number;
+  /** The player's club (v0.3), if any. */
+  club?: ClubBadge | null;
 }
 
 export interface AuthResponse {
@@ -354,6 +365,23 @@ export interface AdminErrorRow {
   clientVersion: string | null;
   serverVersion: string | null;
   sessionId: string | null;
+}
+
+/** /api/admin/clubs (v0.3): every club for moderation; `house`: kept by the game itself. */
+export interface AdminClubRow {
+  id: string;
+  name: string;
+  tag: string;
+  motto: string;
+  rating: number;
+  rank: number;
+  members: number;
+  realMembers: number;
+  headName: string | null;
+  recruiting: boolean;
+  house: boolean;
+  createdAt: string;
+  requests: number;
 }
 
 export interface AdminErrorGroup {

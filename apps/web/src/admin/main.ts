@@ -10,6 +10,7 @@ import { renderExports } from './views/exports.js';
 import { renderAudit } from './views/audit.js';
 import { renderFunnel } from './views/funnel.js';
 import { renderEconomy } from './views/economy.js';
+import { renderClubs } from './views/clubs.js';
 
 const app = document.getElementById('app')!;
 let me: AdminMe | null = null;
@@ -55,6 +56,7 @@ const NAV: Array<[string, string, 'viewer' | 'admin']> = [
   ['#/funnel', 'Воронка', 'viewer'],
   ['#/economy', 'Экономика', 'viewer'],
   ['#/players', 'Игроки', 'viewer'],
+  ['#/clubs', 'Клубы', 'viewer'],
   ['#/errors', 'Ошибки', 'viewer'],
   ['#/exports', 'Экспорт', 'viewer'],
   ['#/audit', 'Аудит', 'admin'],
@@ -106,6 +108,7 @@ async function route(): Promise<void> {
     else if (hash.startsWith('#/players')) await renderPlayers(content);
     else if (hash.startsWith('#/funnel')) await renderFunnel(content);
     else if (hash.startsWith('#/economy')) await renderEconomy(content);
+    else if (hash.startsWith('#/clubs')) await renderClubs(content, me);
     else if (hash.startsWith('#/errors')) await renderErrors(content);
     else if (hash.startsWith('#/exports')) renderExports(content, me);
     else if (hash.startsWith('#/audit')) await renderAudit(content);

@@ -44,6 +44,9 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
    addresses and long identifiers are removed before saving).
 7. **Friends and messages:** your friend list and friend requests; private messages with friends (text,
    time, read or not) — deleted 180 days after sending, and at once with the profile.
+7a. **Clubs (v0.3):** the club you are in (role, join date), the clubs you asked to join, and the name,
+   tag, motto, flag and emblem of a club you founded — removed when you leave, withdraw or delete the
+   profile.
 8. **Visit statistics:** a random visitor identifier created by your browser, first/last visit, days
    with visits, platform type and the domain of the site you came from — to count how many visitors
    become players; linked to your profile once you sign in.
@@ -61,7 +64,9 @@ and fix bugs and protect against abuse; and for aggregated statistics to make th
 Other players see your in-game name, avatar, character and results. Anyone who knows your in-game name
 can send you a friend request; friends see whether you are online, in a lobby or in a match; only you and
 the friend you write to see your private messages. Players with at least one finished online match are
-listed in the public Top-100 (name, avatar, level, rating, eliminations, wins). Administrators work with the statistics
+listed in the public Top-100 (name, avatar, level, rating, eliminations, wins). A club's name, tag, motto,
+flag, rating and people (name, avatar, level, role) are public; join requests are seen by the club's head
+only. Administrators work with the statistics
 panel; every sign-in, look at a player’s card, balance adjustment, password-reset link and export is
 audited. Data is shared only with the hosting provider, the payment provider you choose when you buy,
 and the email provider when you ask for a password reset. Telegram processes data under its own rules.
@@ -75,6 +80,7 @@ and the email provider when you ask for a password reset. Telegram processes dat
 | Visit statistics | 400 days after the last visit |
 | Private messages with friends | 180 days |
 | Friend list and requests | until removed by you or the friend, or the profile is deleted |
+| Club membership and join requests | until you leave (or are shown out), withdraw, or the profile is deleted |
 | Error reports | 90 days |
 | Sign-in session records | 90 days after the session ends |
 | Password-reset links | valid 1 hour, deleted 7 days later |
@@ -108,6 +114,7 @@ When this policy changes, we update the revision date.
 | `profiles` | counters, XP/level, rating, streaks, preferred character, avatar id | progression, Top-100 | until account deletion (cascade) |
 | `friendships` | pairs of user ids, request/accept times | friends, presence | until removed; immediately on account deletion (cascade) |
 | `direct_messages` | sender, recipient, text (≤ 500 chars), sent/read times | private messages between friends | 180 days; immediately on account deletion (cascade) |
+| `clubs`, `club_members`, `club_requests` | a club's name/tag/motto/flag/emblem and `head_id` (SET NULL on deletion); membership (club, user, role, join time); requests (club, user, time) | clubs, the club table | membership and requests until left/withdrawn, immediately on account deletion (the head hands the club over first); a club until disbanded, closed by its last member or removed by an admin (audited) |
 | `sessions` | `token_hash` (HMAC of the token, never the token), `method`, `platform`, `client_version`, timestamps | authentication | 90 days after expiry/revocation; immediately on account deletion |
 | `user_daily_activity` | (user, UTC day) | DAU/WAU/MAU, retention | 400 days; immediately on account deletion |
 | `match_participants` | per-match stats of a player | history, profile, admin | until account deletion (cascade) |
@@ -147,7 +154,9 @@ update the table in Part 1 §5.
 1. revokes all of the player's sessions;
 2. `DELETE FROM users WHERE id = …` — cascades to `profiles`, `sessions`, `user_daily_activity`,
    `match_participants`, `player_achievements`, `currency_ledger`, `user_items`, `weapon_mods`,
-   `case_openings`, `password_resets`, `friendships`, `direct_messages`; sets `user_id`/`session_id`/`created_by` to `NULL` in
+   `case_openings`, `password_resets`, `friendships`, `direct_messages`, `club_members`, `club_requests` (before that the
+   player leaves their club like a player who quits: a head hands it to the longest-standing member, a last member closes it);
+   sets `user_id`/`session_id`/`created_by` to `NULL` in
    `analytics_events`, `app_errors`, `invitations`, `payments`, `visitors`;
 3. leaves only unlinked rows: anonymous events/errors (purged by the retention job) and `matches`
    rows without player references. Admin audit entries may still contain the former internal UUID,

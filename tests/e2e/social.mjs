@@ -52,7 +52,8 @@ async function pressPlay(page) {
 
 const A = await player('A', 'en', { width: 1280, height: 720 });
 const B = await player('B', 'ru', { width: 390, height: 844 });
-const NB = `Тестер ${RUN}`;
+// v0.3: aliases are Latin — B types it in Cyrillic and takes the Latin version the dialog offers
+const NB = `Tester ${RUN}`;
 const NA = `Social A ${RUN}`;
 const EMAIL = `e2e-social-${RUN}@example.com`;
 const friendRow = (p, list, name) => p.page.locator(`[data-testid=${list}] [data-friend="${name}"]`);
@@ -67,7 +68,12 @@ try {
   await B.page.getByTestId('welcome-guest').click();
   const nickB = B.page.getByRole('textbox', { name: 'Кличка' });
   await nickB.waitFor({ timeout: 20000 });
-  await nickB.fill(NB);
+  await nickB.fill(`Тестер ${RUN}`);
+  await B.page.getByTestId('name-latin').waitFor({ timeout: 10000 });
+  const latin = (await B.page.getByTestId('name-latin').innerText()).trim();
+  check(latin === NB && /латиниц/i.test(await B.page.getByTestId('name-hint').innerText()), `B typed the alias in Cyrillic: the dialog says Latin letters only and offers «${latin}»`);
+  await B.page.getByTestId('name-latin').click();
+  check((await nickB.inputValue()) === NB, 'one tap puts the Latin version in the field');
   await B.page.getByRole('button', { name: 'Готово' }).click();
   await B.page.getByTestId('menu-nick').filter({ hasText: NB }).waitFor({ timeout: 20000 });
   check(true, `B continued as a guest and took the alias «${NB}»`);

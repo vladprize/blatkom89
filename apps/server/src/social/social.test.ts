@@ -62,18 +62,18 @@ const friends = (token: string) => api(app.base, '/api/friends', { token });
 const request = (token: string, name: string) => api(app.base, '/api/friends/request', { method: 'POST', token, body: { name } });
 
 test('aliases are unique (any letter case): new accounts get a number, renames to a taken alias are refused with free suggestions', async () => {
-  const a = await devLogin(app.base, 'Петя Уникум');
-  const b = await devLogin(app.base, 'Петя Уникум');
+  const a = await devLogin(app.base, 'Petya Unikum');
+  const b = await devLogin(app.base, 'Petya Unikum');
   const pa = await api(app.base, '/api/me', { token: a.token });
   const pb = await api(app.base, '/api/me', { token: b.token });
-  assert.equal(pa.body.displayName, 'Петя Уникум');
-  assert.equal(pb.body.displayName, 'Петя Уникум 2', 'a second account with the same name gets a number');
-  const taken = await api(app.base, '/api/me', { method: 'PATCH', token: b.token, body: { displayName: 'петя уникум' } });
+  assert.equal(pa.body.displayName, 'Petya Unikum');
+  assert.equal(pb.body.displayName, 'Petya Unikum 2', 'a second account with the same name gets a number');
+  const taken = await api(app.base, '/api/me', { method: 'PATCH', token: b.token, body: { displayName: 'petya unikum' } });
   assert.equal(taken.status, 409);
   assert.equal(taken.body.error.code, 'name_taken');
-  const own = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { displayName: 'ПЕТЯ уникум' } });
+  const own = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { displayName: 'PETYA unikum' } });
   assert.equal(own.status, 200, 'changing the case of your own alias is fine');
-  const check = await api(app.base, `/api/names/check?name=${encodeURIComponent('Петя Уникум')}`, { token: b.token });
+  const check = await api(app.base, `/api/names/check?name=${encodeURIComponent('Petya Unikum')}`, { token: b.token });
   assert.equal(check.status, 200);
   assert.equal(check.body.available, false);
   assert.ok(check.body.suggestions.length >= 2);
@@ -81,7 +81,7 @@ test('aliases are unique (any letter case): new accounts get a number, renames t
     const c = await api(app.base, `/api/names/check?name=${encodeURIComponent(s)}`, { token: b.token });
     assert.equal(c.body.available, true, `${s} is free`);
   }
-  const free = await api(app.base, `/api/names/check?name=${encodeURIComponent('Совсем Новый')}`, { token: b.token });
+  const free = await api(app.base, `/api/names/check?name=${encodeURIComponent('Totally New')}`, { token: b.token });
   assert.deepEqual([free.body.available, free.body.suggestions], [true, []]);
   const bad = await api(app.base, `/api/names/check?name=${encodeURIComponent('<script>')}`, { token: b.token });
   assert.equal(bad.status, 400);
@@ -93,18 +93,18 @@ test('aliases are unique (any letter case): new accounts get a number, renames t
 });
 
 test('friends: a request by alias, live notice, acceptance; mutual requests; refusals', async () => {
-  const a = await devLogin(app.base, 'Друг Первый');
-  const b = await devLogin(app.base, 'Друг Второй');
+  const a = await devLogin(app.base, 'Friend One');
+  const b = await devLogin(app.base, 'Friend Two');
   const sb = new Social(b.token);
   await sb.next('ready');
-  const r = await request(a.token, 'друг второй');
+  const r = await request(a.token, 'friend two');
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.result, 'sent');
   const ev = await sb.next('friend_request');
-  assert.equal(ev.from.name, 'Друг Первый');
+  assert.equal(ev.from.name, 'Friend One');
   assert.equal((await friends(b.token)).body.incoming[0].id, a.userId);
   assert.equal((await friends(a.token)).body.outgoing[0].id, b.userId);
-  assert.equal((await request(a.token, 'Друг Второй')).body.error.code, 'already_sent');
+  assert.equal((await request(a.token, 'Friend Two')).body.error.code, 'already_sent');
   const sa = new Social(a.token);
   await sa.next('ready');
   const acc = await api(app.base, `/api/friends/${a.userId}/accept`, { method: 'POST', token: b.token });
@@ -115,13 +115,13 @@ test('friends: a request by alias, live notice, acceptance; mutual requests; ref
   const fa = (await friends(a.token)).body;
   assert.deepEqual(fa.friends.map((f: { id: string }) => f.id), [b.userId]);
   assert.equal(fa.friends[0].status, 'online');
-  assert.equal((await request(a.token, 'Друг Второй')).body.error.code, 'already_friends');
-  assert.equal((await request(a.token, 'Друг Первый')).status, 400, 'not yourself');
-  assert.equal((await request(a.token, 'Никого Нет Такого')).status, 404);
+  assert.equal((await request(a.token, 'Friend Two')).body.error.code, 'already_friends');
+  assert.equal((await request(a.token, 'Friend One')).status, 400, 'not yourself');
+  assert.equal((await request(a.token, 'Nobody Like This')).status, 404);
   // two players asking each other: the second request is a yes
-  const c = await devLogin(app.base, 'Друг Третий');
-  assert.equal((await request(c.token, 'Друг Первый')).body.result, 'sent');
-  const mutual = await request(a.token, 'Друг Третий');
+  const c = await devLogin(app.base, 'Friend Three');
+  assert.equal((await request(c.token, 'Friend One')).body.result, 'sent');
+  const mutual = await request(a.token, 'Friend Three');
   assert.equal(mutual.body.result, 'accepted');
   assert.equal((await friends(c.token)).body.friends[0].id, a.userId);
   // presence: B goes offline, A's list says so; A's open window hears it
@@ -139,10 +139,10 @@ test('friends: a request by alias, live notice, acceptance; mutual requests; ref
 });
 
 test('direct messages: only between friends, live delivery, unread counts and read receipts, validation', async () => {
-  const a = await devLogin(app.base, 'Писатель');
-  const b = await devLogin(app.base, 'Читатель');
-  const stranger = await devLogin(app.base, 'Незнакомец');
-  await request(a.token, 'Читатель');
+  const a = await devLogin(app.base, 'Writer');
+  const b = await devLogin(app.base, 'Reader');
+  const stranger = await devLogin(app.base, 'Stranger');
+  await request(a.token, 'Reader');
   await api(app.base, `/api/friends/${a.userId}/accept`, { method: 'POST', token: b.token });
   const sb = new Social(b.token);
   await sb.next('ready');
@@ -151,7 +151,7 @@ test('direct messages: only between friends, live delivery, unread counts and re
   assert.equal(sent.body.message.text, 'Здорово! Как дела?', 'trimmed, control characters dropped');
   const dm = await sb.next('dm');
   assert.equal(dm.message.text, 'Здорово! Как дела?');
-  assert.equal(dm.from.name, 'Писатель');
+  assert.equal(dm.from.name, 'Writer');
   const fb = (await friends(b.token)).body.friends[0];
   assert.equal(fb.unread, 1);
   const conv = await api(app.base, `/api/messages/${a.userId}`, { token: b.token });
@@ -182,10 +182,10 @@ test('direct messages: only between friends, live delivery, unread counts and re
 });
 
 test('invitations: a friend in your room gets a live invite with the room; strangers and outsiders are refused', async () => {
-  const a = await devLogin(app.base, 'Зазывала');
-  const b = await devLogin(app.base, 'Приглашённый');
-  const c = await devLogin(app.base, 'Посторонний');
-  await request(a.token, 'Приглашённый');
+  const a = await devLogin(app.base, 'Barker');
+  const b = await devLogin(app.base, 'Invitee');
+  const c = await devLogin(app.base, 'Outsider');
+  await request(a.token, 'Invitee');
   await api(app.base, `/api/friends/${a.userId}/accept`, { method: 'POST', token: b.token });
   const room = await api(app.base, '/api/rooms', { method: 'POST', token: a.token, body: { mapId: 'factory', isPrivate: true, mode: 'ctf' } });
   assert.equal(room.status, 201);
@@ -203,7 +203,7 @@ test('invitations: a friend in your room gets a live invite with the room; stran
   assert.equal(inv.status, 200, inv.text);
   assert.equal(inv.body.delivered, true);
   const ev = await sb.next('invite');
-  assert.deepEqual([ev.invite.roomId, ev.invite.mode, ev.invite.mapId, ev.invite.isPrivate, ev.invite.from.name], [room.body.roomId, 'ctf', 'factory', true, 'Зазывала']);
+  assert.deepEqual([ev.invite.roomId, ev.invite.mode, ev.invite.mapId, ev.invite.isPrivate, ev.invite.from.name], [room.body.roomId, 'ctf', 'factory', true, 'Barker']);
   assert.equal((await api(app.base, `/api/friends/${c.userId}/invite`, { method: 'POST', token: a.token, body: { roomId: room.body.roomId } })).status, 403, 'only friends');
   sb.close();
   await new Promise((r) => setTimeout(r, 300));
@@ -213,9 +213,9 @@ test('invitations: a friend in your room gets a live invite with the room; stran
 });
 
 test('rating and the Top-100: places move the rating, the table ranks by rating, level and eliminations', async () => {
-  const top = await devLogin(app.base, 'Чемпион');
-  const low = await devLogin(app.base, 'Новобранец');
-  const idle = await devLogin(app.base, 'Без Матчей');
+  const top = await devLogin(app.base, 'Champion');
+  const low = await devLogin(app.base, 'Recruit');
+  const idle = await devLogin(app.base, 'No Matches');
   const rec = pgContext(app.db.sql, app.env, silentLogger).recorder;
   const now = Date.now();
   const part = (userId: string, place: number, kills: number) => ({ userId, character: 'petya' as const, place, kills, assists: 0, deaths: 1, score: kills * 2, damageDealt: 0, completed: true, viaInvite: false, team: null, playtimeMs: 60_000 });
@@ -246,19 +246,19 @@ test('rating and the Top-100: places move the rating, the table ranks by rating,
   const lb = await api(app.base, '/api/leaderboard?by=rating', { token: idle.token });
   assert.equal(lb.status, 200);
   const names = lb.body.entries.map((e: { name: string }) => e.name);
-  assert.ok(names.indexOf('Чемпион') >= 0 && names.indexOf('Чемпион') < names.indexOf('Новобранец'));
-  assert.ok(!names.includes('Без Матчей'), 'players without a finished match are not ranked');
+  assert.ok(names.indexOf('Champion') >= 0 && names.indexOf('Champion') < names.indexOf('Recruit'));
+  assert.ok(!names.includes('No Matches'), 'players without a finished match are not ranked');
   assert.equal(lb.body.me, null);
   const mine = await api(app.base, '/api/leaderboard?by=kills', { token: low.token });
   assert.equal(mine.body.by, 'kills');
-  assert.equal(mine.body.me.name, 'Новобранец');
+  assert.equal(mine.body.me.name, 'Recruit');
   assert.ok(mine.body.me.rank >= 2);
   assert.ok(mine.body.entries.every((_e: unknown, i: number, arr: Array<{ kills: number }>) => i === 0 || arr[i - 1]!.kills >= arr[i]!.kills));
   // places are distinct (ties go to the other measure, then the older account) and «me» matches the table
   assert.deepEqual(mine.body.entries.map((e: { rank: number }) => e.rank), mine.body.entries.map((_: unknown, i: number) => i + 1));
-  assert.equal(mine.body.entries.find((e: { name: string }) => e.name === 'Новобранец').rank, mine.body.me.rank);
+  assert.equal(mine.body.entries.find((e: { name: string }) => e.name === 'Recruit').rank, mine.body.me.rank);
   const topMe = await api(app.base, '/api/leaderboard?by=rating', { token: top.token });
-  assert.equal(topMe.body.entries.find((e: { name: string }) => e.name === 'Чемпион').rank, topMe.body.me.rank);
+  assert.equal(topMe.body.entries.find((e: { name: string }) => e.name === 'Champion').rank, topMe.body.me.rank);
   const lvl = await api(app.base, '/api/leaderboard?by=level', { token: low.token });
   assert.equal(lvl.body.entries[0].rank, 1);
   // a leaver loses rating; the rating never goes below zero
@@ -270,9 +270,9 @@ test('rating and the Top-100: places move the rating, the table ranks by rating,
 });
 
 test('deleting an account removes its friendships and messages', async () => {
-  const a = await devLogin(app.base, 'Остаётся');
-  const b = await devLogin(app.base, 'Уходит');
-  await request(a.token, 'Уходит');
+  const a = await devLogin(app.base, 'Stays');
+  const b = await devLogin(app.base, 'Leaver');
+  await request(a.token, 'Leaver');
   await api(app.base, `/api/friends/${a.userId}/accept`, { method: 'POST', token: b.token });
   await api(app.base, `/api/messages/${a.userId}`, { method: 'POST', token: b.token, body: { text: 'пока' } });
   assert.equal((await api(app.base, '/api/me', { method: 'DELETE', token: b.token })).status, 200);

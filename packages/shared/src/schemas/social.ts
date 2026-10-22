@@ -8,6 +8,7 @@ import type { AvatarId } from '../game-rules/avatars.js';
 import type { CharacterId } from '../game-rules/characters.js';
 import type { GameMode } from '../game-rules/match.js';
 import type { MapId } from '../maps/types.js';
+import type { ClubSummary } from '../game-rules/clubs.js';
 import { displayNameSchema } from './api.js';
 
 /** Where a friend is right now: not connected, in the menus, in a room's lobby, in a match. */
@@ -89,7 +90,8 @@ export interface RoomInviteEvent {
 
 /** Events pushed over the social WebSocket. */
 export type SocialEvent =
-  | { type: 'ready'; userId: string; unread: number; incoming: number }
+  /** `clubs`: join requests waiting for this player's answer (heads of clubs). */
+  | { type: 'ready'; userId: string; unread: number; incoming: number; clubs: number }
   | { type: 'presence'; userId: string; status: FriendStatus }
   | { type: 'friend_request'; from: FriendRequestEntry }
   | { type: 'friend_accepted'; friend: FriendEntry }
@@ -97,6 +99,12 @@ export type SocialEvent =
   | { type: 'dm'; message: DirectMessage; from: PlayerCard }
   | { type: 'dm_read'; by: string; upTo: number }
   | { type: 'invite'; invite: RoomInviteEvent }
+  /** Clubs (v0.3): a request to the head; the answer to the player; showing out, disbanding, a new head. */
+  | { type: 'club_request'; clubId: string; from: PlayerCard }
+  | { type: 'club_joined'; club: ClubSummary }
+  | { type: 'club_declined'; clubId: string; name: string }
+  | { type: 'club_left'; clubId: string; reason: 'removed' | 'disbanded' }
+  | { type: 'club_head'; clubId: string }
   /** The answer to a client `ping` (keep-alive through proxies that drop idle sockets). */
   | { type: 'pong'; t: number };
 

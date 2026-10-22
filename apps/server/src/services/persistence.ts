@@ -20,6 +20,7 @@ import { EconomyRepo } from '../economy/repo.js';
 import { EmailAuth } from '../auth/email.js';
 import { PaymentService } from '../payments/service.js';
 import { NowPaymentsProvider, StripeProvider } from '../payments/providers.js';
+import { ClubRepo } from '../clubs/repo.js';
 
 export interface Persistence {
   services: Services;
@@ -112,6 +113,16 @@ export function pgContext(sql: Sql, env: Env, log: Logger): PgContext {
 export async function createPersistence(deps: { sql: Sql; env: Env; log: Logger }): Promise<Persistence> {
   const ctx = pgContext(deps.sql, deps.env, deps.log);
   await seedAchievements(deps.sql);
+  // the house clubs (clubs/house.ts): in the table from the first start, their ratings caught up;
+  // never a reason not to start
+  try {
+    const clubs = new ClubRepo(deps.sql);
+    const added = await clubs.seedHouse();
+    if (added) deps.log.info('house clubs added', { added });
+    await clubs.driftHouse();
+  } catch (e) {
+    deps.log.warn('house clubs not ready', { err: e as Error });
+  }
   await bootstrapAdmin(deps.sql, ctx.adminAuth, deps.log, deps.env.ADMIN_BOOTSTRAP_USERNAME, deps.env.ADMIN_BOOTSTRAP_PASSWORD);
   // Retention purge (docs/PRIVACY.md): first run 5 min after start, then daily; unref'd timers.
   const stopRetention = deps.env.NODE_ENV === 'test' ? () => {} : scheduleRetention(deps.sql, deps.log);

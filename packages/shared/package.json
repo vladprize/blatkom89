@@ -1,6 +1,6 @@
 {
   "name": "@blatkom/shared",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "type": "module",
   "description": "Shared game rules, maps, simulation, network protocol, schemas and analytics events",

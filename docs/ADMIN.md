@@ -8,7 +8,9 @@ names weapons, characters and maps the way the owner's sheets do). API: `/api/ad
 
 Tabs: «Обзор» (KPIs and charts), «Воронка» (visitors → account → match → return, sources),
 «Экономика» (talons, diamonds, revenue, purchases, modifications, cases), «Игроки» (search, player
-card with wallet, purchases, ledger, payments and admin actions), «Ошибки», «Экспорт», «Аудит».
+card with wallet, purchases, ledger, payments and admin actions), «Клубы» (v0.3: every club — the
+game's own marked «игры» — with its rating, people, head and requests; an admin removes a player club,
+e.g. for an offensive name or flag), «Ошибки», «Экспорт», «Аудит».
 
 The page itself is public (it contains no data); **every** data request is authorised on the server.
 Hiding the URL is not part of the security model.
@@ -77,7 +79,7 @@ what the role cannot use.
 
 Recorded actions: `login`, `login_failed`, `logout`, `admin_bootstrap`, `admin_created`,
 `admin_created_cli`, `player_viewed` (opening a player's card, target = player id),
-`balance_grant` (currency, amount, reason, balance after), `password_reset_link`,
+`balance_grant` (currency, amount, reason, balance after), `password_reset_link`, `club_delete` (name, tag, members),
 `export_players`, `export_matches`, `export_daily` (with row counts / date range). Visible to `admin`
 in the «Аудит» tab (latest 200). Kept 365 days ([PRIVACY.md](PRIVACY.md) §4).
 
@@ -103,6 +105,8 @@ Range parameters (where noted): `range=24h|7d|30d|90d` (default `7d`) or
 | `GET /api/admin/players/:id` | viewer | profile, progression, sessions summary, sign-in methods, masked email, wallet, owned items and modifications, last 50 ledger rows, last 30 payments, achievements, last 50 matches, last 50 errors (audited) |
 | `POST /api/admin/players/:id/grant` | admin | `{currency: tokens\|diamonds, amount: ±1…1 000 000, note: 3–120 chars}` → `{balance}`; never below zero (`409 insufficient_balance`); ledger reason `grant` with the admin id; audited; 30 actions / 5 min per admin (CSRF) |
 | `POST /api/admin/players/:id/reset-link` | admin | one-time password-reset link (valid 1 h) for a player with a registered email → `{link, expiresAt}`; `404 no_email` otherwise; audited; hand it over only to the account owner (CSRF) |
+| `GET /api/admin/clubs` | viewer | every club (`AdminClubRow`: rank, tag, name, motto, rating, people, real members, head, requests, recruiting, `house`, created) |
+| `DELETE /api/admin/clubs/:id` | admin | removes a player club; its people get `club_left` (disbanded); `409 house_club` for the game's own clubs; audited; 30 actions / 5 min per admin (CSRF) |
 | `GET /api/admin/errors?range…` | viewer | errors grouped by fingerprint (≤200 groups) |
 | `GET /api/admin/audit` | admin | latest 200 audit entries |
 | `POST /api/admin/users` | admin | `{username, password, role}` (CSRF) |

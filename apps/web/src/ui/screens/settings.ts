@@ -127,7 +127,7 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
             class: 'btn btn--small',
             onclick: async () => {
               const parsed = displayNameSchema.safeParse(input.value);
-              if (!parsed.success) return toast(t('A name may contain letters, digits, spaces and _ . -'));
+              if (!parsed.success) return toast(t('A name may contain Latin letters (A–Z), digits, spaces and _ . -'));
               try {
                 await opts.online!.rename(parsed.data);
                 toast(t('Name saved'));

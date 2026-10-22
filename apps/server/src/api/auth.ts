@@ -1,5 +1,5 @@
 /** Player authentication: Telegram Mini App initData, guest login (public website), dev-only login, logout. */
-import { DevAuthRequest, EmailLinkRequest, EmailLoginRequest, GuestAuthRequest, PasswordChangeRequest, PasswordResetConfirm, PasswordResetRequest, TelegramAuthRequest, VisitRequest } from '@blatkom/shared';
+import { latinName, DevAuthRequest, EmailLinkRequest, EmailLoginRequest, GuestAuthRequest, PasswordChangeRequest, PasswordResetConfirm, PasswordResetRequest, TelegramAuthRequest, VisitRequest } from '@blatkom/shared';
 import type { AuthResponse } from '@blatkom/shared';
 import { createHmac, randomBytes } from 'node:crypto';
 import type { RouteModule } from '../app.js';
@@ -85,7 +85,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
       throw new HttpError(429, 'rate_limited', 'Too many new players in a row — try again in a few minutes', { 'retry-after': '60' });
     }
     const platform = body.platform ?? null;
-    const up = await pg.users.upsertGuest(deviceKey, body.name, platform);
+    const up = await pg.users.upsertGuest(deviceKey, latinName(body.name, `Comrade_${deviceKey.slice(3, 7).replace(/[^A-Za-z0-9]/g, 'X').toUpperCase()}`), platform);
     // the visitor funnel: link the anonymous visit to the account it became
     if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform);
     const s = await pg.sessions.issue(up.userId, 'guest', platform, body.clientVersion ?? null);
@@ -105,7 +105,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     const pg = pgContext(deps.sql, env, deps.log);
     const deviceId = body.deviceId ?? randomBytes(12).toString('base64url');
     const platform = body.platform ?? null;
-    const up = await pg.users.upsertDev(deviceId, body.name, platform);
+    const up = await pg.users.upsertDev(deviceId, latinName(body.name, `Comrade_${deviceId.slice(-4).replace(/[^A-Za-z0-9]/g, 'X').toUpperCase()}`), platform);
     const s = await pg.sessions.issue(up.userId, 'dev', platform, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform };
     services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'dev' }, evCtx);

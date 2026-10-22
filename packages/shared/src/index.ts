@@ -10,6 +10,7 @@ export * from './game-rules/economy.js';
 export * from './game-rules/skins.js';
 export * from './game-rules/match.js';
 export * from './game-rules/progression.js';
+export * from './game-rules/clubs.js';
 export * from './maps/index.js';
 export * from './sim/math.js';
 export * from './sim/rng.js';

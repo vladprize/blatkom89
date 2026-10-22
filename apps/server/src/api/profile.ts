@@ -7,6 +7,7 @@ import { HttpError } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
 import { RateLimiter, rateLimit } from '../security/rateLimit.js';
 import { pgContext } from '../services/persistence.js';
+import { ClubRepo } from '../clubs/repo.js';
 
 export const registerProfileRoutes: RouteModule = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
@@ -72,6 +73,8 @@ export const registerProfileRoutes: RouteModule = (router, deps) => {
     const user = currentUser(ctx);
     const p = pg();
     await p.sessions.revokeAllForUser(user.userId);
+    // out of the club first, so a head hands the club over before the account disappears
+    await new ClubRepo(deps.sql!).forget(user.userId);
     await p.profiles.deleteUser(user.userId);
     p.activity.forget(user.userId);
     deps.log.info('account deleted', { userId: user.userId });

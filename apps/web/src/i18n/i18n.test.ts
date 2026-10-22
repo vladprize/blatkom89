@@ -95,7 +95,8 @@ test('Russian plurals and substitution', () => {
     assert.equal(count(12, 'talon'), '12 талонов');
     assert.equal(t('Players {n}/{max}', { n: 3, max: 10 }), 'Игроки 3/10');
     assert.equal(t('No such key in the dictionary'), 'No such key in the dictionary');
-    assert.match(randomNickname(() => 0.5), /^[А-ЯЁ][а-яё]+ [А-ЯЁ][а-яё]+$/);
+    // v0.3: aliases are Latin — the Russian version suggests the same English names
+    assert.match(randomNickname(() => 0.5), /^[A-Z][a-z]+ [A-Z][a-z ]+$/);
   } finally {
     _setLangForTests('en');
   }

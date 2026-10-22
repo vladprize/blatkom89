@@ -4,7 +4,7 @@
  * server recorder (`applyMatchProgress`), so a level means the same in both builds. Pure functions;
  * persistence is in localStore.ts. The online build never uses this — there the server owns progress.
  */
-import { ACHIEVEMENT_IDS, ACHIEVEMENTS, applyMatchProgress, displayNameSchema, isAvatarId, isCharacterId, isMapId, levelForXp, RATING_RULES } from '@blatkom/shared';
+import { ACHIEVEMENT_IDS, ACHIEVEMENTS, applyMatchProgress, displayNameSchema, isAvatarId, isCharacterId, isMapId, latinName, levelForXp, RATING_RULES } from '@blatkom/shared';
 import type { AchievementId, AchievementStatus, AvatarId, CharacterId, MapId, MatchHistoryEntry, PersonalResult, PublicProfile, Standing, TeamResultSummary } from '@blatkom/shared';
 
 export const LOCAL_HISTORY_MAX = 20;
@@ -88,7 +88,8 @@ const iso = (v: unknown, fallback: string): string => (typeof v === 'string' && 
 export function sanitizeLocalProfile(raw: unknown, now = new Date()): LocalProfile | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
-  const name = displayNameSchema.safeParse(r.displayName);
+  // v0.3: aliases are Latin; a name saved by an older build is transliterated, not lost
+  const name = displayNameSchema.safeParse(typeof r.displayName === 'string' ? latinName(r.displayName, '') : r.displayName);
   if (!name.success) return null;
   const nowIso = now.toISOString();
   const achievements: LocalProfile['achievements'] = {};

@@ -43,12 +43,15 @@ import { t, count, getLang, setLang, onLangChange, LANGS } from '../i18n/index.j
 import { charText, finishName, gadgetName, modText, weaponName } from '../i18n/content.js';
 import { apiErrorText } from '../net/errors.js';
 import { watchForUpdates } from './updates.js';
+import { renderClubs, renderClub, renderClubEditor, clubLabel } from '../ui/screens/clubs.js';
+import { clubFlag } from '../ui/clubFlag.js';
+import type { ClubDetails } from '@blatkom/shared';
 import type { UpdateWatch } from './updates.js';
 
 /** Room capacity shown in the menu. */
 const MAX_ROOM_PLAYERS = DEFAULT_MATCH_CONFIG.maxPlayers;
 
-type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'social' | 'top' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
+type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'social' | 'top' | 'clubs' | 'club' | 'clubEdit' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
 
 /** Profile id whose nickname has been confirmed in the first-launch dialog (online build). */
 const NICK_CONFIRMED_KEY = 'blatkom89.nick-confirmed.v1';
@@ -103,7 +106,7 @@ function gearIcon(): SVGSVGElement {
 }
 
 /** Pictograms of the menu's Friends (two heads) and Top-100 (a podium) buttons, inline SVG. */
-function socialIcon(kind: 'friends' | 'top'): SVGSVGElement {
+function socialIcon(kind: 'friends' | 'top' | 'clubs'): SVGSVGElement {
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('viewBox', '0 0 32 32');
@@ -121,6 +124,11 @@ function socialIcon(kind: 'friends' | 'top'): SVGSVGElement {
     shape('path', { d: 'M2 27c0-6 4-10 9-10s9 4 9 10z', fill: 'currentColor' });
     shape('circle', { cx: '22', cy: '11', r: '4', fill: 'currentColor', opacity: '.65' });
     shape('path', { d: 'M17 18.5c1.4-.9 3-1.5 5-1.5 4.4 0 8 3.6 8 9h-8c0-3-1.8-5.8-5-7.5z', fill: 'currentColor', opacity: '.65' });
+  } else if (kind === 'clubs') {
+    // a flag on a pole
+    shape('rect', { x: '5', y: '3', width: '2.6', height: '27', fill: 'currentColor' });
+    shape('path', { d: 'M8.5 4.5h19l-4.5 6.5 4.5 6.5h-19z', fill: 'currentColor', opacity: '.75' });
+    shape('path', { d: 'M16.5 7.4l1 2.1 2.3.3-1.7 1.6.4 2.3-2-1.1-2 1.1.4-2.3-1.7-1.6 2.3-.3z', fill: '#d8a93c' });
   } else {
     shape('rect', { x: '12', y: '9', width: '8', height: '19', fill: 'currentColor' });
     shape('rect', { x: '3', y: '15', width: '8', height: '13', fill: 'currentColor', opacity: '.75' });
@@ -163,6 +171,8 @@ export class App {
   private chatOverlay: ChatOverlay | null = null;
   /** A newer release on the server: reload in the main menu (app/updates.ts). */
   private updates: UpdateWatch | null = null;
+  /** The club page on screen (v0.3). */
+  private clubId: string | null = null;
 
   constructor() {
     const saved = storageGet('blatkom89.character');
@@ -394,6 +404,11 @@ export class App {
         return this.showSocial(push);
       case 'top':
         return this.showTop(push);
+      case 'clubs':
+      case 'clubEdit':
+        return this.showClubs(push);
+      case 'club':
+        return this.clubId ? this.showClub(this.clubId, push) : this.showClubs(push);
       case 'profile':
         return this.showProfile(push);
       case 'settings':
@@ -593,7 +608,101 @@ export class App {
         h('span', { class: 'stile__txt' }, h('b', null, t('Friends')), h('small', null, friendsSub(social))),
         badge > 0 ? h('span', { class: 'nbadge stile__badge', 'data-testid': 'friends-badge', 'aria-label': t('{n} new', { n: badge }) }, String(badge)) : null,
       ),
+      this.clubTile(),
       h('button', { class: 'stile', 'data-testid': 'menu-top', onclick: () => this.showTop() }, socialIcon('top'), h('span', { class: 'stile__txt' }, h('b', null, t('Top-100')), h('small', null, t('rating · level · eliminations')))),
+    );
+  }
+
+  /** Clubs (v0.3): the player's club flag (or the icon), its tag, and requests waiting for the head. */
+  private clubTile(): HTMLElement {
+    const club = this.online?.profile?.club ?? null;
+    const waiting = this.online?.social.clubRequests ?? 0;
+    return h(
+      'button',
+      { class: 'stile stile--club', 'data-testid': 'menu-clubs', onclick: () => this.showClubs() },
+      club ? h('span', { class: 'stile__flag' }, clubFlag(club.flag, club.emblem, { size: 40 })) : socialIcon('clubs'),
+      h('span', { class: 'stile__txt' }, h('b', null, t('Clubs')), h('small', null, club ? clubLabel(club) : t('crews and their table'))),
+      waiting > 0 ? h('span', { class: 'nbadge stile__badge', 'data-testid': 'clubs-badge', 'aria-label': t('{n} new', { n: waiting }) }, String(waiting)) : null,
+    );
+  }
+
+  private showClubs(push = true) {
+    const online = this.online;
+    if (!online) return;
+    this.go('clubs', push);
+    const p = online.profile;
+    this.render(
+      h(
+        'div',
+        { class: 'screen screen--dim' },
+        h(
+          'div',
+          { class: 'wrap' },
+          this.topbar(t('Clubs')),
+          renderClubs({
+            api: online.api,
+            level: p?.level ?? 1,
+            tokens: p?.tokens ?? 0,
+            onOpen: (id) => this.showClub(id),
+            onFound: () => this.showClubEditor(),
+            onLoaded: (r) => online.social.setClubRequests(r.incoming),
+          }),
+        ),
+      ),
+    );
+  }
+
+  private showClub(id: string, push = true) {
+    const online = this.online;
+    if (!online) return;
+    this.clubId = id;
+    this.go('club', push);
+    const changed = () => void online.refreshProfile().then(() => this.refreshSocialTiles()).catch(() => {});
+    this.render(
+      h(
+        'div',
+        { class: 'screen screen--dim' },
+        h(
+          'div',
+          { class: 'wrap' },
+          this.topbar(t('Club')),
+          renderClub({
+            api: online.api,
+            id,
+            myId: online.profile?.id ?? null,
+            onEdit: (c) => this.showClubEditor(c),
+            onGone: () => this.showClubs(false),
+            onChanged: changed,
+          }),
+        ),
+      ),
+    );
+  }
+
+  private showClubEditor(club?: ClubDetails) {
+    const online = this.online;
+    if (!online) return;
+    this.go('clubEdit');
+    this.render(
+      h(
+        'div',
+        { class: 'screen screen--dim' },
+        h(
+          'div',
+          { class: 'wrap' },
+          this.topbar(club ? t('Flag and motto') : t('Found a club')),
+          renderClubEditor({
+            api: online.api,
+            ...(club ? { club } : {}),
+            onDone: (c) => {
+              void online.refreshProfile().then(() => this.refreshSocialTiles()).catch(() => {});
+              // back to the club's page (the editor is not kept in the history)
+              this.history = this.history.filter((s) => s !== 'club' && s !== 'clubEdit');
+              this.showClub(c.id, false);
+            },
+          }),
+        ),
+      ),
     );
   }
 
@@ -1283,6 +1392,27 @@ export class App {
       case 'friend_accepted':
         if (!inGame) toast(t('{name} accepted your friend request', { name: e.friend.name }));
         return;
+      // clubs (v0.3): the news, and the club pages on screen redrawn
+      case 'club_request':
+        if (!inGame) toast(t('{name} asks to join your club', { name: e.from.name }));
+        if (this.screen === 'club' && this.clubId === e.clubId) this.showClub(e.clubId, false);
+        return;
+      case 'club_joined':
+        if (!inGame) toast(t('You are in «{name}» now', { name: e.club.name }));
+        this.afterClubChange();
+        return;
+      case 'club_declined':
+        if (!inGame) toast(t('Your request to «{name}» was turned down', { name: e.name }));
+        this.afterClubChange();
+        return;
+      case 'club_left':
+        if (!inGame) toast(e.reason === 'disbanded' ? t('Your club was disbanded') : t('You were shown out of the club'));
+        this.afterClubChange();
+        return;
+      case 'club_head':
+        if (!inGame) toast(t('You are the head of the club now'));
+        this.afterClubChange();
+        return;
       case 'dm': {
         const me = this.online.profile?.id;
         if (e.message.from === me || this.online.social.openChat === e.message.from || inGame) return;
@@ -1293,6 +1423,20 @@ export class App {
       default:
         return;
     }
+  }
+
+  /** The player's club changed elsewhere: the profile (menu tile) and any club screen on display. */
+  private afterClubChange() {
+    const online = this.online;
+    if (!online) return;
+    void online
+      .refreshProfile()
+      .then(() => {
+        this.refreshSocialTiles();
+        if (this.screen === 'clubs') this.showClubs(false);
+        else if (this.screen === 'club' && this.clubId) this.showClub(this.clubId, false);
+      })
+      .catch(() => {});
   }
 
   private showInvite(inv: RoomInviteEvent) {

@@ -3,7 +3,7 @@
  * (first launch, and «✎» in the menu/profile). Validation is the shared `displayNameSchema`,
  * the same one the server applies to PATCH /api/me.
  */
-import { displayNameSchema, sameAlias } from '@blatkom/shared';
+import { displayNameSchema, latinName, sameAlias } from '@blatkom/shared';
 import type { NameCheckResponse } from '@blatkom/shared';
 import { h, fill, toast } from '../ui/dom.js';
 import { sfx } from '../game/audio/Sfx.js';
@@ -74,10 +74,37 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
         if (seq === checkSeq) hint.replaceChildren();
       });
   };
+  /** v0.3: aliases are Latin — Cyrillic (or accents) typed: offer the same name in Latin letters. */
+  const latinHint = (): boolean => {
+    const v = input.value.trim();
+    if (!/[^\x20-\x7E’]/.test(v)) return false;
+    const fixed = latinName(v, '');
+    fill(
+      hint,
+      h('span', { class: 'namehint__bad' }, t('Latin letters only.')),
+      fixed && fixed !== v
+        ? h(
+            'button',
+            {
+              class: 'chip',
+              'data-testid': 'name-latin',
+              onclick: () => {
+                input.value = fixed;
+                error.textContent = '';
+                scheduleCheck();
+                input.focus();
+              },
+            },
+            fixed,
+          )
+        : null,
+    );
+    return true;
+  };
   const scheduleCheck = () => {
-    if (!o.check) return;
     if (checkTimer) clearTimeout(checkTimer);
     hint.replaceChildren();
+    if (latinHint() || !o.check) return;
     const parsed = displayNameSchema.safeParse(input.value);
     if (!parsed.success) return;
     checkTimer = setTimeout(() => runCheck(parsed.data), 350);
@@ -96,7 +123,8 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
     if (busy) return;
     const parsed = displayNameSchema.safeParse(input.value);
     if (!parsed.success) {
-      error.textContent = input.value.trim().length < 2 ? t('At least 2 characters.') : input.value.trim().length > 24 ? t('At most 24 characters.') : t('Only letters, digits, spaces and _ . - will do.');
+      error.textContent = input.value.trim().length < 2 ? t('At least 2 characters.') : input.value.trim().length > 24 ? t('At most 24 characters.') : t('A name may contain Latin letters (A–Z), digits, spaces and _ . -');
+      latinHint();
       input.focus();
       return;
     }
@@ -143,7 +171,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
       h('div', { class: 'muted', style: 'font-size:15px' }, o.note ?? t('Rivals see your alias — above your character, on the scoreboard and in the results. You can change it in the profile.')),
       input,
       error,
-      o.check ? hint : null,
+      hint,
       h(
         'div',
         { class: 'row' },

@@ -170,10 +170,11 @@ export class SocialRepo {
     return rows.reduce((m, r) => Math.max(m, Number(r.id)), 0);
   }
 
-  async counts(userId: string): Promise<{ unread: number; incoming: number }> {
-    const [r] = await this.sql<Array<{ unread: number; incoming: number }>>`
+  async counts(userId: string): Promise<{ unread: number; incoming: number; clubs: number }> {
+    const [r] = await this.sql<Array<{ unread: number; incoming: number; clubs: number }>>`
       SELECT (SELECT count(*)::int FROM direct_messages WHERE recipient_id = ${userId} AND read_at IS NULL) AS unread,
-             (SELECT count(*)::int FROM friendships WHERE friend_id = ${userId} AND status = 'pending') AS incoming`;
+             (SELECT count(*)::int FROM friendships WHERE friend_id = ${userId} AND status = 'pending') AS incoming,
+             (SELECT count(*)::int FROM club_requests q JOIN club_members m ON m.club_id = q.club_id AND m.user_id = ${userId} AND m.role = 'head') AS clubs`;
     return r!;
   }
 

@@ -56,7 +56,11 @@ test('010 keeps every alias with its oldest living holder and numbers the later 
     await match(3, 'teams', 2, 0, null, true, [[com, 1, true, 0]]);
     await match(4, 'ctf', 2, 4, 1, true, [[som, 2, true, 1]]);
     await match(5, 'ffa', 2, 0, null, false, [[petya, 2, true, null]]); // never processed: ignored
-    const applied = await migrate(sql);
+    // the migrations up to 013 (014 turns the aliases Latin: checked below)
+    const upTo013 = mkdtempSync(join(tmpdir(), 'blatkom-mig-'));
+    for (const f of readdirSync(DEFAULT_MIGRATIONS_DIR).filter((f) => f < '014')) cpSync(join(DEFAULT_MIGRATIONS_DIR, f), join(upTo013, f));
+    const applied = await migrate(sql, upTo013);
+    rmSync(upTo013, { recursive: true, force: true });
     assert.equal(applied[0], '010_social.sql', 'the migrations after 009, 010 first');
     const ratings = await sql<Array<{ user_id: string; rating: number }>>`SELECT user_id, rating FROM profiles`;
     const r = new Map(ratings.map((x) => [x.user_id, x.rating]));
@@ -79,6 +83,22 @@ test('010 keeps every alias with its oldest living holder and numbers the later 
     // a row written without a key (an older server) still gets one
     const [plain] = await sql<Array<{ name_key: string }>>`INSERT INTO users (dev_device_id, display_name) VALUES ('dev-mig-y', 'Plain Name') RETURNING name_key`;
     assert.equal(plain!.name_key, 'plain name');
+
+    // 014 (v0.3): every living alias in Latin letters; a transliteration already taken gets a number
+    await sql`INSERT INTO users (dev_device_id, display_name, name_key, created_at) VALUES ('dev-mig-z', 'Pyotr', 'pyotr', ${new Date(Date.UTC(2026, 0, 30))})`;
+    const later = await migrate(sql);
+    assert.deepEqual(later, ['014_latin_names.sql']);
+    const after = new Map((await sql<Array<{ id: string; display_name: string; name_key: string }>>`SELECT id, display_name, name_key FROM users`).map((r) => [r.id, r]));
+    assert.deepEqual(
+      ids.map((id) => after.get(id)!.display_name),
+      ['Petya', 'PETYA 3', 'Petya 2', 'Som', 'Com 2', 'петя', 'Pyotr 2', 'Petr 2', 'Valuta'],
+      'Latin letters for the living (a deleted account keeps its row as it was); «Пётр» meets an existing «Pyotr»',
+    );
+    for (const r of after.values()) assert.equal(r.name_key, nameKey(r.display_name));
+    await assert.rejects(
+      sql`INSERT INTO users (dev_device_id, display_name, name_key) VALUES ('dev-mig-w', 'PETYA', ${nameKey('PETYA')})`,
+      (e: { code?: string; constraint_name?: string }) => e.code === '23505' && (e.constraint_name ?? '').includes('name_key'),
+    );
   } finally {
     await sql.end({ timeout: 5 });
     await root.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);

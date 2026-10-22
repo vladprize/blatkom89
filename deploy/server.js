@@ -15,8 +15,8 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
 var __commonJS = (cb, mod) => function __require2() {
   try {
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
+  } catch (e2) {
+    throw mod = 0, e2;
   }
 };
 var __export = (target, all) => {
@@ -132,7 +132,7 @@ var require_buffer_util = __commonJS({
           if (buffer2.length < 32) _unmask(buffer2, mask);
           else bufferUtil.unmask(buffer2, mask);
         };
-      } catch (e) {
+      } catch (e2) {
       }
     }
   }
@@ -766,7 +766,7 @@ var require_validation = __commonJS({
         module.exports.isValidUTF8 = function(buf) {
           return buf.length < 32 ? _isValidUTF8(buf) : isValidUTF8(buf);
         };
-      } catch (e) {
+      } catch (e2) {
       }
     }
   }
@@ -2924,7 +2924,7 @@ var require_websocket = __commonJS({
           let addr;
           try {
             addr = new URL2(location, address);
-          } catch (e) {
+          } catch (e2) {
             const err = new SyntaxError(`Invalid URL: ${location}`);
             emitErrorAndClose(websocket, err);
             return;
@@ -3853,8 +3853,8 @@ var util;
     return util2.objectValues(filtered);
   };
   util2.objectValues = (obj) => {
-    return util2.objectKeys(obj).map(function(e) {
-      return obj[e];
+    return util2.objectKeys(obj).map(function(e2) {
+      return obj[e2];
     });
   };
   util2.objectKeys = typeof Object.keys === "function" ? (obj) => Object.keys(obj) : (object) => {
@@ -7022,13 +7022,13 @@ var ZodFunction = class _ZodFunction extends ZodType {
       const me = this;
       return OK(async function(...args) {
         const error = new ZodError([]);
-        const parsedArgs = await me._def.args.parseAsync(args, params).catch((e) => {
-          error.addIssue(makeArgsIssue(args, e));
+        const parsedArgs = await me._def.args.parseAsync(args, params).catch((e2) => {
+          error.addIssue(makeArgsIssue(args, e2));
           throw error;
         });
         const result = await Reflect.apply(fn, this, parsedArgs);
-        const parsedReturns = await me._def.returns._def.type.parseAsync(result, params).catch((e) => {
-          error.addIssue(makeReturnsIssue(result, e));
+        const parsedReturns = await me._def.returns._def.type.parseAsync(result, params).catch((e2) => {
+          error.addIssue(makeReturnsIssue(result, e2));
           throw error;
         });
         return parsedReturns;
@@ -7788,7 +7788,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.5"),
+  SERVER_VERSION: external_exports.string().default("0.2.6"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -7869,10 +7869,10 @@ function createLogger(level = "info", base2 = {}, sink = (l) => process.stdout.w
     sink(JSON.stringify({ t: (/* @__PURE__ */ new Date()).toISOString(), level: lvl, msg, ...base2, ...fields ? sanitize(fields) : {} }));
   };
   return {
-    debug: (m, f) => write("debug", m, f),
-    info: (m, f) => write("info", m, f),
-    warn: (m, f) => write("warn", m, f),
-    error: (m, f) => write("error", m, f),
+    debug: (m, f2) => write("debug", m, f2),
+    info: (m, f2) => write("info", m, f2),
+    warn: (m, f2) => write("warn", m, f2),
+    error: (m, f2) => write("error", m, f2),
     child: (fields) => createLogger(level, { ...base2, ...fields }, sink)
   };
 }
@@ -8574,8 +8574,8 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
     let x;
     try {
       x = options.socket ? await Promise.resolve(options.socket(options)) : new net.Socket();
-    } catch (e) {
-      error(e);
+    } catch (e2) {
+      error(e2);
       return;
     }
     x.on("error", error);
@@ -8710,9 +8710,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
       }
       try {
         handle(incoming.subarray(0, length + 1));
-      } catch (e) {
+      } catch (e2) {
         query && (query.cursorFn || query.describeFirst) && write(Sync);
-        errored(e);
+        errored(e2);
       }
       incoming = incoming.subarray(length + 1);
       remaining = 0;
@@ -9397,8 +9397,8 @@ function Subscribe(postgres2, options) {
     stream2.on("error", error);
     stream2.on("close", sql3.close);
     return { stream: stream2, state: xs.state };
-    function error(e) {
-      console.error("Unexpected error during logical streaming - reconnecting", e);
+    function error(e2) {
+      console.error("Unexpected error during logical streaming - reconnecting", e2);
     }
     function data(x2) {
       if (x2[0] === 119) {
@@ -9779,9 +9779,9 @@ function Postgres(a, b2) {
         });
         if (uncaughtError)
           throw uncaughtError;
-      } catch (e) {
+      } catch (e2) {
         await (name ? sql3`rollback to ${sql3(name)}` : sql3`rollback`);
-        throw e instanceof PostgresError && e.code === "25P02" && uncaughtError || e;
+        throw e2 instanceof PostgresError && e2.code === "25P02" && uncaughtError || e2;
       }
       if (!name) {
         prepare ? await sql3`prepare transaction '${sql3.unsafe(prepare)}'` : await sql3`commit`;
@@ -9794,7 +9794,7 @@ function Postgres(a, b2) {
         return scope(c, fn3, "s" + savepoints++ + (name2 ? "_" + name2 : ""));
       }
       function handler3(q) {
-        q.catch((e) => uncaughtError || (uncaughtError = e));
+        q.catch((e2) => uncaughtError || (uncaughtError = e2));
         c.queue === full ? queries2.push(q) : c.execute(q) || move(c, full);
       }
     }
@@ -9878,10 +9878,10 @@ function Postgres(a, b2) {
     }
     ready ? move(c, busy) : move(c, full);
   }
-  function onclose(c, e) {
+  function onclose(c, e2) {
     move(c, closed);
     c.reserved = null;
-    c.onclose && (c.onclose(e), c.onclose = null);
+    c.onclose && (c.onclose(e2), c.onclose = null);
     options.onclose && options.onclose(c.id);
     queries.length && connect(c, queries.shift());
   }
@@ -10506,19 +10506,17 @@ function isAvatarId(v) {
 // packages/shared/src/game-rules/nicknames.ts
 var PRACTICE_NAMES = Object.freeze({
   en: ["Beardy", "Comrade_312", "The Cooperator", "Petrovich", "Plumber", "Quartermaster", "Praporshchik", "Kolyan", "Mechanic", "Shurik", "Valerka", "The Docent"],
-  ru: ["\u0411\u043E\u0440\u043E\u0434\u0430\u0447", "\u0422\u043E\u0432\u0430\u0440\u0438\u0449_312", "\u041A\u043E\u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440", "\u041F\u0435\u0442\u0440\u043E\u0432\u0438\u0447", "\u0421\u0430\u043D\u0442\u0435\u0445\u043D\u0438\u043A", "\u0417\u0430\u0432\u0445\u043E\u0437", "\u041F\u0440\u0430\u043F\u043E\u0440\u0449\u0438\u043A", "\u041A\u043E\u043B\u044F\u043D", "\u041C\u0435\u0445\u0430\u043D\u0438\u043A", "\u0428\u0443\u0440\u0438\u043A", "\u0412\u0430\u043B\u0435\u0440\u043A\u0430", "\u0414\u043E\u0446\u0435\u043D\u0442"]
+  ru: ["Borodach", "Tovarishch_312", "Kooperator", "Petrovich", "Santekhnik", "Zavkhoz", "Praporshchik", "Kolyan", "Mekhanik", "Shurik", "Valerka", "Dotsent"]
 });
 var ADJ_EN = ["Quiet", "Garage", "Factory", "Night", "Gloomy", "Seasoned", "Jolly", "Courtyard", "Imported", "Lucky", "Cassette", "District", "Elusive", "Shady", "Sleepy", "Bald", "Contraband", "Comrade"];
 var NOUN_EN = ["Quartermaster", "Watchman", "Storekeeper", "Gym Teacher", "Foreman", "Cabbie", "Electrician", "Fitter", "Site Boss", "Cooperator", "Plumber", "Projectionist", "Spiv", "Postman", "Janitor", "Badger", "Raccoon", "Ferret", "Beaver", "Owl", "Weasel"];
-var ADJ_RU = ["\u0422\u0438\u0445\u0438\u0439", "\u0413\u0430\u0440\u0430\u0436\u043D\u044B\u0439", "\u0417\u0430\u0432\u043E\u0434\u0441\u043A\u043E\u0439", "\u041D\u043E\u0447\u043D\u043E\u0439", "\u0425\u043C\u0443\u0440\u044B\u0439", "\u0411\u044B\u0432\u0430\u043B\u044B\u0439", "\u0412\u0435\u0441\u0451\u043B\u044B\u0439", "\u0414\u0432\u043E\u0440\u043E\u0432\u044B\u0439", "\u0418\u043C\u043F\u043E\u0440\u0442\u043D\u044B\u0439", "\u0424\u0430\u0440\u0442\u043E\u0432\u044B\u0439", "\u041A\u0430\u0441\u0441\u0435\u0442\u043D\u044B\u0439", "\u0420\u0430\u0439\u043E\u043D\u043D\u044B\u0439", "\u041D\u0435\u0443\u043B\u043E\u0432\u0438\u043C\u044B\u0439", "\u0414\u0435\u043B\u043E\u0432\u043E\u0439", "\u0421\u043E\u043D\u043D\u044B\u0439", "\u041B\u044B\u0441\u044B\u0439"];
-var NOUN_RU = ["\u0417\u0430\u0432\u0445\u043E\u0437", "\u0412\u0430\u0445\u0442\u0451\u0440", "\u041A\u043B\u0430\u0434\u043E\u0432\u0449\u0438\u043A", "\u0424\u0438\u0437\u0440\u0443\u043A", "\u0411\u0440\u0438\u0433\u0430\u0434\u0438\u0440", "\u0422\u0430\u043A\u0441\u0438\u0441\u0442", "\u042D\u043B\u0435\u043A\u0442\u0440\u0438\u043A", "\u0421\u043B\u0435\u0441\u0430\u0440\u044C", "\u041F\u0440\u043E\u0440\u0430\u0431", "\u041A\u043E\u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440", "\u0421\u0430\u043D\u0442\u0435\u0445\u043D\u0438\u043A", "\u041A\u0438\u043D\u043E\u043C\u0435\u0445\u0430\u043D\u0438\u043A", "\u0424\u0430\u0440\u0446\u043E\u0432\u0449\u0438\u043A", "\u041F\u043E\u0447\u0442\u0430\u043B\u044C\u043E\u043D", "\u0414\u0432\u043E\u0440\u043D\u0438\u043A", "\u0411\u0430\u0440\u0441\u0443\u043A", "\u0415\u043D\u043E\u0442", "\u0425\u043E\u0440\u0451\u043A", "\u0411\u043E\u0431\u0440", "\u0424\u0438\u043B\u0438\u043D", "\u0421\u044B\u0447"];
 var CASUAL_EN = ["Vadik", "Edik", "Arkasha", "Vovan", "Tolik", "Lyokha", "Seryoga", "Dimon", "Sanya", "Max", "Rustam", "Zhenya", "Gena", "Stas", "Kostyan", "Vityok", "Garik", "Zhora", "Slavik", "Tyoma", "Mishanya", "Boris", "Sanchez", "Dok", "Ryzhy", "Lis", "Kot", "Shpala"];
-var CASUAL_RU = ["\u0412\u0430\u0434\u0438\u043A", "\u042D\u0434\u0438\u043A", "\u0410\u0440\u043A\u0430\u0448\u0430", "\u0412\u043E\u0432\u0430\u043D", "\u0422\u043E\u043B\u0438\u043A", "\u041B\u0451\u0445\u0430", "\u0421\u0435\u0440\u0451\u0433\u0430", "\u0414\u0438\u043C\u043E\u043D", "\u0421\u0430\u043D\u044F", "\u041C\u0430\u043A\u0441", "\u0420\u0443\u0441\u0442\u0430\u043C", "\u0416\u0435\u043D\u0451\u043A", "\u0413\u0435\u043D\u0430", "\u0421\u0442\u0430\u0441", "\u041A\u043E\u0441\u0442\u044F\u043D", "\u0412\u0438\u0442\u0451\u043A", "\u0413\u0430\u0440\u0438\u043A", "\u0416\u043E\u0440\u0430", "\u0421\u043B\u0430\u0432\u0438\u043A", "\u0422\u0451\u043C\u044B\u0447", "\u041C\u0438\u0448\u0430\u043D\u044F", "\u0411\u0430\u0442\u044F", "\u041F\u0430\u043B\u044B\u0447", "\u041C\u0438\u0445\u0430\u043B\u044B\u0447", "\u0420\u044B\u0436\u0438\u0439", "\u041B\u0438\u0441", "\u041A\u043E\u0442", "\u0428\u043F\u0430\u043B\u0430"];
+var CASUAL_RU = ["Vadik", "Edik", "Arkasha", "Vovan", "Tolik", "Lyokha", "Seryoga", "Dimon", "Sanya", "Maks", "Rustam", "Zhenyok", "Gena", "Stas", "Kostyan", "Vityok", "Garik", "Zhora", "Slavik", "Tyomych", "Mishanya", "Batya", "Palych", "Mikhalych", "Ryzhiy", "Lis", "Kot", "Shpala"];
 var SUFFIX_EN = ["", "", "", "", "89", "_89", "777", "1988", "_2007", "01", "_x", " Jr"];
-var SUFFIX_RU = ["", "", "", "", "89", "_89", "777", "1988", "_2007", " \u0441 \u0440\u0430\u0439\u043E\u043D\u0430", " \u0438\u0437 5-\u0433\u043E", " \u043C\u043B."];
+var SUFFIX_RU = ["", "", "", "", "89", "_89", "777", "1988", "_2007", "_msk", "_spb", "_rayon"];
 var pickFrom = (rnd, a) => a[Math.floor(rnd() * a.length) % a.length];
-function randomNickname(rnd = Math.random, lang = "en") {
-  return lang === "ru" ? `${pickFrom(rnd, ADJ_RU)} ${pickFrom(rnd, NOUN_RU)}` : `${pickFrom(rnd, ADJ_EN)} ${pickFrom(rnd, NOUN_EN)}`;
+function randomNickname(rnd = Math.random, _lang = "en") {
+  return `${pickFrom(rnd, ADJ_EN)} ${pickFrom(rnd, NOUN_EN)}`;
 }
 function fillNickname(rnd, lang) {
   if (rnd() < 0.5) return randomNickname(rnd, lang);
@@ -10558,6 +10556,81 @@ function nameKey(name) {
 function numberedAlias(base2, n) {
   const tail = ` ${n}`;
   return base2.slice(0, MAX_NAME_LENGTH - tail.length).trimEnd() + tail;
+}
+var LATIN_NAME_RE = /^[A-Za-z0-9 _.\-’']+$/;
+var CYRILLIC = Object.freeze({
+  \u0430: "a",
+  \u0431: "b",
+  \u0432: "v",
+  \u0433: "g",
+  \u0434: "d",
+  \u0435: "e",
+  \u0451: "yo",
+  \u0436: "zh",
+  \u0437: "z",
+  \u0438: "i",
+  \u0439: "y",
+  \u043A: "k",
+  \u043B: "l",
+  \u043C: "m",
+  \u043D: "n",
+  \u043E: "o",
+  \u043F: "p",
+  \u0440: "r",
+  \u0441: "s",
+  \u0442: "t",
+  \u0443: "u",
+  \u0444: "f",
+  \u0445: "kh",
+  \u0446: "ts",
+  \u0447: "ch",
+  \u0448: "sh",
+  \u0449: "shch",
+  \u044A: "",
+  \u044B: "y",
+  \u044C: "",
+  \u044D: "e",
+  \u044E: "yu",
+  \u044F: "ya",
+  \u0456: "i",
+  \u0457: "yi",
+  \u0454: "ye",
+  \u0491: "g",
+  \u045E: "u",
+  \u04D9: "a",
+  \u0493: "gh",
+  \u049B: "q",
+  \u04A3: "ng",
+  \u04E9: "o",
+  \u04B1: "u",
+  \u04AF: "u",
+  \u04BB: "h"
+});
+var LATIN_EXTRA = Object.freeze({ \u00DF: "ss", \u00E6: "ae", \u00C6: "AE", \u00F8: "o", \u00D8: "O", \u0153: "oe", \u0152: "OE", \u0142: "l", \u0141: "L", \u0111: "d", \u0110: "D", \u00FE: "th", \u00DE: "Th", \u0131: "i" });
+function transliterate(raw) {
+  const words = raw.normalize("NFKC").split(/(\s+)/);
+  const out = words.map((w) => {
+    if (!/[\u0400-\u04ff]/.test(w)) return w;
+    const letters = [...w].filter((c) => new RegExp("\\p{L}", "u").test(c));
+    const shout = letters.length > 1 && letters.every((c) => c === c.toUpperCase() && c !== c.toLowerCase());
+    let res = "";
+    for (const ch of w) {
+      const low = ch.toLowerCase();
+      const m = CYRILLIC[low];
+      if (m === void 0) res += ch;
+      else if (shout) res += m.toUpperCase();
+      else res += ch !== low && m ? m[0].toUpperCase() + m.slice(1) : m;
+    }
+    return res;
+  }).join("");
+  return [...out].map((c) => LATIN_EXTRA[c] ?? c).join("").normalize("NFKD").replace(new RegExp("\\p{M}", "gu"), "");
+}
+function toLatin(raw) {
+  return transliterate(raw).replace(/[^A-Za-z0-9 _.\-’']/g, "").replace(/\s+/g, " ").trim().slice(0, MAX_NAME_LENGTH).trim();
+}
+function latinName(raw, fallback) {
+  const s = toLatin(raw);
+  return s.length >= 2 && /[A-Za-z0-9]/.test(s) ? s : fallback;
 }
 
 // packages/shared/src/game-rules/weapons.ts
@@ -10937,7 +11010,7 @@ function parseSkin(id) {
 }
 function skinCaseOdds(owned) {
   const left = new Map(SKIN_RARITIES.map((r) => [r, 0]));
-  for (const w of SKINNABLE_WEAPONS) for (const f of FINISH_IDS) if (!owned.has(skinId(w, f))) left.set(FINISHES[f].rarity, left.get(FINISHES[f].rarity) + 1);
+  for (const w of SKINNABLE_WEAPONS) for (const f2 of FINISH_IDS) if (!owned.has(skinId(w, f2))) left.set(FINISHES[f2].rarity, left.get(FINISHES[f2].rarity) + 1);
   const total = SKIN_RARITIES.reduce((s, r) => s + (left.get(r) > 0 ? SKIN_RARITY_CHANCE[r] : 0), 0);
   const out = {};
   for (const r of SKIN_RARITIES) out[r] = total === 0 || left.get(r) === 0 ? 0 : SKIN_RARITY_CHANCE[r] / total * 100;
@@ -10955,15 +11028,15 @@ function drawSkin(owned, rand) {
   }
   if (!rarity) return null;
   const pool = [];
-  for (const w of SKINNABLE_WEAPONS) for (const f of FINISH_IDS) if (FINISHES[f].rarity === rarity && !owned.has(skinId(w, f))) pool.push({ weapon: w, finish: f, rarity });
+  for (const w of SKINNABLE_WEAPONS) for (const f2 of FINISH_IDS) if (FINISHES[f2].rarity === rarity && !owned.has(skinId(w, f2))) pool.push({ weapon: w, finish: f2, rarity });
   if (pool.length === 0) return null;
   return pool[Math.min(pool.length - 1, Math.floor(Math.min(Math.max(rand(), 0), 0.999999999) * pool.length))];
 }
 function sanitizeSkins(raw, owns2 = () => true) {
   const out = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
-  for (const [w, f] of Object.entries(raw)) {
-    if (isWeaponId(w) && SKINNABLE_WEAPONS.includes(w) && isFinishId(f) && owns2(w, f)) out[w] = f;
+  for (const [w, f2] of Object.entries(raw)) {
+    if (isWeaponId(w) && SKINNABLE_WEAPONS.includes(w) && isFinishId(f2) && owns2(w, f2)) out[w] = f2;
   }
   return out;
 }
@@ -11072,13 +11145,13 @@ var CASE_TABLE = [
   { weapon: "granatomet", rarity: "legendary", chance: 5 }
 ];
 function drawCase(owned, r) {
-  const left = CASE_TABLE.filter((e) => !owned.has(e.weapon));
+  const left = CASE_TABLE.filter((e2) => !owned.has(e2.weapon));
   if (left.length === 0) return null;
-  const total = left.reduce((s, e) => s + e.chance, 0);
+  const total = left.reduce((s, e2) => s + e2.chance, 0);
   let x = Math.min(Math.max(r, 0), 0.999999999) * total;
-  for (const e of left) {
-    x -= e.chance;
-    if (x < 0) return e;
+  for (const e2 of left) {
+    x -= e2.chance;
+    if (x < 0) return e2;
   }
   return left[left.length - 1];
 }
@@ -11151,7 +11224,7 @@ var REFUSAL_TEXT = {
 var SHOP_WEAPONS = WEAPON_IDS.filter((w) => WEAPON_PRICES[w]);
 var SHOP_CHARACTERS = CHARACTER_IDS.filter((c) => CHARACTER_PRICES[c]);
 var SHOP_GADGETS = GADGET_IDS.filter((g) => GADGET_PRICES[g]);
-var CASE_WEAPONS = CASE_TABLE.map((e) => e.weapon);
+var CASE_WEAPONS = CASE_TABLE.map((e2) => e2.weapon);
 
 // packages/shared/src/game-rules/match.ts
 var MATCH_PHASES = ["waiting", "ready", "countdown", "active", "finished", "closed"];
@@ -11381,6 +11454,67 @@ function applyMatchProgress(prev, perf, owned) {
   const level = levelForXp(totalXp).level;
   return { won, lost, streak, unlocked, xpGained, totalXp, level, leveledUp: level > prev.level };
 }
+
+// packages/shared/src/game-rules/clubs.ts
+var CLUB_PALETTE = Object.freeze([
+  "#c8312a",
+  // red
+  "#6e1f22",
+  // burgundy
+  "#16120f",
+  // black
+  "#d9c39a",
+  // tobacco
+  "#5b6b3a",
+  // olive
+  "#2f5d8a",
+  // industrial blue
+  "#9a4b24",
+  // rust
+  "#e08a2e",
+  // sodium orange
+  "#efe8da",
+  // white
+  "#d8a93c",
+  // gold
+  "#2e7d4f",
+  // green
+  "#7fb2d6"
+  // sky
+]);
+var CLUB_COLORS = CLUB_PALETTE.length;
+var FLAG_PATTERNS = ["solid", "h2", "h3", "v2", "v3", "diag", "band", "frame", "corner", "wedge"];
+var EMBLEM_ICONS = ["none", "star", "gear", "wrench", "cassette", "bolt", "rocket", "satellite", "anchor", "key", "ball", "flame", "paw", "crosshair", "tower", "eye", "sun"];
+var colorIndex = external_exports.number().int().min(0).max(CLUB_COLORS - 1);
+var ClubFlagSchema = external_exports.object({ pattern: external_exports.enum(FLAG_PATTERNS), colors: external_exports.tuple([colorIndex, colorIndex, colorIndex]) }).strict();
+var ClubEmblemSchema = external_exports.object({ icon: external_exports.enum(EMBLEM_ICONS), color: colorIndex }).strict();
+var CLUB_RULES = Object.freeze({
+  nameMin: 3,
+  nameMax: 24,
+  tagMin: 2,
+  tagMax: 4,
+  mottoMax: 60,
+  maxMembers: 50,
+  /** Open join requests a player may have at once (to different clubs). */
+  maxOutgoingRequests: 3,
+  /** Requests waiting for one club's head. */
+  maxIncomingRequests: 50,
+  /** Founding a club: a level and a fee in talons (keeps the table free of throwaway clubs). */
+  createLevel: 3,
+  createTokens: 300,
+  startRating: 1e3
+});
+var clubNameSchema = external_exports.string().transform((s) => s.normalize("NFKC").replace(/\s+/g, " ").trim()).pipe(
+  external_exports.string().min(CLUB_RULES.nameMin).max(CLUB_RULES.nameMax).regex(/^[A-Za-z0-9 _.\-’'#!&]+$/, "A club name may contain Latin letters (A\u2013Z), digits, spaces and _ . - # ! &").regex(/[A-Za-z0-9]/, "A club name needs a letter or a digit")
+);
+var clubTagSchema = external_exports.string().transform((s) => s.normalize("NFKC").trim().toUpperCase()).pipe(
+  external_exports.string().min(CLUB_RULES.tagMin).max(CLUB_RULES.tagMax).regex(/^[A-Z0-9]+$/, "A tag is 2\u20134 Latin letters or digits")
+);
+var clubMottoSchema = external_exports.string().transform((s) => s.replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, " ").replace(/\s+/g, " ").trim()).pipe(
+  external_exports.string().max(CLUB_RULES.mottoMax).regex(/^[\x20-\x7E’‘“”«»—–…]*$/, "A motto is written in Latin letters")
+);
+var CreateClubBody = external_exports.object({ name: clubNameSchema, tag: clubTagSchema, motto: clubMottoSchema.optional(), flag: ClubFlagSchema, emblem: ClubEmblemSchema }).strict();
+var UpdateClubBody = external_exports.object({ motto: clubMottoSchema.optional(), flag: ClubFlagSchema.optional(), emblem: ClubEmblemSchema.optional() }).strict();
 
 // packages/shared/src/maps/builder.ts
 var MapBuilder = class {
@@ -13536,7 +13670,7 @@ var World = class {
     const p = this.players.get(id);
     if (!p) return;
     if (p.alive && p.heavy) this.dropHeavy(p);
-    const flag = this.flags.find((f) => f.carrierId === id);
+    const flag = this.flags.find((f2) => f2.carrierId === id);
     if (flag) this.dropFlag(flag, p);
     this.players.delete(id);
     for (let i = this.gadgets.length - 1; i >= 0; i--) {
@@ -13691,14 +13825,14 @@ var World = class {
       if (this.collision.overlapsCircle(s.x, s.y, PLAYER_RADIUS)) return;
       let minD = 1200;
       let seen = false;
-      for (const e of enemies) {
-        const d = Math.sqrt((e.x - s.x) ** 2 + (e.y - s.y) ** 2);
+      for (const e2 of enemies) {
+        const d = Math.sqrt((e2.x - s.x) ** 2 + (e2.y - s.y) ** 2);
         minD = Math.min(minD, d);
-        if (d < 700 && this.collision.lineOfSight(e.x, e.y, s.x, s.y)) seen = true;
+        if (d < 700 && this.collision.lineOfSight(e2.x, e2.y, s.x, s.y)) seen = true;
       }
       let bonus = 0;
       if (home?.has(i)) bonus += 160;
-      for (const f of friends) if (Math.hypot(f.x - s.x, f.y - s.y) < 420) bonus += 40;
+      for (const f2 of friends) if (Math.hypot(f2.x - s.x, f2.y - s.y) < 420) bonus += 40;
       const score = minD - (seen ? 400 : 0) + Math.min(bonus, 280) + this.rng() * 60;
       if (score > bestScore) {
         bestScore = score;
@@ -13772,7 +13906,7 @@ var World = class {
     stepWeapons(p, input, pressed, {
       shot: (pl, w, spread) => this.doShot(pl, w, spread, input.viewTime),
       melee: (pl, w) => this.doMelee(pl, w, input.viewTime),
-      event: (e) => this.events.push(e)
+      event: (e2) => this.events.push(e2)
     });
   }
   // ── Combat ──────────────────────────────────────────────────────────────
@@ -13981,7 +14115,7 @@ var World = class {
     victim.vy = 0;
     victim.reloadWeapon = null;
     if (victim.heavy) this.dropHeavy(victim);
-    const carried = this.flags.find((f) => f.carrierId === victim.id);
+    const carried = this.flags.find((f2) => f2.carrierId === victim.id);
     if (carried) this.dropFlag(carried, victim);
     const scorers = [];
     if (killer && killer !== victim) {
@@ -14013,7 +14147,7 @@ var World = class {
   }
   // ── Objectives: capture the flag, base capture ──────────────────────────
   resetObjectives() {
-    for (const f of this.flags) this.flagHome(f);
+    for (const f2 of this.flags) this.flagHome(f2);
     for (const b2 of this.bases) {
       b2.owner = null;
       b2.capturer = null;
@@ -14022,70 +14156,70 @@ var World = class {
       b2.inside = [0, 0];
     }
   }
-  flagHome(f) {
-    f.status = "home";
-    f.x = f.standX;
-    f.y = f.standY;
-    f.carrierId = null;
-    f.carrierSlot = -1;
-    f.returnAt = 0;
+  flagHome(f2) {
+    f2.status = "home";
+    f2.x = f2.standX;
+    f2.y = f2.standY;
+    f2.carrierId = null;
+    f2.carrierSlot = -1;
+    f2.returnAt = 0;
   }
-  dropFlag(f, carrier) {
-    f.status = "dropped";
-    f.x = carrier.x;
-    f.y = carrier.y;
-    f.carrierId = null;
-    f.carrierSlot = -1;
-    f.returnAt = this.time + CTF_RULES.returnMs;
-    this.events.push({ t: "flag", action: "dropped", team: f.team, slot: carrier.slot });
+  dropFlag(f2, carrier) {
+    f2.status = "dropped";
+    f2.x = carrier.x;
+    f2.y = carrier.y;
+    f2.carrierId = null;
+    f2.carrierSlot = -1;
+    f2.returnAt = this.time + CTF_RULES.returnMs;
+    this.events.push({ t: "flag", action: "dropped", team: f2.team, slot: carrier.slot });
   }
   /** The flag `p` carries, if any. */
   flagCarriedBy(id) {
-    return this.flags.find((f) => f.carrierId === id);
+    return this.flags.find((f2) => f2.carrierId === id);
   }
   stepFlags() {
     const r2 = CTF_RULES.touchRadius * CTF_RULES.touchRadius;
-    for (const f of this.flags) {
-      if (f.status === "carried") {
-        const c = f.carrierId ? this.players.get(f.carrierId) : void 0;
+    for (const f2 of this.flags) {
+      if (f2.status === "carried") {
+        const c = f2.carrierId ? this.players.get(f2.carrierId) : void 0;
         if (!c || !c.alive || !c.connected) {
-          f.status = "dropped";
-          f.carrierId = null;
-          f.carrierSlot = -1;
-          f.returnAt = this.time + CTF_RULES.returnMs;
-          this.events.push({ t: "flag", action: "dropped", team: f.team, slot: c ? c.slot : -1 });
+          f2.status = "dropped";
+          f2.carrierId = null;
+          f2.carrierSlot = -1;
+          f2.returnAt = this.time + CTF_RULES.returnMs;
+          this.events.push({ t: "flag", action: "dropped", team: f2.team, slot: c ? c.slot : -1 });
           continue;
         }
-        f.x = c.x;
-        f.y = c.y;
-      } else if (f.status === "dropped" && this.time >= f.returnAt) {
-        this.flagHome(f);
-        this.events.push({ t: "flag", action: "returned", team: f.team, slot: -1 });
+        f2.x = c.x;
+        f2.y = c.y;
+      } else if (f2.status === "dropped" && this.time >= f2.returnAt) {
+        this.flagHome(f2);
+        this.events.push({ t: "flag", action: "returned", team: f2.team, slot: -1 });
       }
     }
     const order = [...this.players.values()].filter((p) => p.alive && p.team !== null).sort((a, b2) => a.slot - b2.slot);
     for (const p of order) {
       const team = p.team;
-      for (const f of this.flags) {
-        if (f.status === "carried" || (p.x - f.x) ** 2 + (p.y - f.y) ** 2 > r2) continue;
-        if (f.team !== team) {
-          f.status = "carried";
-          f.carrierId = p.id;
-          f.carrierSlot = p.slot;
-          f.returnAt = 0;
-          f.x = p.x;
-          f.y = p.y;
+      for (const f2 of this.flags) {
+        if (f2.status === "carried" || (p.x - f2.x) ** 2 + (p.y - f2.y) ** 2 > r2) continue;
+        if (f2.team !== team) {
+          f2.status = "carried";
+          f2.carrierId = p.id;
+          f2.carrierSlot = p.slot;
+          f2.returnAt = 0;
+          f2.x = p.x;
+          f2.y = p.y;
           p.score += CTF_RULES.takePoints;
           p.invulnUntil = Math.min(p.invulnUntil, this.time);
-          this.events.push({ t: "flag", action: "taken", team: f.team, slot: p.slot });
-        } else if (f.status === "dropped") {
-          this.flagHome(f);
+          this.events.push({ t: "flag", action: "taken", team: f2.team, slot: p.slot });
+        } else if (f2.status === "dropped") {
+          this.flagHome(f2);
           p.score += CTF_RULES.returnPoints;
-          this.events.push({ t: "flag", action: "returned", team: f.team, slot: p.slot });
+          this.events.push({ t: "flag", action: "returned", team: f2.team, slot: p.slot });
         }
       }
       const carried = this.flagCarriedBy(p.id);
-      const own = this.flags.find((f) => f.team === team);
+      const own = this.flags.find((f2) => f2.team === team);
       if (carried && own && own.status === "home" && (p.x - own.standX) ** 2 + (p.y - own.standY) ** 2 <= r2) {
         this.flagHome(carried);
         p.score += CTF_RULES.capturePoints;
@@ -14626,14 +14760,14 @@ var World = class {
     const a = this.history[i];
     const b2 = this.history[Math.min(i + 1, this.history.length - 1)];
     if (a === b2 || b2.time === a.time) return a.data;
-    const f = (target - a.time) / (b2.time - a.time);
+    const f2 = (target - a.time) / (b2.time - a.time);
     const out = new Float32Array(a.data.length);
     for (let k = 0; k < out.length; k += 3) {
       const aliveA = a.data[k + 2];
       const aliveB = b2.data[k + 2];
       if (aliveA > 0.5 && aliveB > 0.5) {
-        out[k] = a.data[k] + (b2.data[k] - a.data[k]) * f;
-        out[k + 1] = a.data[k + 1] + (b2.data[k + 1] - a.data[k + 1]) * f;
+        out[k] = a.data[k] + (b2.data[k] - a.data[k]) * f2;
+        out[k + 1] = a.data[k + 1] + (b2.data[k + 1] - a.data[k + 1]) * f2;
         out[k + 2] = 1;
       } else {
         out[k] = b2.data[k];
@@ -14644,9 +14778,9 @@ var World = class {
     return out;
   }
   drainEvents() {
-    const e = this.events;
+    const e2 = this.events;
     this.events = [];
-    return e;
+    return e2;
   }
   /** Team matches: team scores and the winner (null on a draw). */
   teamResult() {
@@ -15129,8 +15263,8 @@ var BotBrain = class {
         const mates = [...w.players.values()].filter((p) => p.isBot && p.team === team).sort((a, b2) => a.slot - b2.slot);
         this.defender = mates.findIndex((p) => p.id === me.id) % 3 === 2;
       }
-      const own = w.flags.find((f) => f.team === team);
-      const enemy = w.flags.find((f) => f.team !== team);
+      const own = w.flags.find((f2) => f2.team === team);
+      const enemy = w.flags.find((f2) => f2.team !== team);
       const dist = (x, y) => Math.hypot(x - me.x, y - me.y);
       if (enemy.carrierId === me.id) return { x: own.standX, y: own.standY, urgent: true, hold: 0 };
       if (own.status === "dropped" && (this.defender || dist(own.x, own.y) < 700)) return { x: own.x, y: own.y, urgent: true, hold: 0 };
@@ -15339,8 +15473,8 @@ var i16 = (x) => clamp(Math.round(x), -32768, 32767);
 var u8c = (x) => clamp(Math.round(x), 0, 255);
 function encodeSnapshot(src) {
   const players = [...src.players];
-  const shots = src.events.filter((e) => e.t === "shot");
-  const melees = src.events.filter((e) => e.t === "melee");
+  const shots = src.events.filter((e2) => e2.t === "shot");
+  const melees = src.events.filter((e2) => e2.t === "melee");
   const pickups = src.pickups.filter((p) => p.active || !p.dropped);
   const gadgets = src.gadgets.slice(0, 255);
   const flags = (src.flags ?? []).slice(0, 2);
@@ -15450,13 +15584,13 @@ function encodeSnapshot(src) {
   }
   v.setUint8(o, flags.length);
   o += 1;
-  for (const f of flags) {
-    v.setUint8(o, f.team);
-    v.setUint8(o + 1, FLAG_STATUSES.indexOf(f.status));
-    v.setUint8(o + 2, f.carrierSlot < 0 ? 255 : f.carrierSlot);
-    v.setUint16(o + 3, u16(f.x * POS_SCALE), true);
-    v.setUint16(o + 5, u16(f.y * POS_SCALE), true);
-    v.setUint16(o + 7, u16(f.status === "dropped" ? Math.max(0, f.returnAt - src.time) / 10 : 0), true);
+  for (const f2 of flags) {
+    v.setUint8(o, f2.team);
+    v.setUint8(o + 1, FLAG_STATUSES.indexOf(f2.status));
+    v.setUint8(o + 2, f2.carrierSlot < 0 ? 255 : f2.carrierSlot);
+    v.setUint16(o + 3, u16(f2.x * POS_SCALE), true);
+    v.setUint16(o + 5, u16(f2.y * POS_SCALE), true);
+    v.setUint16(o + 7, u16(f2.status === "dropped" ? Math.max(0, f2.returnAt - src.time) / 10 : 0), true);
     o += FLAG_BYTES;
   }
   v.setUint8(o, bases.length);
@@ -15583,7 +15717,8 @@ function parseClientEventProps(name, props) {
 }
 
 // packages/shared/src/schemas/api.ts
-var displayNameSchema = external_exports.string().trim().min(2).max(MAX_NAME_LENGTH).regex(/^[\p{L}\p{N} _.\-’']+$/u, "A name may contain letters, digits, spaces and _ . -");
+var displayNameSchema = external_exports.string().trim().min(2).max(MAX_NAME_LENGTH).regex(LATIN_NAME_RE, "A name may contain Latin letters (A\u2013Z), digits, spaces and _ . -");
+var signupNameSchema = external_exports.string().trim().min(1).max(64);
 var TelegramAuthRequest = external_exports.object({
   initData: external_exports.string().min(10).max(8192),
   platform: PlatformSchema.optional(),
@@ -15592,13 +15727,13 @@ var TelegramAuthRequest = external_exports.object({
   visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional()
 }).strict();
 var DevAuthRequest = external_exports.object({
-  name: displayNameSchema,
+  name: signupNameSchema,
   deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
   platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional()
 }).strict();
 var GuestAuthRequest = external_exports.object({
-  name: displayNameSchema,
+  name: signupNameSchema,
   deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{20,64}$/),
   platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional(),
@@ -15741,18 +15876,56 @@ async function replayRatings(tx) {
       WHERE p.user_id = v.u`;
   }
 }
+async function latinNames(tx) {
+  const users = await tx`SELECT id, display_name, name_key FROM users WHERE deleted_at IS NULL ORDER BY created_at, id`;
+  const taken = new Set(users.filter((u) => LATIN_NAME_RE.test(u.display_name)).map((u) => nameKey(u.display_name)));
+  for (const u of users) {
+    if (LATIN_NAME_RE.test(u.display_name)) continue;
+    const base2 = latinName(u.display_name, `Comrade ${u.id.replace(/\D/g, "").slice(-4).padStart(4, "0")}`);
+    let name = base2;
+    for (let n = 2; taken.has(nameKey(name)); n++) name = numberedAlias(base2, n);
+    taken.add(nameKey(name));
+    await tx`UPDATE users SET display_name = ${name}, name_key = ${nameKey(name)} WHERE id = ${u.id}`;
+  }
+  const clubs = await tx`SELECT id, name, tag, motto FROM clubs ORDER BY created_at, id`;
+  const names = new Set(clubs.filter((c) => LATIN_NAME_RE.test(c.name)).map((c) => nameKey(c.name)));
+  const tags = new Set(clubs.filter((c) => /^[A-Z0-9]+$/.test(c.tag)).map((c) => nameKey(c.tag)));
+  for (const c of clubs) {
+    const okName = LATIN_NAME_RE.test(c.name);
+    const okTag = /^[A-Z0-9]+$/.test(c.tag);
+    const okMotto = /^[\x20-\x7E’‘“”«»—–…]*$/.test(c.motto);
+    if (okName && okTag && okMotto) continue;
+    let name = c.name;
+    if (!okName) {
+      const base2 = latinName(c.name, "Club").slice(0, MAX_NAME_LENGTH).padEnd(3, "0");
+      name = base2;
+      for (let n = 2; names.has(nameKey(name)); n++) name = numberedAlias(base2, n);
+      names.add(nameKey(name));
+    }
+    let tag = c.tag;
+    if (!okTag) {
+      const base2 = toLatin(c.tag).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+      tag = base2.length >= 2 ? base2 : "C" + c.id.replace(/\D/g, "").slice(0, 3);
+      for (let n = 1; tags.has(nameKey(tag)); n++) tag = `C${(n * 37 + c.id.length) % 1e3}`.slice(0, 4);
+      tags.add(nameKey(tag));
+    }
+    const motto = okMotto ? c.motto : transliterate(c.motto).replace(/[^\x20-\x7E’‘“”«»—–…]/g, "").replace(/\s+/g, " ").trim().slice(0, 60);
+    await tx`UPDATE clubs SET name = ${name}, name_key = ${nameKey(name)}, tag = ${tag}, tag_key = ${nameKey(tag)}, motto = ${motto}, updated_at = now() WHERE id = ${c.id}`;
+  }
+}
 var CODE_STEPS = Object.freeze({
   "010_social.sql": async (tx) => {
     await uniqueAliases(tx);
     await replayRatings(tx);
-  }
+  },
+  "014_latin_names.sql": latinNames
 });
 
 // apps/server/src/database/migrate.ts
 var DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL("./migrations/", import.meta.url));
 var LOCK_ID = 891989;
 function listFiles(dir) {
-  return readdirSync(dir).filter((f) => /^\d{3}_[a-z0-9_]+\.sql$/.test(f)).sort();
+  return readdirSync(dir).filter((f2) => /^\d{3}_[a-z0-9_]+\.sql$/.test(f2)).sort();
 }
 async function ensureLedger(sql2) {
   await sql2`CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`;
@@ -16248,9 +16421,7 @@ function validateInitData(initData, botToken, maxAgeSec, nowSec = Math.floor(Dat
   };
 }
 function displayNameFromTelegram(u) {
-  const raw = `${u.firstName} ${u.lastName ?? ""}`.normalize("NFKC");
-  const cleaned = raw.replace(/[^\p{L}\p{N} _.\-’']/gu, "").replace(/\s+/g, " ").trim().slice(0, 24).trim();
-  return cleaned.length >= 2 ? cleaned : `Comrade ${String(u.id).slice(-4)}`;
+  return latinName(`${u.firstName} ${u.lastName ?? ""}`, `Comrade ${String(u.id).slice(-4)}`);
 }
 
 // apps/server/src/services/persistence.ts
@@ -16276,9 +16447,9 @@ var ActivityTracker = class {
     if (this.lastDay.size > 5e4) this.lastDay.clear();
     try {
       await this.sql`INSERT INTO user_daily_activity (user_id, day, first_seen_at) VALUES (${userId}, ${day}::date, ${now}) ON CONFLICT DO NOTHING`;
-    } catch (e) {
+    } catch (e2) {
       this.lastDay.delete(userId);
-      this.log.warn("activity touch failed", { err: e });
+      this.log.warn("activity touch failed", { err: e2 });
     }
   }
   forget(userId) {
@@ -16287,8 +16458,8 @@ var ActivityTracker = class {
 };
 
 // apps/server/src/auth/names.ts
-function isNameConflict(e) {
-  const err = e;
+function isNameConflict(e2) {
+  const err = e2;
   return !!err && err.code === "23505" && (err.constraint_name ?? err.constraint ?? "").includes("name_key");
 }
 async function isNameFree(sql2, name, exceptUserId) {
@@ -16338,8 +16509,8 @@ var UserRepo = class {
         const row = (await insert(candidate))[0];
         if (row.inserted) await this.sql`INSERT INTO profiles (user_id) VALUES (${row.id}) ON CONFLICT DO NOTHING`;
         return { userId: row.id, isNew: row.inserted, displayName: row.display_name };
-      } catch (e) {
-        if (!isNameConflict(e) || attempt >= 4) throw e;
+      } catch (e2) {
+        if (!isNameConflict(e2) || attempt >= 4) throw e2;
       }
     }
   }
@@ -16448,8 +16619,8 @@ var SessionStore = class {
     if (now - last > LAST_SEEN_THROTTLE_MS) {
       this.lastSeenWrite.set(r.session_id, now);
       if (this.lastSeenWrite.size > 5e4) this.lastSeenWrite.clear();
-      this.sql`UPDATE sessions SET last_seen_at = now() WHERE id = ${r.session_id}`.catch((e) => this.log.warn("session touch failed", { err: e }));
-      this.sql`UPDATE users SET last_seen_at = now() WHERE id = ${r.user_id}`.catch((e) => this.log.warn("user touch failed", { err: e }));
+      this.sql`UPDATE sessions SET last_seen_at = now() WHERE id = ${r.session_id}`.catch((e2) => this.log.warn("session touch failed", { err: e2 }));
+      this.sql`UPDATE users SET last_seen_at = now() WHERE id = ${r.user_id}`.catch((e2) => this.log.warn("user touch failed", { err: e2 }));
     }
     void this.activity.touch(r.user_id);
     return { userId: r.user_id, sessionId: r.session_id, displayName: r.display_name, level: r.level ?? 1, avatar: isAvatarId(r.avatar) ? r.avatar : null, platform: r.platform ?? null, method: r.method };
@@ -16467,6 +16638,8 @@ var SessionStore = class {
 // apps/server/src/profiles/repo.ts
 function toPublicProfile(r) {
   const lv = levelForXp(r.xp);
+  const flag = ClubFlagSchema.safeParse(r.club_flag);
+  const emblem = ClubEmblemSchema.safeParse(r.club_emblem);
   return {
     id: r.id,
     displayName: r.display_name,
@@ -16491,7 +16664,8 @@ function toPublicProfile(r) {
     tokens: r.tokens,
     diamonds: r.diamonds,
     email: r.email,
-    rating: r.rating
+    rating: r.rating,
+    club: r.club_id && r.club_tag && r.club_name && flag.success && emblem.success ? { id: r.club_id, tag: r.club_tag, name: r.club_name, flag: flag.data, emblem: emblem.data } : null
   };
 }
 var ProfileRepo = class {
@@ -16509,8 +16683,10 @@ var ProfileRepo = class {
              COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
              p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email,
-             COALESCE(p.rating, 1000) AS rating
+             COALESCE(p.rating, 1000) AS rating,
+             c.id AS club_id, c.tag AS club_tag, c.name AS club_name, c.flag AS club_flag, c.emblem AS club_emblem
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
+        LEFT JOIN club_members cm ON cm.user_id = u.id LEFT JOIN clubs c ON c.id = cm.club_id
       WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
     return rows[0] ? toPublicProfile(rows[0]) : null;
   }
@@ -16615,7 +16791,7 @@ var EconomyRepo = class {
     const raw = wallet.loadout && typeof wallet.loadout === "object" ? wallet.loadout : {};
     const loadout = sanitizeLoadout(
       { ...DEFAULT_LOADOUT, ...raw },
-      { weapon: (w) => weapons.has(w), gadget: (g) => gadgets.has(g), mod: (w, m) => mods[w]?.includes(m) ?? false, skin: (w, f) => skins.has(skinId(w, f)) }
+      { weapon: (w) => weapons.has(w), gadget: (g) => gadgets.has(g), mod: (w, m) => mods[w]?.includes(m) ?? false, skin: (w, f2) => skins.has(skinId(w, f2)) }
     );
     return {
       tokens: wallet.tokens,
@@ -16743,7 +16919,7 @@ var EconomyRepo = class {
       const ownedSkins = new Set(inv.skins);
       const l = sanitizeLoadout(
         { ...raw, gadget: raw.gadget === void 0 ? inv.loadout.gadget : raw.gadget, mods: raw.mods ?? inv.loadout.mods, skins: raw.skins ?? inv.loadout.skins },
-        { weapon: (w) => owned.has(w), gadget: (g) => inv.gadgets.includes(g), mod: (w, m) => inv.mods[w]?.includes(m) ?? false, skin: (w, f) => ownedSkins.has(skinId(w, f)) }
+        { weapon: (w) => owned.has(w), gadget: (g) => inv.gadgets.includes(g), mod: (w, m) => inv.mods[w]?.includes(m) ?? false, skin: (w, f2) => ownedSkins.has(skinId(w, f2)) }
       );
       const stored = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods, skins: l.skins ?? {} };
       await tx`UPDATE profiles SET loadout = ${tx.json(stored)}, updated_at = now() WHERE user_id = ${userId}`;
@@ -16782,6 +16958,458 @@ async function awardMatchTokens(tx, userId, matchId, tokens) {
   const total = rows[0]?.tokens ?? 0;
   if (tokens > 0) await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${tokens}, ${total}, 'match', ${matchId})`;
   return total;
+}
+
+// apps/server/src/clubs/house.ts
+var P2 = { red: 0, burgundy: 1, black: 2, tobacco: 3, olive: 4, blue: 5, rust: 6, orange: 7, white: 8, gold: 9, green: 10, sky: 11 };
+var f = (pattern, a, b2, c) => ({ pattern, colors: [a, b2, c] });
+var e = (icon, color) => ({ icon, color });
+var HOUSE_CLUBS = Object.freeze([
+  // v0.3: names, tags and mottos in Latin letters, like every club; `lang` only picks the people's names
+  { name: "Courtyard Bosses", tag: "CB", motto: "Our yard, our rules, shared benches", lang: "ru", flag: f("v2", P2.red, P2.black, P2.gold), emblem: e("star", P2.gold), rating: 4210, trend: 2, size: 47, recruiting: false, ageDays: 64 },
+  { name: "Garage Co-op 7", tag: "GC7", motto: "Gates close at ten sharp", lang: "ru", flag: f("h3", P2.rust, P2.black, P2.gold), emblem: e("wrench", P2.gold), rating: 3820, trend: 3, size: 41, recruiting: true, ageDays: 58 },
+  { name: "Garage Kings", tag: "GK", motto: "Built from spare parts", lang: "en", flag: f("v2", P2.rust, P2.black, P2.white), emblem: e("wrench", P2.white), rating: 3700, trend: 2, size: 35, recruiting: true, ageDays: 51 },
+  { name: "Rassvet Video Club", tag: "RVC", motto: "Show at ten, bring your own tape", lang: "ru", flag: f("band", P2.black, P2.red, P2.black), emblem: e("cassette", P2.white), rating: 3560, trend: 1, size: 36, recruiting: true, ageDays: 49 },
+  { name: "VHS Pirates", tag: "VHS", motto: "Be kind, rewind", lang: "en", flag: f("h3", P2.black, P2.red, P2.black), emblem: e("cassette", P2.gold), rating: 3460, trend: 2, size: 31, recruiting: true, ageDays: 46 },
+  { name: "Night Shift", tag: "NS", motto: "While the city sleeps, we work", lang: "ru", flag: f("diag", P2.blue, P2.black, P2.orange), emblem: e("bolt", P2.orange), rating: 3330, trend: 1, size: 33, recruiting: true, ageDays: 44 },
+  { name: "Factory Lads", tag: "FAC", motto: "The checkpoint is ours", lang: "ru", flag: f("h2", P2.olive, P2.black, P2.tobacco), emblem: e("gear", P2.tobacco), rating: 3105, trend: 0, size: 44, recruiting: true, ageDays: 61 },
+  { name: "Sodium Lights", tag: "SOD", motto: "Orange light, long nights", lang: "en", flag: f("diag", P2.orange, P2.black, P2.orange), emblem: e("sun", P2.black), rating: 3010, trend: 1, size: 26, recruiting: true, ageDays: 37 },
+  { name: "Entrance Six", tag: "E6", motto: "We won\u2019t tell you the door code", lang: "ru", flag: f("frame", P2.black, P2.tobacco, P2.gold), emblem: e("key", P2.gold), rating: 2870, trend: 2, size: 18, recruiting: true, ageDays: 33 },
+  { name: "Block 14", tag: "B14", motto: "Fourteen floors, one crew", lang: "en", flag: f("corner", P2.tobacco, P2.red, P2.black), emblem: e("tower", P2.black), rating: 2790, trend: 1, size: 20, recruiting: true, ageDays: 31 },
+  { name: "Yard Cats", tag: "CAT", motto: "Nine lives, one bench", lang: "ru", flag: f("solid", P2.burgundy, P2.burgundy, P2.tobacco), emblem: e("paw", P2.tobacco), rating: 2715, trend: 2, size: 27, recruiting: true, ageDays: 29 },
+  { name: "Concrete Wolves", tag: "CW", motto: "Howl at the street lamps", lang: "en", flag: f("wedge", P2.burgundy, P2.black, P2.white), emblem: e("paw", P2.white), rating: 2640, trend: 1, size: 28, recruiting: true, ageDays: 28 },
+  { name: "Sunbeam Co-op", tag: "SUN", motto: "Light at the end of the yard", lang: "ru", flag: f("corner", P2.blue, P2.gold, P2.white), emblem: e("sun", P2.gold), rating: 2560, trend: 0, size: 22, recruiting: true, ageDays: 26 },
+  { name: "North End", tag: "NE", motto: "The wind blows from the north. So do we", lang: "ru", flag: f("h3", P2.white, P2.sky, P2.blue), emblem: e("star", P2.white), rating: 2440, trend: 1, size: 29, recruiting: true, ageDays: 24 },
+  { name: "Tape Rewinders", tag: "RWD", motto: "Back to \u201989 and back again", lang: "en", flag: f("v3", P2.olive, P2.tobacco, P2.olive), emblem: e("cassette", P2.black), rating: 2380, trend: 2, size: 16, recruiting: true, ageDays: 21 },
+  { name: "Still Waters", tag: "SW", motto: "We don\u2019t make noise", lang: "ru", flag: f("wedge", P2.black, P2.olive, P2.sky), emblem: e("eye", P2.sky), rating: 2290, trend: 1, size: 15, recruiting: true, ageDays: 20 },
+  { name: "Courtyard Union", tag: "CU", motto: "Benches for everyone", lang: "en", flag: f("band", P2.blue, P2.white, P2.blue), emblem: e("star", P2.red), rating: 2205, trend: 1, size: 23, recruiting: true, ageDays: 19 },
+  { name: "Tram Depot", tag: "TRAM", motto: "The last tram is ours", lang: "ru", flag: f("v3", P2.red, P2.white, P2.red), emblem: e("bolt", P2.black), rating: 2135, trend: 0, size: 24, recruiting: true, ageDays: 18 },
+  { name: "Young Technicians", tag: "YT", motto: "Built from whatever was lying around", lang: "ru", flag: f("h2", P2.sky, P2.white, P2.red), emblem: e("rocket", P2.red), rating: 1980, trend: 2, size: 19, recruiting: true, ageDays: 16 },
+  { name: "Late Arrivals", tag: "LATE", motto: "Fashionably late, never lost", lang: "en", flag: f("solid", P2.black, P2.black, P2.sky), emblem: e("rocket", P2.sky), rating: 1920, trend: 1, size: 11, recruiting: true, ageDays: 14 },
+  { name: "Second Gate", tag: "GATE", motto: "Only newcomers use the first one", lang: "ru", flag: f("diag", P2.rust, P2.tobacco, P2.black), emblem: e("crosshair", P2.black), rating: 1840, trend: 1, size: 12, recruiting: true, ageDays: 13 },
+  { name: "Northside Co-op", tag: "NCO", motto: "Fair shares, fair fights", lang: "en", flag: f("h3", P2.green, P2.white, P2.green), emblem: e("anchor", P2.gold), rating: 1760, trend: 1, size: 14, recruiting: true, ageDays: 12 },
+  { name: "House of Culture", tag: "HOC", motto: "Hobby clubs. The hobby is winning", lang: "ru", flag: f("band", P2.burgundy, P2.gold, P2.burgundy), emblem: e("satellite", P2.tobacco), rating: 1695, trend: 1, size: 21, recruiting: true, ageDays: 11 },
+  { name: "Static Noise", tag: "STN", motto: "Snow on every channel", lang: "en", flag: f("diag", P2.sky, P2.black, P2.white), emblem: e("bolt", P2.white), rating: 1580, trend: 2, size: 9, recruiting: true, ageDays: 9 },
+  { name: "Rookie Street", tag: "RKS", motto: "Everyone starts somewhere", lang: "en", flag: f("h2", P2.gold, P2.black, P2.black), emblem: e("flame", P2.black), rating: 1310, trend: 2, size: 7, recruiting: true, ageDays: 6 },
+  { name: "Fresh Faces", tag: "NEW", motto: "Just moved in, already one of us", lang: "ru", flag: f("v2", P2.green, P2.tobacco, P2.black), emblem: e("flame", P2.black), rating: 1240, trend: 3, size: 6, recruiting: true, ageDays: 4 }
+]);
+function houseSeed(name) {
+  let h = 2166136261;
+  for (const ch of nameKey(name)) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
+  return h >>> 0 & 2147483647;
+}
+var DAY = 864e5;
+var DRIFT_STEP_MS = 30 * 6e4;
+function houseSize(base2, seed, createdAt, now, realMembers) {
+  const days = Math.max(0, (now.getTime() - createdAt.getTime()) / DAY);
+  const every = 7 + hash32(seed, 1) % 8;
+  return Math.max(1, Math.min(CLUB_RULES.maxMembers - realMembers, base2 + Math.floor(days / every)));
+}
+function housePeople(seed, lang, size2, createdAt, now) {
+  const weeks = Math.floor(Math.max(0, now.getTime() - createdAt.getTime()) / (7 * DAY));
+  const taken = /* @__PURE__ */ new Set();
+  const out = [];
+  for (let i = 0; i < size2; i++) {
+    const rnd = mulberry32(hash32(seed, 1e3 + i));
+    const p = fillPersona(rnd, { lang: rnd() < 0.85 ? lang : lang === "ru" ? "en" : "ru", aroundLevel: i === 0 ? 24 : 6 + hash32(seed, i) % 14, taken });
+    taken.add(p.name.toLowerCase());
+    out.push({ id: personId(seed, i), name: p.name, level: Math.min(60, p.level + weeks), avatar: p.avatar, character: p.character, role: i === 0 ? "head" : "member" });
+  }
+  return out;
+}
+function personId(seed, i) {
+  const hex = (n) => (n >>> 0).toString(16).padStart(8, "0");
+  const a = hex(hash32(seed, i, 1));
+  const b2 = hex(hash32(seed, i, 2));
+  const c = hex(hash32(seed, i, 3));
+  const d = hex(hash32(seed, i, 4));
+  return `${a}-${b2.slice(0, 4)}-4${b2.slice(5, 8)}-${(8 + hash32(seed, i, 5) % 4).toString(16)}${c.slice(1, 4)}-${c.slice(4)}${d}`;
+}
+function drift(rating, o) {
+  const first = Math.floor(o.from.getTime() / DRIFT_STEP_MS) + 1;
+  const last = Math.floor(o.now.getTime() / DRIFT_STEP_MS);
+  if (last < first) return { rating, at: o.from };
+  let r = rating;
+  for (let step = Math.max(first, last - 7 * 48 + 1); step <= last; step++) {
+    const at = step * DRIFT_STEP_MS;
+    const days = (at - o.createdAt.getTime()) / DAY;
+    const target = o.base + o.trend * Math.max(0, days);
+    const noise = (hash32(o.seed, step) / 4294967296 - 0.5) * 2 * (5 + o.size / 4);
+    r = Math.max(300, Math.round(r + noise + (target - r) * 0.03));
+  }
+  return { rating: r, at: new Date(last * DRIFT_STEP_MS) };
+}
+function acceptAfterMs(seed, userId) {
+  let h = seed;
+  for (let i = 0; i < userId.length; i++) h = Math.imul(h ^ userId.charCodeAt(i), 16777619);
+  return (2 + (h >>> 0) % 600 / 60) * 6e4;
+}
+
+// apps/server/src/clubs/repo.ts
+var DEFAULT_FLAG = { pattern: "solid", colors: [0, 2, 3] };
+var DEFAULT_EMBLEM = { icon: "star", color: 9 };
+var ClubError = class extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+  }
+  code;
+};
+var HOUSE_BY_SEED = new Map(HOUSE_CLUBS.map((c) => [houseSeed(c.name), c]));
+var houseOf = (r) => r.house_seed !== null ? HOUSE_BY_SEED.get(r.house_seed) ?? null : null;
+var ClubRepo = class {
+  constructor(sql2, now = () => /* @__PURE__ */ new Date()) {
+    this.sql = sql2;
+    this.now = now;
+  }
+  sql;
+  now;
+  // ── reading ─────────────────────────────────────────────────────────────────────────────────────
+  members(r) {
+    const house = houseOf(r);
+    if (!house || r.house_seed === null) return r.real_members;
+    return r.real_members + houseSize(r.house_size, r.house_seed, r.created_at, this.now(), r.real_members);
+  }
+  summary(r, rank) {
+    const members = this.members(r);
+    return {
+      id: r.id,
+      name: r.name,
+      tag: r.tag,
+      flag: parseFlag(r.flag),
+      emblem: parseEmblem(r.emblem),
+      rating: r.rating,
+      rank,
+      members,
+      recruiting: r.recruiting && members < CLUB_RULES.maxMembers
+    };
+  }
+  /** The club table: the first `limit` clubs by rating (ties: the older club first). */
+  async table(limit = 100) {
+    const rows = await this.sql`
+      SELECT c.*, (SELECT count(*)::int FROM club_members m WHERE m.club_id = c.id) AS real_members
+      FROM clubs c ORDER BY c.rating DESC, c.created_at ASC, c.id LIMIT ${limit}`;
+    return rows.map((r, i) => this.summary(r, i + 1));
+  }
+  /** Clubs whose name or tag contains the text (by the folded key). */
+  async search(text, limit = 30) {
+    const key = `%${nameKey(text).replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+    const rows = await this.sql`
+      SELECT c.*, (SELECT count(*)::int FROM club_members m WHERE m.club_id = c.id) AS real_members
+      FROM clubs c WHERE c.name_key LIKE ${key} OR c.tag_key LIKE ${key}
+      ORDER BY c.rating DESC, c.created_at ASC LIMIT ${limit}`;
+    const out = [];
+    for (const r of rows) out.push(this.summary(r, await this.rankOf(r)));
+    return out;
+  }
+  async rankOf(r) {
+    const [x] = await this.sql`
+      SELECT count(*)::int AS n FROM clubs WHERE rating > ${r.rating} OR (rating = ${r.rating} AND (created_at < ${r.created_at} OR (created_at = ${r.created_at} AND id < ${r.id})))`;
+    return (x?.n ?? 0) + 1;
+  }
+  async row(clubId, q = this.sql, lock = false) {
+    const rows = lock ? await q`SELECT c.*, 0 AS real_members FROM clubs c WHERE c.id = ${clubId} FOR UPDATE` : await q`SELECT c.*, (SELECT count(*)::int FROM club_members m WHERE m.club_id = c.id) AS real_members FROM clubs c WHERE c.id = ${clubId}`;
+    if (!rows[0]) return null;
+    if (lock) {
+      const [n] = await q`SELECT count(*)::int AS n FROM club_members WHERE club_id = ${clubId}`;
+      rows[0].real_members = n?.n ?? 0;
+    }
+    return rows[0];
+  }
+  /** The player's club (with its place in the table), or null. */
+  async clubOf(userId) {
+    const rows = await this.sql`
+      SELECT c.*, m.role, (SELECT count(*)::int FROM club_members x WHERE x.club_id = c.id) AS real_members
+      FROM club_members m JOIN clubs c ON c.id = m.club_id WHERE m.user_id = ${userId}`;
+    const r = rows[0];
+    if (!r) return null;
+    return { summary: this.summary(r, await this.rankOf(r)), role: r.role };
+  }
+  async requestedBy(userId) {
+    const rows = await this.sql`SELECT club_id FROM club_requests WHERE user_id = ${userId} ORDER BY created_at`;
+    return rows.map((r) => r.club_id);
+  }
+  /** Requests waiting for this head's answer. */
+  async incomingFor(userId) {
+    const [r] = await this.sql`
+      SELECT count(*)::int AS n FROM club_requests q JOIN club_members m ON m.club_id = q.club_id AND m.user_id = ${userId} AND m.role = 'head'`;
+    return r?.n ?? 0;
+  }
+  async details(clubId, userId) {
+    const r = await this.row(clubId);
+    if (!r) return null;
+    const real = await this.sql`
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, m.role
+      FROM club_members m JOIN users u ON u.id = m.user_id LEFT JOIN profiles p ON p.user_id = u.id
+      WHERE m.club_id = ${clubId} AND u.deleted_at IS NULL
+      ORDER BY (m.role = 'head') DESC, p.level DESC NULLS LAST, m.joined_at`;
+    const people = real.map((m) => ({ id: m.id, name: m.display_name, level: m.level ?? 1, avatar: isAvatarId(m.avatar) ? m.avatar : null, character: m.preferred_character && isCharacterId(m.preferred_character) ? m.preferred_character : null, role: m.role }));
+    const house = houseOf(r);
+    if (house && r.house_seed !== null) {
+      const size2 = houseSize(r.house_size, r.house_seed, r.created_at, this.now(), r.real_members);
+      const computed = housePeople(r.house_seed, house.lang, size2, r.created_at, this.now());
+      const [head, ...rest] = computed;
+      const all = [...rest, ...people].sort((a, b2) => b2.level - a.level);
+      people.splice(0, people.length, head, ...all);
+    }
+    const mine = people.find((p) => p.id === userId);
+    let me = mine ? mine.role === "head" ? "head" : "member" : "none";
+    if (me === "none") {
+      const q = await this.sql`SELECT 1 FROM club_requests WHERE club_id = ${clubId} AND user_id = ${userId}`;
+      if (q.length) me = "requested";
+    }
+    let requests = [];
+    if (me === "head") {
+      const rows = await this.sql`
+        SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, q.created_at
+        FROM club_requests q JOIN users u ON u.id = q.user_id LEFT JOIN profiles p ON p.user_id = u.id
+        WHERE q.club_id = ${clubId} AND u.deleted_at IS NULL ORDER BY q.created_at`;
+      requests = rows.map((q) => ({ id: q.id, name: q.display_name, level: q.level ?? 1, avatar: isAvatarId(q.avatar) ? q.avatar : null, character: q.preferred_character && isCharacterId(q.preferred_character) ? q.preferred_character : null, at: q.created_at.toISOString() }));
+    }
+    return { ...this.summary(r, await this.rankOf(r)), motto: r.motto, createdAt: r.created_at.toISOString(), memberList: people, me, requests };
+  }
+  // ── founding and changing ───────────────────────────────────────────────────────────────────────
+  async create(userId, body) {
+    return this.sql.begin(async (tx) => {
+      await tx`INSERT INTO profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
+      const [p] = await tx`SELECT tokens, level FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+      if ((await tx`SELECT 1 FROM club_members WHERE user_id = ${userId}`).length) throw new ClubError("in_club");
+      if (p.level < CLUB_RULES.createLevel) throw new ClubError("level");
+      if (p.tokens < CLUB_RULES.createTokens) throw new ClubError("funds");
+      if ((await tx`SELECT 1 FROM clubs WHERE name_key = ${nameKey(body.name)}`).length) throw new ClubError("name_taken");
+      if ((await tx`SELECT 1 FROM clubs WHERE tag_key = ${nameKey(body.tag)}`).length) throw new ClubError("tag_taken");
+      let id;
+      try {
+        const [c] = await tx`
+          INSERT INTO clubs (name, name_key, tag, tag_key, motto, flag, emblem, head_id, rating)
+          VALUES (${body.name}, ${nameKey(body.name)}, ${body.tag}, ${nameKey(body.tag)}, ${body.motto ?? ""}, ${tx.json(body.flag)}, ${tx.json(body.emblem)}, ${userId}, ${CLUB_RULES.startRating})
+          RETURNING id`;
+        id = c.id;
+      } catch (e2) {
+        if (e2.code === "23505") throw new ClubError(String(e2.constraint_name ?? "").includes("tag") ? "tag_taken" : "name_taken");
+        throw e2;
+      }
+      await tx`INSERT INTO club_members (club_id, user_id, role) VALUES (${id}, ${userId}, 'head')`;
+      await tx`DELETE FROM club_requests WHERE user_id = ${userId}`;
+      const after = p.tokens - CLUB_RULES.createTokens;
+      await tx`UPDATE profiles SET tokens = ${after}, updated_at = now() WHERE user_id = ${userId}`;
+      await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${-CLUB_RULES.createTokens}, ${after}, 'purchase', ${`club:${id}`})`;
+      return id;
+    });
+  }
+  async update(clubId, userId, body) {
+    await this.sql.begin(async (tx) => {
+      const r = await this.row(clubId, tx, true);
+      if (!r) throw new ClubError("not_found");
+      await this.mustHead(tx, clubId, userId);
+      await tx`
+        UPDATE clubs SET
+          motto = ${body.motto ?? r.motto},
+          flag = ${tx.json(body.flag ?? parseFlag(r.flag))},
+          emblem = ${tx.json(body.emblem ?? parseEmblem(r.emblem))},
+          updated_at = now()
+        WHERE id = ${clubId}`;
+    });
+  }
+  async setRecruiting(clubId, userId, recruiting) {
+    await this.sql.begin(async (tx) => {
+      await this.mustHead(tx, clubId, userId);
+      await tx`UPDATE clubs SET recruiting = ${recruiting}, updated_at = now() WHERE id = ${clubId}`;
+    });
+  }
+  async mustHead(tx, clubId, userId) {
+    const rows = await tx`SELECT role FROM club_members WHERE club_id = ${clubId} AND user_id = ${userId}`;
+    if (!rows[0]) throw new ClubError("not_member");
+    if (rows[0].role !== "head") throw new ClubError("not_head");
+  }
+  // ── joining ─────────────────────────────────────────────────────────────────────────────────────
+  /** Asks to join; returns the head to tell (null for a house club, which answers by itself). */
+  async request(clubId, userId) {
+    return this.sql.begin(async (tx) => {
+      const r = await this.row(clubId, tx, true);
+      if (!r) throw new ClubError("not_found");
+      if ((await tx`SELECT 1 FROM club_members WHERE user_id = ${userId}`).length) throw new ClubError("in_club");
+      if (!r.recruiting) throw new ClubError("closed");
+      if (this.members(r) >= CLUB_RULES.maxMembers) throw new ClubError("full");
+      if ((await tx`SELECT 1 FROM club_requests WHERE club_id = ${clubId} AND user_id = ${userId}`).length) throw new ClubError("already_requested");
+      const [mine] = await tx`SELECT count(*)::int AS n FROM club_requests WHERE user_id = ${userId}`;
+      if ((mine?.n ?? 0) >= CLUB_RULES.maxOutgoingRequests) throw new ClubError("too_many_requests");
+      const [theirs] = await tx`SELECT count(*)::int AS n FROM club_requests WHERE club_id = ${clubId}`;
+      if ((theirs?.n ?? 0) >= CLUB_RULES.maxIncomingRequests) throw new ClubError("full");
+      await tx`INSERT INTO club_requests (club_id, user_id) VALUES (${clubId}, ${userId})`;
+      return { headId: r.house_seed !== null ? null : r.head_id };
+    });
+  }
+  async cancelRequest(clubId, userId) {
+    const rows = await this.sql`DELETE FROM club_requests WHERE club_id = ${clubId} AND user_id = ${userId} RETURNING 1`;
+    if (!rows.length) throw new ClubError("no_request");
+  }
+  /**
+   * The head's answer. Accepting someone who has meanwhile joined another club, or a full club, only
+   * removes the request (`joined: false`).
+   */
+  async answer(clubId, headId, userId, accept) {
+    return this.sql.begin(async (tx) => {
+      const r = await this.row(clubId, tx, true);
+      if (!r) throw new ClubError("not_found");
+      await this.mustHead(tx, clubId, headId);
+      const del = await tx`DELETE FROM club_requests WHERE club_id = ${clubId} AND user_id = ${userId} RETURNING 1`;
+      if (!del.length) throw new ClubError("no_request");
+      if (!accept) return { joined: false };
+      return { joined: await this.join(tx, r, userId) };
+    });
+  }
+  async join(tx, r, userId) {
+    if ((await tx`SELECT 1 FROM club_members WHERE user_id = ${userId}`).length) return false;
+    if (this.members(r) >= CLUB_RULES.maxMembers) return false;
+    await tx`INSERT INTO club_members (club_id, user_id, role) VALUES (${r.id}, ${userId}, 'member') ON CONFLICT DO NOTHING`;
+    await tx`DELETE FROM club_requests WHERE user_id = ${userId}`;
+    return true;
+  }
+  /** House clubs answer «yes» a few minutes after a request; returns who got in (to tell them). */
+  async answerHouseRequests() {
+    const now = this.now().getTime();
+    const waiting = await this.sql`
+      SELECT q.club_id, q.user_id, q.created_at, c.house_seed FROM club_requests q JOIN clubs c ON c.id = q.club_id
+      WHERE c.house_seed IS NOT NULL ORDER BY q.created_at LIMIT 200`;
+    const out = [];
+    for (const w of waiting) {
+      if (w.created_at.getTime() + acceptAfterMs(w.house_seed, w.user_id) > now) continue;
+      const joined = await this.sql.begin(async (tx) => {
+        const r = await this.row(w.club_id, tx, true);
+        if (!r) return false;
+        const del = await tx`DELETE FROM club_requests WHERE club_id = ${w.club_id} AND user_id = ${w.user_id} RETURNING 1`;
+        if (!del.length) return false;
+        return this.join(tx, r, w.user_id);
+      });
+      if (joined) out.push({ userId: w.user_id, clubId: w.club_id });
+    }
+    return out;
+  }
+  // ── leaving ─────────────────────────────────────────────────────────────────────────────────────
+  /** Leaves the club; a head hands it to the longest-standing member, a last member closes it. */
+  async leave(userId) {
+    return this.sql.begin(async (tx) => {
+      const [m] = await tx`SELECT club_id, role FROM club_members WHERE user_id = ${userId}`;
+      if (!m) throw new ClubError("not_member");
+      const r = await this.row(m.club_id, tx, true);
+      await tx`DELETE FROM club_members WHERE club_id = ${m.club_id} AND user_id = ${userId}`;
+      if (m.role !== "head" || !r || r.house_seed !== null) return { clubId: m.club_id, newHead: null, closed: false };
+      const [next] = await tx`SELECT user_id FROM club_members WHERE club_id = ${m.club_id} ORDER BY joined_at, user_id LIMIT 1`;
+      if (!next) {
+        await tx`DELETE FROM clubs WHERE id = ${m.club_id}`;
+        return { clubId: m.club_id, newHead: null, closed: true };
+      }
+      await tx`UPDATE club_members SET role = 'head' WHERE club_id = ${m.club_id} AND user_id = ${next.user_id}`;
+      await tx`UPDATE clubs SET head_id = ${next.user_id}, updated_at = now() WHERE id = ${m.club_id}`;
+      return { clubId: m.club_id, newHead: next.user_id, closed: false };
+    });
+  }
+  async kick(clubId, headId, userId) {
+    await this.sql.begin(async (tx) => {
+      await this.mustHead(tx, clubId, headId);
+      if (userId === headId) throw new ClubError("not_member");
+      const rows = await tx`DELETE FROM club_members WHERE club_id = ${clubId} AND user_id = ${userId} AND role = 'member' RETURNING 1`;
+      if (!rows.length) throw new ClubError("not_member");
+    });
+  }
+  /** The head closes the club: everybody is out, the requests are gone. Returns who was in it. */
+  async disband(clubId, headId) {
+    return this.sql.begin(async (tx) => {
+      const r = await this.row(clubId, tx, true);
+      if (!r) throw new ClubError("not_found");
+      if (r.house_seed !== null) throw new ClubError("house");
+      await this.mustHead(tx, clubId, headId);
+      const people = await tx`SELECT user_id FROM club_members WHERE club_id = ${clubId}`;
+      await tx`DELETE FROM clubs WHERE id = ${clubId}`;
+      return people.map((p) => p.user_id).filter((id) => id !== headId);
+    });
+  }
+  /** An account being deleted: out of its club like a player who leaves, its requests withdrawn. */
+  async forget(userId) {
+    if ((await this.sql`SELECT 1 FROM club_members WHERE user_id = ${userId}`).length) await this.leave(userId);
+    await this.sql`DELETE FROM club_requests WHERE user_id = ${userId}`;
+  }
+  // ── moderation ──────────────────────────────────────────────────────────────────────────────────
+  async adminList() {
+    const rows = await this.sql`
+      SELECT c.*, u.display_name AS head_name,
+             (SELECT count(*)::int FROM club_members m WHERE m.club_id = c.id) AS real_members,
+             (SELECT count(*)::int FROM club_requests q WHERE q.club_id = c.id) AS requests
+      FROM clubs c LEFT JOIN users u ON u.id = c.head_id
+      ORDER BY c.rating DESC, c.created_at ASC, c.id`;
+    return rows.map((r, i) => {
+      const s = this.summary(r, i + 1);
+      return { id: r.id, name: r.name, tag: r.tag, motto: r.motto, rating: r.rating, rank: s.rank, members: s.members, realMembers: r.real_members, headName: r.head_name, recruiting: r.recruiting, house: r.house_seed !== null, createdAt: r.created_at.toISOString(), requests: r.requests };
+    });
+  }
+  /** A player club removed by the admin; house clubs stay (they would come back on the next start). */
+  async adminDelete(clubId) {
+    return this.sql.begin(async (tx) => {
+      const r = await this.row(clubId, tx, true);
+      if (!r) return "not_found";
+      if (r.house_seed !== null) return "house";
+      const people = await tx`SELECT user_id FROM club_members WHERE club_id = ${clubId}`;
+      await tx`DELETE FROM clubs WHERE id = ${clubId}`;
+      return { name: r.name, tag: r.tag, members: people.map((p) => p.user_id) };
+    });
+  }
+  // ── the house clubs ─────────────────────────────────────────────────────────────────────────────
+  /**
+   * Puts the house clubs in the table (once; a name or tag a player already holds is skipped). House
+   * clubs that are no longer on the list (renamed in a release) leave the table when nobody real is in
+   * them.
+   */
+  async seedHouse() {
+    const now = this.now();
+    const seeds = HOUSE_CLUBS.map((c) => houseSeed(c.name));
+    await this.sql`
+      DELETE FROM clubs c WHERE c.house_seed IS NOT NULL AND NOT (c.house_seed = ANY(${this.sql.array(seeds)}::int[]))
+        AND NOT EXISTS (SELECT 1 FROM club_members m WHERE m.club_id = c.id)`;
+    let added = 0;
+    for (const c of HOUSE_CLUBS) {
+      const created = new Date(now.getTime() - c.ageDays * 864e5);
+      const rows = await this.sql`
+        INSERT INTO clubs (name, name_key, tag, tag_key, motto, flag, emblem, recruiting, rating, house_seed, house_size, drift_at, created_at, updated_at)
+        VALUES (${c.name}, ${nameKey(c.name)}, ${c.tag}, ${nameKey(c.tag)}, ${c.motto}, ${this.sql.json(c.flag)}, ${this.sql.json(c.emblem)}, ${c.recruiting}, ${c.rating}, ${houseSeed(c.name)}, ${c.size}, ${now}, ${created}, ${now})
+        ON CONFLICT DO NOTHING RETURNING 1`;
+      added += rows.length;
+    }
+    return added;
+  }
+  /** Moves the house clubs' ratings by the half-hour steps since their last move. */
+  async driftHouse() {
+    const now = this.now();
+    const rows = await this.sql`
+      SELECT id, rating, house_seed, house_size, created_at, drift_at FROM clubs WHERE house_seed IS NOT NULL`;
+    for (const r of rows) {
+      const def = HOUSE_BY_SEED.get(r.house_seed);
+      if (!def) continue;
+      const base2 = def.rating - def.trend * def.ageDays;
+      const next = drift(r.rating, { seed: r.house_seed, base: base2, trend: def.trend, size: r.house_size, createdAt: r.created_at, from: r.drift_at ?? now, now });
+      if (next.rating !== r.rating || r.drift_at && next.at.getTime() !== r.drift_at.getTime()) {
+        await this.sql`UPDATE clubs SET rating = ${next.rating}, drift_at = ${next.at} WHERE id = ${r.id} AND drift_at IS NOT DISTINCT FROM ${r.drift_at}`;
+      }
+    }
+  }
+};
+function parseFlag(v) {
+  const p = ClubFlagSchema.safeParse(v);
+  return p.success ? p.data : DEFAULT_FLAG;
+}
+function parseEmblem(v) {
+  const p = ClubEmblemSchema.safeParse(v);
+  return p.success ? p.data : DEFAULT_EMBLEM;
+}
+async function moveClubRatings(tx, deltas) {
+  const moving = deltas.filter((d) => d.delta !== 0);
+  if (!moving.length) return;
+  const rows = await tx`SELECT club_id, user_id FROM club_members WHERE user_id IN ${tx(moving.map((d) => d.userId))}`;
+  const byClub = /* @__PURE__ */ new Map();
+  for (const r of rows) byClub.set(r.club_id, (byClub.get(r.club_id) ?? 0) + moving.find((d) => d.userId === r.user_id).delta);
+  for (const [clubId, delta] of [...byClub].sort(([a], [b2]) => a < b2 ? -1 : 1)) {
+    await tx`UPDATE clubs SET rating = GREATEST(0, rating + ${delta}), updated_at = now() WHERE id = ${clubId}`;
+  }
 }
 
 // apps/server/src/progression/recorder.ts
@@ -16838,6 +17466,7 @@ var PgMatchRecorder = class {
       const participants = m.participants.filter((p) => known.has(p.userId)).sort((a, b2) => a.userId < b2.userId ? -1 : 1);
       if (locked[0]?.results_processed_at) return this.readResults(tx, m.matchId, participants.map((p) => p.userId));
       const out = /* @__PURE__ */ new Map();
+      const clubDeltas = [];
       for (const p of participants) {
         await tx`INSERT INTO profiles (user_id) VALUES (${p.userId}) ON CONFLICT DO NOTHING`;
         const [prof] = await tx`
@@ -16882,7 +17511,9 @@ var PgMatchRecorder = class {
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
             tokens_awarded = EXCLUDED.tokens_awarded, rating_delta = EXCLUDED.rating_delta, left_at = EXCLUDED.left_at`;
         out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating });
+        clubDeltas.push({ userId: p.userId, delta: rDelta });
       }
+      await moveClubRatings(tx, clubDeltas);
       await tx`
         UPDATE matches SET status = 'completed', ended_at = ${m.endedAt}, duration_ms = ${Math.max(0, Math.round(m.durationMs))},
           end_reason = ${m.endReason}, player_count = ${people}, bot_count = ${fill}, mode = ${m.mode}, winner_team = ${m.winnerTeam}, results_processed_at = now()
@@ -16980,21 +17611,21 @@ async function insertErrors(sql2, rows) {
            client_version text, server_version text, session_id uuid, user_id uuid)
     LEFT JOIN users u ON u.id = r.user_id`;
 }
-function errorRow(e) {
-  const component = sanitizeLabel(e.component);
-  const category = sanitizeLabel(e.category);
-  const message = sanitizeMessage(e.message) || "unknown";
+function errorRow(e2) {
+  const component = sanitizeLabel(e2.component);
+  const category = sanitizeLabel(e2.category);
+  const message = sanitizeMessage(e2.message) || "unknown";
   return {
-    occurred_at: (e.at ?? /* @__PURE__ */ new Date()).toISOString(),
-    source: e.source,
+    occurred_at: (e2.at ?? /* @__PURE__ */ new Date()).toISOString(),
+    source: e2.source,
     component,
     category,
     message,
-    fingerprint: errorFingerprint(e.source, component, category, message),
-    client_version: e.clientVersion ? sanitizeLabel(e.clientVersion, 32) : null,
-    server_version: e.serverVersion ? sanitizeLabel(e.serverVersion, 32) : null,
-    session_id: uuidOrNull(e.sessionId),
-    user_id: uuidOrNull(e.userId)
+    fingerprint: errorFingerprint(e2.source, component, category, message),
+    client_version: e2.clientVersion ? sanitizeLabel(e2.clientVersion, 32) : null,
+    server_version: e2.serverVersion ? sanitizeLabel(e2.serverVersion, 32) : null,
+    session_id: uuidOrNull(e2.sessionId),
+    user_id: uuidOrNull(e2.userId)
   };
 }
 var PgAnalytics = class {
@@ -17026,13 +17657,13 @@ var PgAnalytics = class {
       });
       if (this.events.length > 2e3) this.events.splice(0, this.events.length - 2e3);
       if (this.events.length >= 100) void this.flush();
-    } catch (e) {
-      this.log.warn("analytics enqueue failed", { err: e });
+    } catch (e2) {
+      this.log.warn("analytics enqueue failed", { err: e2 });
     }
   }
-  error(e) {
+  error(e2) {
     try {
-      this.errors.push(errorRow({ ...e, serverVersion: this.serverVersion }));
+      this.errors.push(errorRow({ ...e2, serverVersion: this.serverVersion }));
       if (this.errors.length > 1e3) this.errors.splice(0, this.errors.length - 1e3);
       if (this.errors.length >= 50) void this.flush();
     } catch (err) {
@@ -17050,13 +17681,13 @@ var PgAnalytics = class {
     this.flushing = (async () => {
       try {
         await insertEvents(this.sql, ev);
-      } catch (e) {
-        this.log.warn("analytics flush failed", { err: e, dropped: ev.length });
+      } catch (e2) {
+        this.log.warn("analytics flush failed", { err: e2, dropped: ev.length });
       }
       try {
         await insertErrors(this.sql, er);
-      } catch (e) {
-        this.log.warn("error flush failed", { err: e, dropped: er.length });
+      } catch (e2) {
+        this.log.warn("error flush failed", { err: e2, dropped: er.length });
       }
     })().finally(() => {
       this.flushing = null;
@@ -17077,7 +17708,7 @@ import { createHmac as createHmac3 } from "node:crypto";
 import { randomBytes as randomBytes2, scrypt as scryptCb, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 var N = 16384;
 var R = 8;
-var P2 = 1;
+var P3 = 1;
 var KEYLEN = 64;
 function scrypt(password, salt, n, r, p) {
   return new Promise(
@@ -17086,8 +17717,8 @@ function scrypt(password, salt, n, r, p) {
 }
 async function hashPassword(password) {
   const salt = randomBytes2(16);
-  const key = await scrypt(password, salt, N, R, P2);
-  return `scrypt$${N}$${R}$${P2}$${salt.toString("base64url")}$${key.toString("base64url")}`;
+  const key = await scrypt(password, salt, N, R, P3);
+  return `scrypt$${N}$${R}$${P3}$${salt.toString("base64url")}$${key.toString("base64url")}`;
 }
 async function verifyPassword(password, stored) {
   const parts = stored.split("$");
@@ -17207,13 +17838,13 @@ function currentAdmin(ctx) {
 }
 
 // apps/server/src/admin/audit.ts
-async function audit(sql2, log2, e) {
+async function audit(sql2, log2, e2) {
   try {
     await sql2`
       INSERT INTO admin_audit_log (admin_id, action, target, details, ip)
-      VALUES (${e.adminId}, ${e.action}, ${e.target ?? null}, ${sql2.json(e.details ?? {})}, ${e.ip ?? null})`;
+      VALUES (${e2.adminId}, ${e2.action}, ${e2.target ?? null}, ${sql2.json(e2.details ?? {})}, ${e2.ip ?? null})`;
   } catch (err) {
-    log2.error("audit write failed", { err, action: e.action });
+    log2.error("audit write failed", { err, action: e2.action });
   }
 }
 
@@ -17319,8 +17950,8 @@ function scheduleRetention(sql2, log2, opts = {}) {
       const r = await purgeExpired(sql2);
       const total = Object.values(r).reduce((a, b2) => a + b2, 0);
       if (total > 0) log2.info("retention purge", r);
-    } catch (e) {
-      log2.warn("retention purge failed", { err: e.message });
+    } catch (e2) {
+      log2.warn("retention purge failed", { err: e2.message });
     } finally {
       running = false;
     }
@@ -17419,8 +18050,8 @@ If it wasn\u2019t you, just delete this letter \u2014 nothing will change.`
     });
     if (!res.ok) log2.warn("reset mail failed", { status: res.status });
     return res.ok;
-  } catch (e) {
-    log2.warn("reset mail failed", { err: e });
+  } catch (e2) {
+    log2.warn("reset mail failed", { err: e2 });
     return false;
   }
 }
@@ -17463,9 +18094,9 @@ var PaymentService = class {
       await this.sql`UPDATE payments SET provider_ref = ${s.providerRef}, updated_at = now() WHERE id = ${id}`;
       this.log.info("checkout created", { paymentId: id, provider: providerName, pack: pack.id, userId });
       return { paymentId: id, url: s.url };
-    } catch (e) {
+    } catch (e2) {
       await this.sql`UPDATE payments SET status = 'failed', updated_at = now() WHERE id = ${id}`;
-      this.log.error("checkout failed", { paymentId: id, provider: providerName, err: e });
+      this.log.error("checkout failed", { paymentId: id, provider: providerName, err: e2 });
       throw new HttpError(502, "payment_provider_error", "The payment system didn\u2019t answer \u2014 try again later");
     }
   }
@@ -17726,6 +18357,14 @@ function pgContext(sql2, env2, log2) {
 async function createPersistence(deps) {
   const ctx = pgContext(deps.sql, deps.env, deps.log);
   await seedAchievements(deps.sql);
+  try {
+    const clubs = new ClubRepo(deps.sql);
+    const added = await clubs.seedHouse();
+    if (added) deps.log.info("house clubs added", { added });
+    await clubs.driftHouse();
+  } catch (e2) {
+    deps.log.warn("house clubs not ready", { err: e2 });
+  }
   await bootstrapAdmin(deps.sql, ctx.adminAuth, deps.log, deps.env.ADMIN_BOOTSTRAP_USERNAME, deps.env.ADMIN_BOOTSTRAP_PASSWORD);
   const stopRetention = deps.env.NODE_ENV === "test" ? () => {
   } : scheduleRetention(deps.sql, deps.log);
@@ -17801,7 +18440,7 @@ var registerAuthRoutes = (router, deps) => {
       throw new HttpError(429, "rate_limited", "Too many new players in a row \u2014 try again in a few minutes", { "retry-after": "60" });
     }
     const platform2 = body.platform ?? null;
-    const up = await pg.users.upsertGuest(deviceKey, body.name, platform2);
+    const up = await pg.users.upsertGuest(deviceKey, latinName(body.name, `Comrade_${deviceKey.slice(3, 7).replace(/[^A-Za-z0-9]/g, "X").toUpperCase()}`), platform2);
     if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform2);
     const s = await pg.sessions.issue(up.userId, "guest", platform2, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform: platform2 };
@@ -17819,7 +18458,7 @@ var registerAuthRoutes = (router, deps) => {
     const pg = pgContext(deps.sql, env2, deps.log);
     const deviceId = body.deviceId ?? randomBytes4(12).toString("base64url");
     const platform2 = body.platform ?? null;
-    const up = await pg.users.upsertDev(deviceId, body.name, platform2);
+    const up = await pg.users.upsertDev(deviceId, latinName(body.name, `Comrade_${deviceId.slice(-4).replace(/[^A-Za-z0-9]/g, "X").toUpperCase()}`), platform2);
     const s = await pg.sessions.issue(up.userId, "dev", platform2, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform: platform2 };
     services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "dev" }, evCtx);
@@ -17924,9 +18563,9 @@ var registerProfileRoutes = (router, deps) => {
     if (body.displayName !== void 0 && deps.sql && !await isNameFree(deps.sql, body.displayName, user.userId)) throw new HttpError(409, "name_taken", "This alias is taken \u2014 pick another");
     try {
       await pg().profiles.update(user.userId, body);
-    } catch (e) {
-      if (isNameConflict(e)) throw new HttpError(409, "name_taken", "This alias is taken \u2014 pick another");
-      throw e;
+    } catch (e2) {
+      if (isNameConflict(e2)) throw new HttpError(409, "name_taken", "This alias is taken \u2014 pick another");
+      throw e2;
     }
     const profile = await pg().profiles.get(user.userId);
     ctx.json(200, profile);
@@ -17956,6 +18595,7 @@ var registerProfileRoutes = (router, deps) => {
     const user = currentUser(ctx);
     const p = pg();
     await p.sessions.revokeAllForUser(user.userId);
+    await new ClubRepo(deps.sql).forget(user.userId);
     await p.profiles.deleteUser(user.userId);
     p.activity.forget(user.userId);
     deps.log.info("account deleted", { userId: user.userId });
@@ -17969,20 +18609,20 @@ async function ingestClientEvents(sql2, user, events, now = Date.now()) {
   let rejected = 0;
   const seen = /* @__PURE__ */ new Set();
   const rows = [];
-  for (const e of events) {
-    const id = e.id.toLowerCase();
+  for (const e2 of events) {
+    const id = e2.id.toLowerCase();
     if (seen.has(id)) continue;
     seen.add(id);
-    const props = parseClientEventProps(e.name, e.props);
+    const props = parseClientEventProps(e2.name, e2.props);
     if (!props) {
       rejected++;
       continue;
     }
-    if (e.name === "client_error") props.message = sanitizeMessage(String(props.message ?? ""));
-    const ts = Math.min(now + CLOCK_SKEW_MS, Math.max(now - CLOCK_SKEW_MS, e.ts));
+    if (e2.name === "client_error") props.message = sanitizeMessage(String(props.message ?? ""));
+    const ts = Math.min(now + CLOCK_SKEW_MS, Math.max(now - CLOCK_SKEW_MS, e2.ts));
     rows.push({
       id,
-      name: e.name,
+      name: e2.name,
       source: "client",
       user_id: user.userId,
       session_id: user.sessionId,
@@ -18037,7 +18677,7 @@ function toCsv(headers, rows) {
 }
 
 // apps/server/src/analytics/metrics.ts
-var DAY = 864e5;
+var DAY2 = 864e5;
 var RangeError400 = class extends Error {
 };
 function utcDayString(d) {
@@ -18049,7 +18689,7 @@ function resolveRange(key, fromStr, toStr, now = /* @__PURE__ */ new Date()) {
   let to;
   switch (k) {
     case "24h":
-      from = new Date(now.getTime() - DAY);
+      from = new Date(now.getTime() - DAY2);
       to = now;
       break;
     case "7d":
@@ -18057,7 +18697,7 @@ function resolveRange(key, fromStr, toStr, now = /* @__PURE__ */ new Date()) {
     case "90d": {
       const days = Number(k.replace("d", ""));
       to = now;
-      from = new Date(Date.parse(utcDayString(now)) - (days - 1) * DAY);
+      from = new Date(Date.parse(utcDayString(now)) - (days - 1) * DAY2);
       break;
     }
     case "custom": {
@@ -18067,7 +18707,7 @@ function resolveRange(key, fromStr, toStr, now = /* @__PURE__ */ new Date()) {
       to = /* @__PURE__ */ new Date(`${toStr}T23:59:59.999Z`);
       if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) throw new RangeError400("invalid date");
       if (from > to) throw new RangeError400("from must be before to");
-      if (to.getTime() - from.getTime() > 400 * DAY) throw new RangeError400("range too long (max 400 days)");
+      if (to.getTime() - from.getTime() > 400 * DAY2) throw new RangeError400("range too long (max 400 days)");
       break;
     }
     default:
@@ -18520,9 +19160,9 @@ var registerAdminRoutes = (router, deps) => {
   const range = (ctx) => {
     try {
       return resolveRange(ctx.query.get("range"), ctx.query.get("from"), ctx.query.get("to"));
-    } catch (e) {
-      if (e instanceof RangeError400) throw new HttpError(400, "bad_range", e.message);
-      throw e;
+    } catch (e2) {
+      if (e2 instanceof RangeError400) throw new HttpError(400, "bad_range", e2.message);
+      throw e2;
     }
   };
   const me = (ctx) => {
@@ -18651,9 +19291,9 @@ var registerAdminRoutes = (router, deps) => {
     let balance;
     try {
       balance = await p.economy.grant(id, body.currency, body.amount, a.id, body.note);
-    } catch (e) {
-      if (e instanceof EconomyError) throw new HttpError(409, "insufficient_balance", "\u0411\u0430\u043B\u0430\u043D\u0441 \u043D\u0435 \u043C\u043E\u0436\u0435\u0442 \u0441\u0442\u0430\u0442\u044C \u043E\u0442\u0440\u0438\u0446\u0430\u0442\u0435\u043B\u044C\u043D\u044B\u043C");
-      throw e;
+    } catch (e2) {
+      if (e2 instanceof EconomyError) throw new HttpError(409, "insufficient_balance", "\u0411\u0430\u043B\u0430\u043D\u0441 \u043D\u0435 \u043C\u043E\u0436\u0435\u0442 \u0441\u0442\u0430\u0442\u044C \u043E\u0442\u0440\u0438\u0446\u0430\u0442\u0435\u043B\u044C\u043D\u044B\u043C");
+      throw e2;
     }
     await audit(p.sql, deps.log, { adminId: a.id, action: "balance_grant", target: id, details: { currency: body.currency, amount: body.amount, note: body.note, balance }, ip: ctx.ip });
     ctx.json(200, { currency: body.currency, balance });
@@ -18669,6 +19309,22 @@ var registerAdminRoutes = (router, deps) => {
     await audit(p.sql, deps.log, { adminId: a.id, action: "password_reset_link", target: id, ip: ctx.ip });
     const out = { link: `${deps.env.PUBLIC_URL.replace(/\/$/, "")}/?reset=${r.token}`, expiresAt: new Date(Date.now() + RESET_TTL_MS).toISOString() };
     ctx.json(200, out, { "cache-control": "no-store" });
+  });
+  router.get("/api/admin/clubs", viewer, async (ctx) => {
+    ctx.json(200, await new ClubRepo(pg().sql).adminList());
+  });
+  router.delete("/api/admin/clubs/:id", admin, async (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID_RE3.test(id)) throw new HttpError(400, "bad_id", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440");
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
+    const p = pg();
+    const gone = await new ClubRepo(p.sql).adminDelete(id);
+    if (gone === "not_found") throw new HttpError(404, "not_found", "\u041A\u043B\u0443\u0431 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    if (gone === "house") throw new HttpError(409, "house_club", "\u041A\u043B\u0443\u0431\u044B \u0438\u0433\u0440\u044B \u043D\u0435 \u0443\u0434\u0430\u043B\u044F\u044E\u0442\u0441\u044F");
+    for (const userId of gone.members) deps.social?.push(userId, { type: "club_left", clubId: id, reason: "disbanded" });
+    await audit(p.sql, deps.log, { adminId: a.id, action: "club_delete", target: id, details: { name: gone.name, tag: gone.tag, members: gone.members.length }, ip: ctx.ip });
+    ctx.json(200, { deleted: id });
   });
   router.get("/api/admin/errors", viewer, async (ctx) => {
     ctx.json(200, await errorGroups(pg().sql, range(ctx)));
@@ -18755,12 +19411,12 @@ var registerShopRoutes = (router, deps) => {
     if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
     return pgContext(deps.sql, deps.env, deps.log);
   };
-  const guard = async (f) => {
+  const guard = async (f2) => {
     try {
-      return await f();
-    } catch (e) {
-      if (e instanceof EconomyError) throw new HttpError(409, e.refusal, e.message);
-      throw e;
+      return await f2();
+    } catch (e2) {
+      if (e2 instanceof EconomyError) throw new HttpError(409, e2.refusal, e2.message);
+      throw e2;
     }
   };
   const adultCheck = (body, price) => {
@@ -18998,7 +19654,8 @@ var SocialRepo = class {
   async counts(userId) {
     const [r] = await this.sql`
       SELECT (SELECT count(*)::int FROM direct_messages WHERE recipient_id = ${userId} AND read_at IS NULL) AS unread,
-             (SELECT count(*)::int FROM friendships WHERE friend_id = ${userId} AND status = 'pending') AS incoming`;
+             (SELECT count(*)::int FROM friendships WHERE friend_id = ${userId} AND status = 'pending') AS incoming,
+             (SELECT count(*)::int FROM club_requests q JOIN club_members m ON m.club_id = q.club_id AND m.user_id = ${userId} AND m.role = 'head') AS clubs`;
     return r;
   }
   // ── leaderboard ──────────────────────────────────────────────────────
@@ -19076,9 +19733,9 @@ var SocialHub = class {
     if (!this.store) return;
     const status = this.status(userId);
     try {
-      for (const f of await this.store.friendIds(userId)) this.push(f, { type: "presence", userId, status });
-    } catch (e) {
-      this.log.warn("presence announce failed", { err: e });
+      for (const f2 of await this.store.friendIds(userId)) this.push(f2, { type: "presence", userId, status });
+    } catch (e2) {
+      this.log.warn("presence announce failed", { err: e2 });
     }
   }
   /** A freshly upgraded `/ws/social` socket: the first message must be `auth` within 8 s. */
@@ -19119,7 +19776,8 @@ var SocialHub = class {
         }
         const first = set.size === 0;
         set.add(ws);
-        const counts = this.store ? await this.store.counts(userId).catch(() => ({ unread: 0, incoming: 0 })) : { unread: 0, incoming: 0 };
+        const none = { unread: 0, incoming: 0, clubs: 0 };
+        const counts = this.store ? await this.store.counts(userId).catch(() => none) : none;
         if (ws.readyState === 1) ws.send(JSON.stringify({ type: "ready", userId, ...counts }));
         if (first) void this.announce(userId);
         void this.store?.touch?.(userId).catch(() => {
@@ -19178,7 +19836,7 @@ var registerSocialRoutes = (router, deps) => {
     if (!UUID.test(id)) throw new HttpError(400, "bad_id", "Invalid player id");
     return id;
   };
-  const withPresence = (f) => ({ ...f, status: hub.status(f.id) });
+  const withPresence = (f2) => ({ ...f2, status: hub.status(f2.id) });
   router.get("/api/friends", auth, rateLimit(readLimiter, byUser), async (ctx) => {
     const me = currentUser(ctx);
     const l = await repo().lists(me.userId);
@@ -19430,20 +20088,189 @@ async function setupBot(env2, log2, fetchImpl = fetch) {
     for (const [method, params] of cosmetic) {
       try {
         await botApi(token, method, params, fetchImpl);
-      } catch (e) {
-        log2.warn("telegram bot setting not applied", { method, err: e });
+      } catch (e2) {
+        log2.warn("telegram bot setting not applied", { method, err: e2 });
       }
     }
     log2.info("telegram webhook registered", { url: url.replace(/\?.*$/, "") });
     return "registered";
-  } catch (e) {
-    log2.warn("telegram webhook not registered", { err: e });
+  } catch (e2) {
+    log2.warn("telegram webhook not registered", { err: e2 });
     return "failed";
   }
 }
 
+// apps/server/src/api/clubs.ts
+var UUID2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var REFUSALS = {
+  not_found: [404, "No such club"],
+  in_club: [409, "You are already in a club \u2014 leave it first"],
+  not_member: [403, "You are not in this club"],
+  not_head: [403, "Only the head of the club can do that"],
+  level: [403, "Founding a club needs level 3"],
+  funds: [409, "Not enough talons to found a club"],
+  name_taken: [409, "A club with that name already exists"],
+  tag_taken: [409, "That tag is taken by another club"],
+  full: [409, "The club is full"],
+  closed: [409, "The club isn\u2019t taking anyone right now"],
+  already_requested: [409, "You have already asked to join"],
+  too_many_requests: [409, "You can ask three clubs at a time \u2014 wait for an answer or withdraw a request"],
+  no_request: [404, "No such request"],
+  house: [403, "This club can\u2019t be changed"]
+};
+var registerClubRoutes = (router, deps) => {
+  const auth = requireUser(deps.services.sessions);
+  const byUser = (ctx) => currentUser(ctx).userId;
+  const readLimiter = new RateLimiter(120, 2);
+  const writeLimiter = new RateLimiter(30, 30 / 60);
+  const foundLimiter = new RateLimiter(10, 10 / 3600);
+  const hub = deps.social ?? null;
+  const repo = () => {
+    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
+    return new ClubRepo(deps.sql);
+  };
+  const run = async (f2) => {
+    try {
+      return await f2();
+    } catch (e2) {
+      if (e2 instanceof ClubError) {
+        const [status, text] = REFUSALS[e2.code];
+        throw new HttpError(status, e2.code === "level" ? "level_required" : e2.code === "funds" ? "insufficient_funds" : e2.code, text);
+      }
+      throw e2;
+    }
+  };
+  const push = (userId, ev) => hub?.push(userId, ev);
+  const card = async (userId) => deps.sql ? new SocialRepo(deps.sql).card(userId) : null;
+  let lastHouse = 0;
+  const house = async () => {
+    if (!deps.sql || Date.now() - lastHouse < 2e4) return;
+    lastHouse = Date.now();
+    const r = new ClubRepo(deps.sql);
+    await r.driftHouse();
+    for (const j of await r.answerHouseRequests()) {
+      const mine = await r.clubOf(j.userId);
+      if (mine) push(j.userId, { type: "club_joined", club: mine.summary });
+    }
+  };
+  if (deps.sql && deps.env.NODE_ENV !== "test") {
+    const timer2 = setInterval(() => void house().catch((e2) => deps.log.warn("house clubs", { err: e2 })), 6e4);
+    timer2.unref();
+  }
+  const clubId = (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID2.test(id)) throw new HttpError(400, "bad_id", "Invalid club id");
+    return id;
+  };
+  const userParam = (ctx) => {
+    const id = ctx.params.userId ?? "";
+    if (!UUID2.test(id)) throw new HttpError(400, "bad_id", "Invalid player id");
+    return id;
+  };
+  router.get("/api/clubs", auth, rateLimit(readLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    await house().catch(() => {
+    });
+    const r = repo();
+    const q = (ctx.query.get("q") ?? "").trim().slice(0, 24);
+    const [clubs, mine, requested, incoming] = await Promise.all([q.length >= 2 ? r.search(q) : r.table(), r.clubOf(me.userId), r.requestedBy(me.userId), r.incomingFor(me.userId)]);
+    const res = { clubs, mine: mine?.summary ?? null, requested, incoming };
+    ctx.json(200, res);
+  });
+  router.get("/api/clubs/:id", auth, rateLimit(readLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    await house().catch(() => {
+    });
+    const d = await repo().details(clubId(ctx), me.userId);
+    if (!d) throw new HttpError(404, "not_found", "No such club");
+    ctx.json(200, d);
+  });
+  router.post("/api/clubs", auth, rateLimit(writeLimiter, byUser), rateLimit(foundLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const body = await ctx.body(CreateClubBody, 4 * 1024);
+    const r = repo();
+    const id = await run(() => r.create(me.userId, body));
+    deps.log.info("club founded", { clubId: id });
+    ctx.json(200, await r.details(id, me.userId));
+  });
+  router.patch("/api/clubs/:id", auth, rateLimit(writeLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const id = clubId(ctx);
+    const body = await ctx.body(UpdateClubBody, 4 * 1024);
+    const r = repo();
+    await run(() => r.update(id, me.userId, body));
+    ctx.json(200, await r.details(id, me.userId));
+  });
+  router.post("/api/clubs/:id/recruiting", auth, rateLimit(writeLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const id = clubId(ctx);
+    const body = await ctx.body(external_exports.object({ recruiting: external_exports.boolean() }).strict(), 1024);
+    const r = repo();
+    await run(() => r.setRecruiting(id, me.userId, body.recruiting));
+    ctx.json(200, await r.details(id, me.userId));
+  });
+  router.post("/api/clubs/:id/request", auth, rateLimit(writeLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const id = clubId(ctx);
+    const r = repo();
+    const { headId } = await run(() => r.request(id, me.userId));
+    if (headId) {
+      const from = await card(me.userId);
+      if (from) push(headId, { type: "club_request", clubId: id, from });
+    }
+    ctx.json(200, await r.details(id, me.userId));
+  });
+  router.delete("/api/clubs/:id/request", auth, rateLimit(writeLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const id = clubId(ctx);
+    const r = repo();
+    await run(() => r.cancelRequest(id, me.userId));
+    ctx.json(200, await r.details(id, me.userId));
+  });
+  router.post("/api/clubs/:id/requests/:userId", auth, rateLimit(writeLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const id = clubId(ctx);
+    const who = userParam(ctx);
+    const body = await ctx.body(external_exports.object({ accept: external_exports.boolean() }).strict(), 1024);
+    const r = repo();
+    const { joined } = await run(() => r.answer(id, me.userId, who, body.accept));
+    if (joined) {
+      const mine = await r.clubOf(who);
+      if (mine) push(who, { type: "club_joined", club: mine.summary });
+    } else if (!body.accept) {
+      const d = await r.details(id, who);
+      if (d) push(who, { type: "club_declined", clubId: id, name: d.name });
+    }
+    ctx.json(200, await r.details(id, me.userId));
+  });
+  router.post("/api/clubs/:id/kick/:userId", auth, rateLimit(writeLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const id = clubId(ctx);
+    const who = userParam(ctx);
+    const r = repo();
+    await run(() => r.kick(id, me.userId, who));
+    push(who, { type: "club_left", clubId: id, reason: "removed" });
+    ctx.json(200, await r.details(id, me.userId));
+  });
+  router.post("/api/clubs/leave", auth, rateLimit(writeLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const r = repo();
+    const out = await run(() => r.leave(me.userId));
+    if (out.newHead) push(out.newHead, { type: "club_head", clubId: out.clubId });
+    ctx.json(200, { left: out.clubId, closed: out.closed });
+  });
+  router.delete("/api/clubs/:id", auth, rateLimit(writeLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const id = clubId(ctx);
+    const people = await run(() => repo().disband(id, me.userId));
+    for (const p of people) push(p, { type: "club_left", clubId: id, reason: "disbanded" });
+    deps.log.info("club disbanded", { clubId: id });
+    ctx.json(200, { disbanded: id });
+  });
+};
+
 // apps/server/src/app.ts
-var ROUTE_MODULES = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerTelegramRoutes, registerAdminRoutes];
+var ROUTE_MODULES = [registerAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerClubRoutes, registerTelegramRoutes, registerAdminRoutes];
 function createApp(deps, modules = ROUTE_MODULES) {
   const router = new Router();
   const startedAt = Date.now();
@@ -19747,14 +20574,14 @@ var MatchRoom = class {
       let frames;
       try {
         frames = decodeInputs(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength));
-      } catch (e) {
-        if (e instanceof ProtocolError) return this.violation(c, "bad_input");
-        throw e;
+      } catch (e2) {
+        if (e2 instanceof ProtocolError) return this.violation(c, "bad_input");
+        throw e2;
       }
-      for (const f of frames) {
-        if (f.seq <= c.lastQueuedSeq) continue;
-        c.lastQueuedSeq = f.seq;
-        c.queue.push(f);
+      for (const f2 of frames) {
+        if (f2.seq <= c.lastQueuedSeq) continue;
+        c.lastQueuedSeq = f2.seq;
+        c.queue.push(f2);
       }
       if (c.queue.length > INPUT_QUEUE_MAX) c.queue.splice(0, c.queue.length - INPUT_QUEUE_MAX);
       return;
@@ -19843,7 +20670,7 @@ var MatchRoom = class {
           cur.gear = g;
           this.world.setLoadout(userId, g.loadout);
           this.broadcastRoster();
-        }).catch((e) => this.log.warn("loadout refresh failed", { user: userId, err: e }));
+        }).catch((e2) => this.log.warn("loadout refresh failed", { user: userId, err: e2 }));
         return;
       }
       case "rematch":
@@ -20077,7 +20904,7 @@ var MatchRoom = class {
     this.resultsSent = false;
     const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite, team: this.world.players.get(c.user.userId)?.team ?? null }));
     const fill = this.seats.size;
-    this.services.recorder.matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, startedAt: /* @__PURE__ */ new Date(), players, fill }).catch((e) => this.log.error("matchStarted failed", { err: e }));
+    this.services.recorder.matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, startedAt: /* @__PURE__ */ new Date(), players, fill }).catch((e2) => this.log.error("matchStarted failed", { err: e2 }));
     this.services.analytics.server("match_started", { matchId: this.matchId, roomId: this.id, mapId: this.mapId, players: players.length, fill, mode: this.config.mode });
     this.services.analytics.server("map_played", { matchId: this.matchId, mapId: this.mapId });
     this.log.info("match started", { matchId: this.matchId, players: players.length, fill, map: this.mapId, mode: this.config.mode });
@@ -20170,9 +20997,9 @@ var MatchRoom = class {
         this.send(c, { type: "progress", matchId, result });
       }
       if (levelChanged && !this.closed) this.broadcastRoster();
-    }).catch((e) => {
-      this.log.error("matchCompleted failed", { err: e, matchId });
-      this.services.analytics.error({ source: "server", component: "results", category: "persist", message: e.message });
+    }).catch((e2) => {
+      this.log.error("matchCompleted failed", { err: e2, matchId });
+      this.services.analytics.error({ source: "server", component: "results", category: "persist", message: e2.message });
     });
   }
   // ── Tick ────────────────────────────────────────────────────────────────
@@ -20218,17 +21045,17 @@ var MatchRoom = class {
       }
     }
     w.update();
-    for (const e of w.drainEvents()) {
-      if (e.t === "shot" || e.t === "melee") this.pendingShots.push(e);
+    for (const e2 of w.drainEvents()) {
+      if (e2.t === "shot" || e2.t === "melee") this.pendingShots.push(e2);
       else {
-        this.pendingEvents.push(e);
-        if (e.t === "phase") {
+        this.pendingEvents.push(e2);
+        if (e2.t === "phase") {
           this.broadcastRoster();
-          if (e.phase === "ready" || e.phase === "finished") {
+          if (e2.phase === "ready" || e2.phase === "finished") {
             for (const c of this.clients.values()) if (c.connected) this.onPresence(c.user.userId);
           }
         }
-        if (e.t === "matchEnd") this.finishResults(e.reason);
+        if (e2.t === "matchEnd") this.finishResults(e2.reason);
       }
     }
     if (w.phase === "finished" && w.phaseEndsAt && w.time >= w.phaseEndsAt) this.toLobby(false);
@@ -20277,7 +21104,7 @@ var MatchRoom = class {
     if (this.closed) return;
     if (this.matchId && (this.world.phase === "active" || this.world.phase === "countdown" || this.world.phase === "ready") && !this.resultsSent) {
       const id = this.matchId;
-      this.services.recorder.matchAbandoned(id, reason).catch((e) => this.log.error("matchAbandoned failed", { err: e }));
+      this.services.recorder.matchAbandoned(id, reason).catch((e2) => this.log.error("matchAbandoned failed", { err: e2 }));
       this.services.analytics.server("match_abandoned", { matchId: id, mapId: this.mapId, phase: this.world.phase });
     }
     this.closed = true;
@@ -20491,9 +21318,9 @@ var RoomManager = class {
     for (const [id, room] of this.rooms) {
       try {
         room.tick(now);
-      } catch (e) {
-        this.log.error("room tick failed", { room: id, err: e });
-        this.services.analytics.error({ source: "server", component: "room", category: "tick", message: e.message });
+      } catch (e2) {
+        this.log.error("room tick failed", { room: id, err: e2 });
+        this.services.analytics.error({ source: "server", component: "room", category: "tick", message: e2.message });
         room.close("error");
       }
       if (room.closed) this.rooms.delete(id);
@@ -20593,8 +21420,8 @@ function attachGateway(server2, rooms2, services2, log2, opts, social2) {
         return ws.close(WS_CLOSE.ROOM_NOT_FOUND, "room not found");
       }
       const viaInvite = room.isPrivate;
-      const gear = await services2.economy.gear(user.userId).catch((e) => {
-        log2.warn("gear lookup failed", { user: user.userId, err: e });
+      const gear = await services2.economy.gear(user.userId).catch((e2) => {
+        log2.warn("gear lookup failed", { user: user.userId, err: e2 });
         return void 0;
       });
       if (ws.readyState !== 1) return;
@@ -20608,8 +21435,8 @@ function attachGateway(server2, rooms2, services2, log2, opts, social2) {
       ws.on("message", (d, bin) => {
         try {
           room.onMessage(ws, d, bin);
-        } catch (e) {
-          log2.error("message handling failed", { err: e });
+        } catch (e2) {
+          log2.error("message handling failed", { err: e2 });
         }
       });
       ws.on("close", () => room.onSocketClose(ws));
@@ -20670,11 +21497,11 @@ var KeepAwake = class {
       this.stop();
       return false;
     }
-    const f = this.opts.fetchImpl ?? fetch;
+    const f2 = this.opts.fetchImpl ?? fetch;
     try {
-      await f(`${this.publicUrl.replace(/\/$/, "")}/api/health`, { signal: AbortSignal.timeout(15e3), headers: { "user-agent": "blatkom89-keep-awake" } });
-    } catch (e) {
-      this.opts.log.debug("keep-awake request failed", { err: e });
+      await f2(`${this.publicUrl.replace(/\/$/, "")}/api/health`, { signal: AbortSignal.timeout(15e3), headers: { "user-agent": "blatkom89-keep-awake" } });
+    } catch (e2) {
+      this.opts.log.debug("keep-awake request failed", { err: e2 });
     }
     return true;
   }
@@ -20702,7 +21529,7 @@ rooms.onPresence((userId) => void social.announce(userId));
 var keepAwake = new KeepAwake(env.PUBLIC_URL, { always: env.KEEP_AWAKE, log });
 var handler = createApp({ env, sql, log, services, rooms, social, keepAwake });
 var server = createServer((req, res) => {
-  handler(req, res).catch((e) => log.error("fatal request error", { err: e }));
+  handler(req, res).catch((e2) => log.error("fatal request error", { err: e2 }));
 });
 server.headersTimeout = 2e4;
 server.requestTimeout = 3e4;
@@ -20733,5 +21560,5 @@ async function shutdown(signal) {
 }
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
-process.on("unhandledRejection", (e) => log.error("unhandledRejection", { err: e }));
+process.on("unhandledRejection", (e2) => log.error("unhandledRejection", { err: e2 }));
 //# sourceMappingURL=server.js.map

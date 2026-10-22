@@ -14,6 +14,7 @@ import { RangeError400, charts, dailyMetrics, errorGroups, listPlayers, overview
 import { economy, funnel, maskEmail } from '../analytics/economy.js';
 import { EconomyError } from '../economy/repo.js';
 import { RESET_TTL_MS } from '../auth/email.js';
+import { ClubRepo } from '../clubs/repo.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -198,6 +199,26 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
     await audit(p.sql, deps.log, { adminId: a.id, action: 'password_reset_link', target: id, ip: ctx.ip });
     const out: AdminResetLink = { link: `${deps.env.PUBLIC_URL.replace(/\/$/, '')}/?reset=${r.token}`, expiresAt: new Date(Date.now() + RESET_TTL_MS).toISOString() };
     ctx.json(200, out, { 'cache-control': 'no-store' });
+  });
+
+  /** Clubs (v0.3): the whole table for moderation. */
+  router.get('/api/admin/clubs', viewer, async (ctx) => {
+    ctx.json(200, await new ClubRepo(pg().sql).adminList());
+  });
+
+  /** Removes a player club (an offensive name or flag); its people hear that it was disbanded. */
+  router.delete('/api/admin/clubs/:id', admin, async (ctx) => {
+    const id = ctx.params.id ?? '';
+    if (!UUID_RE.test(id)) throw new HttpError(400, 'bad_id', 'Неверный идентификатор');
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, 'rate_limited', 'Слишком много операций подряд, подождите', { 'retry-after': '60' });
+    const p = pg();
+    const gone = await new ClubRepo(p.sql).adminDelete(id);
+    if (gone === 'not_found') throw new HttpError(404, 'not_found', 'Клуб не найден');
+    if (gone === 'house') throw new HttpError(409, 'house_club', 'Клубы игры не удаляются');
+    for (const userId of gone.members) deps.social?.push(userId, { type: 'club_left', clubId: id, reason: 'disbanded' });
+    await audit(p.sql, deps.log, { adminId: a.id, action: 'club_delete', target: id, details: { name: gone.name, tag: gone.tag, members: gone.members.length }, ip: ctx.ip });
+    ctx.json(200, { deleted: id });
   });
 
   router.get('/api/admin/errors', viewer, async (ctx) => {

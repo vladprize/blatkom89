@@ -61,7 +61,7 @@ try {
   await pressPlay();
   const nick = page.getByRole('textbox', { name: 'Кличка' });
   await nick.waitFor({ timeout: 60000 });
-  await nick.fill(`Картограф ${Math.random().toString(36).slice(2, 5)}`);
+  await nick.fill(`Kartograf ${Math.random().toString(36).slice(2, 5)}`);
   await page.getByRole('button', { name: 'Готово' }).click();
   await page.getByTestId('menu-nick').waitFor({ timeout: 20000 });
 

@@ -101,7 +101,7 @@ try {
   check(/^[A-Za-z0-9]{6,16}$/.test(code), `A created a capture-the-flag room (invite ${code})`);
   await B.page.goto(`${base}/?invite=${encodeURIComponent(code)}`);
   await pressPlay(B.page);
-  await nickname(B, `Перехватчик ${RUN}`);
+  await nickname(B, `Perekhvatchik ${RUN}`);
   await A.page.getByText(/Players 2\//).waitFor({ timeout: 90000 });
   await B.page.getByText(/Игроки 2\//).waitFor({ timeout: 90000 });
   check((await A.page.locator('.teamcol').count()) === 2 && (await B.page.locator('.teamcol').count()) === 2, 'both lobbies show the red and blue columns');

@@ -61,8 +61,10 @@ test('telegram: stale and future auth_date are rejected', () => {
   assert.equal(validateInitData(fresh, BOT, 86400, NOW).ok, true);
 });
 
-test('telegram: display names are sanitized for the game', () => {
-  assert.equal(displayNameFromTelegram({ id: 1, firstName: 'Петя 🐓', lastName: 'Комендант', languageCode: null }), 'Петя Комендант');
+test('telegram: display names are sanitized for the game — in Latin letters (v0.3)', () => {
+  assert.equal(displayNameFromTelegram({ id: 1, firstName: 'Петя 🐓', lastName: 'Комендант', languageCode: null }), 'Petya Komendant');
+  assert.equal(displayNameFromTelegram({ id: 3, firstName: 'José', lastName: 'Müller', languageCode: null }), 'Jose Muller');
+  assert.equal(displayNameFromTelegram({ id: 4, firstName: '王小明', lastName: null, languageCode: null }), 'Comrade 4');
   assert.equal(displayNameFromTelegram({ id: 12345678, firstName: '🔥', lastName: null, languageCode: null }), 'Comrade 5678');
   assert.ok(displayNameFromTelegram({ id: 2, firstName: 'А'.repeat(60), lastName: null, languageCode: null }).length <= 24);
 });

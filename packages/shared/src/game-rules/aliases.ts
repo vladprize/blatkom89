@@ -49,3 +49,64 @@ export function numberedAlias(base: string, n: number): string {
   const tail = ` ${n}`;
   return base.slice(0, MAX_NAME_LENGTH - tail.length).trimEnd() + tail;
 }
+
+// ── Latin names (v0.3) ──────────────────────────────────────────────────────────────────────────────
+/**
+ * Aliases and club names are written in Latin letters only (the owner's rule: the game is played across
+ * Europe and America; everybody must be able to read every name). What the server and the client accept.
+ */
+export const LATIN_NAME_RE = /^[A-Za-z0-9 _.\-’']+$/;
+
+const CYRILLIC: Readonly<Record<string, string>> = Object.freeze({
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o',
+  п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu',
+  я: 'ya', і: 'i', ї: 'yi', є: 'ye', ґ: 'g', ў: 'u', ә: 'a', ғ: 'gh', қ: 'q', ң: 'ng', ө: 'o', ұ: 'u', ү: 'u', һ: 'h',
+});
+/** Latin letters NFKD doesn't take apart. */
+const LATIN_EXTRA: Readonly<Record<string, string>> = Object.freeze({ ß: 'ss', æ: 'ae', Æ: 'AE', ø: 'o', Ø: 'O', œ: 'oe', Œ: 'OE', ł: 'l', Ł: 'L', đ: 'd', Đ: 'D', þ: 'th', Þ: 'Th', ı: 'i' });
+
+/** Cyrillic letters spelled in Latin ones («Петя» → «Petya», «ВАСЯ» → «VASYA»), accents dropped; nothing else changes. */
+export function transliterate(raw: string): string {
+  const words = raw.normalize('NFKC').split(/(\s+)/);
+  const out = words
+    .map((w) => {
+      if (!/[\u0400-\u04ff]/.test(w)) return w;
+      const letters = [...w].filter((c) => /\p{L}/u.test(c));
+      const shout = letters.length > 1 && letters.every((c) => c === c.toUpperCase() && c !== c.toLowerCase());
+      let res = '';
+      for (const ch of w) {
+        const low = ch.toLowerCase();
+        const m = CYRILLIC[low];
+        if (m === undefined) res += ch;
+        else if (shout) res += m.toUpperCase();
+        else res += ch !== low && m ? m[0]!.toUpperCase() + m.slice(1) : m;
+      }
+      return res;
+    })
+    .join('');
+  return [...out]
+    .map((c) => LATIN_EXTRA[c] ?? c)
+    .join('')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '');
+}
+
+/**
+ * A name in Latin letters: transliterated (see above), anything else that isn't allowed in a name
+ * removed, spaces tidied, at most 24 characters. May come out empty (a name in another script): see
+ * `latinName`.
+ */
+export function toLatin(raw: string): string {
+  return transliterate(raw)
+    .replace(/[^A-Za-z0-9 _.\-’']/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_NAME_LENGTH)
+    .trim();
+}
+
+/** `toLatin`, or the fallback when too little is left (fewer than two characters, no letter or digit). */
+export function latinName(raw: string, fallback: string): string {
+  const s = toLatin(raw);
+  return s.length >= 2 && /[A-Za-z0-9]/.test(s) ? s : fallback;
+}

@@ -1,5 +1,5 @@
 /** Player profile queries for /api/me (profile, history, achievements, deletion). */
-import { ACHIEVEMENTS, ACHIEVEMENT_IDS, isAvatarId, levelForXp, nameKey } from '@blatkom/shared';
+import { ACHIEVEMENTS, ACHIEVEMENT_IDS, ClubEmblemSchema, ClubFlagSchema, isAvatarId, levelForXp, nameKey } from '@blatkom/shared';
 import type { AchievementId, AchievementStatus, AvatarId, CharacterId, MapId, MatchHistoryEntry, PublicProfile } from '@blatkom/shared';
 import type { Sql } from '../database/db.js';
 
@@ -26,10 +26,17 @@ interface ProfileRow {
   diamonds: number;
   email: string | null;
   rating: number;
+  club_id?: string | null;
+  club_tag?: string | null;
+  club_name?: string | null;
+  club_flag?: unknown;
+  club_emblem?: unknown;
 }
 
 export function toPublicProfile(r: ProfileRow): PublicProfile {
   const lv = levelForXp(r.xp);
+  const flag = ClubFlagSchema.safeParse(r.club_flag);
+  const emblem = ClubEmblemSchema.safeParse(r.club_emblem);
   return {
     id: r.id,
     displayName: r.display_name,
@@ -55,6 +62,7 @@ export function toPublicProfile(r: ProfileRow): PublicProfile {
     diamonds: r.diamonds,
     email: r.email,
     rating: r.rating,
+    club: r.club_id && r.club_tag && r.club_name && flag.success && emblem.success ? { id: r.club_id, tag: r.club_tag, name: r.club_name, flag: flag.data, emblem: emblem.data } : null,
   };
 }
 
@@ -71,8 +79,10 @@ export class ProfileRepo {
              COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
              p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email,
-             COALESCE(p.rating, 1000) AS rating
+             COALESCE(p.rating, 1000) AS rating,
+             c.id AS club_id, c.tag AS club_tag, c.name AS club_name, c.flag AS club_flag, c.emblem AS club_emblem
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
+        LEFT JOIN club_members cm ON cm.user_id = u.id LEFT JOIN clubs c ON c.id = cm.club_id
       WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
     return rows[0] ? toPublicProfile(rows[0]) : null;
   }

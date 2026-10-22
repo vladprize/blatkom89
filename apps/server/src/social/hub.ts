@@ -19,7 +19,7 @@ export const SOCIAL_CLOSE = { UNAUTHORIZED: 4401, REPLACED: 4409, POLICY: 1008 }
 
 export interface SocialStore {
   friendIds(userId: string): Promise<string[]>;
-  counts(userId: string): Promise<{ unread: number; incoming: number }>;
+  counts(userId: string): Promise<{ unread: number; incoming: number; clubs: number }>;
   touch?(userId: string): Promise<void>;
 }
 
@@ -109,7 +109,8 @@ export class SocialHub {
           }
           const first = set.size === 0;
           set.add(ws);
-          const counts = this.store ? await this.store.counts(userId).catch(() => ({ unread: 0, incoming: 0 })) : { unread: 0, incoming: 0 };
+          const none = { unread: 0, incoming: 0, clubs: 0 };
+          const counts = this.store ? await this.store.counts(userId).catch(() => none) : none;
           if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'ready', userId, ...counts } satisfies SocialEvent));
           if (first) void this.announce(userId);
           void this.store?.touch?.(userId).catch(() => {});

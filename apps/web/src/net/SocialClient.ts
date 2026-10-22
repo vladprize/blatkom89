@@ -25,6 +25,8 @@ export class SocialClient {
   connected = false;
   /** Loaded at least once (the lists are meaningful). */
   loaded = false;
+  /** Join requests waiting for this player's answer as the head of a club (v0.3). */
+  clubRequests = 0;
   private ws: WebSocket | null = null;
   private token: string | null = null;
   private stopped = true;
@@ -57,6 +59,13 @@ export class SocialClient {
   /** Unread messages from friends plus requests waiting for an answer (the menu badge). */
   badge(): number {
     return this.friends.reduce((n, f) => n + f.unread, 0) + this.incoming.length;
+  }
+
+  /** The club table's count (the most recent word on the requests waiting for the head). */
+  setClubRequests(n: number): void {
+    if (n === this.clubRequests) return;
+    this.clubRequests = n;
+    this.emit({ type: 'changed' });
   }
 
   onlineCount(): number {
@@ -213,6 +222,7 @@ export class SocialClient {
     const me = this.myId();
     switch (e.type) {
       case 'ready':
+        this.clubRequests = e.clubs ?? 0;
         this.retry = 0;
         this.setLink(true);
         void this.refresh().catch(() => {});
@@ -244,6 +254,14 @@ export class SocialClient {
       }
       case 'invite':
         this.invites = [e.invite, ...this.invites.filter((i) => i.roomId !== e.invite.roomId)].slice(0, 5);
+        break;
+      case 'club_request':
+        this.clubRequests++;
+        break;
+      case 'club_joined':
+      case 'club_declined':
+      case 'club_left':
+      case 'club_head':
         break;
       case 'dm_read':
       case 'pong':
