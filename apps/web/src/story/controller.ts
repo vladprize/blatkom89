@@ -17,6 +17,7 @@ import { missionHeading, renderCards, renderStory, renderStoryFail, renderStoryW
 import { StorySession } from './StorySession.js';
 import { StoryOverlay } from './overlay.js';
 import { playComic } from './comic.js';
+import { music } from '../game/audio/Music.js';
 import { sceneForMap, sceneUrl } from './scenes.js';
 import { CAMPAIGN_OPENING, MISSION_SCRIPTS, PROLOGUE } from './script.js';
 
@@ -62,6 +63,7 @@ export class StoryController {
     if (!backend) return;
     this.closeComic?.();
     this.host.go('story', push);
+    music.setWanted(true);
     const body = h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
     const wrap = h('div', { class: 'wrap' }, this.host.topbar(t('Story')), body);
     this.host.render(h('div', { class: 'screen screen--dim' }, wrap));
@@ -164,6 +166,8 @@ export class StoryController {
     const stats = s.heroStats();
     this.host.endSession(true);
     this.host.go('storyEnd', false);
+    // the end of a mission is a menu again: the soundtrack comes back (quietly while the comic after it plays)
+    music.setWanted(true);
     if (out.result === 'fail') {
       this.running = null;
       this.host.render(endScreen(m, renderStoryFail({ mission: m, reason: out.reason ?? 'lost', onRetry: () => void this.play(m, { again: true }), onHub: () => this.show(false) })));

@@ -1,7 +1,7 @@
 /**
  * Menu soundtrack: one looping track streamed from assets/audio/theme.mp3 (never decoded whole —
- * a decoded three-minute track would take ~60 MB). It plays in menus and lobbies and fades out
- * when a match starts. At start-up the game tries to play it straight away (browsers that allow
+ * a decoded three-minute track would take ~60 MB). It plays in menus and lobbies, very quietly under
+ * the story's comics (v0.2.14), and fades out when a match starts. At start-up the game tries to play it straight away (browsers that allow
  * sound without a tap); where the browser refuses, the loading screen ends with a «Play» button
  * whose tap starts the music together with the menu (main.ts). The volume goes through WebAudio
  * once a tap has unlocked it, because iOS ignores HTMLMediaElement.volume. The single-file offline
@@ -16,6 +16,9 @@ const FADE_IN_MS = 1400;
 const FADE_OUT_MS = 700;
 /** Menu music sits under the interface sounds. */
 const MUSIC_GAIN = 0.55;
+/** Under the story's comics the soundtrack plays very quietly: this share of the menu level. */
+const QUIET_LEVEL = 0.22;
+const QUIET_FADE_MS = 600;
 
 class MusicPlayer {
   private el: HTMLAudioElement | null = null;
@@ -28,6 +31,7 @@ class MusicPlayer {
   private lastTick = 0;
   private hidden = false;
   private failed = false;
+  private quiet = false;
 
   available(): boolean {
     return !isSingleFile() && typeof Audio !== 'undefined' && !this.failed;
@@ -74,7 +78,7 @@ class MusicPlayer {
     }
     // allowed: plays straight to the speakers (el.volume) until a tap moves it onto WebAudio
     this.unlocked = true;
-    if (this.wanted && !this.hidden) this.fadeTo(1, FADE_IN_MS);
+    if (this.wanted && !this.hidden) this.fadeTo(this.full(), FADE_IN_MS);
     else el.pause();
     return true;
   }
@@ -108,6 +112,22 @@ class MusicPlayer {
     this.wanted = on;
     if (on) this.start();
     else this.fadeTo(0, FADE_OUT_MS);
+  }
+
+  /** The story's comics: the soundtrack very quiet behind the pages; off again — back to the menu level. */
+  setQuiet(on: boolean): void {
+    if (on === this.quiet) return;
+    this.quiet = on;
+    if (this.wanted && this.target > 0) this.fadeTo(this.full(), on ? QUIET_FADE_MS : FADE_IN_MS);
+  }
+
+  /** For tests: what the player is doing (`target` — the level it fades to, 0…1 of the menu level). */
+  state(): { wanted: boolean; quiet: boolean; target: number; playing: boolean } {
+    return { wanted: this.wanted, quiet: this.quiet, target: this.target, playing: this.playing() };
+  }
+
+  private full(): number {
+    return this.quiet ? QUIET_LEVEL : 1;
   }
 
   /** 0…1 from the settings slider (0 = off). */
@@ -165,7 +185,7 @@ class MusicPlayer {
         /* blocked until the next gesture */
       });
     }
-    this.fadeTo(1, FADE_IN_MS);
+    this.fadeTo(this.full(), FADE_IN_MS);
   }
 
   private fadeTo(target: number, ms: number) {

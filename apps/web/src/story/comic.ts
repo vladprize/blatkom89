@@ -5,11 +5,13 @@
  * scene on the whole screen — the camera slowly pushing in — with the speaker's portrait and speech
  * bubble along the bottom, or the narrator's caption; a new place fades in. Without a picture: the
  * speaker's art as a card beside the bubble over the place's map, alternating sides when the speaker
- * changes. 2089 in neon, 1989 on tape. A tap, a click, Space, Enter or → turns the page; «Skip» ends it.
+ * changes. 2089 in neon, 1989 on tape. The soundtrack plays very quietly behind the pages. A tap, a click,
+ * Space, Enter or → turns the page; «Skip» ends it.
  */
 import type { MapId } from '@blatkom/shared';
 import { t } from '../i18n/index.js';
 import { asset, h } from '../ui/dom.js';
+import { music } from '../game/audio/Music.js';
 import { line } from './script.js';
 import type { Beat } from './script.js';
 import { speakerArt, speakerName } from './overlay.js';
@@ -74,6 +76,8 @@ export function playComic(root: HTMLElement, beats: readonly Beat[], o: ComicOpt
     closed = true;
     window.removeEventListener('keydown', onKey, true);
     el.remove();
+    // back to the menu level — or, when a mission starts now, faded out with the match
+    music.setQuiet(false);
   };
   const finish = () => {
     if (closed) return;
@@ -127,6 +131,9 @@ export function playComic(root: HTMLElement, beats: readonly Beat[], o: ComicOpt
   window.addEventListener('keydown', onKey, true);
   root.append(el);
   el.focus({ preventScroll: true });
+  // the soundtrack very quietly behind the pages (before a mission, after it, the prologue)
+  music.setWanted(true);
+  music.setQuiet(true);
   next();
   return close;
 }

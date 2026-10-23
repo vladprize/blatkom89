@@ -1,6 +1,6 @@
 // The story mode end to end (v0.2.13, part 4a): A (English, desktop) and B (Russian, phone).
 // A: the menu's «Story» button; the first visit plays the prologue by itself (2089 in neon over the
-// BLATKOM hall), «Skip»
+// BLATKOM hall), «Skip»; the soundtrack very quietly behind every comic, off in the mission
 // ends it; the hub — two campaigns of five missions in chapter 1, chapters 3–4 on the way, the first
 // mission open and the rest locked, the card index empty; mission 1 of «My Yard»: the campaign's
 // opening and the mission's comic over the yard's big picture, then the mission — the objective line counts the loafers, the
@@ -115,12 +115,16 @@ try {
   await A.page.getByTestId('comic').waitFor({ timeout: 15000 });
   const firstPanel = await text(A.page, '[data-testid=comic-panel]');
   const yardScene = await A.page.evaluate(() => document.querySelector('[data-testid=comic]')?.classList.contains('comic--scene') && document.querySelector('[data-testid=comic-scene]')?.getAttribute('data-scene'));
+  const comicMusic = await A.page.evaluate(() => window.__blatkom.music.state());
   await A.page.screenshot({ path: `${outDir}/story_comic_a1.png` });
   const pages = await readComic(A.page);
   check(pages === 7 && /3rd Microdistrict/.test(firstPanel), `the campaign's opening and the mission's comic: ${pages} pages, the first «${firstPanel.slice(0, 40)}…»`);
   check(yardScene === 'yard', `«My Yard» opens over the yard's big picture (${yardScene})`);
+  check(comicMusic.wanted && comicMusic.quiet && comicMusic.target <= 0.22, `the soundtrack very quietly behind the comic (${JSON.stringify(comicMusic)})`);
   await A.page.getByTestId('story-goal').waitFor({ state: 'visible', timeout: 30000 });
   check(/Free the bench: loafers 3/.test(await text(A.page, '[data-testid=story-goal]')), `the objective line: «${await text(A.page, '[data-testid=story-goal]')}»`);
+  const missionMusic = await A.page.evaluate(() => window.__blatkom.music.state());
+  check(!missionMusic.wanted && !missionMusic.quiet, `the soundtrack fades out with the mission (${JSON.stringify(missionMusic)})`);
   await A.page.getByTestId('story-bark').first().waitFor({ timeout: 15000 });
   check(/No unauthorised persons/.test(await text(A.page, '[data-testid=story-bark]')), `the hero says his line at the start («${await text(A.page, '[data-testid=story-bark]')}»)`);
   await A.page.screenshot({ path: `${outDir}/story_mission_a1.png` });
@@ -140,6 +144,8 @@ try {
   await A.page.getByTestId('story-rewards').waitFor({ timeout: 20000 });
   const rewards = await text(A.page, '[data-testid=story-rewards]');
   check(/\+60 talons/.test(rewards) && /\+40 XP/.test(rewards), `the rewards: ${rewards}`);
+  const endMusic = await A.page.evaluate(() => window.__blatkom.music.state());
+  check(endMusic.wanted && !endMusic.quiet, `after the comic the soundtrack is back at the menu level (${JSON.stringify(endMusic)})`);
   check(/Next: The Queue/i.test(await text(A.page, '[data-testid=story-next]')), 'the next mission is offered');
   await A.page.screenshot({ path: `${outDir}/story_win.png` });
   const [row] = await sql`SELECT best_ms, completions FROM story_progress WHERE user_id = ${me} AND mission_id = 'a1'`;
