@@ -1,12 +1,13 @@
 /**
- * The story mode's flow in the app (v0.2.13, part 4a): the hub, a mission's ticket from the server, the
+ * The story mode's flow in the app (v0.2.13, part 4a): the hub, a mission's ticket (from the server, or
+ * this browser's own in the offline build — story/backend.ts), the
  * comic before it, the mission itself with its overlay, and the end — the comic after it and what it
  * paid, or one tap to go again.
  */
-import { STORY_MIN_MS, campaignMissions, nextMission } from '@blatkom/shared';
+import { STORY_CHAPTERS, campaignMissions, nextMission } from '@blatkom/shared';
 import type { StoryCampaign, StoryDone, StoryMission, StoryReward } from '@blatkom/shared';
-import type { OnlineClient } from '../net/OnlineClient.js';
 import type { GameSession } from '../game/session/types.js';
+import type { StoryBackend } from './backend.js';
 import { apiErrorText } from '../net/errors.js';
 import { t } from '../i18n/index.js';
 import { h, toast } from '../ui/dom.js';
@@ -24,7 +25,10 @@ const PROLOGUE_KEY = 'blatkom89.story.prologue.v1';
 /** What the story needs from the app shell. */
 export interface StoryHost {
   root: HTMLElement;
-  online: () => OnlineClient | null;
+  /** The server's progress online, this browser's in the offline build. */
+  backend: () => StoryBackend | null;
+  /** A mission paid something: the app updates the profile it shows. */
+  afterReward: (r: StoryReward) => void;
   go: (screen: 'story' | 'storyEnd', push?: boolean) => void;
   screen: () => string;
   render: (el: HTMLElement) => void;
@@ -32,7 +36,6 @@ export interface StoryHost {
   beginSession: (s: GameSession) => void;
   endSession: (showPreview?: boolean) => void;
   canvas: () => HTMLCanvasElement | null;
-  refreshStrip: () => void;
 }
 
 interface Running {
@@ -54,8 +57,8 @@ export class StoryController {
 
   /** The hub: the prologue, the campaigns, the card index. */
   show(push = true): void {
-    const online = this.host.online();
-    if (!online) return;
+    const backend = this.host.backend();
+    if (!backend) return;
     this.closeComic?.();
     this.host.go('story', push);
     const body = h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
@@ -71,16 +74,24 @@ export class StoryController {
             this.chapter = { ...this.chapter, [c]: n };
             draw();
           },
+          offline: backend.local,
           onPlay: (m) => void this.play(m),
           onPrologue: () => this.prologue(),
           onCards: () => openSheet(this.host.root, { title: t('Card index'), body: renderCards(this.done), testid: 'story-cards-sheet' }),
         }),
       );
     };
-    void online.api
-      .story()
-      .then((r) => {
-        this.done = r.done;
+    void backend
+      .progress()
+      .then((done) => {
+        this.done = done;
+        // each campaign opens on the chapter of its next mission (or the last one written, all done)
+        const ids = new Set(done.map((d) => d.id));
+        for (const c of ['petya', 'uchastkovy'] as const) {
+          const next = nextMission(c, ids);
+          const written = STORY_CHAPTERS.filter((x) => x.campaign === c && x.ready).map((x) => x.chapter);
+          this.chapter = { ...this.chapter, [c]: next?.chapter ?? Math.max(1, ...written) };
+        }
         draw();
         // the first visit: the prologue plays by itself
         if (this.done.length === 0 && !storageGet(PROLOGUE_KEY) && this.host.screen() === 'story') this.prologue();
@@ -103,11 +114,11 @@ export class StoryController {
 
   /** A mission: its ticket, the comic before it (the campaign's opening the first time), the mission. */
   async play(m: StoryMission, o: { again?: boolean } = {}): Promise<void> {
-    const online = this.host.online();
-    if (!online || this.busy) return;
+    const backend = this.host.backend();
+    if (!backend || this.busy) return;
     this.busy = true;
     try {
-      const { ticket } = await online.api.storyStart(m.id);
+      const ticket = await backend.start(m.id);
       const run: Running = { mission: m, ticket, ticketAt: Date.now() };
       const ids = new Set(this.done.map((d) => d.id));
       const first = campaignMissions(m.campaign)[0]?.id === m.id && !ids.has(m.id);
@@ -172,6 +183,7 @@ export class StoryController {
           ms,
           reward,
           error,
+          offline: this.host.backend()?.local ?? false,
           next: reward && next && next.id !== m.id ? next : null,
           onNext: () => next && void this.play(next),
           onHub: () => this.show(false),
@@ -184,22 +196,16 @@ export class StoryController {
       );
     };
     const send = () => {
-      const online = this.host.online();
-      if (!online) return;
-      const wait = Math.max(0, run.ticketAt + STORY_MIN_MS + 500 - Date.now());
+      const backend = this.host.backend();
+      if (!backend) return;
+      const wait = backend.minMs > 0 ? Math.max(0, run.ticketAt + backend.minMs + 500 - Date.now()) : 0;
       setTimeout(() => {
-        online.api
-          .storyComplete(run.ticket, ms, stats.kills, stats.deaths)
+        backend
+          .complete(run.ticket, ms, stats.kills, stats.deaths)
           .then((r) => {
             reward = r;
             this.done = r.done;
-            if (online.profile) online.profile = { ...online.profile, tokens: r.tokens, xp: r.xpTotal, level: r.level };
-            this.host.refreshStrip();
-            // $BLAT and the rest of the profile as the server now has them
-            void online
-              .refreshProfile()
-              .then(() => this.host.refreshStrip())
-              .catch(() => {});
+            this.host.afterReward(r);
             draw();
           })
           .catch((e) => {

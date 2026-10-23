@@ -41,11 +41,13 @@ export function missionHeading(m: StoryMission): string {
 }
 
 /** A chapter's rewards in words: the achievement, the talons, the characters and skins. */
-function chapterRewards(c: StoryCampaign, chapter: number): string {
+function chapterRewards(c: StoryCampaign, chapter: number, offline: boolean): string {
   const ch = storyChapter(c, chapter);
   if (!ch) return '';
   const parts: string[] = [];
   if (ch.achievement) parts.push(`«${achievementText(ch.achievement).title}»`);
+  // offline (no server): the achievement and its experience only
+  if (offline) return parts.join(' · ');
   parts.push(count(ch.talons, 'talon'));
   for (const id of ch.characters) parts.push(t('the character {name}', { name: charName(id) }));
   for (const s of ch.skins) {
@@ -55,7 +57,7 @@ function chapterRewards(c: StoryCampaign, chapter: number): string {
   return parts.join(' · ');
 }
 
-function missionRow(m: StoryMission, done: Map<string, StoryDone>, ids: ReadonlySet<string>, onPlay: (m: StoryMission) => void): HTMLElement {
+function missionRow(m: StoryMission, done: Map<string, StoryDone>, ids: ReadonlySet<string>, onPlay: (m: StoryMission) => void, offline: boolean): HTMLElement {
   const d = done.get(m.id);
   const open = isMissionOpen(m.id, ids);
   const state = d ? 'done' : open ? 'open' : 'locked';
@@ -68,7 +70,7 @@ function missionRow(m: StoryMission, done: Map<string, StoryDone>, ids: Readonly
       { class: 'smission__txt' },
       h('b', null, missionTitle(m)),
       h('small', null, `${missionKind(m)} · ${mapName(m.map)}`),
-      h('small', { class: 'smission__reward' }, d ? t('Best time {time}', { time: fmtDuration(d.bestMs) }) : t('First time: +{n} {talons}, +{xp} XP', { n: m.talons, talons: plural(m.talons, 'talon'), xp: m.xp })),
+      h('small', { class: 'smission__reward' }, d ? t('Best time {time}', { time: fmtDuration(d.bestMs) }) : offline ? t('First time: +{xp} XP', { xp: m.xp }) : t('First time: +{n} {talons}, +{xp} XP', { n: m.talons, talons: plural(m.talons, 'talon'), xp: m.xp })),
     ),
     state === 'locked'
       ? h('span', { class: 'smission__lock', 'aria-label': t('Locked: finish the mission before it') }, '🔒')
@@ -76,7 +78,7 @@ function missionRow(m: StoryMission, done: Map<string, StoryDone>, ids: Readonly
   );
 }
 
-function campaignPanel(c: StoryCampaign, done: Map<string, StoryDone>, ids: ReadonlySet<string>, chapter: number, onChapter: (c: StoryCampaign, n: number) => void, onPlay: (m: StoryMission) => void): HTMLElement {
+function campaignPanel(c: StoryCampaign, done: Map<string, StoryDone>, ids: ReadonlySet<string>, chapter: number, onChapter: (c: StoryCampaign, n: number) => void, onPlay: (m: StoryMission) => void, offline: boolean): HTMLElement {
   const info = CAMPAIGNS[c];
   const all = campaignMissions(c);
   const doneN = all.filter((m) => done.has(m.id)).length;
@@ -107,9 +109,9 @@ function campaignPanel(c: StoryCampaign, done: Map<string, StoryDone>, ids: Read
       ),
     ),
     ch.ready
-      ? h('div', { class: 'col smissions' }, ...ms.map((m) => missionRow(m, done, ids, onPlay)))
+      ? h('div', { class: 'col smissions' }, ...ms.map((m) => missionRow(m, done, ids, onPlay, offline)))
       : h('div', { class: 'scamp__soon' }, h('b', null, t('Chapter {n} is being written', { n: ch.chapter })), h('span', { class: 'muted' }, t('It comes in one of the next updates — the missions you finish now stay yours.'))),
-    h('div', { class: 'muted scamp__reward' }, t('For the chapter: {rewards}', { rewards: chapterRewards(c, ch.chapter) })),
+    h('div', { class: 'muted scamp__reward' }, t('For the chapter: {rewards}', { rewards: chapterRewards(c, ch.chapter, offline) })),
   );
 }
 
@@ -120,6 +122,8 @@ export function renderStory(o: {
   onPlay: (m: StoryMission) => void;
   onPrologue: () => void;
   onCards: () => void;
+  /** The offline build: progress on this device, experience and achievements only. */
+  offline?: boolean;
 }): HTMLElement {
   const done = new Map(o.done.map((d) => [d.id, d]));
   const ids = new Set(done.keys());
@@ -134,7 +138,8 @@ export function renderStory(o: {
       h('div', { class: 'story__lead' }, t('In 2089 the city’s disputes go to BLATKOM: both sides wake up in a simulation of 1989, half human, half beast — and whoever holds the district there is right out here.')),
       h('div', { class: 'story__btns' }, h('button', { class: 'btn btn--small', 'data-testid': 'story-prologue', onclick: o.onPrologue }, t('Prologue ▶')), h('button', { class: 'btn btn--small', 'data-testid': 'story-cards', onclick: o.onCards }, t('Card index · {n}/{all}', { n: STORY_CARD_INDEX.filter((c) => met.has(c)).length, all: STORY_CARD_INDEX.length }))),
     ),
-    h('div', { class: 'story__camps' }, ...CAMPAIGN_ORDER.map((c) => campaignPanel(c, done, ids, o.chapter[c], o.onChapter, o.onPlay))),
+    h('div', { class: 'story__camps' }, ...CAMPAIGN_ORDER.map((c) => campaignPanel(c, done, ids, o.chapter[c], o.onChapter, o.onPlay, !!o.offline))),
+    o.offline ? h('div', { class: 'muted story__offline' }, t('Offline: the progress stays in this browser on this device.')) : null,
     h('div', { class: 'panel story__finale' }, h('span', { class: 'tag' }, t('Finale')), h('b', null, t('«The Building Site» — the two of them against Arkadich')), h('span', { class: 'muted' }, t('Opens after both campaigns. The reward: «Neon-2089», a legendary skin for every weapon — only from the story.'))),
   );
 }
@@ -160,7 +165,7 @@ export function renderCards(done: StoryDone[]): HTMLElement {
 }
 
 /** A mission done: what it paid (the first time) and where to go next. */
-export function renderStoryWin(o: { mission: StoryMission; ms: number; reward: StoryReward | null; error: string | null; next: StoryMission | null; onNext: () => void; onHub: () => void; onRetrySend: () => void }): HTMLElement {
+export function renderStoryWin(o: { mission: StoryMission; ms: number; reward: StoryReward | null; error: string | null; next: StoryMission | null; offline?: boolean; onNext: () => void; onHub: () => void; onRetrySend: () => void }): HTMLElement {
   const r = o.reward;
   const lines: HTMLElement[] = [];
   if (r?.first) {

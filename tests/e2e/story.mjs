@@ -5,8 +5,9 @@
 // opening and the mission's comic, then the mission — the objective line counts the loafers, the
 // characters' lines pop up; everybody down (after the server's shortest time) — the comic after it, the
 // rewards (+60 talons, +40 XP) also in the database, the next mission offered; the hub: mission 1 done
-// with its best time, mission 2 open, Karlych in the card index. Then mission 1 again: the hero dropped —
-// «Mission failed» with the narrator's line, «Again» goes straight into the mission, the pause menu's
+// with its best time, mission 2 open, Karlych in the card index. Then mission 1 again: three hearts on the
+// objective line, the hero dropped three times (a heart each, back after each fall) — «Mission failed»
+// with the narrator's line, «Again» goes straight into the mission, the pause menu's
 // «Back to the story» leaves it. B: the phone menu — «Сюжет» beside «Быстрый матч», friends, Kon and
 // practice in a row, one screen; the hub and the comic upright without sideways scroll.
 //
@@ -154,7 +155,16 @@ try {
   await A.page.getByTestId('story-play-a1').click();
   await A.page.getByTestId('comic-skip').click();
   await A.page.getByTestId('story-goal').waitFor({ state: 'visible', timeout: 30000 });
-  await world(A.page, 'const h = w.players.get("local"); h.invulnUntil = 0; w.applyDamage(h, [...w.players.values()].find((p) => p.team === 1), 999, "pistol");');
+  check((await text(A.page, '[data-testid=story-lives]')) === '♥♥♥', `three lives on the objective line («${await text(A.page, '[data-testid=story-lives]')}»)`);
+  const dropHero = 'const h = w.players.get("local"); h.invulnUntil = 0; w.applyDamage(h, [...w.players.values()].find((p) => p.team === 1), 999, "pistol");';
+  for (let fall = 1; fall <= 2; fall++) {
+    await A.page.waitForFunction(() => window.__blatkom.app.session?.world?.players.get('local')?.alive === true, null, { timeout: 20000 });
+    await world(A.page, dropHero);
+    await A.page.waitForFunction((n) => document.querySelector('[data-testid=story-lives]')?.textContent === '♥'.repeat(3 - n) + '♡'.repeat(n), fall, { timeout: 10000 });
+  }
+  check(true, 'two falls: two hearts lost, the hero back each time, the mission goes on');
+  await A.page.waitForFunction(() => window.__blatkom.app.session?.world?.players.get('local')?.alive === true, null, { timeout: 20000 });
+  await world(A.page, dropHero);
   await A.page.getByTestId('story-fail').waitFor({ timeout: 20000 });
   const fail = await text(A.page, '[data-testid=story-fail]');
   check(/Mission failed/i.test(fail) && /headache/.test(fail), `dropped: «${fail.slice(0, 90)}…»`);

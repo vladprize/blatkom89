@@ -34,7 +34,7 @@ export type StoryObjective =
   | { kind: 'survive' };
 
 /** People without a name of their own (their words are in the client's script). */
-export const STORY_ROLES = ['loafer', 'queue', 'speculator', 'reseller', 'pilferer', 'dancer', 'garage'] as const;
+export const STORY_ROLES = ['loafer', 'queue', 'speculator', 'reseller', 'pilferer', 'dancer', 'garage', 'scrapper', 'patrol', 'courier', 'suitor', 'workshop', 'fence', 'guard', 'smuggler'] as const;
 export type StoryRole = (typeof STORY_ROLES)[number];
 
 export interface StoryKit {
@@ -93,9 +93,10 @@ export interface StoryChapter {
 
 /**
  * The hero's edge in a mission: a share of the incoming damage (the fights are two, three, five against
- * one) and, where one fall would end it («clear», «survive»), a few lives.
+ * one) and, where one fall would end it («clear», «survive»), a few lives; in «survive» the attackers
+ * who fall come back after a while, not at once.
  */
-export const STORY_RULES = Object.freeze({ heroDamage: 0.5, lives: 3 });
+export const STORY_RULES = Object.freeze({ heroDamage: 0.5, lives: 3, surviveRespawnMs: 7000 });
 
 /** The shortest time from starting a mission to reporting it done (a scripted «instant win» is refused). */
 export const STORY_MIN_MS = 15_000;
@@ -106,7 +107,7 @@ export const STORY_OWNED_SKIN_TALONS = 150;
 
 const kit = (sidearm: WeaponId, melee: WeaponId, primary: WeaponId | null = null, gadget: GadgetId | null = null): StoryKit => ({ sidearm, melee, primary, gadget });
 const enemy = (character: CharacterId, role: StoryRole | 'self', k: StoryKit, difficulty: BotDifficulty = 'normal', extra: Partial<StoryNpc> = {}): StoryNpc => ({ character, role, side: 'enemy', kit: k, difficulty, ...extra });
-const ally = (character: CharacterId, k: StoryKit, difficulty: BotDifficulty = 'normal'): StoryNpc => ({ character, role: 'self', side: 'ally', kit: k, difficulty });
+const ally = (character: CharacterId, k: StoryKit, difficulty: BotDifficulty = 'normal', role: StoryRole | 'self' = 'self'): StoryNpc => ({ character, role, side: 'ally', kit: k, difficulty });
 
 export const STORY_MISSIONS: readonly StoryMission[] = [
   // ── Petya «My Yard», chapter 1 «The Yard» ─────────────────────────────────
@@ -172,16 +173,100 @@ export const STORY_MISSIONS: readonly StoryMission[] = [
     objective: { kind: 'team', limit: 5 }, timeLimitMs: 300_000, meets: ['petya'], talons: 120, xp: 80,
     npcs: [enemy('petya', 'self', kit('pistol', 'montirovka', 'avtomat', 'f1'), 'hard', { boss: true })],
   },
+  // ── Petya «My Yard», chapter 2 «The Garages» ──────────────────────────────
+  {
+    id: 'a6', campaign: 'petya', chapter: 2, n: 6, map: 'garages', hero: 'petya', kit: kit('pistol', 'montirovka', 'avtomat', 'f1'),
+    objective: { kind: 'team', limit: 10 }, timeLimitMs: 300_000, meets: ['varan'], talons: 110, xp: 70,
+    npcs: [
+      ally('varan', kit('pistol', 'montirovka', 'obrez')),
+      enemy('buyvol', 'scrapper', kit('pistol', 'montirovka', 'obrez')), enemy('svinya', 'scrapper', kit('pistol', 'bita'), 'easy'), enemy('gorilla', 'scrapper', kit('tt', 'kuvalda', 'uzi'), 'easy'),
+    ],
+  },
+  {
+    id: 'a7', campaign: 'petya', chapter: 2, n: 7, map: 'factory', hero: 'petya', kit: kit('pistol', 'montirovka', 'avtomat', 'molotov'),
+    objective: { kind: 'survive' }, timeLimitMs: 75_000, meets: ['tarakan'], talons: 120, xp: 75,
+    npcs: [
+      ally('tarakan', kit('pistol', 'nozh', 'ppsh')),
+      enemy('krysa', 'patrol', kit('pistol', 'bita'), 'easy'), enemy('golub', 'patrol', kit('pistol', 'bita'), 'easy'), enemy('slon', 'patrol', kit('tt', 'montirovka', 'obrez'), 'easy'), enemy('nosorog', 'patrol', kit('pistol', 'bita')),
+    ],
+  },
+  {
+    id: 'a8', campaign: 'petya', chapter: 2, n: 8, map: 'camp', hero: 'petya', kit: kit('pistol', 'montirovka', 'ksyuha', 'smoke'),
+    objective: { kind: 'flag', limit: 2 }, timeLimitMs: 360_000, meets: ['popugay'], talons: 130, xp: 80,
+    npcs: [
+      ally('popugay', kit('pistol', 'nozh', 'mp5')),
+      enemy('leopard', 'courier', kit('pistol', 'nozh', 'uzi')), enemy('krysa', 'courier', kit('tt', 'bita', 'ksyuha'), 'easy'), enemy('svinya', 'courier', kit('pistol', 'montirovka', 'obrez'), 'easy'),
+    ],
+  },
+  {
+    id: 'a9', campaign: 'petya', chapter: 2, n: 9, map: 'gastronom', hero: 'petya', kit: kit('pistol', 'montirovka', 'avtomat', 'f1'),
+    objective: { kind: 'clear' }, timeLimitMs: 300_000, waveGapMs: 1500, meets: ['zmeya'], talons: 140, xp: 90,
+    npcs: [
+      enemy('golub', 'suitor', kit('pistol', 'bita'), 'easy'), enemy('buyvol', 'suitor', kit('pistol', 'nozh'), 'easy'),
+      enemy('krysa', 'suitor', kit('tt', 'bita', 'ksyuha'), 'easy', { wave: 1 }), enemy('gorilla', 'suitor', kit('pistol', 'montirovka', 'obrez'), 'easy', { wave: 1 }),
+      enemy('zmeya', 'self', kit('p92', 'nozh', 'uzi', 'smoke'), 'normal', { wave: 2, boss: true }),
+    ],
+  },
+  {
+    id: 'a10', campaign: 'petya', chapter: 2, n: 10, map: 'garages', hero: 'petya', kit: kit('pistol', 'montirovka', 'avtomat', 'mine'),
+    objective: { kind: 'bases', limit: 100 }, timeLimitMs: 360_000, meets: [], talons: 160, xp: 100,
+    npcs: [
+      ally('mihalych', kit('pistol', 'montirovka', 'avtomat', 'f1')), ally('varan', kit('pistol', 'montirovka', 'obrez')),
+      enemy('slon', 'workshop', kit('tt', 'bita', 'avtomat')), enemy('nosorog', 'workshop', kit('pistol', 'montirovka', 'obrez')), enemy('leopard', 'workshop', kit('pistol', 'nozh', 'mp5'), 'easy'), enemy('gorilla', 'workshop', kit('pistol', 'bita', 'ksyuha'), 'easy'),
+    ],
+  },
+  // ── Uchastkovy «The Report», chapter 2 «The Black Market» ─────────────────
+  {
+    id: 'b6', campaign: 'uchastkovy', chapter: 2, n: 6, map: 'square', hero: 'uchastkovy', kit: kit('pistol', 'bita', 'ksyuha', 'flash'),
+    objective: { kind: 'clear' }, timeLimitMs: 300_000, waveGapMs: 1500, meets: ['lobster'], talons: 110, xp: 70,
+    npcs: [
+      enemy('svinya', 'fence', kit('pistol', 'bita'), 'easy'), enemy('golub', 'fence', kit('tt', 'nozh'), 'easy'),
+      enemy('krysa', 'fence', kit('pistol', 'montirovka', 'uzi'), 'easy', { wave: 1 }), enemy('buyvol', 'fence', kit('pistol', 'bita', 'obrez'), 'easy', { wave: 1 }),
+      enemy('lobster', 'self', kit('tt', 'nozh', 'tulka', 'molotov'), 'normal', { wave: 2, boss: true }),
+    ],
+  },
+  {
+    id: 'b7', campaign: 'uchastkovy', chapter: 2, n: 7, map: 'hospital', hero: 'uchastkovy', kit: kit('pistol', 'bita', 'avtomat', 'f1'),
+    objective: { kind: 'team', limit: 10 }, timeLimitMs: 300_000, meets: ['akula'], talons: 120, xp: 75,
+    npcs: [
+      ally('koshka', kit('p92', 'nozh', 'mp5', 'smoke')),
+      enemy('gorilla', 'guard', kit('pistol', 'montirovka', 'avtomat')), enemy('slon', 'guard', kit('tt', 'bita', 'uzi'), 'easy'), enemy('akula', 'self', kit('p92', 'nozh', 'mp5'), 'normal', { boss: true }),
+    ],
+  },
+  {
+    id: 'b8', campaign: 'uchastkovy', chapter: 2, n: 8, map: 'factory', hero: 'uchastkovy', kit: kit('pistol', 'bita', 'ksyuha', 'smoke'),
+    objective: { kind: 'flag', limit: 2 }, timeLimitMs: 360_000, meets: ['oryol'], talons: 130, xp: 80,
+    npcs: [
+      ally('koshka', kit('p92', 'nozh', 'mp5', 'smoke')),
+      enemy('krysa', 'smuggler', kit('pistol', 'montirovka', 'ksyuha'), 'easy'), enemy('buyvol', 'smuggler', kit('tt', 'bita', 'obrez'), 'easy'), enemy('oryol', 'self', kit('p92', 'nozh', 'm4'), 'normal', { boss: true }),
+    ],
+  },
+  {
+    id: 'b9', campaign: 'uchastkovy', chapter: 2, n: 9, map: 'cemetery', hero: 'uchastkovy', kit: kit('pistol', 'bita', 'avtomat', 'flash'),
+    objective: { kind: 'survive' }, timeLimitMs: 75_000, meets: [], talons: 140, xp: 90,
+    npcs: [
+      ally('koshka', kit('p92', 'nozh', 'mp5', 'smoke')),
+      enemy('golub', 'smuggler', kit('pistol', 'bita'), 'easy'), enemy('svinya', 'smuggler', kit('pistol', 'montirovka', 'obrez'), 'easy'), enemy('leopard', 'smuggler', kit('pistol', 'nozh')), enemy('krysa', 'smuggler', kit('tt', 'bita'), 'easy'),
+    ],
+  },
+  {
+    id: 'b10', campaign: 'uchastkovy', chapter: 2, n: 10, map: 'camp', hero: 'uchastkovy', kit: kit('pistol', 'bita', 'avtomat', 'f1'),
+    objective: { kind: 'bases', limit: 100 }, timeLimitMs: 360_000, meets: [], talons: 160, xp: 100,
+    npcs: [
+      ally('koshka', kit('p92', 'nozh', 'mp5', 'smoke')), ally('golub', kit('pistol', 'bita', 'ksyuha'), 'normal', 'patrol'),
+      enemy('slon', 'smuggler', kit('tt', 'bita', 'avtomat'), 'easy'), enemy('nosorog', 'smuggler', kit('pistol', 'montirovka', 'obrez'), 'easy'), enemy('gorilla', 'smuggler', kit('pistol', 'bita', 'uzi'), 'easy'), enemy('oryol', 'self', kit('p92', 'nozh', 'm4'), 'normal', { boss: true }),
+    ],
+  },
 ];
 
 /** The chapters, the written ones and the ones on the way (with the rewards they will bring). */
 export const STORY_CHAPTERS: readonly StoryChapter[] = [
   { campaign: 'petya', chapter: 1, ready: true, achievement: 'story_petya_1', talons: 500, characters: [], skins: ['montirovka.hohloma'] },
-  { campaign: 'petya', chapter: 2, ready: false, achievement: null, talons: 600, characters: [], skins: [] },
+  { campaign: 'petya', chapter: 2, ready: true, achievement: 'story_petya_2', talons: 600, characters: [], skins: [] },
   { campaign: 'petya', chapter: 3, ready: false, achievement: null, talons: 700, characters: ['golub'], skins: [] },
   { campaign: 'petya', chapter: 4, ready: false, achievement: null, talons: 1000, characters: [], skins: ['avtomat.zoloto'] },
   { campaign: 'uchastkovy', chapter: 1, ready: true, achievement: 'story_uchastkovy_1', talons: 500, characters: ['uchastkovy'], skins: [] },
-  { campaign: 'uchastkovy', chapter: 2, ready: false, achievement: null, talons: 600, characters: ['koshka'], skins: ['pistol.gzhel'] },
+  { campaign: 'uchastkovy', chapter: 2, ready: true, achievement: 'story_uchastkovy_2', talons: 600, characters: ['koshka'], skins: ['pistol.gzhel'] },
   { campaign: 'uchastkovy', chapter: 3, ready: false, achievement: null, talons: 700, characters: [], skins: [] },
   { campaign: 'uchastkovy', chapter: 4, ready: false, achievement: null, talons: 1000, characters: [], skins: [] },
 ];

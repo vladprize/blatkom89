@@ -46,7 +46,7 @@ export const CAMPAIGNS: Record<StoryCampaign, { hero: CharacterId; title: Line; 
 /** Chapter names (the ones not written yet are shown as «coming soon»). */
 export const CHAPTER_TITLES: Record<StoryCampaign, readonly Line[]> = {
   petya: [['The Yard', 'Двор'], ['The Garages', 'Гаражи'], ['The Industrial Zone', 'Промзона'], ['The Yard Against Everyone', 'Двор против всех']],
-  uchastkovy: [['The Beat', 'Участок'], ['The Market and the Port', 'Рынок и порт'], ['Downtown', 'Центр'], ['Tape No. 89', 'Кассета №89']],
+  uchastkovy: [['The Beat', 'Участок'], ['The Black Market', 'Толкучка'], ['Downtown', 'Центр'], ['Tape No. 89', 'Кассета №89']],
 };
 
 /** What the narrator says when a mission is lost. */
@@ -64,6 +64,14 @@ export const ROLE_NAMES: Record<StoryRole, Line> = {
   pilferer: ['Pilferer', 'Несун'],
   dancer: ['Dancer', 'Танцор'],
   garage: ['Garage Man', 'Гаражник'],
+  scrapper: ['Scrap Collector', 'Металлист'],
+  patrol: ['Patrol Volunteer', 'Дружинник'],
+  courier: ['Courier', 'Курьер'],
+  suitor: ['Admirer', 'Ухажёр'],
+  workshop: ['Workshop Man', 'Цеховой'],
+  fence: ['Fence', 'Барыга'],
+  guard: ['Bouncer', 'Охранник'],
+  smuggler: ['Smuggler', 'Контрабандист'],
 };
 
 export const PEOPLE_2089: Record<Person2089, { art: CharacterId; name: Line }> = {
@@ -307,6 +315,237 @@ export const MISSION_SCRIPTS: Record<string, MissionScript> = {
       { who: 'caption', say: ['The Commandant got away through the basement. With the tape.', 'Комендант ушёл через подвал. Кассету унёс с собой.'] },
       { who: 'uchastkovy', say: ['His yard, he says. We’ll see whose yard it is.', 'Двор, говорит. Посмотрим, чей это двор.'] },
       { who: 'volkov', fx: 'neon', say: ['2089. Oversight. Inspector Volkov opens his eyes: “He isn’t a crook. He’s… a residents’ committee head.”', '2089. Отдел надзора. Инспектор Волков открывает глаза: «Он не жулик. Он… старший по дому».'] },
+    ],
+  },
+  // ── «My Yard», chapter 2 «The Garages» ─────────────────────────────────────
+  a6: {
+    title: ['The VCR', 'Видак'],
+    goal: ['Drive off the scrap collectors: {score} of {limit}', 'Прогони металлистов: {score} из {limit}'],
+    intro: [
+      { who: 'caption', fx: 'vhs', say: ['The garage cooperative «Motorist». The tape needs a VCR. The VCR needs Tolyan.', 'Гаражный кооператив «Автолюбитель». Для кассеты нужен видак. Для видака — Толян.'] },
+      { who: 'petya', say: ['They say you’ve got a VCR. A working one.', 'Говорят, у тебя видак есть. Рабочий.'] },
+      { who: 'varan', say: ['Assembled from three dead ones. Plays anything. Rewinds by hand.', 'Собран из трёх покойных. Показывает всё. Перематывает вручную.'] },
+      { who: 'varan', say: ['Only right now the scrap collectors are taking my garage apart. For parts. With me inside.', 'Только сейчас металлисты разбирают мой гараж. На запчасти. Вместе со мной.'] },
+      { who: 'petya', say: ['Scrap collectors. In my district.', 'Металлисты. В моём районе.'] },
+      { who: 'varan', say: ['Help me out and the VCR is yours for the evening. With popcorn. Well, with sunflower seeds.', 'Поможешь — видак твой на вечер. С попкорном. Ну, с семечками.'] },
+    ],
+    barks: {
+      start: { who: 'varan', say: ['Don’t let them near the workbench!', 'К верстаку не подпускай!'] },
+      half: { who: 'petya', say: ['This is a garage, not a scrapyard!', 'Это гараж, а не пункт приёма!'] },
+      lowHp: { who: 'varan', say: ['Hold on, I’ll weld you back together later.', 'Держись, потом заварю.'] },
+      win: { who: 'varan', say: ['The VCR is saved. The garage — almost.', 'Видак спасён. Гараж — почти.'] },
+    },
+    outro: [
+      { who: 'caption', say: ['Evening. The garage. The VCR hums like a tram. The tape goes in.', 'Вечер. Гараж. Видак гудит, как трамвай. Кассета входит.'] },
+      { who: 'caption', fx: 'vhs', say: ['On the screen: our yard. Only instead of the lilac — a grey tower. Nine hundred parking spaces.', 'На экране — наш двор. Только вместо сирени — серая башня. Девятьсот машиномест.'] },
+      { who: 'varan', say: ['Is that a film? Science fiction?', 'Это кино? Фантастика?'] },
+      { who: 'petya', say: ['It’s a threat. Somebody wants this yard. Not now — later. And for good.', 'Это угроза. Кто-то хочет этот двор. Не сейчас — потом. И насовсем.'] },
+    ],
+  },
+  a7: {
+    title: ['The Heating Main', 'Теплотрасса'],
+    goal: ['Hold out until the patrol gives up', 'Продержись, пока дружинникам не надоест'],
+    intro: [
+      { who: 'caption', say: ['Morning. Volunteer patrols are combing the garages. Word is, the police are looking for a tape.', 'Утро. По гаражам ходят дружинники. Говорят, милиция ищет кассету.'] },
+      { who: 'tarakan', say: ['Psst. Down here. Not through the gate — through the hatch.', 'Тс-с. Сюда. Не через ворота — через люк.'] },
+      { who: 'petya', say: ['And who might you be?', 'А ты кто такой?'] },
+      { who: 'tarakan', say: ['Prusak. I live where it’s warm. The heating main runs under the whole district — I know every valve.', 'Прусак. Я живу там, где тепло. Теплотрасса идёт под всем районом — я каждую задвижку знаю.'] },
+      { who: 'tarakan', say: ['The patrol will come down after us. We just hold out until they get bored. They get bored fast.', 'Дружинники полезут следом. Надо продержаться, пока им не надоест. Им быстро надоедает.'] },
+      { who: 'petya', say: ['Holding out is something I know how to do.', 'Держаться — это я умею.'] },
+    ],
+    barks: {
+      start: { who: 'tarakan', say: ['Mind the pipes, they’re hot. So is the patrol.', 'Осторожно, трубы горячие. Дружинники тоже.'] },
+      firstKill: { who: 'petya', say: ['Off you go, volunteer. Volunteer somewhere else.', 'Иди, доброволец. Добровольничай в другом месте.'] },
+      lowHp: { who: 'tarakan', say: ['Breathe through your nose! The steam helps. Probably.', 'Дыши носом! Пар помогает. Наверное.'] },
+      win: { who: 'tarakan', say: ['That’s it, they’ve gone for tea. The patrol’s timetable is sacred.', 'Всё, ушли пить чай. Расписание у дружины святое.'] },
+    },
+    outro: [
+      { who: 'tarakan', say: ['Keep the tape down here, in the warm. Nobody looks for anything underground.', 'Кассету держи здесь, в тепле. Под землёй никто ничего не ищет.'] },
+      { who: 'petya', say: ['Fine. But first — who else wants it?', 'Ладно. Но сначала — кто ещё её хочет?'] },
+      { who: 'tarakan', say: ['Gosha knows. Gosha knows everything that passes from hand to hand.', 'Гоша знает. Гоша знает всё, что переходит из рук в руки.'] },
+    ],
+  },
+  a8: {
+    title: ['The Parcel', 'Посылка'],
+    goal: ['Get the parcels back to your stand: {score} of {limit}', 'Верни посылки на свою точку: {score} из {limit}'],
+    intro: [
+      { who: 'caption', say: ['The abandoned pioneer camp «Sunny Glade». Gosha holds his meetings here: nobody has answered the bugle for years.', 'Заброшенный пионерлагерь «Солнечная поляна». Здесь Гоша назначает встречи: на горн давно никто не приходит.'] },
+      { who: 'popugay', say: ['Petya! Petya! Good news and bad news. Which first?', 'Петя! Петя! Новость хорошая и плохая. С какой начать?'] },
+      { who: 'petya', say: ['The bad.', 'С плохой.'] },
+      { who: 'popugay', say: ['Couriers took the yard’s cash box. The playground money. Forty-three roubles and a button.', 'Курьеры увели кассу двора. Деньги на детскую площадку. Сорок три рубля и пуговица.'] },
+      { who: 'petya', say: ['And the good?', 'А хорошая?'] },
+      { who: 'popugay', say: ['They work for a serious man, and they’ll give it all back — if you hand over the tape. Was that the good one? I mixed them up.', 'Они работают на серьёзного человека и всё вернут — если отдашь кассету. Это была хорошая? Я перепутал.'] },
+    ],
+    barks: {
+      start: { who: 'popugay', say: ['I’ll repeat everything you say! Loudly!', 'Я повторю всё, что скажешь! Громко!'] },
+      flag: { who: 'petya', say: ['The cash box is mine! Forty-three roubles — and the button!', 'Касса у меня! Сорок три рубля — и пуговица!'] },
+      half: { who: 'popugay', say: ['One parcel home! One more!', 'Одна посылка дома! Ещё одна!'] },
+      win: { who: 'popugay', say: ['Delivered! Delivered! Sign here!', 'Доставлено! Доставлено! Распишитесь!'] },
+    },
+    outro: [
+      { who: 'popugay', say: ['The serious man won’t like this. He doesn’t like the word «no».', 'Серьёзному человеку это не понравится. Он не любит слово «нет».'] },
+      { who: 'petya', say: ['Then give him another word. «Yard».', 'Тогда передай ему другое слово. «Двор».'] },
+      { who: 'popugay', say: ['And watch out for Sonka. She’s been asking about you. Very sweetly.', 'И осторожнее с Сонькой. Она про тебя спрашивала. Очень ласково.'] },
+    ],
+  },
+  a9: {
+    title: ['Sonka', 'Сонька'],
+    goal: ['Get past the admirers: {left} left', 'Пробейся через ухажёров: осталось {left}'],
+    intro: [
+      { who: 'caption', say: ['The back room of the Jubilee grocery. It smells of herring and expensive perfume.', 'Подсобка гастронома «Юбилейный». Пахнет селёдкой и дорогими духами.'] },
+      { who: 'zmeya', say: ['So you’re the Commandant. I imagined someone taller. And without the comb.', 'Так вот ты какой, Комендант. Я думала, повыше. И без гребня.'] },
+      { who: 'petya', say: ['Where’s the tape, Sonka? It was in the heating main. Now it isn’t.', 'Где кассета, Сонька? Она была в теплотрассе. Теперь её там нет.'] },
+      { who: 'zmeya', say: ['Tapes come and go. Admirers stay. Boys — the Commandant is bothering me.', 'Кассеты приходят и уходят. Ухажёры остаются. Мальчики, Комендант ко мне пристаёт.'] },
+      { who: 'petya', say: ['Nobody is bothering anybody. Order is being restored.', 'Никто ни к кому не пристаёт. Наводится порядок.'] },
+    ],
+    barks: {
+      start: { who: 'zmeya', say: ['Gently, boys. Don’t crease his tracksuit.', 'Аккуратнее, мальчики. Не помните ему костюм.'] },
+      firstKill: { who: 'petya', say: ['Next admirer!', 'Следующий ухажёр!'] },
+      wave: { who: 'zmeya', say: ['Fine. I’ll do it myself. As always.', 'Ладно. Сама. Как всегда.'] },
+      lowHp: { who: 'petya', say: ['Herring and lead. A terrible combination.', 'Селёдка и свинец. Ужасное сочетание.'] },
+      win: { who: 'petya', say: ['Out of admirers. Talk.', 'Ухажёры кончились. Рассказывай.'] },
+    },
+    outro: [
+      { who: 'zmeya', say: ['Fine. I took it. And gave it to the Shadow Tycoon’s people. They pay in imported tights.', 'Ладно. Взяла. И отдала людям Цеховика. Они платят импортными колготками.'] },
+      { who: 'petya', say: ['Who is this Tycoon?', 'Кто такой этот Цеховик?'] },
+      { who: 'zmeya', say: ['Nobody has seen him. But tonight his men come to the garages — for the rest. For your Tolyan, for one.', 'Его никто не видел. Но сегодня ночью его люди придут в гаражи — за остальным. За твоим Толяном, например.'] },
+      { who: 'petya', say: ['Then tonight the garages are closed.', 'Тогда сегодня ночью гаражи закрыты.'] },
+    ],
+  },
+  a10: {
+    title: ['Night at the Cooperative', 'Ночь в кооперативе'],
+    goal: ['Hold the garages: {score} of {limit} points', 'Удержи гаражи: {score} из {limit} очков'],
+    intro: [
+      { who: 'caption', say: ['Midnight. The garage cooperative. Three boxes: Tolyan’s, the watchman’s and the one with the tape.', 'Полночь. Гаражный кооператив. Три бокса: Толяна, сторожа и тот, где кассета.'] },
+      { who: 'mihalych', say: ['I went out for bread. Again.', 'Я опять за хлебом вышел.'] },
+      { who: 'varan', say: ['Four of them. In overalls. With a «Workshop» stencil.', 'Их четверо. В спецовках. С трафаретом «Цех».'] },
+      { who: 'petya', say: ['Three boxes, three points. Whoever holds the garages holds the tape.', 'Три бокса — три точки. Кто держит гаражи, тот держит кассету.'] },
+      { who: 'mihalych', say: ['Order is what people hold up. Let’s hold up the garages.', 'Порядок держится на людях. Подержим гаражи.'] },
+    ],
+    barks: {
+      start: { who: 'mihalych', say: ['You take the watchman’s box. I’ll take the far one.', 'Бери будку сторожа. Я — дальний бокс.'] },
+      base: { who: 'varan', say: ['The box is ours! The light’s still on!', 'Бокс наш! Свет ещё горит!'] },
+      half: { who: 'petya', say: ['Halfway to dawn. Hold on!', 'Полпути до рассвета. Держимся!'] },
+      lowHp: { who: 'mihalych', say: ['Get down behind the car. I’ve seen worse.', 'Ложись за машину. Я и не такое видел.'] },
+      win: { who: 'petya', say: ['The garages are ours. Tell your Tycoon.', 'Гаражи наши. Передайте своему Цеховику.'] },
+    },
+    outro: [
+      { who: 'caption', say: ['Dawn. The tape is back. On its label someone has written in pencil: «A. A.»', 'Рассвет. Кассета вернулась. На наклейке кто-то написал карандашом: «А. А.»'] },
+      { who: 'varan', say: ['«A. A.»? Some kind of agency?', '«А. А.»? Агентство какое-то?'] },
+      { who: 'petya', say: ['Somebody. And that somebody wants my yard.', 'Кто-то. И этот кто-то хочет мой двор.'] },
+      { who: 'petr', fx: 'neon', say: ['2089. Capsule 2. Pyotr Petrovich frowns in his sleep: «A. A.… Arkadia… Arkadiev».', '2089. Капсула №2. Пётр Петрович хмурится во сне: «А. А.… Аркадия… Аркадьев».'] },
+    ],
+  },
+  // ── «The Report», chapter 2 «The Black Market» ────────────────────────────
+  b6: {
+    title: ['The Flea Market', 'Толкучка'],
+    goal: ['Close the stalls: {left} left', 'Закрой лотки: осталось {left}'],
+    intro: [
+      { who: 'caption', fx: 'vhs', say: ['Sunday. The flea market by the square. Everything is for sale here except a conscience — out of stock since spring.', 'Воскресенье. Толкучка у площади. Тут продают всё, кроме совести — её нет с весны.'] },
+      { who: 'koshka', say: ['Look, chief. Third row. «Tape No. 89 — a copy, the very one».', 'Смотри, начальник. Третий ряд. «Кассета №89 — копия, та самая».'] },
+      { who: 'uchastkovy', say: ['Copies. Already copies. Who is selling?', 'Копии. Уже копии. Кто торгует?'] },
+      { who: 'koshka', say: ['Slavik. He sells anything that was somebody else’s yesterday.', 'Славик. Он продаёт всё, что вчера было чьим-то.'] },
+      { who: 'uchastkovy', say: ['Citizens, the market is closed. Sanitary day.', 'Граждане, рынок закрыт. Санитарный день.'] },
+    ],
+    barks: {
+      start: { who: 'uchastkovy', say: ['Hands where I can see them! The goods too!', 'Руки на виду! И товар тоже!'] },
+      firstKill: { who: 'uchastkovy', say: ['One stall closed.', 'Один лоток закрыт.'] },
+      wave: { who: 'lobster', say: ['Hey, chief! Want a tape? Slightly used. By you.', 'Эй, начальник! Кассету надо? Слегка б/у. Тобой.'] },
+      win: { who: 'uchastkovy', say: ['The market is closed. The goods are evidence.', 'Рынок закрыт. Товар — вещдок.'] },
+    },
+    outro: [
+      { who: 'lobster', say: ['Copies, chief, copies! I don’t make them, I resell them. They come from Zhora’s cooperative.', 'Копии, начальник, копии! Я их не делаю, я перепродаю. Они идут из кооператива Жоры.'] },
+      { who: 'uchastkovy', say: ['A cooperative. Producing what?', 'Кооператив. Что производит?'] },
+      { who: 'lobster', say: ['Officially — jeans. Unofficially — also jeans. And tapes.', 'Официально — джинсы. Неофициально — тоже джинсы. И кассеты.'] },
+    ],
+  },
+  b7: {
+    title: ['The Cooperative', 'Кооператив'],
+    goal: ['Shut the cooperative down: {score} of {limit}', 'Прикрой кооператив: {score} из {limit}'],
+    intro: [
+      { who: 'caption', say: ['City Hospital No. 3. The basement. A sign: «Cooperative “Progress”. Sewing. Copying. No entry».', 'Городская больница №3. Подвал. Табличка: «Кооператив „Прогресс“. Пошив. Тиражирование. Посторонним вход воспрещён».'] },
+      { who: 'akula', say: ['Comrade lieutenant! What an honour. Jeans? Your size, the latest model.', 'Товарищ лейтенант! Какие люди. Джинсы? Ваш размер, последняя модель.'] },
+      { who: 'uchastkovy', say: ['Citizen Zhora. Tapes. Number eighty-nine. Copied here.', 'Гражданин Жора. Кассеты. Номер восемьдесят девять. Копируются здесь.'] },
+      { who: 'akula', say: ['I am a businessman. Everything here is licensed. The licence is in the other basement.', 'Я бизнесмен. Здесь всё по лицензии. Лицензия — в другом подвале.'] },
+      { who: 'koshka', say: ['Chief, there are three of them with guns and one with a sewing machine.', 'Начальник, их трое со стволами и один со швейной машинкой.'] },
+    ],
+    barks: {
+      start: { who: 'akula', say: ['Boys, show the lieutenant the way out.', 'Ребята, проводите лейтенанта к выходу.'] },
+      half: { who: 'koshka', say: ['Half a shift done, chief!', 'Полсмены отработали, начальник!'] },
+      lowHp: { who: 'koshka', say: ['Don’t fall over in a hospital — they’ll keep you in for tests.', 'Не падай в больнице — оставят на обследование.'] },
+      win: { who: 'uchastkovy', say: ['The cooperative is closed for stocktaking.', 'Кооператив закрыт на учёт.'] },
+    },
+    outro: [
+      { who: 'akula', say: ['All right, all right. The originals aren’t mine. They come by truck — Garik brings them. The American.', 'Ладно, ладно. Оригиналы не мои. Их привозит Гарик. Американец.'] },
+      { who: 'uchastkovy', say: ['An American. In our district.', 'Американец. В нашем районе.'] },
+      { who: 'koshka', say: ['He’s from the next district, chief. He just chews gum.', 'Он с соседнего района, начальник. Просто жвачку жуёт.'] },
+    ],
+  },
+  b8: {
+    title: ['The Cargo', 'Груз'],
+    goal: ['Drag the crates to your car: {score} of {limit}', 'Перетащи ящики к своей машине: {score} из {limit}'],
+    intro: [
+      { who: 'caption', say: ['The factory checkpoint, night. A truck marked «Bread» has stood here for three days. It doesn’t smell of bread.', 'Заводская проходная, ночь. Третий день стоит грузовик с надписью «Хлеб». Хлебом не пахнет.'] },
+      { who: 'oryol', say: ['Hey, officer! Easy, easy. Everything’s okay. Very okay.', 'Хэй, офицер! Изи, изи. Всё окей. Очень окей.'] },
+      { who: 'uchastkovy', say: ['Citizen Garik. What is in the crates?', 'Гражданин Гарик. Что в ящиках?'] },
+      { who: 'oryol', say: ['Bread. Foreign bread. With buttons: play, stop, rewind.', 'Хлеб. Иностранный хлеб. С кнопками: плей, стоп, перемотка.'] },
+      { who: 'koshka', say: ['Two crates, chief. Get them to our car and they become evidence.', 'Два ящика, начальник. Дотащишь до нашей машины — станут вещдоками.'] },
+    ],
+    barks: {
+      start: { who: 'oryol', say: ['Guys, protect the business!', 'Парни, защищайте бизнес!'] },
+      flag: { who: 'uchastkovy', say: ['Crate confiscated! Cover me!', 'Ящик изъят! Прикрой!'] },
+      half: { who: 'koshka', say: ['One crate is ours!', 'Один ящик наш!'] },
+      win: { who: 'uchastkovy', say: ['The bread is confiscated. With all its buttons.', 'Хлеб изъят. Со всеми кнопками.'] },
+    },
+    outro: [
+      { who: 'caption', say: ['In the crates: foreign VCRs. And a stack of blank tapes, every one labelled «89».', 'В ящиках — иностранные видаки. И пачка чистых кассет, на каждой — «89».'] },
+      { who: 'oryol', say: ['I’m only the driver! The buyer is the Tycoon. The deal is tonight. At the cemetery.', 'Я только водитель! Покупатель — Цеховик. Сделка сегодня ночью. На кладбище.'] },
+      { who: 'uchastkovy', say: ['At the cemetery. Naturally.', 'На кладбище. Естественно.'] },
+    ],
+  },
+  b9: {
+    title: ['The Cemetery', 'Кладбище'],
+    goal: ['Hold out until the patrol car arrives', 'Продержись до приезда наряда'],
+    intro: [
+      { who: 'caption', say: ['The old cemetery. Midnight. The deal was here. The buyer wasn’t.', 'Старое кладбище. Полночь. Сделка была здесь. Покупателя не было.'] },
+      { who: 'koshka', say: ['It’s a trap, chief. They knew we would come.', 'Это ловушка, начальник. Они знали, что мы придём.'] },
+      { who: 'uchastkovy', say: ['I’ve called for backup. The car will be here in a minute and a half.', 'Я вызвал наряд. Машина будет через полторы минуты.'] },
+      { who: 'koshka', say: ['A minute and a half in a cemetery at night. How romantic.', 'Полторы минуты на кладбище ночью. Романтика.'] },
+    ],
+    barks: {
+      start: { who: 'uchastkovy', say: ['Behind the headstones! And no jokes about headstones.', 'За надгробия! И без шуток про надгробия.'] },
+      firstKill: { who: 'uchastkovy', say: ['One is having a rest.', 'Один отдыхает.'] },
+      lowHp: { who: 'koshka', say: ['Chief, it’s too early for you to stay here!', 'Начальник, тебе тут оставаться рано!'] },
+      win: { who: 'uchastkovy', say: ['The siren. Backup is here. Everyone, face down.', 'Сирена. Наряд прибыл. Всем лицом вниз.'] },
+    },
+    outro: [
+      { who: 'koshka', say: ['The smugglers kept talking about a warehouse. At the pioneer camp. Everything is stored there.', 'Контрабандисты болтали про склад. В пионерлагере. Там всё хранится.'] },
+      { who: 'uchastkovy', say: ['Then at dawn — a raid.', 'Тогда на рассвете — облава.'] },
+    ],
+  },
+  b10: {
+    title: ['The Raid', 'Облава'],
+    goal: ['Take the camp: {score} of {limit} points', 'Возьми лагерь: {score} из {limit} очков'],
+    intro: [
+      { who: 'caption', fx: 'vhs', say: ['Dawn. The pioneer camp «Sunny Glade». In the cabins: crates, crates, crates.', 'Рассвет. Пионерлагерь «Солнечная поляна». В корпусах — ящики, ящики, ящики.'] },
+      { who: 'uchastkovy', say: ['Three cabins. Three points. We take them in order, by the regulations.', 'Три корпуса. Три точки. Берём по порядку, как положено.'] },
+      { who: 'koshka', say: ['And the volunteer patrol is with us. One of them even has a whistle.', 'И дружина с нами. У одного даже свисток есть.'] },
+      { who: 'oryol', say: ['Officer! Let’s talk business! Fifty-fifty!', 'Офицер! Давай договоримся! Фифти-фифти!'] },
+      { who: 'uchastkovy', say: ['Fifty-fifty is a bribe. And bribes go into the report.', 'Фифти-фифти — это взятка. А взятки идут в протокол.'] },
+    ],
+    barks: {
+      start: { who: 'uchastkovy', say: ['Raid! Nobody move — and nobody run!', 'Облава! Никому не двигаться — и не бегать!'] },
+      base: { who: 'koshka', say: ['That cabin is ours! Tapes under the beds!', 'Корпус наш! Под кроватями — кассеты!'] },
+      half: { who: 'uchastkovy', say: ['Halfway. The camp is almost ours.', 'Полдела. Лагерь почти наш.'] },
+      lowHp: { who: 'koshka', say: ['Chief, the infirmary is the last cabin on the left!', 'Начальник, медпункт — последний корпус слева!'] },
+      win: { who: 'uchastkovy', say: ['The camp is taken. Lights out.', 'Лагерь взят. Отбой.'] },
+    },
+    outro: [
+      { who: 'caption', say: ['On the camp noticeboard: a list of deliveries. Signed: «A. Arkadiev, Arkadia».', 'На доске объявлений лагеря — список поставок. Подпись: «А. Аркадьев, „Аркадия“».'] },
+      { who: 'koshka', say: ['Chief, I’ll tell you for free: everything leads to him. The Tycoon. And that’s the last free tip.', 'Начальник, скажу бесплатно: всё ведёт к нему. К Цеховику. И это последняя бесплатная подсказка.'] },
+      { who: 'uchastkovy', say: ['Murka. Come and work with me. Officially.', 'Мурка. Иди ко мне работать. Официально.'] },
+      { who: 'koshka', say: ['Officially — no. But I’ll be around.', 'Официально — нет. Но рядом буду.'] },
+      { who: 'volkov', fx: 'neon', say: ['2089. Oversight. Inspector Volkov writes in the case file: «Arkadiev. Arkadia Development. Coincidence?»', '2089. Отдел надзора. Инспектор Волков пишет в деле: «Аркадьев. „Аркадия Девелопмент“. Совпадение?»'] },
     ],
   },
 };

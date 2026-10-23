@@ -145,8 +145,9 @@ export class StorySession extends OfflineSession {
         }
         if (this.enemyIds.has(victim.id)) {
           if (e.killer === me) this.cue('firstKill');
-          // «clear»: the ones who are down stay down
+          // «clear»: the ones who are down stay down; «survive»: they come back, but not at once
           if (this.mission.objective.kind === 'clear') victim.respawnAt = Number.POSITIVE_INFINITY;
+          else if (this.mission.objective.kind === 'survive') victim.respawnAt = this.world.time + STORY_RULES.surviveRespawnMs;
         }
         break;
       }

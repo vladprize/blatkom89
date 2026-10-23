@@ -7324,6 +7324,7 @@ var KON_RATING = Object.freeze({ start: 1e3, floor: 100, k: 24, kNew: 40, newMat
 var KON_STAKES = Object.freeze({ enabled: false, minStake: 100, maxStake: 1e4 });
 
 // packages/shared/src/story/missions.ts
+var STORY_RULES = Object.freeze({ heroDamage: 0.5, lives: 3 });
 var STORY_TICKET_TTL_MS = 3 * 36e5;
 var kit = (sidearm2, melee2, primary2 = null, gadget = null) => ({ sidearm: sidearm2, melee: melee2, primary: primary2, gadget });
 var enemy = (character, role, k, difficulty = "normal", extra = {}) => ({ character, role, side: "enemy", kit: k, difficulty, ...extra });
@@ -7367,7 +7368,7 @@ var STORY_MISSIONS = [
     n: 3,
     map: "garages",
     hero: "petya",
-    kit: kit("pistol", "montirovka", "obrez", "f1"),
+    kit: kit("pistol", "montirovka", "ksyuha", "f1"),
     objective: { kind: "clear" },
     timeLimitMs: 3e5,
     waveGapMs: 1500,
@@ -7375,11 +7376,11 @@ var STORY_MISSIONS = [
     talons: 90,
     xp: 60,
     npcs: [
-      enemy("lobster", "speculator", kit("pistol", "nozh", "uzi")),
-      enemy("zmeya", "speculator", kit("tt", "nozh", "ksyuha")),
-      enemy("popugay", "speculator", kit("pistol", "bita")),
-      enemy("tarakan", "speculator", kit("pistol", "montirovka", "obrez"), "normal", { wave: 1 }),
-      enemy("krysa", "speculator", kit("tt", "bita", "avtomat"), "normal", { wave: 1 })
+      enemy("popugay", "speculator", kit("pistol", "bita"), "easy"),
+      enemy("lobster", "speculator", kit("pistol", "nozh"), "easy"),
+      enemy("zmeya", "speculator", kit("tt", "nozh", "ksyuha"), "easy", { wave: 1 }),
+      enemy("tarakan", "speculator", kit("pistol", "montirovka", "obrez"), "easy", { wave: 1 }),
+      enemy("krysa", "speculator", kit("tt", "bita", "avtomat"), "normal", { wave: 2 })
     ]
   },
   {
@@ -7456,7 +7457,7 @@ var STORY_MISSIONS = [
     n: 3,
     map: "dk",
     hero: "uchastkovy",
-    kit: kit("pistol", "bita", "obrez", "f1"),
+    kit: kit("pistol", "bita", "ksyuha", "f1"),
     objective: { kind: "clear" },
     timeLimitMs: 3e5,
     waveGapMs: 1500,
@@ -7464,11 +7465,11 @@ var STORY_MISSIONS = [
     talons: 90,
     xp: 60,
     npcs: [
-      enemy("krysa", "dancer", kit("pistol", "bita")),
-      enemy("svinya", "dancer", kit("pistol", "topor")),
-      enemy("tarakan", "dancer", kit("tt", "nozh")),
-      enemy("golub", "dancer", kit("pistol", "bita", "uzi")),
-      enemy("piranya", "self", kit("pistol", "topor", "obrez", "molotov"), "hard", { wave: 1, boss: true })
+      enemy("krysa", "dancer", kit("pistol", "bita"), "easy"),
+      enemy("svinya", "dancer", kit("pistol", "topor"), "easy"),
+      enemy("tarakan", "dancer", kit("tt", "nozh"), "easy", { wave: 1 }),
+      enemy("golub", "dancer", kit("pistol", "bita"), "easy", { wave: 1 }),
+      enemy("piranya", "self", kit("pistol", "topor", "obrez", "molotov"), "normal", { wave: 2, boss: true })
     ]
   },
   {
@@ -7479,12 +7480,12 @@ var STORY_MISSIONS = [
     map: "garages",
     hero: "uchastkovy",
     kit: kit("pistol", "bita", "avtomat", "f1"),
-    objective: { kind: "bases", limit: 120 },
+    objective: { kind: "bases", limit: 100 },
     timeLimitMs: 36e4,
     meets: [],
     talons: 100,
     xp: 70,
-    npcs: [ally("koshka", kit("p92", "nozh", "mp5", "smoke")), enemy("varan", "garage", kit("pistol", "montirovka", "obrez")), enemy("buyvol", "garage", kit("tt", "bita", "avtomat")), enemy("gorilla", "garage", kit("pistol", "montirovka", "uzi"))]
+    npcs: [ally("koshka", kit("p92", "nozh", "mp5", "smoke")), enemy("varan", "garage", kit("pistol", "montirovka", "obrez"), "easy"), enemy("buyvol", "garage", kit("tt", "bita", "avtomat"), "easy"), enemy("gorilla", "garage", kit("pistol", "montirovka", "uzi"), "easy")]
   },
   {
     id: "b5",

@@ -1,6 +1,6 @@
 {
   "name": "blatkom89",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "private": true,
   "description": "БЛАТКОМ ’89 — top-down 2D multiplayer action for Telegram Mini Apps",
   "type": "module",

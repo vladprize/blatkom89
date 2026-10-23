@@ -92,7 +92,13 @@ test('story: what is open — the first mission of each campaign, then one after
   assert.ok(!isChapterDone('petya', 1, done));
   for (const id of ['a2', 'a3', 'a4', 'a5']) done.add(id);
   assert.ok(isChapterDone('petya', 1, done));
-  assert.equal(nextMission('petya', done), null, 'chapter 2 is not written yet');
-  assert.ok(!isChapterDone('petya', 2, done), 'an unwritten chapter is never done');
   assert.deepEqual([...charactersMet(done)].sort(), ['mihalych', 'uchastkovy', 'valuta', 'vorona']);
+  // chapter 2 follows chapter 1 (v0.2.13); chapter 3 is not written yet
+  assert.equal(nextMission('petya', done)?.id, 'a6');
+  assert.ok(!isChapterDone('petya', 2, done));
+  for (const id of ['a6', 'a7', 'a8', 'a9', 'a10']) done.add(id);
+  assert.ok(isChapterDone('petya', 2, done));
+  assert.equal(nextMission('petya', done), null, 'chapter 3 is not written yet');
+  assert.ok(!isChapterDone('petya', 3, done), 'an unwritten chapter is never done');
+  assert.deepEqual([...charactersMet(done)].sort(), ['mihalych', 'popugay', 'tarakan', 'uchastkovy', 'valuta', 'varan', 'vorona', 'zmeya']);
 });

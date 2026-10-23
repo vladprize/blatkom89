@@ -1305,8 +1305,11 @@ button.chatline__name:hover { text-decoration: underline; }
   .kon__stats .kon__rating small { margin-top: 0; }
 }
 /* v0.2.13: the story — the menu button, the hub, the comic, the mission overlay, the end of a mission */
-.menu__story { border-color: #2f7f95; background: linear-gradient(100deg, rgba(57, 208, 255, .16), rgba(255, 90, 209, .08) 55%, transparent), var(--panel-2); }
-.menu__story:hover { background: linear-gradient(100deg, rgba(57, 208, 255, .24), rgba(255, 90, 209, .12) 55%, transparent), #27211c; }
+.menu__story { border-color: #b3261e; background: linear-gradient(100deg, rgba(200, 49, 42, .36), rgba(138, 26, 22, .14) 55%, transparent), var(--panel-2); }
+.menu__story:hover { background: linear-gradient(100deg, rgba(200, 49, 42, .5), rgba(138, 26, 22, .2) 55%, transparent), #27211c; }
+/* the offline build: the story is the main button */
+.btn--red.menu__story { background: var(--red); border-color: #e0483c; }
+.btn--red.menu__story:hover { background: #d63a30; }
 @media (max-width: 560px) {
   /* the phone menu: Quick Match and the story side by side, then friends, Kon, practice */
   .menu__play--kon > .btn--red { grid-column: 1 / span 3; grid-row: 1; justify-content: center; text-align: center; }
@@ -1325,7 +1328,6 @@ button.chatline__name:hover { text-decoration: underline; }
 .scamp__head { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .scamp__head > img { width: 64px; height: 64px; border: 2px solid var(--tape); }
 .scamp__title { font-family: Oswald, sans-serif; font-weight: 700; font-size: 24px; line-height: 1.05; text-transform: uppercase; }
-.scamp--uchastkovy .scamp__title { color: #9cc7ef; }
 .scamp__tagline { font-size: 14px; line-height: 1.25; }
 .scamp__progress { display: flex; flex-direction: column; align-items: center; padding: 0 4px; }
 .scamp__progress b { font-family: Oswald, sans-serif; font-size: 26px; line-height: 1; color: var(--gold); font-variant-numeric: tabular-nums; }
@@ -1363,7 +1365,7 @@ button.chatline__name:hover { text-decoration: underline; }
 .sresult--fail > .tag { background: var(--red); color: #fff4e4; }
 .sresult__rewards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-family: Oswald, sans-serif; font-size: 20px; }
 .sresult__rewards .gold { color: var(--gold); }
-.sresult__caption { font-family: Caveat, cursive; font-size: 25px; line-height: 1.15; color: var(--beige); max-width: 460px; }
+.sresult__caption { max-width: 460px; background: var(--tape); color: #1a1410; font-family: Oswald, sans-serif; font-size: 19px; line-height: 1.3; padding: 10px 16px; transform: rotate(-.6deg); box-shadow: 0 3px 0 rgba(0, 0, 0, .45); }
 .sresult__err { color: #ff8a7a; max-width: 460px; }
 .sresult__btns { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 @media (max-width: 760px) {
@@ -1374,38 +1376,42 @@ button.chatline__name:hover { text-decoration: underline; }
 }
 
 /* the comic: one page at a time; 2089 in neon, 1989 on tape */
-.comic { position: fixed; inset: 0; z-index: 65; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; padding: calc(10px + var(--safe-top)) calc(14px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(14px + var(--safe-left)); background: radial-gradient(circle at 50% 35%, #2a1712 0%, #0b0908 75%); color: var(--beige); cursor: pointer; outline: none; touch-action: manipulation; }
+.comic { position: fixed; inset: 0; z-index: 65; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; padding: calc(10px + var(--safe-top)) calc(14px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(14px + var(--safe-left)); background: radial-gradient(circle at 50% 35%, #3a1310 0%, #0b0908 75%); color: var(--beige); font-family: Oswald, sans-serif; cursor: pointer; outline: none; touch-action: manipulation; }
 .comic::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .2) 0 1px, transparent 1px 3px); }
-.comic--neon { background: radial-gradient(circle at 50% 30%, #0f2238 0%, #05060c 75%); }
-.comic__bg { position: absolute; inset: -24px; background-size: cover; background-position: center; filter: blur(3px) brightness(.3) saturate(.75); pointer-events: none; }
+.comic--neon { background: radial-gradient(circle at 50% 30%, #4a0c0a 0%, #0b0505 75%); }
+.comic__bg { position: absolute; inset: 0; background-size: cover; background-position: center; filter: grayscale(1) sepia(1) saturate(5) hue-rotate(-40deg) brightness(.34) contrast(1.2); transform: translateZ(0); pointer-events: none; }
+/* the year, huge and faint, behind the pages: 2089 in neon, 1989 on tape */
+.comic__stage::before { position: absolute; z-index: 0; left: 50%; top: 50%; transform: translate(-50%, -50%); font-family: Oswald, sans-serif; font-weight: 700; font-size: min(34vw, 46vh); line-height: 1; letter-spacing: .02em; color: rgba(200, 49, 42, .07); pointer-events: none; }
+.comic--neon .comic__stage::before { content: '2089'; color: rgba(255, 59, 47, .08); text-shadow: 0 0 40px rgba(255, 59, 47, .12); }
+.comic--vhs .comic__stage::before { content: '1989'; }
 .comic--neon .comic__bg { display: none; }
 .comic__top { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 38px; }
 .comic__title { font-family: Oswald, sans-serif; text-transform: uppercase; letter-spacing: .08em; font-size: 14px; color: var(--muted); }
 .comic__stage { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
-.comic__panel { margin: 0; width: min(880px, 100%); display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: center; gap: 26px; animation: comic-in .22s ease-out; }
+.comic__panel { position: relative; z-index: 1; margin: 0; width: min(880px, 100%); display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: center; gap: 26px; animation: comic-in .22s ease-out; }
 .comic__panel--right { grid-template-columns: minmax(0, 1fr) minmax(0, 300px); }
 .comic__panel--right .comic__art { order: 2; transform: rotate(1deg); }
 .comic__art { display: block; width: 100%; max-height: 62vh; aspect-ratio: 3 / 4; object-fit: cover; border: 3px solid #0b0908; outline: 2px solid var(--tape); box-shadow: 0 8px 0 rgba(0, 0, 0, .45); transform: rotate(-1deg); }
-.comic__bubble { position: relative; background: #f4ead2; color: #1a1410; padding: 14px 18px; border-radius: 18px; box-shadow: 0 4px 0 rgba(0, 0, 0, .4); font-size: clamp(18px, 2.4vw, 23px); line-height: 1.25; }
+.comic__bubble { position: relative; background: #f4ead2; color: #1a1410; padding: 14px 18px; border-radius: 18px; box-shadow: 0 4px 0 rgba(0, 0, 0, .4); font-family: Oswald, sans-serif; font-weight: 400; font-size: clamp(18px, 2.3vw, 22px); line-height: 1.3; }
 .comic__bubble::after { content: ''; position: absolute; top: 50%; border: 12px solid transparent; transform: translateY(-50%); }
 .comic__panel--left .comic__bubble::after { left: -23px; border-right-color: #f4ead2; }
 .comic__panel--right .comic__bubble::after { right: -23px; border-left-color: #f4ead2; }
 .comic__who { display: block; margin-bottom: 4px; font-family: Oswald, sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; font-size: 14px; color: var(--red-dark); }
 .comic__panel--caption { grid-template-columns: minmax(0, 1fr); justify-items: center; }
 .comic__caption { position: relative; max-width: 700px; background: var(--tape); color: #1a1410; font-family: Oswald, sans-serif; font-size: clamp(18px, 2.6vw, 26px); line-height: 1.3; padding: 16px 22px; transform: rotate(-.6deg); box-shadow: 0 4px 0 rgba(0, 0, 0, .45); }
-.comic--vhs .comic__caption::before { content: '▶ PLAY'; position: absolute; top: -26px; left: 2px; font-size: 14px; letter-spacing: .14em; color: #f4ead2; text-shadow: 2px 0 rgba(255, 0, 60, .55), -2px 0 rgba(0, 200, 255, .45); }
-.comic--neon .comic__caption { background: rgba(10, 20, 40, .88); color: #bff6ff; border: 1px solid #39d0ff; box-shadow: 0 0 18px rgba(57, 208, 255, .45), inset 0 0 12px rgba(255, 64, 200, .22); text-shadow: 0 0 6px rgba(57, 208, 255, .6); transform: none; }
-.comic--neon .comic__art { filter: saturate(.55) hue-rotate(165deg) brightness(1.05); outline-color: #39d0ff; box-shadow: 0 0 22px rgba(57, 208, 255, .5); }
-.comic--neon .comic__bubble { background: #0d1b2c; color: #d9fbff; border: 1px solid #39d0ff; box-shadow: 0 0 14px rgba(57, 208, 255, .35); }
-.comic--neon .comic__panel--left .comic__bubble::after { border-right-color: #39d0ff; }
-.comic--neon .comic__panel--right .comic__bubble::after { border-left-color: #39d0ff; }
-.comic--neon .comic__who { color: #ff5ad1; }
+.comic--vhs .comic__caption::before { content: '▶ PLAY'; position: absolute; top: -26px; left: 2px; font-size: 14px; letter-spacing: .14em; color: #f4ead2; text-shadow: 2px 0 rgba(255, 0, 60, .6), -2px 0 rgba(255, 154, 60, .4); }
+.comic--neon .comic__caption { background: rgba(28, 6, 6, .9); color: #ffe2d6; border: 1px solid #ff3b2f; box-shadow: 0 0 18px rgba(255, 59, 47, .45), inset 0 0 12px rgba(255, 59, 47, .18); text-shadow: 0 0 6px rgba(255, 59, 47, .55); transform: none; }
+.comic--neon .comic__art { filter: grayscale(1) sepia(1) saturate(6) hue-rotate(-40deg) brightness(.85) contrast(1.25); outline-color: #ff3b2f; box-shadow: 0 0 22px rgba(255, 59, 47, .5); }
+.comic--neon .comic__bubble { background: #1a0807; color: #ffe6dc; border: 1px solid #ff3b2f; box-shadow: 0 0 14px rgba(255, 59, 47, .35); }
+.comic--neon .comic__panel--left .comic__bubble::after { border-right-color: #ff3b2f; }
+.comic--neon .comic__panel--right .comic__bubble::after { border-left-color: #ff3b2f; }
+.comic--neon .comic__who { color: #ff9a3c; }
 .comic__bottom { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .comic__dots { display: flex; flex-wrap: wrap; gap: 6px; }
 .comic__dots i { display: block; width: 8px; height: 8px; background: var(--line); transform: rotate(45deg); }
-.comic__dots i.on { background: var(--tape); }
-.comic--neon .comic__dots i.on { background: #39d0ff; }
-.comic__hint { font-family: Caveat, cursive; font-size: 20px; color: var(--muted); white-space: nowrap; }
+.comic__dots i.on { background: var(--red); }
+.comic--neon .comic__dots i.on { background: #ff3b2f; }
+.comic__hint { font-family: Oswald, sans-serif; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
 @keyframes comic-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .comic__panel { animation: none; } }
 /* phones held upright: the picture over the bubble */
@@ -1415,7 +1421,7 @@ button.chatline__name:hover { text-decoration: underline; }
   .comic__art { width: min(64vw, 270px); max-height: 46vh; }
   .comic__bubble { width: 100%; font-size: 18px; }
   .comic__bubble::after, .comic__panel--left .comic__bubble::after, .comic__panel--right .comic__bubble::after { top: -23px; left: 50%; right: auto; border-color: transparent; border-bottom-color: #f4ead2; transform: translateX(-50%); }
-  .comic--neon .comic__bubble::after { border-bottom-color: #39d0ff; }
+  .comic--neon .comic__bubble::after { border-bottom-color: #ff3b2f; }
 }
 /* phones on their side: the picture as tall as the room allows */
 @media (max-height: 480px) and (orientation: landscape) {
@@ -1435,7 +1441,7 @@ button.chatline__name:hover { text-decoration: underline; }
 .storybark { display: flex; align-items: flex-start; gap: 8px; animation: comic-in .2s ease-out; transition: opacity .24s; }
 .storybark--out { opacity: 0; }
 .storybark__ava { width: 46px; height: 46px; flex: none; border: 2px solid var(--tape); box-shadow: 0 2px 0 rgba(0, 0, 0, .45); }
-.storybark__bubble { position: relative; background: #f4ead2; color: #1a1410; padding: 6px 10px 7px; border-radius: 12px; font-size: 16px; line-height: 1.2; box-shadow: 0 3px 0 rgba(0, 0, 0, .4); }
+.storybark__bubble { position: relative; background: #f4ead2; color: #1a1410; padding: 6px 10px 7px; border-radius: 12px; font-family: Oswald, sans-serif; font-size: 16px; line-height: 1.25; box-shadow: 0 3px 0 rgba(0, 0, 0, .4); }
 .storybark__bubble b { display: block; font-family: Oswald, sans-serif; font-weight: 600; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--red-dark); }
 .storylay--touch .storybark__bubble { font-size: 13px; padding: 5px 8px 6px; }
 .storylay--touch .storybark__ava { width: 36px; height: 36px; }

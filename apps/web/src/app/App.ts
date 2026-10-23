@@ -53,6 +53,9 @@ import { clubFlag } from '../ui/clubFlag.js';
 import type { ClubDetails } from '@blatkom/shared';
 import type { UpdateWatch } from './updates.js';
 import { StoryController } from '../story/controller.js';
+import { localBackend, onlineBackend } from '../story/backend.js';
+import type { StoryBackend } from '../story/backend.js';
+import type { StoryReward } from '@blatkom/shared';
 import { StorySession } from '../story/StorySession.js';
 
 /** Room capacity shown in the menu. */
@@ -190,6 +193,7 @@ export class App {
   private clubId: string | null = null;
   /** v0.2.13: the story mode (hub, missions, comics). */
   private readonly story: StoryController;
+  private storyServer: { online: OnlineClient; backend: StoryBackend } | null = null;
 
   constructor() {
     const saved = storageGet('blatkom89.character');
@@ -197,7 +201,8 @@ export class App {
     if (!ONLINE_AVAILABLE) this.localProfile = loadLocalProfile();
     this.story = new StoryController({
       root: this.root,
-      online: () => this.online,
+      backend: () => this.storyBackend(),
+      afterReward: (r) => this.afterStoryReward(r),
       go: (s, push) => this.go(s, push),
       screen: () => this.screen,
       render: (el) => this.render(el),
@@ -205,7 +210,6 @@ export class App {
       beginSession: (session) => this.beginSession(session),
       endSession: (preview) => this.endSession(preview),
       canvas: () => this.host.game.canvas,
-      refreshStrip: () => this.refreshStrip(),
     });
     hudBus.on('pause', () => this.togglePause());
     hudBus.on('match-end', () => setTimeout(() => this.onMatchFinished(), 2200));
@@ -252,6 +256,36 @@ export class App {
       default:
         return;
     }
+  }
+
+  /** The story's progress: the server's online, this browser's in the offline build. */
+  private storyBackend(): StoryBackend | null {
+    if (this.online) {
+      if (this.storyServer?.online !== this.online) this.storyServer = { online: this.online, backend: onlineBackend(this.online) };
+      return this.storyServer.backend;
+    }
+    if (ONLINE_AVAILABLE) return null;
+    return localBackend({
+      profile: () => this.localProfile,
+      saveProfile: (p) => {
+        this.localProfile = p;
+        saveLocalProfile(p);
+      },
+    });
+  }
+
+  /** A story mission paid: the profile on screen follows (online the server's numbers). */
+  private afterStoryReward(r: StoryReward) {
+    const online = this.online;
+    if (online?.profile) {
+      online.profile = { ...online.profile, tokens: r.tokens, xp: r.xpTotal, level: r.level };
+      // $BLAT and the rest of the profile as the server now has them
+      void online
+        .refreshProfile()
+        .then(() => this.refreshStrip())
+        .catch(() => {});
+    }
+    this.refreshStrip();
   }
 
   /** Who made what: music, fonts, engine (licences in THIRD_PARTY_LICENSES.txt). */
@@ -502,7 +536,7 @@ export class App {
     // a newer release found while playing: now is the moment (after the menu is on screen)
     setTimeout(() => this.updates?.atMenu(), 0);
     setTimeout(() => this.flushBlatNote(), 0);
-    const onlineNote = ONLINE_AVAILABLE ? null : h('div', { class: 'muted', style: 'font-size:14px' }, t('This is the demo without a server: practice against bots is available. Online matches work in the online version.'));
+    const onlineNote = ONLINE_AVAILABLE ? null : h('div', { class: 'muted', style: 'font-size:14px' }, t('This version plays without a server: the story and practice against bots. Online matches work on the website and in Telegram.'));
     this.stripEl = this.profileTile();
     const menu = h(
       'div',
@@ -524,11 +558,12 @@ export class App {
               h('span', { class: 'tag' }, t('District Business')),
               h('button', { class: 'btn btn--red', onclick: () => this.quickMatch(), disabled: !ONLINE_AVAILABLE }, t('Quick Match'), h('span', { class: 'sub' }, t('online, up to {n} comrades', { n: MAX_ROOM_PLAYERS }))),
               // v0.2.13: the story — two campaigns in 1989 (on phones beside Quick Match)
-              this.online ? h('button', { class: 'btn menu__story', 'data-testid': 'menu-story', onclick: () => this.story.show() }, t('Story'), h('span', { class: 'sub' }, t('two campaigns · 2089 → 1989'))) : null,
+              // offline (no server): the story is the main thing to play
+              h('button', { class: ONLINE_AVAILABLE ? 'btn menu__story' : 'btn btn--red menu__story', 'data-testid': 'menu-story', onclick: () => this.story.show() }, t('Story'), h('span', { class: 'sub' }, t('two campaigns · 2089 → 1989'))),
               h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, t('Play with Friends'), h('span', { class: 'sub' }, t('a room by invitation'))),
               // V2.0 part D: ranked matches with fixed sides
               this.online ? h('button', { class: 'btn menu__kon', 'data-testid': 'menu-kon', onclick: () => this.showKon() }, t('Blatnoy Kon'), h('span', { class: 'sub' }, t('ranked 1×1 · 2×2 · 3×3 · 5×5'))) : null,
-              h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, t('Practice'), h('span', { class: 'sub' }, t('against bots, no internet needed'))),
+              h('button', { class: 'btn', onclick: () => this.showPractice() }, t('Practice'), h('span', { class: 'sub' }, t('against bots, no internet needed'))),
               h('button', { class: 'btn menu__settings', onclick: () => this.showSettings() }, t('Settings'), h('span', { class: 'sub' }, t('picture, sound, controls, language'))),
               this.online ? (this.socialTiles = this.socialRow()) : null,
               onlineNote,

@@ -29,9 +29,9 @@ test('every mission has its words: a title, an objective line with the right pla
     assert.ok(s, `${m.id} has a script`);
     assert.ok(s.intro.length > 0 && s.outro.length > 0, `${m.id}: comic before and after`);
     assert.ok(s.barks.start && s.barks.win, `${m.id}: lines at the start and at the win`);
-    const counted = m.objective.kind === 'clear' || m.objective.kind === 'survive';
     for (const g of s.goal) {
-      if (counted) assert.ok(g.includes('{left}') && !g.includes('{score}'), `${m.id} goal «${g}» counts who is left`);
+      if (m.objective.kind === 'clear') assert.ok(g.includes('{left}') && !g.includes('{score}'), `${m.id} goal «${g}» counts who is left`);
+      else if (m.objective.kind === 'survive') assert.ok(!/\{(left|score|limit)\}/.test(g), `${m.id} goal «${g}»: the clock counts, not the line`);
       else assert.ok(g.includes('{score}') && g.includes('{limit}'), `${m.id} goal «${g}» counts the points`);
     }
     if (m.waveGapMs !== undefined || m.npcs.some((n) => (n.wave ?? 0) > 0)) assert.ok(s.barks.wave, `${m.id}: a line when the next wave comes`);
