@@ -1446,7 +1446,8 @@ button.chatline__name:hover { text-decoration: underline; }
 .comic--scene .comic__hint { color: var(--beige); opacity: .8; }
 @keyframes scene-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes scene-push { from { transform: scale(1.02); } to { transform: scale(1.1); } }
-@keyframes scene-pan { from { object-position: 16% var(--fy, 50%); } to { object-position: 84% var(--fy, 50%); } }
+/* an upright phone: the picture at the screen's height, travelling across it (transform only — no repaints) */
+@keyframes scene-pan { from { transform: translateX(calc(-16% + 16vw)); } to { transform: translateX(calc(-84% + 84vw)); } }
 @keyframes comic-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .comic__panel { animation: none; } .comic__scene, .loadscr img { animation: scene-in .3s ease-out both; } }
 /* phones held upright: the picture over the bubble */
@@ -1458,7 +1459,7 @@ button.chatline__name:hover { text-decoration: underline; }
   .comic__bubble::after, .comic__panel--left .comic__bubble::after, .comic__panel--right .comic__bubble::after { top: -23px; left: 50%; right: auto; border-color: transparent; border-bottom-color: #f4ead2; transform: translateX(-50%); }
   .comic--neon .comic__bubble::after { border-bottom-color: #ff3b2f; }
   /* the scene: the picture's full height, the camera travelling across it; a small portrait beside the bubble */
-  .comic--scene .comic__scene { animation: scene-in .6s ease-out both, scene-pan 18s ease-in-out infinite alternate; transform: none; }
+  .comic--scene .comic__scene { inset: 0 auto 0 0; width: auto; height: 100%; max-width: none; object-fit: fill; animation: scene-in .6s ease-out both, scene-pan 18s ease-in-out infinite alternate; }
   .comic--scene .comic__panel, .comic--scene .comic__panel--right { grid-template-columns: auto minmax(0, 1fr); justify-items: stretch; align-items: end; gap: 10px; }
   .comic--scene .comic__panel--right .comic__art { order: 0; }
   .comic--scene .comic__art { width: 74px; max-height: none; }
