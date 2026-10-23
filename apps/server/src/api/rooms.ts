@@ -32,7 +32,7 @@ export const registerRoomRoutes: RouteModule = (router, { env, services, rooms }
     const body = await ctx.body(CreateRoomRequest);
     let room;
     try {
-      room = rooms.create(body.mapId, body.isPrivate, user.userId, null, body.mode);
+      room = rooms.create(body.mapId, body.isPrivate, user.userId, null, body.mode, body.kon ?? null);
     } catch {
       throw new HttpError(503, 'capacity', 'The server is full, try again later');
     }
@@ -48,15 +48,15 @@ export const registerRoomRoutes: RouteModule = (router, { env, services, rooms }
       webUrl = urls.web;
       services.analytics.server('invite_created', { code: inv.code, roomId: room.id }, user);
     }
-    const res: CreateRoomResponse = { roomId: room.id, inviteCode, inviteUrl, webUrl, mapId: room.mapId, mode: room.mode };
+    const res: CreateRoomResponse = { roomId: room.id, inviteCode, inviteUrl, webUrl, mapId: room.mapId, mode: room.mode, kon: room.kon };
     ctx.json(201, res);
   });
 
   router.post('/api/rooms/quick', auth, rateLimit(lookupLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
     const user = currentUser(ctx);
     const body = await ctx.body(QuickMatchRequest);
-    const room = rooms.quickMatch(user.userId, body.mapId, body.mode);
-    ctx.json(200, { roomId: room.id, mapId: room.mapId, mode: room.mode });
+    const room = body.kon ? rooms.konQuick(user.userId, body.kon, body.mapId) : rooms.quickMatch(user.userId, body.mapId, body.mode);
+    ctx.json(200, { roomId: room.id, mapId: room.mapId, mode: room.mode, kon: room.kon });
   });
 
   router.get('/api/rooms/:id', auth, (ctx) => {
@@ -70,14 +70,14 @@ export const registerRoomRoutes: RouteModule = (router, { env, services, rooms }
     const code = ctx.params.code ?? '';
     if (!/^[A-Za-z0-9]{6,16}$/.test(code)) throw new HttpError(400, 'bad_code', 'Invalid invitation code');
     const resolved = await services.invites.resolve(code);
-    let info: InviteInfo = { code, status: 'not_found', roomId: null, mapId: null, mode: null, players: 0, maxPlayers: 0, hostName: null };
+    let info: InviteInfo = { code, status: 'not_found', roomId: null, mapId: null, mode: null, players: 0, maxPlayers: 0, hostName: null, kon: null };
     if (resolved) {
       const room = rooms.get(resolved.roomId);
       if (!room) info = { ...info, status: 'expired' };
       else {
         const phase = room.phase;
         const status: InviteInfo['status'] = room.occupancy >= room.config.maxPlayers ? 'full' : phase === 'finished' ? 'finished' : phase === 'waiting' ? 'joinable' : room.isJoinable() ? 'in_progress' : 'full';
-        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.lineup, maxPlayers: room.config.maxPlayers, hostName: room.hostName() };
+        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.lineup, maxPlayers: room.config.maxPlayers, hostName: room.hostName(), kon: room.kon };
       }
     }
     ctx.json(200, info);

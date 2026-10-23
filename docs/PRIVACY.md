@@ -39,7 +39,8 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
    starting in-game name (Latin letters, changeable). No email, picture, friends or provider tokens are
    kept; only the basic profile is requested (`openid profile`, `public_profile`, `identify`, `identity`).
 4. **Game data:** character, profile avatar (one of the game's portraits, by id), match participation (map, place, eliminations, assists, deaths, damage,
-   time), XP, level, achievements, streaks, time in game, match history; talon and diamond balances and
+   time), XP, level, achievements, streaks, time in game, match history; the «Блатной кон» rating, wins, losses, draws and streaks (shown
+   in the Kon tables with your in-game name); talon and diamond balances and
    every change to them, owned weapons, characters, equipment, modifications and weapon skins, loadout, case openings.
 5. **Purchases (optional):** pack, price, currency, payment provider, the provider’s payment reference,
    status and time. You pay on the provider’s page — Stripe (cards), NOWPayments (cryptocurrency); we
@@ -137,7 +138,7 @@ When this policy changes, we update the revision date.
 | `auth_handoffs` (v0.3) | SHA-256 of a one-time code, user id, provider, whether the account is new/linked | handing a provider sign-in back to the page | valid 5 minutes; deleted on use, by the next sign-in once 10 minutes old, by the daily retention job after 1 day; immediately on account deletion (cascade) |
 | `password_resets` | HMAC of the one-time token, user id, who created it (`email`/`admin`) | password reset | 7 days after expiry; immediately on account deletion |
 | `visitors`, `visitor_days` | random browser id, first/last visit, platform, referring domain, `user_id` (SET NULL on deletion) | visitor funnel | 400 days after the last visit |
-| `profiles` | counters, XP/level, rating, streaks, preferred character, avatar id; V2.0: `blat`, `blat_earned`, `blat_level` | progression, Top-100, $BLAT | until account deletion (cascade) |
+| `profiles` | counters, XP/level, rating, streaks, preferred character, avatar id; V2.0: `blat`, `blat_earned`, `blat_level`; the «Блатной кон» rating and record (`kon_*`) | progression, Top-100, $BLAT, the Kon tables | until account deletion (cascade) |
 | `friendships` | pairs of user ids, request/accept times | friends, presence | until removed; immediately on account deletion (cascade) |
 | `direct_messages` | sender, recipient, text (≤ 500 chars), sent/read times | private messages between friends | 180 days; immediately on account deletion (cascade) |
 | `clubs`, `club_members`, `club_requests` | a club's name/tag/motto/flag/emblem and `head_id` (SET NULL on deletion); membership (club, user, role, join time); requests (club, user, time) | clubs, the club table | membership and requests until left/withdrawn, immediately on account deletion (the head hands the club over first); a club until disbanded, closed by its last member or removed by an admin (audited) |

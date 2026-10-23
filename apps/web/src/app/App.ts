@@ -2,8 +2,8 @@
  * App shell: screen navigation (HTML/CSS over the canvas), offline practice flow, online flow
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
-import { CHARACTER_IDS, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, REAL_MONEY, isCharacterId, isGameMode, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
-import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent } from '@blatkom/shared';
+import { CHARACTER_IDS, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, REAL_MONEY, isCharacterId, isGameMode, isKonFormat, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonTopResponse } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
@@ -46,6 +46,7 @@ import { watchForUpdates } from './updates.js';
 import { renderClubs, renderClub, renderClubEditor, clubLabel } from '../ui/screens/clubs.js';
 import { renderBlat, blatCoin, fmtBlat } from '../ui/screens/blat.js';
 import { renderBlatDrop } from '../ui/screens/blatDrop.js';
+import { renderKon, konLabel } from '../ui/screens/kon.js';
 import { PROVIDER_NAME, loginErrorText } from '../ui/screens/signin.js';
 import type { LoginProvider } from '../net/oauth.js';
 import { clubFlag } from '../ui/clubFlag.js';
@@ -55,12 +56,14 @@ import type { UpdateWatch } from './updates.js';
 /** Room capacity shown in the menu. */
 const MAX_ROOM_PLAYERS = DEFAULT_MATCH_CONFIG.maxPlayers;
 
-type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'social' | 'top' | 'clubs' | 'club' | 'clubEdit' | 'blat' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
+type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'social' | 'top' | 'clubs' | 'club' | 'clubEdit' | 'blat' | 'kon' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
 
 /** Profile id whose nickname has been confirmed in the first-launch dialog (online build). */
 const NICK_CONFIRMED_KEY = 'blatkom89.nick-confirmed.v1';
 /** Last game mode picked for a quick match / a new room. */
 const QUICK_MODE_KEY = 'blatkom89.quick-mode';
+/** V2.0 part D: the «Блатной кон» format last chosen. */
+const KON_FORMAT_KEY = 'blatkom89.kon-format';
 
 
 /** Speaker with sound waves (music on) or a cross (muted), drawn as inline SVG. */
@@ -162,6 +165,8 @@ export class App {
   private blatNote: string | null = null;
   /** V2.0: the $BLAT screen's open tab (the balance or BLAT DROP). */
   private blatTab: 'balance' | 'drop' = 'balance';
+  /** V2.0 part D: the Kon table shown (players or gangs). */
+  private konTopBy: 'players' | 'gangs' = 'players';
   /** Last lobby state and results (to redraw them after a language switch). */
   private lastLobby: LobbyState | null = null;
   private lastResults: ResultsData | null = null;
@@ -214,6 +219,7 @@ export class App {
       case 'social':
       case 'top':
       case 'blat':
+      case 'kon':
       case 'profile':
       case 'settings':
       case 'arsenal':
@@ -429,6 +435,8 @@ export class App {
         return this.showTop(push);
       case 'blat':
         return this.showBlat(push);
+      case 'kon':
+        return this.showKon(push);
       case 'clubs':
       case 'clubEdit':
         return this.showClubs(push);
@@ -485,10 +493,12 @@ export class App {
             { class: 'menu' },
             h(
               'div',
-              { class: 'panel menu__play' },
+              { class: `panel menu__play ${this.online ? 'menu__play--kon' : ''}` },
               h('span', { class: 'tag' }, t('District Business')),
               h('button', { class: 'btn btn--red', onclick: () => this.quickMatch(), disabled: !ONLINE_AVAILABLE }, t('Quick Match'), h('span', { class: 'sub' }, t('online, up to {n} comrades', { n: MAX_ROOM_PLAYERS }))),
               h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, t('Play with Friends'), h('span', { class: 'sub' }, t('a room by invitation'))),
+              // V2.0 part D: ranked matches with fixed sides
+              this.online ? h('button', { class: 'btn menu__kon', 'data-testid': 'menu-kon', onclick: () => this.showKon() }, t('Blatnoy Kon'), h('span', { class: 'sub' }, t('ranked 1×1 · 2×2 · 3×3 · 5×5'))) : null,
               h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, t('Practice'), h('span', { class: 'sub' }, t('against bots, no internet needed'))),
               h('button', { class: 'btn menu__settings', onclick: () => this.showSettings() }, t('Settings'), h('span', { class: 'sub' }, t('picture, sound, controls, language'))),
               this.online ? (this.socialTiles = this.socialRow()) : null,
@@ -686,6 +696,81 @@ export class App {
         if (d.justCredited > 0) toast(t('+{n} $BLAT for the levels you reached', { n: fmtBlat(d.justCredited) }));
       })
       .catch(fail);
+  }
+
+  /** The «Блатной кон» format last chosen (2×2 the first time). */
+  private konFormat(): KonFormat {
+    const v = storageGet(KON_FORMAT_KEY);
+    return isKonFormat(v) ? v : '2x2';
+  }
+
+  /** V2.0 part D: «Блатной кон» — the player's Kon numbers, the format, the search, a room, the tables. */
+  private showKon(push = true) {
+    const online = this.online;
+    if (!online) return;
+    this.go('kon', push);
+    const body = h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
+    const wrap = h('div', { class: 'wrap' }, this.topbar(t('Blatnoy Kon')), body);
+    this.render(h('div', { class: 'screen screen--dim' }, wrap));
+    let top: KonTopResponse | null = null;
+    let busy = false;
+    let data: Awaited<ReturnType<typeof online.api.kon>> | null = null;
+    const draw = () => {
+      if (this.screen !== 'kon' || !data) return;
+      const next = renderKon({
+        data,
+        format: this.konFormat(),
+        onFormat: (f) => {
+          storageSet(KON_FORMAT_KEY, f);
+          draw();
+        },
+        onFind: () => void go('find'),
+        onCreate: () => void go('create'),
+        top,
+        topBy: this.konTopBy,
+        onTop: (by) => {
+          this.konTopBy = by;
+          top = null;
+          draw();
+          void loadTop();
+        },
+        busy,
+      });
+      wrap.lastElementChild!.replaceWith(next);
+    };
+    const loadTop = () =>
+      online.api
+        .konTop(this.konTopBy)
+        .then((r) => {
+          if (r.by !== this.konTopBy) return;
+          top = r;
+          draw();
+        })
+        .catch((e) => toast(apiErrorText(e)));
+    const go = async (how: 'find' | 'create') => {
+      if (busy) return;
+      busy = true;
+      draw();
+      const f = this.konFormat();
+      this.go('loading');
+      this.render(this.loading(how === 'find' ? t('Looking for opponents…') : t('Creating the room…')));
+      try {
+        if (how === 'find') await online.konQuick(this.onlineCharacter(), f);
+        else await online.createRoom('factory', this.onlineCharacter(), 'teams', f);
+      } catch (e) {
+        this.showError(apiErrorText(e));
+      }
+    };
+    void online.api
+      .kon()
+      .then((d) => {
+        data = d;
+        draw();
+        void loadTop();
+      })
+      .catch((e) => {
+        if (this.screen === 'kon') body.replaceWith(h('div', { class: 'panel' }, apiErrorText(e)));
+      });
   }
 
   /** Clubs (v0.3): the player's club flag (or the icon), its tag, and requests waiting for the head. */
@@ -1254,6 +1339,7 @@ export class App {
       myId,
       offline,
       chat: chat?.el ?? null,
+      kon: offline ? null : (this.lastLobby?.kon ?? null),
       localProfile: local && !!this.localProfile,
       ...(local && !this.localProfile ? { offlineNote: t('Pick an alias in the menu and practice will start earning you XP and levels.') } : {}),
       onRematch: () => {
@@ -1582,12 +1668,13 @@ export class App {
         analytics.track('invite_opened', { code, result: info.status });
         if (info.status === 'joinable' || info.status === 'in_progress') {
           await this.ensureNicknameBeforeJoin();
-          this.render(this.loading(info.hostName ? t('Entering the room ({host})…', { host: info.hostName }) : t('Entering the room…')));
+          const into = info.kon ? t('Entering the Blatnoy Kon {f} room ({host})…', { f: konLabel(info.kon), host: info.hostName ?? '—' }) : info.hostName ? t('Entering the room ({host})…', { host: info.hostName }) : t('Entering the room…');
+          this.render(this.loading(into));
           await this.online!.joinRoom(info.roomId!, this.onlineCharacter());
           return;
         }
         const msg: Record<string, string> = {
-          full: t('The room is full.'),
+          full: info.kon && info.status === 'full' ? t('The Kon room is full — both sides are taken.') : t('The room is full.'),
           finished: t('That match is already over.'),
           expired: t('The invitation has expired — the room is closed.'),
           not_found: t('Invitation not found.'),

@@ -3,6 +3,9 @@ import type {
   AuthResponse,
   BlatResponse,
   BlatDropInfo,
+  KonFormat,
+  KonResponse,
+  KonTopResponse,
   AvatarId,
   CreateRoomResponse,
   InviteInfo,
@@ -167,11 +170,18 @@ export class Api {
   deleteAccount() {
     return this.req<void>('DELETE', '/api/me');
   }
-  createRoom(mapId: MapId, isPrivate: boolean, mode: GameMode = 'ffa') {
-    return this.req<CreateRoomResponse>('POST', '/api/rooms', { mapId, isPrivate, mode });
+  createRoom(mapId: MapId, isPrivate: boolean, mode: GameMode = 'ffa', kon?: KonFormat) {
+    return this.req<CreateRoomResponse>('POST', '/api/rooms', { mapId, isPrivate, mode, ...(kon ? { kon } : {}) });
   }
-  quickMatch(mapId?: MapId, mode: GameMode = 'ffa') {
-    return this.req<{ roomId: string; mapId: MapId; mode: GameMode }>('POST', '/api/rooms/quick', mapId ? { mapId, mode } : { mode });
+  quickMatch(mapId?: MapId, mode: GameMode = 'ffa', kon?: KonFormat) {
+    return this.req<{ roomId: string; mapId: MapId; mode: GameMode; kon?: KonFormat | null }>('POST', '/api/rooms/quick', { ...(mapId ? { mapId } : {}), mode, ...(kon ? { kon } : {}) });
+  }
+  /** V2.0 part D: «Блатной кон» — the player's numbers, history, people waiting; the tables. */
+  kon() {
+    return this.req<KonResponse>('GET', '/api/kon');
+  }
+  konTop(by: 'players' | 'gangs') {
+    return this.req<KonTopResponse>('GET', `/api/kon/top?by=${by}`);
   }
   invite(code: string) {
     return this.req<InviteInfo>('GET', `/api/invites/${encodeURIComponent(code)}`);

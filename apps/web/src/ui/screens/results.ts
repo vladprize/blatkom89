@@ -1,10 +1,11 @@
 import { h, portrait, fmtDuration } from '../dom.js';
 import { amount } from './shop.js';
 import { BASE_RULES, CTF_RULES, isTeamMode, levelForXp, SCORING, TOKEN_REWARD, tokenBreakdown } from '@blatkom/shared';
-import type { Standing, Team } from '@blatkom/shared';
+import type { Standing, Team, KonFormat } from '@blatkom/shared';
 import type { ResultsData } from '../../game/session/types.js';
 import { t, plural, count } from '../../i18n/index.js';
 import { achievementText, mapName } from '../../i18n/content.js';
+import { konLabel } from './kon.js';
 import { modeName } from '../modes.js';
 import { blatAmount, fmtBlat } from './blat.js';
 
@@ -38,6 +39,8 @@ export function renderResults(o: {
   onMenu: () => void;
   /** Online: the room chat (under the buttons). */
   chat?: HTMLElement | null;
+  /** V2.0 part D: the match was a «Блатной кон» match of this format. */
+  kon?: KonFormat | null;
 }): HTMLElement {
   const r = o.results;
   const mode = r.gameMode ?? 'ffa';
@@ -61,7 +64,20 @@ export function renderResults(o: {
       h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, h('div', { class: 'lvlbadge' }, h('small', null, t('LVL')), String(personal.level)), h('div', { class: 'h1 grow' }, `+${personal.xpGained} XP`)),
       h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
       h('div', { class: 'muted' }, personal.leveledUp ? t('Promoted — level {n}!', { n: personal.level }) : lvl.nextLevelCost > 0 ? t('{a} / {b} to level {n}', { a: lvl.intoLevel, b: lvl.nextLevelCost, n: personal.level + 1 }) : t('Top level')),
-      personal.rating !== undefined
+      // V2.0 part D: a Kon match moves the Kon rating instead of the general one
+      personal.kon
+        ? h(
+            'div',
+            { class: 'ratingline ratingline--kon', 'data-testid': 'kon-line' },
+            t('Kon rating'),
+            ' ',
+            h('b', null, String(personal.kon.rating)),
+            ' ',
+            h('span', { class: personal.kon.delta > 0 ? 'up' : personal.kon.delta < 0 ? 'down' : 'muted' }, signed(personal.kon.delta)),
+            ' · ',
+            h('span', { class: 'muted' }, personal.kon.outcome === 'win' ? t('win') : personal.kon.outcome === 'draw' ? t('draw') : t('loss')),
+          )
+        : personal.rating !== undefined
         ? h(
             'div',
             { class: 'ratingline', 'data-testid': 'rating-line' },
@@ -140,7 +156,7 @@ export function renderResults(o: {
     h(
       'div',
       { class: 'wrap' },
-      h('div', { class: 'row' }, h('span', { class: 'tag' }, t('Match report')), h('span', { class: 'muted' }, `${mapName(r.mapId)} · ${modeName(mode)} · ${fmtDuration(r.durationMs)} · ${reason}`)),
+      h('div', { class: 'row' }, h('span', { class: 'tag' }, t('Match report')), h('span', { class: 'muted' }, `${mapName(r.mapId)} · ${o.kon ? t('Blatnoy Kon {f}', { f: konLabel(o.kon) }) : modeName(mode)} · ${fmtDuration(r.durationMs)} · ${reason}`)),
       banner,
       h(
         'div',

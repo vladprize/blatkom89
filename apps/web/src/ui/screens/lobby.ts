@@ -9,6 +9,8 @@ import { mapField, mapPicker } from '../maps.js';
 import { openSheet } from '../sheet.js';
 import { avatarImg } from '../avatars.js';
 import { MODE_ORDER, modeIcon, modeName, modeRules, modeShort, modeSub } from '../modes.js';
+import { konLabel, konRules } from './kon.js';
+import { KON_RULES } from '@blatkom/shared';
 
 /** The game modes as a 2×2 switch (disabled for room guests). */
 export function modeSwitch(o: { mode: GameMode; onMode?: (m: GameMode) => void }): HTMLElement {
@@ -49,7 +51,7 @@ function playerRow(p: RosterEntry): HTMLElement {
     'div',
     { class: `player ${p.team === 0 ? 'player--red' : p.team === 1 ? 'player--blue' : ''}` },
     avatarImg(p.avatar, p.character),
-    h('div', { class: 'n' }, h('span', { class: 'player__name' }, p.name), ' ', h('span', { class: 'muted player__meta', style: 'font-size:14px' }, `${charName(p.character)} · ${t('lvl')} ${p.level}`)),
+    h('div', { class: 'n' }, h('span', { class: 'player__name' }, p.name), ' ', h('span', { class: 'muted player__meta', style: 'font-size:14px' }, `${charName(p.character)} · ${t('lvl')} ${p.level}${p.konRating !== undefined ? ` · ${t('Kon')} ${p.konRating}` : ''}`)),
     p.isHost ? h('span', { class: 'badge badge--host' }, t('host')) : null,
     h('span', { class: `badge ${state === 'off' ? 'badge--off' : state === 'ok' ? 'badge--ok' : ''}` }, stateText),
     // phones: the same as two small marks (a star for the host, a coloured dot for the state)
@@ -81,8 +83,16 @@ export function renderLobby(o: {
   const connected = s.players.filter((p) => p.connected).length;
   const allReady = s.players.filter((p) => p.connected).every((p) => p.ready);
   const canStart = connected >= s.minToStart;
-  const note =
-    connected >= 2
+  const kon = s.kon;
+  const note = kon
+    ? connected < s.minToStart
+      ? s.isPrivate
+        ? t('Both sides have to be full: {n} against {n}.', { n: KON_RULES[kon].size })
+        : t('Looking for opponents — the match starts by itself when both sides are full.')
+      : allReady
+        ? t('Everyone’s ready — the match starts by itself.')
+        : t('The match starts when everyone is ready.')
+    : connected >= 2
       ? allReady
         ? t('Everyone’s ready — the match starts by itself.')
         : t('The match starts when everyone is ready.')
@@ -110,12 +120,14 @@ export function renderLobby(o: {
       const list = s.players.filter((p) => p.team === team);
       const seats = Math.max(0, Math.ceil(s.maxPlayers / 2) - list.length);
       const mine = me?.team === team;
+      // Kon: a full side takes nobody else
+      const closed = !!kon && list.length >= KON_RULES[kon].size;
       return h(
         'div',
         { class: `teamcol teamcol--${team === 0 ? 'red' : 'blue'}` },
         h('div', { class: 'teamcol__head' }, h('b', null, team === 0 ? t('RED TEAM') : t('BLUE TEAM')), h('span', null, `${list.length}`)),
         h('div', { class: 'list' }, ...list.map(playerRow), ...Array.from({ length: seats }, freeSeat)),
-        me && !mine ? h('button', { class: 'btn btn--small teamcol__join', 'data-team': String(team), onclick: () => o.onTeam(team) }, h('span', { class: 'long' }, team === 0 ? t('Join the red team') : t('Join the blue team')), h('span', { class: 'short' }, t('Join'))) : null,
+        me && !mine && !closed ? h('button', { class: 'btn btn--small teamcol__join', 'data-team': String(team), onclick: () => o.onTeam(team) }, h('span', { class: 'long' }, team === 0 ? t('Join the red team') : t('Join the blue team')), h('span', { class: 'short' }, t('Join'))) : null,
       );
     };
     players = h('div', { class: 'teams' }, col(0), col(1));
@@ -148,7 +160,7 @@ export function renderLobby(o: {
         'div',
         { class: 'topbar' },
         h('button', { class: 'back', onclick: o.onLeave }, t('← Leave')),
-        h('h1', { class: 'h1' }, s.isPrivate ? t('Room') : t('Quick game')),
+        h('h1', { class: 'h1' }, kon ? t('Blatnoy Kon {f}', { f: konLabel(kon) }) : s.isPrivate ? t('Room') : t('Quick game')),
         // phones: the room code with Share and Copy right in the top bar
         s.isPrivate && invite
           ? h(
@@ -177,7 +189,19 @@ export function renderLobby(o: {
         : null,
       // a private room: inviting friends comes right after the link; a public one: under the players
       s.isPrivate && extra ? h('div', { class: 'lobby__extra' }, extra) : null,
-      h(
+      kon
+        ? h(
+            'div',
+            { class: 'panel col lobby__mode lobby__kon', 'data-testid': 'lobby-kon' },
+            h('span', { class: 'tag' }, t('Blatnoy Kon')),
+            h('div', { class: 'konbadge' }, h('b', null, konLabel(kon)), h('span', null, t('team deathmatch · people only · no stakes'))),
+            h('div', { class: 'muted lobby__rules', 'data-testid': 'mode-rules' }, konRules(kon, s.durationMs)),
+            h('div', { class: 'lobby__mapline' }, mapField({ selected: s.mapId, variant: 'line', ...(s.isHost ? { onPick: o.onMap } : {}) })),
+          )
+        : null,
+      kon
+        ? null
+        : h(
         'div',
         { class: 'panel col lobby__mode' },
         h('span', { class: 'tag' }, t('Mode')),
@@ -203,7 +227,7 @@ export function renderLobby(o: {
         { class: 'panel col lobby__map' },
         h('span', { class: 'tag' }, t('Map')),
         mapPicker({ selected: s.mapId, ...(s.isHost ? { onPick: o.onMap } : {}) }),
-        h('div', { class: 'muted lobby__maphint' }, s.isHost ? t('You host the room: you pick the map and the mode and start the match.') : t('The host picks the map and the mode.')),
+        h('div', { class: 'muted lobby__maphint' }, kon ? (s.isHost ? t('You host the room: you pick the map and start the match.') : t('The host picks the map.')) : s.isHost ? t('You host the room: you pick the map and the mode and start the match.') : t('The host picks the map and the mode.')),
       ),
       h(
         'div',

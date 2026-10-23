@@ -12,6 +12,7 @@ import type { ModId, WeaponId } from '../game-rules/weapons.js';
 import type { ArmsId, GadgetId } from '../game-rules/gadgets.js';
 import type { FlagAction, Standing } from '../sim/world.js';
 import type { AchievementId } from '../game-rules/progression.js';
+import type { KonFormat, KonOutcome } from '../game-rules/kon.js';
 
 /**
  * v2: match points with assists, «дефицит» supply drops. v3: loadouts, rockets, medkits.
@@ -85,6 +86,8 @@ export interface RosterEntry {
   mods?: Partial<Record<WeaponId, ModId[]>>;
   /** Equipped weapon skins: everybody sees the finish on the weapon in the player's hands. */
   skins?: Partial<Record<WeaponId, FinishId>>;
+  /** V2.0 part D: the Kon rating (shown in «Блатной кон» rooms). */
+  konRating?: number;
 }
 
 export type GameEvent =
@@ -125,6 +128,8 @@ export interface PersonalResult {
   /** V2.0: $BLAT for the levels reached in this match, and the balance after it. */
   blatGained?: number;
   totalBlat?: number;
+  /** V2.0 part D: a «Блатной кон» match — the result and the Kon rating's change and value. */
+  kon?: { outcome: KonOutcome; delta: number; rating: number };
 }
 
 export type ServerMessage =
@@ -153,6 +158,8 @@ export type ServerMessage =
       mode: GameMode;
       /** People the host needs to start the match (1 when the server fills the lineup up). */
       minToStart?: number;
+      /** V2.0 part D: a «Блатной кон» room (fixed sides, people only), null otherwise. */
+      kon?: KonFormat | null;
     }
   | { type: 'ev'; tick: number; events: GameEvent[] }
   | { type: 'results'; matchId: string; reason: 'time' | 'score' | 'aborted'; durationMs: number; standings: Standing[]; mapId: MapId; mode: GameMode; teams?: TeamResultSummary }
@@ -177,6 +184,7 @@ export type ErrorCode =
   | 'match_running'
   | 'not_enough_players'
   | 'team_full'
+  | 'kon_fixed'
   | 'chat_rate'
   | 'internal';
 

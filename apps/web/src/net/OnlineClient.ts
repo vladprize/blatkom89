@@ -2,7 +2,7 @@
  * Online flow controller: authentication (Telegram initData or dev login), room creation/quick
  * match/invites over HTTP, the game WebSocket, lobby state and the OnlineSession lifecycle.
  */
-import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, WeaponId } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, KonFormat, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, WeaponId } from '@blatkom/shared';
 import { latinName } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { readLoginReturn } from './oauth.js';
@@ -36,6 +36,10 @@ export interface LobbyState {
   minToStart: number;
   /** The room's win limits (from the server's match rules). */
   limits?: { teamScoreLimit: number; captureLimit: number; baseScoreLimit: number };
+  /** V2.0 part D: a «Блатной кон» room (fixed sides of this format, people only). */
+  kon: KonFormat | null;
+  /** The match length in this room (ms, from the server's rules). */
+  durationMs?: number;
 }
 
 /** A line of the room chat as the client keeps it (system: a local notice such as «not so fast»). */
@@ -361,9 +365,17 @@ export class OnlineClient {
     await this.joinRoom(r.roomId, c);
   }
 
-  async createRoom(mapId: MapId, c: CharacterId, mode: GameMode = 'ffa'): Promise<void> {
+  /** V2.0 part D: «Блатной кон» search — a public Kon room of the format (on the map, if one is chosen). */
+  async konQuick(c: CharacterId, kon: KonFormat, mapId?: MapId): Promise<void> {
     await this.ensureAuth();
-    const r = await this.api.createRoom(mapId, true, mode);
+    const r = await this.api.quickMatch(mapId, 'teams', kon);
+    this.inviteUrl = null;
+    await this.joinRoom(r.roomId, c);
+  }
+
+  async createRoom(mapId: MapId, c: CharacterId, mode: GameMode = 'ffa', kon?: KonFormat): Promise<void> {
+    await this.ensureAuth();
+    const r = await this.api.createRoom(mapId, true, mode, kon);
     this.inviteUrl = r.inviteUrl ?? r.webUrl;
     await this.joinRoom(r.roomId, c);
   }
@@ -444,6 +456,8 @@ export class OnlineClient {
           maxPlayers: m.maxPlayers,
           mode: m.mode,
           minToStart: m.minToStart ?? this.config?.minPlayers ?? 2,
+          kon: m.kon ?? null,
+          ...(this.config ? { durationMs: this.config.durationMs } : {}),
           ...(this.config ? { limits: { teamScoreLimit: this.config.teamScoreLimit, captureLimit: this.config.captureLimit, baseScoreLimit: this.config.baseScoreLimit } } : {}),
         };
         if (this.session) this.session.setRoster(m.players);

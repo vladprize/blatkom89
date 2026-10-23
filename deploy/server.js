@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.10"),
+  SERVER_VERSION: external_exports.string().default("0.2.11"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -11578,6 +11578,46 @@ function referralReward(ordinal) {
 var REFERRAL_RULES = Object.freeze({ minMatchSec: 60, dailyCap: 20 });
 var REF_CODE_RE = /^[A-Za-z0-9_-]{4,32}$/;
 var isRefCode = (v) => typeof v === "string" && REF_CODE_RE.test(v);
+
+// packages/shared/src/game-rules/kon.ts
+var KON_FORMATS = ["1x1", "2x2", "3x3", "5x5"];
+var KON_RULES = Object.freeze({
+  "1x1": { size: 1, teamScoreLimit: 10, durationScale: 0.75 },
+  "2x2": { size: 2, teamScoreLimit: 15, durationScale: 1 },
+  "3x3": { size: 3, teamScoreLimit: 20, durationScale: 1 },
+  "5x5": { size: 5, teamScoreLimit: 30, durationScale: 1.25 }
+});
+function konConfig(base2, format) {
+  const r = KON_RULES[format];
+  return {
+    ...base2,
+    mode: "teams",
+    minPlayers: r.size * 2,
+    maxPlayers: r.size * 2,
+    teamScoreLimit: r.teamScoreLimit,
+    durationMs: Math.round(base2.durationMs * r.durationScale),
+    // the sides are set before the match: nobody comes in once it is on
+    allowJoinInProgress: false
+  };
+}
+var KON_RATING = Object.freeze({ start: 1e3, floor: 100, k: 24, kNew: 40, newMatches: 10 });
+function konExpected(mine, theirs) {
+  return 1 / (1 + 10 ** ((theirs - mine) / 400));
+}
+function konDelta(o) {
+  const k = o.matches < KON_RATING.newMatches ? KON_RATING.kNew : KON_RATING.k;
+  const score = o.outcome === "win" ? 1 : o.outcome === "draw" ? 0.5 : 0;
+  return Math.round(k * (score - konExpected(o.mine, o.theirs)));
+}
+function konDeal(players) {
+  const out = /* @__PURE__ */ new Map();
+  const sorted = [...players].sort((a, b2) => b2.rating - a.rating || (a.id < b2.id ? -1 : 1));
+  sorted.forEach((p, i) => out.set(p.id, i % 4 === 0 || i % 4 === 3 ? 0 : 1));
+  return out;
+}
+
+// packages/shared/src/game-rules/konStakes.ts
+var KON_STAKES = Object.freeze({ enabled: false, minStake: 100, maxStake: 1e4 });
 
 // packages/shared/src/maps/builder.ts
 var MapBuilder = class {
@@ -15843,8 +15883,8 @@ var UpdateProfileRequest = external_exports.object({
   /** A profile avatar (game-rules/avatars.ts); null removes it. */
   avatar: external_exports.enum(AVATAR_IDS).nullable().optional()
 }).strict();
-var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true), mode: external_exports.enum(GAME_MODES).default("ffa") }).strict();
-var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional(), mode: external_exports.enum(GAME_MODES).default("ffa") }).strict();
+var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional() }).strict();
+var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional(), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional() }).strict();
 var AdminLoginRequest = external_exports.object({ username: external_exports.string().min(3).max(32), password: external_exports.string().min(1).max(256) }).strict();
 var AdminCreateUserRequest = external_exports.object({
   username: external_exports.string().regex(/^[a-z0-9_.-]{3,32}$/),
@@ -16385,7 +16425,7 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
     const body = await ctx.body(CreateRoomRequest);
     let room;
     try {
-      room = rooms2.create(body.mapId, body.isPrivate, user.userId, null, body.mode);
+      room = rooms2.create(body.mapId, body.isPrivate, user.userId, null, body.mode, body.kon ?? null);
     } catch {
       throw new HttpError(503, "capacity", "The server is full, try again later");
     }
@@ -16401,14 +16441,14 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
       webUrl = urls.web;
       services2.analytics.server("invite_created", { code: inv.code, roomId: room.id }, user);
     }
-    const res = { roomId: room.id, inviteCode, inviteUrl, webUrl, mapId: room.mapId, mode: room.mode };
+    const res = { roomId: room.id, inviteCode, inviteUrl, webUrl, mapId: room.mapId, mode: room.mode, kon: room.kon };
     ctx.json(201, res);
   });
   router.post("/api/rooms/quick", auth, rateLimit(lookupLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
     const user = currentUser(ctx);
     const body = await ctx.body(QuickMatchRequest);
-    const room = rooms2.quickMatch(user.userId, body.mapId, body.mode);
-    ctx.json(200, { roomId: room.id, mapId: room.mapId, mode: room.mode });
+    const room = body.kon ? rooms2.konQuick(user.userId, body.kon, body.mapId) : rooms2.quickMatch(user.userId, body.mapId, body.mode);
+    ctx.json(200, { roomId: room.id, mapId: room.mapId, mode: room.mode, kon: room.kon });
   });
   router.get("/api/rooms/:id", auth, (ctx) => {
     const room = rooms2.get(ctx.params.id ?? "");
@@ -16420,14 +16460,14 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
     const code = ctx.params.code ?? "";
     if (!/^[A-Za-z0-9]{6,16}$/.test(code)) throw new HttpError(400, "bad_code", "Invalid invitation code");
     const resolved = await services2.invites.resolve(code);
-    let info = { code, status: "not_found", roomId: null, mapId: null, mode: null, players: 0, maxPlayers: 0, hostName: null };
+    let info = { code, status: "not_found", roomId: null, mapId: null, mode: null, players: 0, maxPlayers: 0, hostName: null, kon: null };
     if (resolved) {
       const room = rooms2.get(resolved.roomId);
       if (!room) info = { ...info, status: "expired" };
       else {
         const phase = room.phase;
         const status = room.occupancy >= room.config.maxPlayers ? "full" : phase === "finished" ? "finished" : phase === "waiting" ? "joinable" : room.isJoinable() ? "in_progress" : "full";
-        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.lineup, maxPlayers: room.config.maxPlayers, hostName: room.hostName() };
+        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.lineup, maxPlayers: room.config.maxPlayers, hostName: room.hostName(), kon: room.kon };
       }
     }
     ctx.json(200, info);
@@ -16677,7 +16717,7 @@ var SessionStore = class {
   async verify(token) {
     if (!TOKEN_RE.test(token)) return null;
     const rows = await this.sql`
-      SELECT s.id AS session_id, s.user_id, s.platform, s.method, s.last_seen_at, u.display_name, p.level, p.avatar
+      SELECT s.id AS session_id, s.user_id, s.platform, s.method, s.last_seen_at, u.display_name, p.level, p.avatar, p.kon_rating
       FROM sessions s
       JOIN users u ON u.id = s.user_id
       LEFT JOIN profiles p ON p.user_id = u.id
@@ -16696,7 +16736,7 @@ var SessionStore = class {
       this.sql`UPDATE users SET last_seen_at = now() WHERE id = ${r.user_id}`.catch((e2) => this.log.warn("user touch failed", { err: e2 }));
     }
     void this.activity.touch(r.user_id);
-    return { userId: r.user_id, sessionId: r.session_id, displayName: r.display_name, level: r.level ?? 1, avatar: isAvatarId(r.avatar) ? r.avatar : null, platform: r.platform ?? null, method: r.method };
+    return { userId: r.user_id, sessionId: r.session_id, displayName: r.display_name, level: r.level ?? 1, avatar: isAvatarId(r.avatar) ? r.avatar : null, platform: r.platform ?? null, method: r.method, konRating: r.kon_rating ?? 1e3 };
   }
   async revoke(token) {
     if (!TOKEN_RE.test(token)) return false;
@@ -17697,6 +17737,145 @@ async function moveClubRatings(tx, deltas) {
   }
 }
 
+// apps/server/src/kon/repo.ts
+function konOutcome(p, winner) {
+  if (!p.completed || p.team === null) return "loss";
+  if (winner === null) return "draw";
+  return p.team === winner ? "win" : "loss";
+}
+var avg = (xs) => xs.length ? xs.reduce((a, b2) => a + b2, 0) / xs.length : KON_RATING.start;
+async function applyKonResults(tx, m) {
+  const out = /* @__PURE__ */ new Map();
+  const ids = m.participants.map((p) => p.userId);
+  if (ids.length === 0) return out;
+  const rows = await tx`
+    SELECT user_id, kon_rating, kon_matches, kon_streak FROM profiles WHERE user_id IN ${tx(ids)}`;
+  const prof = new Map(rows.map((r) => [r.user_id, r]));
+  const side = (team) => m.participants.filter((p) => p.team === team).map((p) => prof.get(p.userId)?.kon_rating ?? KON_RATING.start);
+  const sideAvg = [avg(side(0)), avg(side(1))];
+  for (const p of m.participants) {
+    const r = prof.get(p.userId);
+    if (!r) continue;
+    const outcome = konOutcome(p, m.winner);
+    const team = p.team ?? 0;
+    const delta = konDelta({ mine: sideAvg[team], theirs: sideAvg[team === 0 ? 1 : 0], outcome, matches: r.kon_matches });
+    const rating = Math.max(KON_RATING.floor, r.kon_rating + delta);
+    const streak = outcome === "win" ? r.kon_streak + 1 : 0;
+    await tx`
+      UPDATE profiles SET kon_rating = ${rating}, kon_matches = kon_matches + 1,
+        kon_wins = kon_wins + ${outcome === "win" ? 1 : 0}, kon_losses = kon_losses + ${outcome === "loss" ? 1 : 0}, kon_draws = kon_draws + ${outcome === "draw" ? 1 : 0},
+        kon_streak = ${streak}, kon_best_streak = GREATEST(kon_best_streak, ${streak}), updated_at = now()
+      WHERE user_id = ${p.userId}`;
+    await tx`UPDATE match_participants SET kon_delta = ${rating - r.kon_rating} WHERE match_id = ${m.matchId} AND user_id = ${p.userId}`;
+    out.set(p.userId, { delta: rating - r.kon_rating, rating, outcome });
+  }
+  const clubOf = new Map((await tx`SELECT user_id, club_id FROM club_members WHERE user_id IN ${tx(ids)}`).map((r) => [r.user_id, r.club_id]));
+  const gangSide = (team) => {
+    const people = m.participants.filter((p) => p.team === team);
+    if (people.length < 2) return null;
+    const first = clubOf.get(people[0].userId);
+    return first && people.every((p) => clubOf.get(p.userId) === first) ? first : null;
+  };
+  const gangs = [gangSide(0), gangSide(1)];
+  const gangIds = [...new Set(gangs.filter((g) => g !== null))].sort();
+  if (gangIds.length) {
+    const g = new Map((await tx`SELECT id, kon_rating, kon_matches FROM clubs WHERE id IN ${tx(gangIds)} ORDER BY id FOR UPDATE`).map((r) => [r.id, r]));
+    for (const team of [0, 1]) {
+      const id = gangs[team];
+      const me = id ? g.get(id) : void 0;
+      if (!id || !me) continue;
+      const otherGang = gangs[team === 0 ? 1 : 0];
+      const theirs = otherGang && g.get(otherGang) ? g.get(otherGang).kon_rating : sideAvg[team === 0 ? 1 : 0];
+      const outcome = m.winner === null ? "draw" : m.winner === team ? "win" : "loss";
+      const rating = Math.max(KON_RATING.floor, me.kon_rating + konDelta({ mine: me.kon_rating, theirs, outcome, matches: me.kon_matches }));
+      await tx`
+        UPDATE clubs SET kon_rating = ${rating}, kon_matches = kon_matches + 1,
+          kon_wins = kon_wins + ${outcome === "win" ? 1 : 0}, kon_losses = kon_losses + ${outcome === "loss" ? 1 : 0}, kon_draws = kon_draws + ${outcome === "draw" ? 1 : 0}
+        WHERE id = ${id}`;
+    }
+  }
+  await tx`UPDATE matches SET kon_format = ${m.format} WHERE id = ${m.matchId}`;
+  return out;
+}
+var KonRepo = class {
+  constructor(sql2) {
+    this.sql = sql2;
+  }
+  sql;
+  async stats(userId) {
+    const [r] = await this.sql`
+      SELECT kon_rating, kon_matches, kon_wins, kon_losses, kon_draws, kon_streak, kon_best_streak FROM profiles WHERE user_id = ${userId}`;
+    return {
+      rating: r?.kon_rating ?? KON_RATING.start,
+      matches: r?.kon_matches ?? 0,
+      wins: r?.kon_wins ?? 0,
+      losses: r?.kon_losses ?? 0,
+      draws: r?.kon_draws ?? 0,
+      streak: r?.kon_streak ?? 0,
+      bestStreak: r?.kon_best_streak ?? 0
+    };
+  }
+  /** The first 100 by Kon rating (players or gangs with at least one Kon match) and the player's own row. */
+  async top(by, userId) {
+    if (by === "players") {
+      const rows2 = await this.sql`
+        SELECT * FROM (
+          SELECT u.id, u.display_name AS name, p.level, p.kon_rating AS rating, p.kon_matches AS matches, p.kon_wins AS wins, p.kon_losses AS losses, p.kon_draws AS draws, p.kon_best_streak AS best,
+                 row_number() OVER (ORDER BY p.kon_rating DESC, p.kon_wins DESC, p.kon_matches DESC, u.id)::int AS place
+          FROM profiles p JOIN users u ON u.id = p.user_id
+          WHERE p.kon_matches > 0 AND u.deleted_at IS NULL
+        ) t WHERE place <= 100 OR id = ${userId} ORDER BY place`;
+      const toRow2 = (r) => ({ place: r.place, id: r.id, name: r.name, level: r.level, rating: r.rating, matches: r.matches, wins: r.wins, losses: r.losses, draws: r.draws, bestStreak: r.best });
+      return { by, rows: rows2.filter((r) => r.place <= 100).map(toRow2), me: rows2.find((r) => r.id === userId) ? toRow2(rows2.find((r) => r.id === userId)) : null };
+    }
+    const [mine] = await this.sql`SELECT club_id FROM club_members WHERE user_id = ${userId}`;
+    const gangId = mine?.club_id ?? "00000000-0000-0000-0000-000000000000";
+    const rows = await this.sql`
+      SELECT * FROM (
+        SELECT c.id, c.name, c.tag, c.kon_rating AS rating, c.kon_matches AS matches, c.kon_wins AS wins, c.kon_losses AS losses, c.kon_draws AS draws,
+               row_number() OVER (ORDER BY c.kon_rating DESC, c.kon_wins DESC, c.kon_matches DESC, c.id)::int AS place
+        FROM clubs c WHERE c.kon_matches > 0
+      ) t WHERE place <= 100 OR id = ${gangId} ORDER BY place`;
+    const toRow = (r) => ({ place: r.place, id: r.id, name: r.name, tag: r.tag, rating: r.rating, matches: r.matches, wins: r.wins, losses: r.losses, draws: r.draws });
+    const me = rows.find((r) => r.id === gangId);
+    return { by, rows: rows.filter((r) => r.place <= 100).map(toRow), me: me ? toRow(me) : null };
+  }
+  /** The player's last Kon matches with their team-mates and opponents. */
+  async history(userId, limit = 20) {
+    const rows = await this.sql`
+      SELECT m.id AS match_id, m.ended_at, m.started_at, m.kon_format, m.map_id, mp.team, mp.won, mp.completed, m.winner_team, mp.kills, mp.deaths, mp.kon_delta, mp.character
+      FROM match_participants mp JOIN matches m ON m.id = mp.match_id
+      WHERE mp.user_id = ${userId} AND m.kon_format IS NOT NULL AND m.status = 'completed'
+      ORDER BY m.ended_at DESC NULLS LAST LIMIT ${limit}`;
+    if (rows.length === 0) return [];
+    const others = await this.sql`
+      SELECT mp.match_id, mp.user_id, mp.team, u.display_name AS name
+      FROM match_participants mp JOIN users u ON u.id = mp.user_id
+      WHERE mp.match_id IN ${this.sql(rows.map((r) => r.match_id))} AND mp.user_id <> ${userId}
+      ORDER BY u.display_name`;
+    return rows.map((r) => {
+      const left = !r.completed;
+      const outcome = left ? "loss" : r.winner_team === null ? "draw" : r.team === r.winner_team ? "win" : "loss";
+      const here = others.filter((o) => o.match_id === r.match_id);
+      return {
+        matchId: r.match_id,
+        endedAt: (r.ended_at ?? r.started_at).toISOString(),
+        format: r.kon_format,
+        mapId: r.map_id,
+        team: r.team,
+        outcome,
+        left,
+        kills: r.kills,
+        deaths: r.deaths,
+        delta: r.kon_delta,
+        character: r.character,
+        mates: here.filter((o) => o.team === r.team).map((o) => o.name),
+        rivals: here.filter((o) => o.team !== r.team).map((o) => o.name)
+      };
+    });
+  }
+};
+
 // apps/server/src/progression/recorder.ts
 var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 async function seedAchievements(sql2) {
@@ -17781,7 +17960,7 @@ var PgMatchRecorder = class {
         const prev = { xp: prof.xp, level: prof.level, matchesCompleted: prof.matches_completed, wins: prof.wins, currentWinStreak: prof.current_win_streak };
         const { won, lost, streak, unlocked, xpGained: xp, totalXp, level } = applyMatchProgress(prev, perf, new Set(ownedRows.map((r) => r.achievement_id)));
         const tokens = tokensForMatch(perf);
-        const rating = Math.max(RATING_RULES.floor, prof.rating + ratingDelta(perf));
+        const rating = m.kon ? prof.rating : Math.max(RATING_RULES.floor, prof.rating + ratingDelta(perf));
         const rDelta = rating - prof.rating;
         await tx`
           UPDATE profiles SET
@@ -17818,6 +17997,13 @@ var PgMatchRecorder = class {
         clubDeltas.push({ userId: p.userId, delta: rDelta });
       }
       await moveClubRatings(tx, clubDeltas);
+      if (m.kon) {
+        const kon = await applyKonResults(tx, { matchId: m.matchId, format: m.kon, winner: m.winnerTeam, participants: participants.map((p) => ({ userId: p.userId, team: p.team, completed: p.completed })) });
+        for (const [userId, k] of kon) {
+          const r = out.get(userId);
+          if (r) out.set(userId, { ...r, kon: k });
+        }
+      }
       await tx`
         UPDATE matches SET status = 'completed', ended_at = ${m.endedAt}, duration_ms = ${Math.max(0, Math.round(m.durationMs))},
           end_reason = ${m.endReason}, player_count = ${people}, bot_count = ${fill}, mode = ${m.mode}, winner_team = ${m.winnerTeam}, results_processed_at = now()
@@ -17829,8 +18015,9 @@ var PgMatchRecorder = class {
     const out = /* @__PURE__ */ new Map();
     if (userIds.length === 0) return out;
     const rows = await tx`
-      SELECT mp.user_id, mp.xp_awarded, mp.tokens_awarded, mp.rating_delta, p.xp, p.level, p.tokens, p.rating
-      FROM match_participants mp JOIN profiles p ON p.user_id = mp.user_id
+      SELECT mp.user_id, mp.xp_awarded, mp.tokens_awarded, mp.rating_delta, p.xp, p.level, p.tokens, p.rating,
+             mp.kon_delta, p.kon_rating, mp.team, mp.completed, m.winner_team, m.kon_format
+      FROM match_participants mp JOIN profiles p ON p.user_id = mp.user_id JOIN matches m ON m.id = mp.match_id
       WHERE mp.match_id = ${matchId} AND mp.user_id IN ${tx(userIds)}`;
     const ach = await tx`
       SELECT user_id, achievement_id FROM player_achievements WHERE match_id = ${matchId} AND user_id IN ${tx(userIds)}`;
@@ -17844,7 +18031,8 @@ var PgMatchRecorder = class {
         tokensGained: r.tokens_awarded,
         totalTokens: r.tokens,
         ratingDelta: r.rating_delta,
-        rating: r.rating
+        rating: r.rating,
+        ...r.kon_format ? { kon: { outcome: konOutcome({ userId: r.user_id, team: r.team, completed: r.completed }, r.winner_team), delta: r.kon_delta, rating: r.kon_rating } } : {}
       });
     }
     return out;
@@ -21199,8 +21387,29 @@ async function resolveAccount(sql2, provider, profile, current) {
   return { userId, isNew: true, linked: false, refused: false };
 }
 
+// apps/server/src/api/kon.ts
+var registerKonRoutes = (router, deps) => {
+  const auth = requireUser(deps.services.sessions);
+  const limiter = new RateLimiter(60, 1);
+  const byUser = (ctx) => currentUser(ctx).userId;
+  const repo = () => {
+    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
+    return new KonRepo(deps.sql);
+  };
+  router.get("/api/kon", auth, rateLimit(limiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const r = repo();
+    const res = { me: await r.stats(me.userId), history: await r.history(me.userId, 20), waiting: deps.rooms.konWaiting() };
+    ctx.json(200, res, { "cache-control": "no-store" });
+  });
+  router.get("/api/kon/top", auth, rateLimit(limiter, byUser), async (ctx) => {
+    const by = ctx.query.get("by") === "gangs" ? "gangs" : "players";
+    ctx.json(200, await repo().top(by, currentUser(ctx).userId), { "cache-control": "no-store" });
+  });
+};
+
 // apps/server/src/app.ts
-var ROUTE_MODULES = [registerAuthRoutes, registerOAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerClubRoutes, registerBlatRoutes, registerTelegramRoutes, registerAdminRoutes];
+var ROUTE_MODULES = [registerAuthRoutes, registerOAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerClubRoutes, registerBlatRoutes, registerKonRoutes, registerTelegramRoutes, registerAdminRoutes];
 function createApp(deps, modules = ROUTE_MODULES) {
   const router = new Router();
   const startedAt = Date.now();
@@ -21287,11 +21496,13 @@ var MatchRoom = class {
     this.hostId = opts.hostUserId;
     this.inviteCode = opts.inviteCode ?? null;
     this.autoStart = opts.autoStart ?? !opts.isPrivate;
-    this.fillBots = opts.fillBots ?? false;
+    this.kon = opts.kon ?? null;
+    this.fillBots = this.kon ? false : opts.fillBots ?? false;
     this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
     this.onPresence = opts.onPresence ?? (() => {
     });
-    this.config = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? "ffa" };
+    const base2 = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? "ffa" };
+    this.config = this.kon ? konConfig(base2, this.kon) : base2;
     this.log = log2.child({ room: this.id });
     this.world = this.createWorld();
   }
@@ -21299,6 +21510,8 @@ var MatchRoom = class {
   id;
   isPrivate;
   createdAt = Date.now();
+  /** V2.0 part D: the «Блатной кон» format (null: an ordinary room). */
+  kon;
   /** Match rules; `mode` changes when the host switches between free-for-all and teams. */
   config;
   mapId;
@@ -21316,6 +21529,13 @@ var MatchRoom = class {
   lastNow = 0;
   autoStartAt = 0;
   soloSince = 0;
+  /** Kon: since when one side has nobody left in the match (0: both sides are there). */
+  emptySideSince = 0;
+  /**
+   * Kon: who started the match (side, character, invitation) and what those who left had done — a
+   * player who leaves loses even after the reconnect window has removed them from the room.
+   */
+  konLineup = /* @__PURE__ */ new Map();
   resultsSent = false;
   autoStart;
   fillBots;
@@ -21480,6 +21700,9 @@ var MatchRoom = class {
     }
   }
   removeClient(c, reason) {
+    const kl = this.konLineup.get(c.user.userId);
+    const wp = this.world.players.get(c.user.userId);
+    if (kl && wp && this.matchId && !this.resultsSent) Object.assign(kl, { kills: wp.kills, assists: wp.assists, deaths: wp.deaths, score: wp.score, damageDealt: wp.damageDealt, playtimeMs: Math.round(c.matchTimeMs) });
     this.clients.delete(c.user.userId);
     this.world.removePlayer(c.user.userId);
     this.services.analytics.server("lobby_left", { roomId: this.id, phase: this.world.phase, reason }, c.user);
@@ -21558,6 +21781,7 @@ var MatchRoom = class {
         this.changeMap(msg.mapId);
         return;
       case "mode":
+        if (this.kon) return this.error(c, "kon_fixed", "A Kon room\u2019s format is fixed");
         if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host changes the mode");
         if (this.world.phase !== "waiting") return this.error(c, "match_running", "The match is already on");
         this.changeMode(msg.mode);
@@ -21567,6 +21791,12 @@ var MatchRoom = class {
         if (this.world.phase !== "waiting") return this.error(c, "match_running", "Teams are fixed once the match is on");
         const p = this.world.players.get(c.user.userId);
         if (!p || p.team === msg.team) return;
+        if (this.kon) {
+          if (this.world.teamSize(msg.team) + 1 > KON_RULES[this.kon].size) return this.error(c, "team_full", "That side is full");
+          this.world.setTeam(c.user.userId, msg.team);
+          this.broadcastRoster();
+          return;
+        }
         if (this.fillBots) {
           let there = 0;
           for (const x of this.clients.values()) if (x !== c && this.world.players.get(x.user.userId)?.team === msg.team) there++;
@@ -21828,7 +22058,19 @@ var MatchRoom = class {
       c.queue = [];
       c.lastQueuedSeq = 0;
     }
+    if (this.kon && !this.isPrivate) {
+      const people = [...this.clients.values()].filter((c) => c.connected).map((c) => ({ id: c.user.userId, rating: c.user.konRating ?? KON_RATING.start }));
+      for (const [id, team] of konDeal(people)) this.world.setTeam(id, team);
+    }
+    this.emptySideSince = 0;
     this.world.beginMatch();
+    this.konLineup.clear();
+    if (this.kon) {
+      for (const c of this.clients.values()) {
+        const p = this.world.players.get(c.user.userId);
+        this.konLineup.set(c.user.userId, { team: p?.team ?? null, character: c.character, viaInvite: c.viaInvite, kills: 0, assists: 0, deaths: 0, score: 0, damageDealt: 0, playtimeMs: 0 });
+      }
+    }
     this.matchId = randomUUID4();
     this.matchStartedAtWall = Date.now();
     this.resultsSent = false;
@@ -21863,7 +22105,12 @@ var MatchRoom = class {
     this.resultsSent = true;
     const standings = this.world.standings();
     const durationMs = Math.max(0, this.world.time - this.world.matchStartedAt);
-    const teams = isTeamMode(this.config.mode) ? this.world.teamResult() : void 0;
+    let teams = isTeamMode(this.config.mode) ? this.world.teamResult() : void 0;
+    if (this.kon && teams) {
+      const stayed = (t) => standings.some((st) => !st.isBot && st.team === t && this.clients.get(st.id)?.connected === true);
+      const winner = stayed(0) && !stayed(1) ? 0 : stayed(1) && !stayed(0) ? 1 : teams.winner;
+      if (winner !== teams.winner) teams = { ...teams, winner };
+    }
     this.flush();
     const shown = standings.map((s) => s.isBot ? { ...s, isBot: false } : s);
     this.broadcast({ type: "results", matchId: this.matchId, reason, durationMs, standings: shown, mapId: this.mapId, mode: this.config.mode, ...teams ? { teams } : {} });
@@ -21899,6 +22146,12 @@ var MatchRoom = class {
         playtimeMs: Math.round(c.matchTimeMs)
       };
     });
+    if (this.kon) {
+      for (const [userId, k] of this.konLineup) {
+        if (participants.some((p) => p.userId === userId)) continue;
+        participants.push({ userId, character: k.character, place: 2, team: k.team, teamOutcome: "loss", kills: k.kills, assists: k.assists, deaths: k.deaths, score: k.score, damageDealt: k.damageDealt, objectives: 0, completed: false, viaInvite: k.viaInvite, playtimeMs: k.playtimeMs });
+      }
+    }
     this.services.analytics.server("match_completed", { matchId, mapId: this.mapId, durationMs, players: peopleAtEnd, fill: fillAtEnd, reason, mode: this.config.mode });
     this.services.recorder.matchCompleted({
       matchId,
@@ -21914,7 +22167,8 @@ var MatchRoom = class {
       playersAtEnd: presentAtEnd.length,
       peopleAtEnd,
       fillAtEnd,
-      participants
+      participants,
+      kon: this.kon
     }).then((personal) => {
       let levelChanged = false;
       for (const [userId, result] of personal) {
@@ -21989,6 +22243,16 @@ var MatchRoom = class {
       }
     }
     if (w.phase === "finished" && w.phaseEndsAt && w.time >= w.phaseEndsAt) this.toLobby(false);
+    if (this.kon && w.phase === "active") {
+      const there = (t) => [...this.clients.values()].some((c) => c.connected && w.players.get(c.user.userId)?.team === t);
+      if (there(0) !== there(1)) {
+        if (!this.emptySideSince) this.emptySideSince = now;
+        else if (now - this.emptySideSince > SOLO_ABORT_MS) {
+          this.emptySideSince = 0;
+          w.finish("aborted");
+        }
+      } else this.emptySideSince = 0;
+    }
     if (w.phase === "active" && this.connectedCount + this.seats.size < 2) {
       if (!this.soloSince) this.soloSince = now;
       else if (now - this.soloSince > SOLO_ABORT_MS) {
@@ -22071,7 +22335,8 @@ var MatchRoom = class {
         avatar: c.user.avatar ?? null,
         team: p?.team ?? null,
         mods: c.gear.loadout.mods,
-        skins: c.gear.loadout.skins ?? {}
+        skins: c.gear.loadout.skins ?? {},
+        ...this.kon ? { konRating: c.user.konRating ?? KON_RATING.start } : {}
       };
     });
     const filled = [...this.seats.values()].map((seat) => {
@@ -22103,7 +22368,8 @@ var MatchRoom = class {
       isPrivate: this.isPrivate,
       maxPlayers: this.config.maxPlayers,
       mode: this.config.mode,
-      minToStart: this.minToStart
+      minToStart: this.minToStart,
+      kon: this.kon
     };
   }
   broadcastRoster() {
@@ -22149,11 +22415,11 @@ var MatchRoom = class {
   }
   /** For the admin dashboard: people and filled players counted separately. */
   info() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, fill: this.seats.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, fill: this.seats.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon };
   }
   /** For players: the lineup as they see it in the room. */
   publicInfo() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon };
   }
   static protocolVersion = PROTOCOL_VERSION;
 };
@@ -22197,7 +22463,8 @@ var RoomManager = class {
   onPresence(listener) {
     this.presence = listener;
   }
-  create(mapId, isPrivate, hostUserId, inviteCode = null, mode = "ffa") {
+  /** A room; with `kon` a «Блатной кон» room of that format (team deathmatch, fixed sides, people only). */
+  create(mapId, isPrivate, hostUserId, inviteCode = null, mode = "ffa", kon = null) {
     if (this.rooms.size >= this.opts.maxRooms) throw new Error("room limit reached");
     let id = newRoomId();
     while (this.rooms.has(id)) id = newRoomId();
@@ -22208,7 +22475,8 @@ var RoomManager = class {
         isPrivate,
         hostUserId,
         inviteCode,
-        mode,
+        mode: kon ? "teams" : mode,
+        kon,
         config: this.opts.config,
         fillBots: this.opts.fillBots ?? false,
         ...this.opts.fillTiming ? { fillTiming: this.opts.fillTiming } : {},
@@ -22218,15 +22486,31 @@ var RoomManager = class {
       this.log
     );
     this.rooms.set(id, room);
-    this.services.analytics.server("lobby_created", { roomId: id, mapId, isPrivate, mode }, { userId: hostUserId });
+    this.services.analytics.server("lobby_created", { roomId: id, mapId, isPrivate, mode: room.mode }, { userId: hostUserId });
     return room;
   }
   /** Finds a public joinable room of the mode (preferring the requested map and fuller rooms) or creates one. */
   quickMatch(userId, mapId, mode = "ffa") {
-    const candidates = this.list().filter((r) => !r.isPrivate && r.mode === mode && r.isJoinable(userId) && (!mapId || r.mapId === mapId)).sort((a, b2) => b2.occupancy - a.occupancy);
+    const candidates = this.list().filter((r) => !r.isPrivate && r.kon === null && r.mode === mode && r.isJoinable(userId) && (!mapId || r.mapId === mapId)).sort((a, b2) => b2.occupancy - a.occupancy);
     if (candidates[0]) return candidates[0];
     const map = mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)];
     return this.create(map, false, null, null, mode);
+  }
+  /**
+   * V2.0 part D, «Блатной кон» search: a public Kon room of the format still gathering people (the
+   * fullest first, on the chosen map if one was chosen) or a new one. It starts by itself once full.
+   */
+  konQuick(userId, format, mapId) {
+    const candidates = this.list().filter((r) => !r.isPrivate && r.kon === format && r.phase === "waiting" && r.isJoinable(userId) && (!mapId || r.mapId === mapId)).sort((a, b2) => b2.occupancy - a.occupancy);
+    if (candidates[0]) return candidates[0];
+    const map = mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)];
+    return this.create(map, false, null, null, "teams", format);
+  }
+  /** People waiting in public Kon rooms of each format (the Kon screen shows it). */
+  konWaiting() {
+    const out = { "1x1": 0, "2x2": 0, "3x3": 0, "5x5": 0 };
+    for (const r of this.list()) if (r.kon && !r.isPrivate && r.phase === "waiting") out[r.kon] += r.connectedCount;
+    return out;
   }
   start() {
     if (this.timer) return;

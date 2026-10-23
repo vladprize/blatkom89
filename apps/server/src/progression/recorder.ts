@@ -17,6 +17,7 @@ import { awardMatchTokens } from '../economy/repo.js';
 import { moveClubRatings } from '../clubs/repo.js';
 import { BlatRepo, creditLevels } from '../blat/repo.js';
 import type { ConfirmResult } from '../blat/repo.js';
+import { applyKonResults, konOutcome } from '../kon/repo.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -112,7 +113,8 @@ export class PgMatchRecorder implements MatchRecorder {
         const prev = { xp: prof!.xp, level: prof!.level, matchesCompleted: prof!.matches_completed, wins: prof!.wins, currentWinStreak: prof!.current_win_streak };
         const { won, lost, streak, unlocked, xpGained: xp, totalXp, level } = applyMatchProgress(prev, perf, new Set(ownedRows.map((r) => r.achievement_id)));
         const tokens = tokensForMatch(perf);
-        const rating = Math.max(RATING_RULES.floor, prof!.rating + ratingDelta(perf));
+        // V2.0 part D: a «Блатной кон» match moves the Kon rating (below), not the general one
+        const rating = m.kon ? prof!.rating : Math.max(RATING_RULES.floor, prof!.rating + ratingDelta(perf));
         const rDelta = rating - prof!.rating;
         await tx`
           UPDATE profiles SET
@@ -151,6 +153,14 @@ export class PgMatchRecorder implements MatchRecorder {
       }
       // the clubs of the people who played (v0.3): their rating moves with their members'
       await moveClubRatings(tx, clubDeltas);
+      // V2.0 part D: the Kon rating of the players and of the gangs that played as a side
+      if (m.kon) {
+        const kon = await applyKonResults(tx, { matchId: m.matchId, format: m.kon, winner: m.winnerTeam, participants: participants.map((p) => ({ userId: p.userId, team: p.team, completed: p.completed })) });
+        for (const [userId, k] of kon) {
+          const r = out.get(userId);
+          if (r) out.set(userId, { ...r, kon: k });
+        }
+      }
       await tx`
         UPDATE matches SET status = 'completed', ended_at = ${m.endedAt}, duration_ms = ${Math.max(0, Math.round(m.durationMs))},
           end_reason = ${m.endReason}, player_count = ${people}, bot_count = ${fill}, mode = ${m.mode}, winner_team = ${m.winnerTeam}, results_processed_at = now()
@@ -162,9 +172,10 @@ export class PgMatchRecorder implements MatchRecorder {
   private async readResults(tx: Tx, matchId: string, userIds: string[]): Promise<Map<string, PersonalResult>> {
     const out = new Map<string, PersonalResult>();
     if (userIds.length === 0) return out;
-    const rows = await tx<Array<{ user_id: string; xp_awarded: number; tokens_awarded: number; rating_delta: number; xp: number; level: number; tokens: number; rating: number }>>`
-      SELECT mp.user_id, mp.xp_awarded, mp.tokens_awarded, mp.rating_delta, p.xp, p.level, p.tokens, p.rating
-      FROM match_participants mp JOIN profiles p ON p.user_id = mp.user_id
+    const rows = await tx<Array<{ user_id: string; xp_awarded: number; tokens_awarded: number; rating_delta: number; xp: number; level: number; tokens: number; rating: number; kon_delta: number; kon_rating: number; team: 0 | 1 | null; completed: boolean; winner_team: 0 | 1 | null; kon_format: string | null }>>`
+      SELECT mp.user_id, mp.xp_awarded, mp.tokens_awarded, mp.rating_delta, p.xp, p.level, p.tokens, p.rating,
+             mp.kon_delta, p.kon_rating, mp.team, mp.completed, m.winner_team, m.kon_format
+      FROM match_participants mp JOIN profiles p ON p.user_id = mp.user_id JOIN matches m ON m.id = mp.match_id
       WHERE mp.match_id = ${matchId} AND mp.user_id IN ${tx(userIds)}`;
     const ach = await tx<Array<{ user_id: string; achievement_id: AchievementId }>>`
       SELECT user_id, achievement_id FROM player_achievements WHERE match_id = ${matchId} AND user_id IN ${tx(userIds)}`;
@@ -179,6 +190,7 @@ export class PgMatchRecorder implements MatchRecorder {
         totalTokens: r.tokens,
         ratingDelta: r.rating_delta,
         rating: r.rating,
+        ...(r.kon_format ? { kon: { outcome: konOutcome({ userId: r.user_id, team: r.team, completed: r.completed }, r.winner_team), delta: r.kon_delta, rating: r.kon_rating } } : {}),
       });
     }
     return out;

@@ -27,7 +27,9 @@
 //      tile with the club's flag (tests/e2e/clubs.mjs)
 //  15. $BLAT (V2.0): the welcome on the menu tile, the $BLAT screen and the personal link, a second
 //      browser through the link, the invitation counted after a whole match, the inviter told live;
-//      with E2E_ADMIN_USER the dashboard's $BLAT page (tests/e2e/blat.mjs)
+//      BLAT DROP; with E2E_ADMIN_USER the dashboard's $BLAT page and snapshots (tests/e2e/blat.mjs)
+//  16. «Блатной кон» (V2.0): the menu button, the Kon screen, a 1×1 room through an invitation, the
+//      leaver loses and the Kon rating moves, the history and the table, the search (tests/e2e/kon.mjs)
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
 // E2E_PROD=1 runs the prebuilt deploy/ bundle exactly as a host would (NODE_ENV=production, guest login,
 // RENDER_EXTERNAL_URL, TRUST_PROXY) instead of the development server.
@@ -176,6 +178,9 @@ try {
   if (process.env.E2E_ADMIN_USER) blatArgs.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
   const blat = spawnSync(process.execPath, blatArgs, { stdio: 'inherit' });
   if (blat.status !== 0) failed = true;
+  console.log('\n[e2e] «Блатной кон»: a 1×1 room by invitation, the Kon rating, the history, the search (three browsers)');
+  const kon = spawnSync(process.execPath, ['tests/e2e/kon.mjs', base, join(out, 'kon')], { stdio: 'inherit' });
+  if (kon.status !== 0) failed = true;
   console.log('\n[e2e] the three new maps: the picker in Russian, the cemetery, the square and the pioneer camp in practice');
   const maps = spawnSync(process.execPath, ['tests/e2e/maps.mjs', base, join(out, 'maps')], { stdio: 'inherit' });
   if (maps.status !== 0) failed = true;

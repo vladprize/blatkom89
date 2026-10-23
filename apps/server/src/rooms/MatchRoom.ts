@@ -36,6 +36,10 @@ import {
   fillPersona,
   CHAT_RULES,
   cleanChat,
+  KON_RATING,
+  KON_RULES,
+  konConfig,
+  konDeal,
 } from '@blatkom/shared';
 import type {
   AvatarId,
@@ -48,6 +52,7 @@ import type {
   GameEvent,
   GameMode,
   InputFrame,
+  KonFormat,
   MapId,
   MatchConfig,
   RosterEntry,
@@ -77,6 +82,11 @@ export interface RoomOptions {
   fillTiming?: Partial<FillTiming>;
   /** A person's place changed (joined, left, a match started or ended): their friends are told. */
   onPresence?: (userId: string) => void;
+  /**
+   * V2.0 part D: a «Блатной кон» room — team deathmatch with fixed sides of this format, people only
+   * (never filled), the mode can't change, nobody joins a match that is on (game-rules/kon.ts).
+   */
+  kon?: KonFormat | null;
 }
 
 /** A player the room runs itself to fill the lineup (never labelled as such to clients). */
@@ -153,6 +163,8 @@ export class MatchRoom {
   readonly id: string;
   readonly isPrivate: boolean;
   readonly createdAt = Date.now();
+  /** V2.0 part D: the «Блатной кон» format (null: an ordinary room). */
+  readonly kon: KonFormat | null;
   /** Match rules; `mode` changes when the host switches between free-for-all and teams. */
   config: MatchConfig;
   mapId: MapId;
@@ -170,6 +182,13 @@ export class MatchRoom {
   private lastNow = 0;
   private autoStartAt = 0;
   private soloSince = 0;
+  /** Kon: since when one side has nobody left in the match (0: both sides are there). */
+  private emptySideSince = 0;
+  /**
+   * Kon: who started the match (side, character, invitation) and what those who left had done — a
+   * player who leaves loses even after the reconnect window has removed them from the room.
+   */
+  private konLineup = new Map<string, { team: Team | null; character: CharacterId; viaInvite: boolean; kills: number; assists: number; deaths: number; score: number; damageDealt: number; playtimeMs: number }>();
   private resultsSent = false;
   private readonly autoStart: boolean;
   private readonly fillBots: boolean;
@@ -194,10 +213,13 @@ export class MatchRoom {
     this.hostId = opts.hostUserId;
     this.inviteCode = opts.inviteCode ?? null;
     this.autoStart = opts.autoStart ?? !opts.isPrivate;
-    this.fillBots = opts.fillBots ?? false;
+    this.kon = opts.kon ?? null;
+    // a Kon room is people only, whatever the server's fill setting
+    this.fillBots = this.kon ? false : (opts.fillBots ?? false);
     this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
     this.onPresence = opts.onPresence ?? (() => {});
-    this.config = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? 'ffa' };
+    const base: MatchConfig = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? 'ffa' };
+    this.config = this.kon ? konConfig(base, this.kon) : base;
     this.log = log.child({ room: this.id });
     this.world = this.createWorld();
   }
@@ -371,6 +393,10 @@ export class MatchRoom {
   }
 
   private removeClient(c: Client, reason: string) {
+    // Kon: keep what a leaver did in the match (they are recorded as having left — a loss)
+    const kl = this.konLineup.get(c.user.userId);
+    const wp = this.world.players.get(c.user.userId);
+    if (kl && wp && this.matchId && !this.resultsSent) Object.assign(kl, { kills: wp.kills, assists: wp.assists, deaths: wp.deaths, score: wp.score, damageDealt: wp.damageDealt, playtimeMs: Math.round(c.matchTimeMs) });
     this.clients.delete(c.user.userId);
     this.world.removePlayer(c.user.userId);
     this.services.analytics.server('lobby_left', { roomId: this.id, phase: this.world.phase, reason }, c.user);
@@ -452,6 +478,7 @@ export class MatchRoom {
         this.changeMap(msg.mapId);
         return;
       case 'mode':
+        if (this.kon) return this.error(c, 'kon_fixed', 'A Kon room’s format is fixed');
         if (c.user.userId !== this.hostId) return this.error(c, 'not_host', 'Only the room’s host changes the mode');
         if (this.world.phase !== 'waiting') return this.error(c, 'match_running', 'The match is already on');
         this.changeMode(msg.mode);
@@ -461,6 +488,13 @@ export class MatchRoom {
         if (this.world.phase !== 'waiting') return this.error(c, 'match_running', 'Teams are fixed once the match is on');
         const p = this.world.players.get(c.user.userId);
         if (!p || p.team === msg.team) return;
+        // Kon: a side holds the format's number of people, no more
+        if (this.kon) {
+          if (this.world.teamSize(msg.team) + 1 > KON_RULES[this.kon].size) return this.error(c, 'team_full', 'That side is full');
+          this.world.setTeam(c.user.userId, msg.team);
+          this.broadcastRoster();
+          return;
+        }
         if (this.fillBots) {
           // the room evens the sides out with its own players: only people are limited per side
           let there = 0;
@@ -750,7 +784,20 @@ export class MatchRoom {
       c.queue = [];
       c.lastQueuedSeq = 0;
     }
+    // Kon, found by the search: even sides by Kon rating (strongest first: red, blue, blue, red…)
+    if (this.kon && !this.isPrivate) {
+      const people = [...this.clients.values()].filter((c) => c.connected).map((c) => ({ id: c.user.userId, rating: c.user.konRating ?? KON_RATING.start }));
+      for (const [id, team] of konDeal(people)) this.world.setTeam(id, team);
+    }
+    this.emptySideSince = 0;
     this.world.beginMatch();
+    this.konLineup.clear();
+    if (this.kon) {
+      for (const c of this.clients.values()) {
+        const p = this.world.players.get(c.user.userId);
+        this.konLineup.set(c.user.userId, { team: p?.team ?? null, character: c.character, viaInvite: c.viaInvite, kills: 0, assists: 0, deaths: 0, score: 0, damageDealt: 0, playtimeMs: 0 });
+      }
+    }
     this.matchId = randomUUID();
     this.matchStartedAtWall = Date.now();
     this.resultsSent = false;
@@ -790,7 +837,13 @@ export class MatchRoom {
     this.resultsSent = true;
     const standings: Standing[] = this.world.standings();
     const durationMs = Math.max(0, this.world.time - this.world.matchStartedAt);
-    const teams = isTeamMode(this.config.mode) ? this.world.teamResult() : undefined;
+    let teams = isTeamMode(this.config.mode) ? this.world.teamResult() : undefined;
+    // Kon: a side with nobody left at the end loses to the side that stayed, whatever the score
+    if (this.kon && teams) {
+      const stayed = (t: Team) => standings.some((st) => !st.isBot && st.team === t && this.clients.get(st.id)?.connected === true);
+      const winner: Team | null = stayed(0) && !stayed(1) ? 0 : stayed(1) && !stayed(0) ? 1 : teams.winner;
+      if (winner !== teams.winner) teams = { ...teams, winner };
+    }
     // deliver the deciding shot/kill events before the results screen
     this.flush();
     // everyone is shown the same way: players the room filled in are not marked
@@ -831,6 +884,13 @@ export class MatchRoom {
           playtimeMs: Math.round(c.matchTimeMs),
         };
       });
+    // Kon: those who started the match and are no longer in the room left it — a loss
+    if (this.kon) {
+      for (const [userId, k] of this.konLineup) {
+        if (participants.some((p) => p.userId === userId)) continue;
+        participants.push({ userId, character: k.character, place: 2, team: k.team, teamOutcome: 'loss' as const, kills: k.kills, assists: k.assists, deaths: k.deaths, score: k.score, damageDealt: k.damageDealt, objectives: 0, completed: false, viaInvite: k.viaInvite, playtimeMs: k.playtimeMs });
+      }
+    }
     this.services.analytics.server('match_completed', { matchId, mapId: this.mapId, durationMs, players: peopleAtEnd, fill: fillAtEnd, reason, mode: this.config.mode });
     this.services.recorder
       .matchCompleted({
@@ -848,6 +908,7 @@ export class MatchRoom {
         peopleAtEnd,
         fillAtEnd,
         participants,
+        kon: this.kon,
       })
       .then((personal) => {
         let levelChanged = false;
@@ -932,6 +993,17 @@ export class MatchRoom {
     }
     // finished → lobby
     if (w.phase === 'finished' && w.phaseEndsAt && w.time >= w.phaseEndsAt) this.toLobby(false);
+    // Kon: a side with nobody left — after the grace period the match ends and the other side wins
+    if (this.kon && w.phase === 'active') {
+      const there = (t: Team) => [...this.clients.values()].some((c) => c.connected && w.players.get(c.user.userId)?.team === t);
+      if (there(0) !== there(1)) {
+        if (!this.emptySideSince) this.emptySideSince = now;
+        else if (now - this.emptySideSince > SOLO_ABORT_MS) {
+          this.emptySideSince = 0;
+          w.finish('aborted');
+        }
+      } else this.emptySideSince = 0;
+    }
     // solo abort: everyone else left during a match (filled players keep a person company)
     if (w.phase === 'active' && this.connectedCount + this.seats.size < 2) {
       if (!this.soloSince) this.soloSince = now;
@@ -1023,6 +1095,7 @@ export class MatchRoom {
         team: p?.team ?? null,
         mods: c.gear.loadout.mods,
         skins: c.gear.loadout.skins ?? {},
+        ...(this.kon ? { konRating: c.user.konRating ?? KON_RATING.start } : {}),
       };
     });
     // players the room filled in look exactly like people (always ready; never the host)
@@ -1056,6 +1129,7 @@ export class MatchRoom {
       maxPlayers: this.config.maxPlayers,
       mode: this.config.mode,
       minToStart: this.minToStart,
+      kon: this.kon,
     };
   }
 
@@ -1107,12 +1181,12 @@ export class MatchRoom {
 
   /** For the admin dashboard: people and filled players counted separately. */
   info() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, fill: this.seats.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, fill: this.seats.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon };
   }
 
   /** For players: the lineup as they see it in the room. */
   publicInfo() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName() };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon };
   }
 
   static protocolVersion = PROTOCOL_VERSION;

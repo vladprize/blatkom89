@@ -7311,6 +7311,19 @@ var REFERRAL_TIERS = Object.freeze([
 ]);
 var REFERRAL_RULES = Object.freeze({ minMatchSec: 60, dailyCap: 20 });
 
+// packages/shared/src/game-rules/kon.ts
+var KON_FORMATS = ["1x1", "2x2", "3x3", "5x5"];
+var KON_RULES = Object.freeze({
+  "1x1": { size: 1, teamScoreLimit: 10, durationScale: 0.75 },
+  "2x2": { size: 2, teamScoreLimit: 15, durationScale: 1 },
+  "3x3": { size: 3, teamScoreLimit: 20, durationScale: 1 },
+  "5x5": { size: 5, teamScoreLimit: 30, durationScale: 1.25 }
+});
+var KON_RATING = Object.freeze({ start: 1e3, floor: 100, k: 24, kNew: 40, newMatches: 10 });
+
+// packages/shared/src/game-rules/konStakes.ts
+var KON_STAKES = Object.freeze({ enabled: false, minStake: 100, maxStake: 1e4 });
+
 // packages/shared/src/maps/props.ts
 var P = (w, h, shape, layer, blocksShot, label, extra = {}) => ({ w, h, shape, layer, blocksMove: shape !== "none", blocksShot: shape !== "none" && blocksShot, label, ...extra });
 var PROP_DEFS = {
@@ -7616,8 +7629,8 @@ var UpdateProfileRequest = external_exports.object({
   /** A profile avatar (game-rules/avatars.ts); null removes it. */
   avatar: external_exports.enum(AVATAR_IDS).nullable().optional()
 }).strict();
-var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true), mode: external_exports.enum(GAME_MODES).default("ffa") }).strict();
-var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional(), mode: external_exports.enum(GAME_MODES).default("ffa") }).strict();
+var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional() }).strict();
+var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional(), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional() }).strict();
 var AdminLoginRequest = external_exports.object({ username: external_exports.string().min(3).max(32), password: external_exports.string().min(1).max(256) }).strict();
 var AdminCreateUserRequest = external_exports.object({
   username: external_exports.string().regex(/^[a-z0-9_.-]{3,32}$/),

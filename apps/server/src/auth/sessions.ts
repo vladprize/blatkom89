@@ -41,8 +41,8 @@ export class SessionStore implements SessionVerifier {
 
   async verify(token: string): Promise<AuthedUser | null> {
     if (!TOKEN_RE.test(token)) return null;
-    const rows = await this.sql<Array<{ session_id: string; user_id: string; platform: string | null; method: AuthedUser['method']; last_seen_at: Date; display_name: string; level: number | null; avatar: string | null }>>`
-      SELECT s.id AS session_id, s.user_id, s.platform, s.method, s.last_seen_at, u.display_name, p.level, p.avatar
+    const rows = await this.sql<Array<{ session_id: string; user_id: string; platform: string | null; method: AuthedUser['method']; last_seen_at: Date; display_name: string; level: number | null; avatar: string | null; kon_rating: number | null }>>`
+      SELECT s.id AS session_id, s.user_id, s.platform, s.method, s.last_seen_at, u.display_name, p.level, p.avatar, p.kon_rating
       FROM sessions s
       JOIN users u ON u.id = s.user_id
       LEFT JOIN profiles p ON p.user_id = u.id
@@ -61,7 +61,7 @@ export class SessionStore implements SessionVerifier {
       this.sql`UPDATE users SET last_seen_at = now() WHERE id = ${r.user_id}`.catch((e: Error) => this.log.warn('user touch failed', { err: e }));
     }
     void this.activity.touch(r.user_id);
-    return { userId: r.user_id, sessionId: r.session_id, displayName: r.display_name, level: r.level ?? 1, avatar: isAvatarId(r.avatar) ? r.avatar : null, platform: (r.platform as Platform | null) ?? null, method: r.method };
+    return { userId: r.user_id, sessionId: r.session_id, displayName: r.display_name, level: r.level ?? 1, avatar: isAvatarId(r.avatar) ? r.avatar : null, platform: (r.platform as Platform | null) ?? null, method: r.method, konRating: r.kon_rating ?? 1000 };
   }
 
   async revoke(token: string): Promise<boolean> {

@@ -9,6 +9,8 @@ import { WEAPON_IDS, MOD_IDS } from '../game-rules/weapons.js';
 import { GADGET_IDS } from '../game-rules/gadgets.js';
 import type { WeaponId } from '../game-rules/weapons.js';
 import { FINISH_IDS } from '../game-rules/skins.js';
+import { KON_FORMATS } from '../game-rules/kon.js';
+import type { KonFormat } from '../game-rules/kon.js';
 import type { FinishId, SkinRarity } from '../game-rules/skins.js';
 import type { Currency, DiamondPack, Inventory, Rarity } from '../game-rules/economy.js';
 import { MAP_IDS } from '../maps/types.js';
@@ -161,8 +163,9 @@ export const UpdateProfileRequest = z
     avatar: z.enum(AVATAR_IDS).nullable().optional(),
   })
   .strict();
-export const CreateRoomRequest = z.object({ mapId: z.enum(MAP_IDS), isPrivate: z.boolean().default(true), mode: z.enum(GAME_MODES).default('ffa') }).strict();
-export const QuickMatchRequest = z.object({ mapId: z.enum(MAP_IDS).optional(), mode: z.enum(GAME_MODES).default('ffa') }).strict();
+/** V2.0 part D: `kon` makes it a «Блатной кон» room (team deathmatch, fixed sides, people only). */
+export const CreateRoomRequest = z.object({ mapId: z.enum(MAP_IDS), isPrivate: z.boolean().default(true), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional() }).strict();
+export const QuickMatchRequest = z.object({ mapId: z.enum(MAP_IDS).optional(), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional() }).strict();
 
 export interface PublicProfile {
   id: string;
@@ -216,6 +219,8 @@ export interface CreateRoomResponse {
   webUrl: string;
   mapId: MapId;
   mode: GameMode;
+  /** V2.0 part D: a «Блатной кон» room. */
+  kon?: KonFormat | null;
 }
 
 export type InviteStatus = 'joinable' | 'full' | 'in_progress' | 'finished' | 'expired' | 'not_found';
@@ -229,6 +234,8 @@ export interface InviteInfo {
   players: number;
   maxPlayers: number;
   hostName: string | null;
+  /** V2.0 part D: a «Блатной кон» room. */
+  kon?: KonFormat | null;
 }
 
 export interface MatchHistoryEntry {

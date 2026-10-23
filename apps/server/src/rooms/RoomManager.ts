@@ -1,7 +1,7 @@
 /** Owns all rooms, the shared 60 Hz tick loop and room discovery (quick match, invites). */
 import { randomBytes } from 'node:crypto';
 import { MAP_ORDER, TICK_MS } from '@blatkom/shared';
-import type { FillTiming, GameMode, MapId, MatchConfig } from '@blatkom/shared';
+import type { FillTiming, GameMode, KonFormat, MapId, MatchConfig } from '@blatkom/shared';
 import { MatchRoom } from './MatchRoom.js';
 import type { Services } from '../services/contracts.js';
 import type { Logger } from '../logging/logger.js';
@@ -61,7 +61,8 @@ export class RoomManager {
     this.presence = listener;
   }
 
-  create(mapId: MapId, isPrivate: boolean, hostUserId: string | null, inviteCode: string | null = null, mode: GameMode = 'ffa'): MatchRoom {
+  /** A room; with `kon` a «Блатной кон» room of that format (team deathmatch, fixed sides, people only). */
+  create(mapId: MapId, isPrivate: boolean, hostUserId: string | null, inviteCode: string | null = null, mode: GameMode = 'ffa', kon: KonFormat | null = null): MatchRoom {
     if (this.rooms.size >= this.opts.maxRooms) throw new Error('room limit reached');
     let id = newRoomId();
     while (this.rooms.has(id)) id = newRoomId();
@@ -72,7 +73,8 @@ export class RoomManager {
         isPrivate,
         hostUserId,
         inviteCode,
-        mode,
+        mode: kon ? 'teams' : mode,
+        kon,
         config: this.opts.config,
         fillBots: this.opts.fillBots ?? false,
         ...(this.opts.fillTiming ? { fillTiming: this.opts.fillTiming } : {}),
@@ -82,18 +84,38 @@ export class RoomManager {
       this.log,
     );
     this.rooms.set(id, room);
-    this.services.analytics.server('lobby_created', { roomId: id, mapId, isPrivate, mode }, { userId: hostUserId });
+    this.services.analytics.server('lobby_created', { roomId: id, mapId, isPrivate, mode: room.mode }, { userId: hostUserId });
     return room;
   }
 
   /** Finds a public joinable room of the mode (preferring the requested map and fuller rooms) or creates one. */
   quickMatch(userId: string, mapId?: MapId, mode: GameMode = 'ffa'): MatchRoom {
     const candidates = this.list()
-      .filter((r) => !r.isPrivate && r.mode === mode && r.isJoinable(userId) && (!mapId || r.mapId === mapId))
+      .filter((r) => !r.isPrivate && r.kon === null && r.mode === mode && r.isJoinable(userId) && (!mapId || r.mapId === mapId))
       .sort((a, b) => b.occupancy - a.occupancy);
     if (candidates[0]) return candidates[0];
     const map = mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)]!;
     return this.create(map, false, null, null, mode);
+  }
+
+  /**
+   * V2.0 part D, «Блатной кон» search: a public Kon room of the format still gathering people (the
+   * fullest first, on the chosen map if one was chosen) or a new one. It starts by itself once full.
+   */
+  konQuick(userId: string, format: KonFormat, mapId?: MapId): MatchRoom {
+    const candidates = this.list()
+      .filter((r) => !r.isPrivate && r.kon === format && r.phase === 'waiting' && r.isJoinable(userId) && (!mapId || r.mapId === mapId))
+      .sort((a, b) => b.occupancy - a.occupancy);
+    if (candidates[0]) return candidates[0];
+    const map = mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)]!;
+    return this.create(map, false, null, null, 'teams', format);
+  }
+
+  /** People waiting in public Kon rooms of each format (the Kon screen shows it). */
+  konWaiting(): Record<KonFormat, number> {
+    const out: Record<KonFormat, number> = { '1x1': 0, '2x2': 0, '3x3': 0, '5x5': 0 };
+    for (const r of this.list()) if (r.kon && !r.isPrivate && r.phase === 'waiting') out[r.kon] += r.connectedCount;
+    return out;
   }
 
   start(): void {

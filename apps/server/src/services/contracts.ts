@@ -2,7 +2,7 @@
  * Service contracts between the realtime game layer (rooms) and persistence/analytics.
  * Implementations: services/persistence.ts (PostgreSQL) and services/memory.ts (tests/offline).
  */
-import type { AvatarId, CharacterId, GameMode, Loadout, MapId, PersonalResult, Team } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, KonFormat, Loadout, MapId, PersonalResult, Team } from '@blatkom/shared';
 import type { Platform } from '@blatkom/shared';
 
 export interface AuthedUser {
@@ -15,6 +15,8 @@ export interface AuthedUser {
   platform: Platform | null;
   /** How the session was opened (verified server-side, unlike `platform`). */
   method?: 'telegram' | 'dev' | 'guest' | 'email';
+  /** V2.0 part D: the «Блатной кон» rating (the search deals sides by it; shown in Kon rooms). */
+  konRating?: number;
 }
 
 /** Validates bearer session tokens (HTTP and WebSocket hello). */
@@ -75,6 +77,8 @@ export interface MatchCompletion {
   /** Players the server added to complete the lineup, present at the end (default 0). */
   fillAtEnd?: number;
   participants: MatchParticipantResult[];
+  /** V2.0 part D: a «Блатной кон» match — the Kon rating moves, the general rating doesn't. */
+  kon?: KonFormat | null;
 }
 
 export interface MatchRecorder {
