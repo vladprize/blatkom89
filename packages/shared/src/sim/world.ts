@@ -133,6 +133,8 @@ export interface PlayerState {
   objectives: number;
   /** Damage taken since the last spawn, per attacker (assist detection). */
   recentDamage: Array<{ id: string; at: number; amount: number }>;
+  /** The share of incoming damage this player takes (1; a story mission's hero takes less). */
+  damageTaken: number;
 }
 
 export interface PickupState {
@@ -374,6 +376,7 @@ export function createPlayerState(id: string, slot: number, name: string, charac
     assists: 0,
     objectives: 0,
     recentDamage: [],
+    damageTaken: 1,
   };
 }
 
@@ -1186,6 +1189,8 @@ export class World {
     if (this.phase !== 'active') return;
     // no friendly fire in team matches (the owner's own explosives still hurt the owner)
     if (attacker && attacker !== victim && !this.hostile(attacker, victim)) return;
+    // the story's hero takes a share of the damage (1 for everyone else: multiplayer is untouched)
+    if (victim.damageTaken !== 1) amount = Math.max(1, Math.round(amount * victim.damageTaken));
     victim.hp = Math.max(0, victim.hp - amount);
     victim.lastHitAt = this.time;
     if (attacker) {

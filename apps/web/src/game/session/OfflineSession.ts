@@ -1,6 +1,6 @@
 /** Offline practice: the shared World + bots running locally (no server). */
 import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS, DEFAULT_LOADOUT, MAX_PLAYERS, PRACTICE_NAMES, weaponAmmo, isTeamMode, teamScoreLimitFor } from '@blatkom/shared';
-import type { CharacterId, FinishId, GadgetId, GameMode, InputFrame, MapId, Standing, BotDifficulty, PlayerState, Loadout, Team, WeaponId } from '@blatkom/shared';
+import type { CharacterId, FinishId, GadgetId, GameMode, InputFrame, MapId, MatchConfig, Standing, BotDifficulty, PlayerState, Loadout, Team, WeaponId, WorldEvent } from '@blatkom/shared';
 import { getLang } from '../../i18n/index.js';
 import type { GameSession, HudState, RenderBase, RenderFlag, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
 import { toRenderGadget, toRenderPlayer, worldEventToSession, reloadProgress } from './convert.js';
@@ -36,6 +36,12 @@ export interface OfflineOptions {
   gameMode?: GameMode;
   /** Team deathmatch limit (capture the flag and base capture use the default limits). */
   teamScoreLimit?: number;
+  /** More match rules (the story's missions: fixed sides, their own limits). */
+  config?: Partial<MatchConfig>;
+  /** Don't start the match yet: the caller adds its own players, then calls `world.beginMatch(true)`. */
+  deferStart?: boolean;
+  /** The World's random seed (tests); a random one otherwise. */
+  seed?: number;
 }
 
 export class OfflineSession implements GameSession {
@@ -43,16 +49,16 @@ export class OfflineSession implements GameSession {
   readonly mapId: MapId;
   readonly gameMode: GameMode;
   readonly world: World;
-  private readonly nav: NavGrid;
-  private readonly brains: BotBrain[] = [];
-  private readonly localId = 'local';
-  private events: SessionEvent[] = [];
+  protected readonly nav: NavGrid;
+  protected readonly brains: BotBrain[] = [];
+  protected readonly localId = 'local';
+  protected events: SessionEvent[] = [];
   private prev = new Map<number, { x: number; y: number; aim: number }>();
   private lastStepAt = performance.now();
   private alpha = 1;
-  private resultsData: ResultsData | null = null;
-  private killedBy: string | null = null;
-  private readonly levels = new Map<string, number>();
+  protected resultsData: ResultsData | null = null;
+  protected killedBy: string | null = null;
+  protected readonly levels = new Map<string, number>();
   private matchSeq = 0;
   /** The local player's weapon skins (from the loadout; practice bots wear none). */
   private localSkins: Partial<Record<WeaponId, FinishId>> = {};
@@ -63,8 +69,8 @@ export class OfflineSession implements GameSession {
     this.gameMode = opts.gameMode ?? 'ffa';
     this.world = new World(getMap(opts.mapId), getCollision(opts.mapId), {
       lagCompensation: false,
-      config: { mode: this.gameMode, readyMs: 0, countdownMs: 3000, durationMs: opts.durationMs ?? 4 * 60_000, scoreLimit: opts.scoreLimit ?? 40, teamScoreLimit: opts.teamScoreLimit ?? PRACTICE_TEAM_LIMIT, maxPlayers: MAX_PLAYERS },
-      seed: Math.floor(Math.random() * 1e9),
+      config: { mode: this.gameMode, readyMs: 0, countdownMs: 3000, durationMs: opts.durationMs ?? 4 * 60_000, scoreLimit: opts.scoreLimit ?? 40, teamScoreLimit: opts.teamScoreLimit ?? PRACTICE_TEAM_LIMIT, maxPlayers: MAX_PLAYERS, ...opts.config },
+      seed: opts.seed ?? Math.floor(Math.random() * 1e9),
     });
     this.nav = new NavGrid(this.world.collision);
     // team practice: the player is red; bots fill both sides alternately (World.smallerTeam)
@@ -79,7 +85,7 @@ export class OfflineSession implements GameSession {
       this.levels.set(id, 2 + Math.floor(Math.random() * 14)); // practice bots wear plausible levels
       this.brains.push(new BotBrain(id, this.world, this.nav, opts.difficulty, 1000 + i * 77 + Math.floor(Math.random() * 1000)));
     }
-    this.world.beginMatch(true);
+    if (!opts.deferStart) this.world.beginMatch(true);
   }
 
   localSlot(): number {
@@ -111,9 +117,15 @@ export class OfflineSession implements GameSession {
           ...(isTeamMode(this.gameMode) ? { teams: this.world.teamResult() } : {}),
         };
       }
+      this.onWorldEvent(e);
     }
+    this.afterStep();
     this.lastStepAt = performance.now();
   }
+
+  /** Story missions add their own rules on top of the match (nothing in practice). */
+  protected onWorldEvent(_e: WorldEvent): void {}
+  protected afterStep(): void {}
 
   frame(now: number): void {
     this.alpha = Math.max(0, Math.min(1, (now - this.lastStepAt) / TICK_MS));

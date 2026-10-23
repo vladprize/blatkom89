@@ -91,6 +91,12 @@ export interface StoryChapter {
   skins: SkinId[];
 }
 
+/**
+ * The hero's edge in a mission: a share of the incoming damage (the fights are two, three, five against
+ * one) and, where one fall would end it («clear», «survive»), a few lives.
+ */
+export const STORY_RULES = Object.freeze({ heroDamage: 0.5, lives: 3 });
+
 /** The shortest time from starting a mission to reporting it done (a scripted «instant win» is refused). */
 export const STORY_MIN_MS = 15_000;
 /** A mission ticket is good for this long (a long mission plus its comic and some retries). */
@@ -115,11 +121,12 @@ export const STORY_MISSIONS: readonly StoryMission[] = [
     npcs: [ally('mihalych', kit('pistol', 'montirovka', 'avtomat', 'f1')), enemy('svinya', 'queue', kit('pistol', 'bita', 'ksyuha')), enemy('buyvol', 'queue', kit('pistol', 'montirovka', 'obrez')), enemy('krysa', 'queue', kit('tt', 'nozh', 'uzi'))],
   },
   {
-    id: 'a3', campaign: 'petya', chapter: 1, n: 3, map: 'garages', hero: 'petya', kit: kit('pistol', 'montirovka', 'obrez', 'f1'),
+    id: 'a3', campaign: 'petya', chapter: 1, n: 3, map: 'garages', hero: 'petya', kit: kit('pistol', 'montirovka', 'ksyuha', 'f1'),
     objective: { kind: 'clear' }, timeLimitMs: 300_000, waveGapMs: 1500, meets: ['valuta'], talons: 90, xp: 60,
     npcs: [
-      enemy('lobster', 'speculator', kit('pistol', 'nozh', 'uzi')), enemy('zmeya', 'speculator', kit('tt', 'nozh', 'ksyuha')), enemy('popugay', 'speculator', kit('pistol', 'bita')),
-      enemy('tarakan', 'speculator', kit('pistol', 'montirovka', 'obrez'), 'normal', { wave: 1 }), enemy('krysa', 'speculator', kit('tt', 'bita', 'avtomat'), 'normal', { wave: 1 }),
+      enemy('popugay', 'speculator', kit('pistol', 'bita'), 'easy'), enemy('lobster', 'speculator', kit('pistol', 'nozh'), 'easy'),
+      enemy('zmeya', 'speculator', kit('tt', 'nozh', 'ksyuha'), 'easy', { wave: 1 }), enemy('tarakan', 'speculator', kit('pistol', 'montirovka', 'obrez'), 'easy', { wave: 1 }),
+      enemy('krysa', 'speculator', kit('tt', 'bita', 'avtomat'), 'normal', { wave: 2 }),
     ],
   },
   {
@@ -147,17 +154,18 @@ export const STORY_MISSIONS: readonly StoryMission[] = [
     npcs: [enemy('lisa', 'self', kit('p92', 'nozh', 'uzi', 'smoke'), 'normal', { boss: true })],
   },
   {
-    id: 'b3', campaign: 'uchastkovy', chapter: 1, n: 3, map: 'dk', hero: 'uchastkovy', kit: kit('pistol', 'bita', 'obrez', 'f1'),
+    id: 'b3', campaign: 'uchastkovy', chapter: 1, n: 3, map: 'dk', hero: 'uchastkovy', kit: kit('pistol', 'bita', 'ksyuha', 'f1'),
     objective: { kind: 'clear' }, timeLimitMs: 300_000, waveGapMs: 1500, meets: ['piranya'], talons: 90, xp: 60,
     npcs: [
-      enemy('krysa', 'dancer', kit('pistol', 'bita')), enemy('svinya', 'dancer', kit('pistol', 'topor')), enemy('tarakan', 'dancer', kit('tt', 'nozh')), enemy('golub', 'dancer', kit('pistol', 'bita', 'uzi')),
-      enemy('piranya', 'self', kit('pistol', 'topor', 'obrez', 'molotov'), 'hard', { wave: 1, boss: true }),
+      enemy('krysa', 'dancer', kit('pistol', 'bita'), 'easy'), enemy('svinya', 'dancer', kit('pistol', 'topor'), 'easy'),
+      enemy('tarakan', 'dancer', kit('tt', 'nozh'), 'easy', { wave: 1 }), enemy('golub', 'dancer', kit('pistol', 'bita'), 'easy', { wave: 1 }),
+      enemy('piranya', 'self', kit('pistol', 'topor', 'obrez', 'molotov'), 'normal', { wave: 2, boss: true }),
     ],
   },
   {
     id: 'b4', campaign: 'uchastkovy', chapter: 1, n: 4, map: 'garages', hero: 'uchastkovy', kit: kit('pistol', 'bita', 'avtomat', 'f1'),
-    objective: { kind: 'bases', limit: 120 }, timeLimitMs: 360_000, meets: [], talons: 100, xp: 70,
-    npcs: [ally('koshka', kit('p92', 'nozh', 'mp5', 'smoke')), enemy('varan', 'garage', kit('pistol', 'montirovka', 'obrez')), enemy('buyvol', 'garage', kit('tt', 'bita', 'avtomat')), enemy('gorilla', 'garage', kit('pistol', 'montirovka', 'uzi'))],
+    objective: { kind: 'bases', limit: 100 }, timeLimitMs: 360_000, meets: [], talons: 100, xp: 70,
+    npcs: [ally('koshka', kit('p92', 'nozh', 'mp5', 'smoke')), enemy('varan', 'garage', kit('pistol', 'montirovka', 'obrez'), 'easy'), enemy('buyvol', 'garage', kit('tt', 'bita', 'avtomat'), 'easy'), enemy('gorilla', 'garage', kit('pistol', 'montirovka', 'uzi'), 'easy')],
   },
   {
     id: 'b5', campaign: 'uchastkovy', chapter: 1, n: 5, map: 'yard', hero: 'uchastkovy', kit: kit('pistol', 'bita', 'avtomat', 'flash'),

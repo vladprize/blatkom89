@@ -3175,7 +3175,9 @@ var ACHIEVEMENTS = {
   objective: { id: "objective", title: "Job Done", description: "Capture a flag or a base.", xpReward: 50 },
   objectives_3: { id: "objectives_3", title: "Raider", description: `Capture ${ACHIEVEMENT_TARGETS.objectives} flags or bases in one match.`, xpReward: 100 },
   level_10: { id: "level_10", title: "Big Name", description: `Reach level ${ACHIEVEMENT_TARGETS.levels[0]}.`, xpReward: 100 },
-  level_25: { id: "level_25", title: "Boss of the District", description: `Reach level ${ACHIEVEMENT_TARGETS.levels[1]}.`, xpReward: 250 }
+  level_25: { id: "level_25", title: "Boss of the District", description: `Reach level ${ACHIEVEMENT_TARGETS.levels[1]}.`, xpReward: 250 },
+  story_petya_1: { id: "story_petya_1", title: "Master of the Yard", description: "Story: finish chapter 1 of \xABMy Yard\xBB.", xpReward: 100 },
+  story_uchastkovy_1: { id: "story_uchastkovy_1", title: "First Report", description: "Story: finish chapter 1 of \xABThe Report\xBB.", xpReward: 100 }
 };
 var LEVEL_ACHIEVEMENTS = [
   ["level_10", ACHIEVEMENT_TARGETS.levels[0]],
@@ -7321,6 +7323,188 @@ var KON_RATING = Object.freeze({ start: 1e3, floor: 100, k: 24, kNew: 40, newMat
 // packages/shared/src/game-rules/konStakes.ts
 var KON_STAKES = Object.freeze({ enabled: false, minStake: 100, maxStake: 1e4 });
 
+// packages/shared/src/story/missions.ts
+var STORY_TICKET_TTL_MS = 3 * 36e5;
+var kit = (sidearm2, melee2, primary2 = null, gadget = null) => ({ sidearm: sidearm2, melee: melee2, primary: primary2, gadget });
+var enemy = (character, role, k, difficulty = "normal", extra = {}) => ({ character, role, side: "enemy", kit: k, difficulty, ...extra });
+var ally = (character, k, difficulty = "normal") => ({ character, role: "self", side: "ally", kit: k, difficulty });
+var STORY_MISSIONS = [
+  // ── Petya «My Yard», chapter 1 «The Yard» ─────────────────────────────────
+  {
+    id: "a1",
+    campaign: "petya",
+    chapter: 1,
+    n: 1,
+    map: "yard",
+    hero: "petya",
+    kit: kit("pistol", "montirovka"),
+    objective: { kind: "clear" },
+    timeLimitMs: 24e4,
+    meets: ["vorona"],
+    talons: 60,
+    xp: 40,
+    npcs: [enemy("golub", "loafer", kit("pistol", "bita"), "easy"), enemy("krysa", "loafer", kit("pistol", "bita"), "easy"), enemy("tarakan", "loafer", kit("pistol", "nozh"), "easy")]
+  },
+  {
+    id: "a2",
+    campaign: "petya",
+    chapter: 1,
+    n: 2,
+    map: "gastronom",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "obrez"),
+    objective: { kind: "team", limit: 10 },
+    timeLimitMs: 3e5,
+    meets: ["mihalych"],
+    talons: 80,
+    xp: 50,
+    npcs: [ally("mihalych", kit("pistol", "montirovka", "avtomat", "f1")), enemy("svinya", "queue", kit("pistol", "bita", "ksyuha")), enemy("buyvol", "queue", kit("pistol", "montirovka", "obrez")), enemy("krysa", "queue", kit("tt", "nozh", "uzi"))]
+  },
+  {
+    id: "a3",
+    campaign: "petya",
+    chapter: 1,
+    n: 3,
+    map: "garages",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "obrez", "f1"),
+    objective: { kind: "clear" },
+    timeLimitMs: 3e5,
+    waveGapMs: 1500,
+    meets: ["valuta"],
+    talons: 90,
+    xp: 60,
+    npcs: [
+      enemy("lobster", "speculator", kit("pistol", "nozh", "uzi")),
+      enemy("zmeya", "speculator", kit("tt", "nozh", "ksyuha")),
+      enemy("popugay", "speculator", kit("pistol", "bita")),
+      enemy("tarakan", "speculator", kit("pistol", "montirovka", "obrez"), "normal", { wave: 1 }),
+      enemy("krysa", "speculator", kit("tt", "bita", "avtomat"), "normal", { wave: 1 })
+    ]
+  },
+  {
+    id: "a4",
+    campaign: "petya",
+    chapter: 1,
+    n: 4,
+    map: "yard",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "avtomat", "f1"),
+    objective: { kind: "flag", limit: 2 },
+    timeLimitMs: 36e4,
+    meets: [],
+    talons: 100,
+    xp: 70,
+    npcs: [
+      ally("mihalych", kit("pistol", "montirovka", "avtomat", "f1")),
+      ally("vorona", kit("pistol", "nozh", "ksyuha", "smoke")),
+      enemy("svinya", "reseller", kit("pistol", "bita", "obrez")),
+      enemy("popugay", "reseller", kit("tt", "nozh", "mp5")),
+      enemy("krysa", "reseller", kit("pistol", "montirovka", "avtomat"))
+    ]
+  },
+  {
+    id: "a5",
+    campaign: "petya",
+    chapter: 1,
+    n: 5,
+    map: "yard",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "avtomat", "f1"),
+    objective: { kind: "team", limit: 5 },
+    timeLimitMs: 3e5,
+    meets: ["uchastkovy"],
+    talons: 120,
+    xp: 80,
+    npcs: [enemy("uchastkovy", "self", kit("pistol", "bita", "avtomat", "flash"), "hard", { boss: true })]
+  },
+  // ── Uchastkovy «The Report», chapter 1 «The Beat» ─────────────────────────
+  {
+    id: "b1",
+    campaign: "uchastkovy",
+    chapter: 1,
+    n: 1,
+    map: "gastronom",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita"),
+    objective: { kind: "clear" },
+    timeLimitMs: 24e4,
+    meets: ["koshka"],
+    talons: 60,
+    xp: 40,
+    npcs: [enemy("krysa", "pilferer", kit("pistol", "montirovka"), "easy"), enemy("tarakan", "pilferer", kit("pistol", "nozh"), "easy"), enemy("svinya", "pilferer", kit("pistol", "bita"), "easy"), enemy("popugay", "pilferer", kit("tt", "nozh"), "easy")]
+  },
+  {
+    id: "b2",
+    campaign: "uchastkovy",
+    chapter: 1,
+    n: 2,
+    map: "dk",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "ksyuha", "flash"),
+    objective: { kind: "team", limit: 4 },
+    timeLimitMs: 24e4,
+    meets: ["lisa"],
+    talons: 80,
+    xp: 50,
+    npcs: [enemy("lisa", "self", kit("p92", "nozh", "uzi", "smoke"), "normal", { boss: true })]
+  },
+  {
+    id: "b3",
+    campaign: "uchastkovy",
+    chapter: 1,
+    n: 3,
+    map: "dk",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "obrez", "f1"),
+    objective: { kind: "clear" },
+    timeLimitMs: 3e5,
+    waveGapMs: 1500,
+    meets: ["piranya"],
+    talons: 90,
+    xp: 60,
+    npcs: [
+      enemy("krysa", "dancer", kit("pistol", "bita")),
+      enemy("svinya", "dancer", kit("pistol", "topor")),
+      enemy("tarakan", "dancer", kit("tt", "nozh")),
+      enemy("golub", "dancer", kit("pistol", "bita", "uzi")),
+      enemy("piranya", "self", kit("pistol", "topor", "obrez", "molotov"), "hard", { wave: 1, boss: true })
+    ]
+  },
+  {
+    id: "b4",
+    campaign: "uchastkovy",
+    chapter: 1,
+    n: 4,
+    map: "garages",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "avtomat", "f1"),
+    objective: { kind: "bases", limit: 120 },
+    timeLimitMs: 36e4,
+    meets: [],
+    talons: 100,
+    xp: 70,
+    npcs: [ally("koshka", kit("p92", "nozh", "mp5", "smoke")), enemy("varan", "garage", kit("pistol", "montirovka", "obrez")), enemy("buyvol", "garage", kit("tt", "bita", "avtomat")), enemy("gorilla", "garage", kit("pistol", "montirovka", "uzi"))]
+  },
+  {
+    id: "b5",
+    campaign: "uchastkovy",
+    chapter: 1,
+    n: 5,
+    map: "yard",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "avtomat", "flash"),
+    objective: { kind: "team", limit: 5 },
+    timeLimitMs: 3e5,
+    meets: ["petya"],
+    talons: 120,
+    xp: 80,
+    npcs: [enemy("petya", "self", kit("pistol", "montirovka", "avtomat", "f1"), "hard", { boss: true })]
+  }
+];
+var STORY_CARD_INDEX = CHARACTER_IDS.filter((c) => c !== "petya" && c !== "uchastkovy");
+var BY_ID = new Map(STORY_MISSIONS.map((m) => [m.id, m]));
+
 // packages/shared/src/maps/props.ts
 var P = (w, h, shape, layer, blocksShot, label, extra = {}) => ({ w, h, shape, layer, blocksMove: shape !== "none", blocksShot: shape !== "none" && blocksShot, label, ...extra });
 var PROP_DEFS = {
@@ -7554,7 +7738,10 @@ var SERVER_EVENT_PROPS = {
   payment_completed: external_exports.object({ provider: external_exports.string(), packId: external_exports.string(), diamonds: external_exports.number().int(), amountCents: external_exports.number().int() }),
   email_linked: external_exports.object({}),
   /** v0.3: a provider attached to an account (google, facebook, discord, reddit, telegram). */
-  identity_linked: external_exports.object({ provider: external_exports.enum(["google", "facebook", "discord", "reddit", "telegram"]), via: external_exports.enum(["code", "email", "widget"]).optional(), merged: external_exports.boolean().optional() })
+  identity_linked: external_exports.object({ provider: external_exports.enum(["google", "facebook", "discord", "reddit", "telegram"]), via: external_exports.enum(["code", "email", "widget"]).optional(), merged: external_exports.boolean().optional() }),
+  /** v0.3 part 4: a story mission started / reported done (first: its rewards were paid now). */
+  story_started: external_exports.object({ mission: external_exports.string().max(16) }),
+  story_completed: external_exports.object({ mission: external_exports.string().max(16), ms: external_exports.number().int(), first: external_exports.boolean() })
 };
 var ClientEventEnvelopeSchema = external_exports.object({
   id: external_exports.string().uuid(),
@@ -7676,6 +7863,16 @@ var SocialClientMessage = external_exports.discriminatedUnion("type", [
   external_exports.object({ type: external_exports.literal("auth"), token: external_exports.string().min(16).max(256) }).strict(),
   external_exports.object({ type: external_exports.literal("ping"), t: external_exports.number().finite() }).strict()
 ]);
+
+// packages/shared/src/schemas/story.ts
+var StoryStartBody = external_exports.object({ mission: external_exports.string().regex(/^[a-z0-9_]{1,16}$/) }).strict();
+var StoryCompleteBody = external_exports.object({
+  ticket: external_exports.string().min(10).max(600),
+  /** Time in the mission (the best time of the mission is kept). */
+  ms: external_exports.number().int().min(0).max(3 * 36e5),
+  kills: external_exports.number().int().min(0).max(999),
+  deaths: external_exports.number().int().min(0).max(999)
+}).strict();
 
 // apps/server/src/database/codeSteps.ts
 async function uniqueAliases(tx) {
