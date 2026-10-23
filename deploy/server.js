@@ -2279,7 +2279,7 @@ var require_websocket = __commonJS({
     var http = __require("http");
     var net2 = __require("net");
     var tls2 = __require("tls");
-    var { randomBytes: randomBytes10, createHash: createHash4 } = __require("crypto");
+    var { randomBytes: randomBytes12, createHash: createHash4 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -2817,7 +2817,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes10(16).toString("base64");
+      const key = randomBytes12(16).toString("base64");
       const request = isSecure ? https.request : http.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.11"),
+  SERVER_VERSION: external_exports.string().default("0.2.12"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -15807,7 +15807,7 @@ var SERVER_EVENT_PROPS = {
   payment_completed: external_exports.object({ provider: external_exports.string(), packId: external_exports.string(), diamonds: external_exports.number().int(), amountCents: external_exports.number().int() }),
   email_linked: external_exports.object({}),
   /** v0.3: a provider attached to an account (google, facebook, discord, reddit, telegram). */
-  identity_linked: external_exports.object({ provider: external_exports.enum(["google", "facebook", "discord", "reddit", "telegram"]) })
+  identity_linked: external_exports.object({ provider: external_exports.enum(["google", "facebook", "discord", "reddit", "telegram"]), via: external_exports.enum(["code", "email", "widget"]).optional(), merged: external_exports.boolean().optional() })
 };
 var ClientEventEnvelopeSchema = external_exports.object({
   id: external_exports.string().uuid(),
@@ -15825,20 +15825,36 @@ function parseClientEventProps(name, props) {
 var displayNameSchema = external_exports.string().trim().min(2).max(MAX_NAME_LENGTH).regex(LATIN_NAME_RE, "A name may contain Latin letters (A\u2013Z), digits, spaces and _ . -");
 var signupNameSchema = external_exports.string().trim().min(1).max(64);
 var refSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
+var partnerCodeSchema = external_exports.string().trim().toLowerCase().regex(/^[a-z0-9_]{3,24}$/, "A partner code: 3\u201324 Latin letters, digits or _");
+var utmValueSchema = external_exports.string().trim().toLowerCase().min(1).max(64).regex(/^[a-z0-9 ._+-]+$/);
+var FirstTouchSchema = external_exports.object({
+  partner: partnerCodeSchema.optional(),
+  utmSource: utmValueSchema.optional(),
+  utmMedium: utmValueSchema.optional(),
+  utmCampaign: utmValueSchema.optional(),
+  invite: external_exports.boolean().optional(),
+  referrer: external_exports.string().max(80).regex(/^[a-z0-9.-]+$/).optional()
+}).strict();
+var telegramLinkCodeSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{16,32}$/);
 var TelegramAuthRequest = external_exports.object({
   initData: external_exports.string().min(10).max(8192),
   platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional(),
   /** Optional anonymous browser id (see VisitRequest) that links a new player to the visitor funnel. */
   visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
-  ref: refSchema.optional()
+  ref: refSchema.optional(),
+  /** V2.0 part E: the one-time code from the bot's link (`?tglink=`): Telegram is attached to the code's account. */
+  link: telegramLinkCodeSchema.optional(),
+  /** V2.0 part F: the first touch, kept with a new account. */
+  source: FirstTouchSchema.optional()
 }).strict();
 var DevAuthRequest = external_exports.object({
   name: signupNameSchema,
   deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
   platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional(),
-  ref: refSchema.optional()
+  ref: refSchema.optional(),
+  source: FirstTouchSchema.optional()
 }).strict();
 var GuestAuthRequest = external_exports.object({
   name: signupNameSchema,
@@ -15846,7 +15862,8 @@ var GuestAuthRequest = external_exports.object({
   platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional(),
   visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
-  ref: refSchema.optional()
+  ref: refSchema.optional(),
+  source: FirstTouchSchema.optional()
 }).strict();
 var visitorIdSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/);
 var emailSchema = external_exports.string().trim().toLowerCase().max(254).email("That is not a valid email address");
@@ -15856,13 +15873,15 @@ var EmailLoginRequest = external_exports.object({
   password: external_exports.string().min(1).max(128),
   deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{20,64}$/).optional(),
   platform: PlatformSchema.optional(),
-  clientVersion: external_exports.string().max(32).optional()
+  clientVersion: external_exports.string().max(32).optional(),
+  /** V2.0 part E: inside Telegram, the signed launch data — this Telegram account gets attached to the email's account. */
+  initData: external_exports.string().min(10).max(8192).optional()
 }).strict();
 var EmailLinkRequest = external_exports.object({ email: emailSchema, password: passwordSchema }).strict();
 var PasswordChangeRequest = external_exports.object({ current: external_exports.string().min(1).max(128), password: passwordSchema }).strict();
 var PasswordResetRequest = external_exports.object({ email: emailSchema }).strict();
 var PasswordResetConfirm = external_exports.object({ token: external_exports.string().regex(/^[A-Za-z0-9_-]{20,64}$/), password: passwordSchema }).strict();
-var VisitRequest = external_exports.object({ visitorId: visitorIdSchema, platform: PlatformSchema.optional(), referrer: external_exports.string().max(120).optional() }).strict();
+var VisitRequest = external_exports.object({ visitorId: visitorIdSchema, platform: PlatformSchema.optional(), referrer: external_exports.string().max(120).optional(), source: FirstTouchSchema.optional() }).strict();
 var BuyRequest = external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget"]), id: external_exports.string().regex(/^[a-z0-9_]{2,24}$/) }).strict();
 var ModBuyRequest = external_exports.object({ weapon: external_exports.enum(WEAPON_IDS), mod: external_exports.enum(MOD_IDS) }).strict();
 var LoadoutRequest = external_exports.object({
@@ -15900,6 +15919,8 @@ var AdminGrantRequest = external_exports.object({
   amount: external_exports.number().int().min(-1e6).max(1e6).refine((v) => v !== 0, "amount must not be 0"),
   note: external_exports.string().trim().min(3).max(120)
 }).strict();
+var AdminPartnerCreate = external_exports.object({ name: external_exports.string().trim().min(1).max(60), code: partnerCodeSchema.optional(), note: external_exports.string().trim().max(300).optional() }).strict();
+var AdminPartnerUpdate = external_exports.object({ name: external_exports.string().trim().min(1).max(60).optional(), note: external_exports.string().trim().max(300).nullable().optional(), active: external_exports.boolean().optional() }).strict();
 
 // packages/shared/src/schemas/social.ts
 var FriendRequestBody = external_exports.object({ name: displayNameSchema }).strict();
@@ -16475,7 +16496,7 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
 };
 
 // apps/server/src/api/auth.ts
-import { createHmac as createHmac5, randomBytes as randomBytes5 } from "node:crypto";
+import { createHmac as createHmac6, randomBytes as randomBytes7 } from "node:crypto";
 
 // apps/server/src/auth/telegram.ts
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -16537,8 +16558,71 @@ function displayNameFromTelegram(u) {
   return latinName(`${u.firstName} ${u.lastName ?? ""}`, `Comrade ${String(u.id).slice(-4)}`);
 }
 
+// apps/server/src/auth/telegramLink.ts
+import { createHmac as createHmac2, randomBytes } from "node:crypto";
+var TELEGRAM_LINK_TTL_MS = 10 * 6e4;
+var LINK_CODE_RE = /^[A-Za-z0-9_-]{16,32}$/;
+var hashCode = (secret, code) => createHmac2("sha256", secret).update(`tglink:${code}`).digest("base64url");
+var TelegramLinkError = class extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+  }
+  code;
+};
+async function createTelegramLinkCode(sql2, secret, userId, now = Date.now()) {
+  const [u] = await sql2`SELECT telegram_id::text FROM users WHERE id = ${userId} AND deleted_at IS NULL`;
+  if (!u) throw new TelegramLinkError("no_user");
+  if (u.telegram_id) throw new TelegramLinkError("already_linked");
+  const code = randomBytes(12).toString("base64url");
+  const expiresAt = new Date(now + TELEGRAM_LINK_TTL_MS);
+  await sql2.begin(async (tx) => {
+    await tx`DELETE FROM telegram_link_codes WHERE user_id = ${userId} AND used_at IS NULL`;
+    await tx`INSERT INTO telegram_link_codes (code_hash, user_id, expires_at) VALUES (${hashCode(secret, code)}, ${userId}, ${expiresAt})`;
+  });
+  return { code, expiresAt };
+}
+async function bind(tx, targetId, telegramId) {
+  const [target] = await tx`SELECT id, telegram_id::text FROM users WHERE id = ${targetId} AND deleted_at IS NULL FOR UPDATE`;
+  if (!target) return { outcome: "conflict", released: null };
+  if (target.telegram_id === telegramId) return { outcome: "already", released: null };
+  if (target.telegram_id) return { outcome: "conflict", released: null };
+  const [owner] = await tx`SELECT id FROM users WHERE telegram_id = ${telegramId}::bigint FOR UPDATE`;
+  if (owner) {
+    const [row] = await tx`
+      SELECT COALESCE((SELECT p.matches_played = 0 AND p.xp = 0 AND p.tokens = 0 AND p.diamonds = 0 FROM profiles p WHERE p.user_id = ${owner.id}), true)
+         AND (SELECT email IS NULL AND dev_device_id IS NULL FROM users WHERE id = ${owner.id})
+         AND NOT EXISTS (SELECT 1 FROM user_identities WHERE user_id = ${owner.id})
+         AND NOT EXISTS (SELECT 1 FROM user_items WHERE user_id = ${owner.id})
+         AND NOT EXISTS (SELECT 1 FROM club_members WHERE user_id = ${owner.id})
+         AND NOT EXISTS (SELECT 1 FROM friendships WHERE user_id = ${owner.id} OR friend_id = ${owner.id}) AS empty`;
+    if (!row?.empty) return { outcome: "conflict", released: null };
+    await tx`UPDATE users SET telegram_id = NULL, merged_into = ${targetId}, merged_at = now() WHERE id = ${owner.id}`;
+  }
+  await tx`UPDATE users SET telegram_id = ${telegramId}::bigint, last_seen_at = now() WHERE id = ${targetId}`;
+  return { outcome: "linked", released: owner?.id ?? null };
+}
+async function useTelegramLinkCode(sql2, secret, code, telegramId, now = Date.now()) {
+  if (!LINK_CODE_RE.test(code)) return { outcome: "invalid", userId: null, released: null };
+  const hash = hashCode(secret, code);
+  return sql2.begin(async (tx) => {
+    const [c] = await tx`SELECT user_id, expires_at, used_at FROM telegram_link_codes WHERE code_hash = ${hash} FOR UPDATE`;
+    if (!c || c.used_at) return { outcome: "invalid", userId: null, released: null };
+    await tx`UPDATE telegram_link_codes SET used_at = now() WHERE code_hash = ${hash}`;
+    if (c.expires_at.getTime() < now) return { outcome: "expired", userId: null, released: null };
+    const r = await bind(tx, c.user_id, telegramId);
+    return { outcome: r.outcome, userId: r.outcome === "conflict" ? null : c.user_id, released: r.released };
+  });
+}
+async function linkTelegramToAccount(sql2, userId, telegramId) {
+  return sql2.begin((tx) => bind(tx, userId, telegramId));
+}
+function telegramLinkUrl(botUsername, code) {
+  return `https://t.me/${botUsername}?start=link_${code}`;
+}
+
 // apps/server/src/services/persistence.ts
-import { randomBytes as randomBytes4 } from "node:crypto";
+import { randomBytes as randomBytes5 } from "node:crypto";
 
 // apps/server/src/auth/activity.ts
 function utcDay(d = /* @__PURE__ */ new Date()) {
@@ -16673,12 +16757,12 @@ var UserRepo = class {
 };
 
 // apps/server/src/auth/tokens.ts
-import { createHmac as createHmac2, randomBytes, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import { createHmac as createHmac3, randomBytes as randomBytes2, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 function newToken(bytes = 32) {
-  return randomBytes(bytes).toString("base64url");
+  return randomBytes2(bytes).toString("base64url");
 }
 function hashToken(secret, token, purpose = "session") {
-  return createHmac2("sha256", secret).update(`${purpose}:${token}`).digest();
+  return createHmac3("sha256", secret).update(`${purpose}:${token}`).digest();
 }
 function safeEqualStr(a, b2) {
   const ba = Buffer.from(a);
@@ -16749,7 +16833,7 @@ var SessionStore = class {
 };
 
 // apps/server/src/blat/repo.ts
-import { randomBytes as randomBytes2 } from "node:crypto";
+import { randomBytes as randomBytes3 } from "node:crypto";
 var CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 async function creditLevels(tx, userId, level) {
   const [p] = await tx`SELECT blat, blat_earned, blat_level FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
@@ -16793,7 +16877,7 @@ var BlatRepo = class {
     const [u] = await this.sql`SELECT ref_code FROM users WHERE id = ${userId}`;
     if (u?.ref_code) return u.ref_code;
     for (let attempt = 0; attempt < 8; attempt++) {
-      const bytes = randomBytes2(8);
+      const bytes = randomBytes3(8);
       const code = Array.from(bytes, (b2) => CODE_ALPHABET[b2 % CODE_ALPHABET.length]).join("");
       try {
         const rows = await this.sql`
@@ -18194,10 +18278,10 @@ var PgAnalytics = class {
 };
 
 // apps/server/src/admin/auth.ts
-import { createHmac as createHmac3 } from "node:crypto";
+import { createHmac as createHmac4 } from "node:crypto";
 
 // apps/server/src/admin/password.ts
-import { randomBytes as randomBytes3, scrypt as scryptCb, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { randomBytes as randomBytes4, scrypt as scryptCb, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 var N = 16384;
 var R = 8;
 var P3 = 1;
@@ -18208,7 +18292,7 @@ function scrypt(password, salt, n, r, p) {
   );
 }
 async function hashPassword(password) {
-  const salt = randomBytes3(16);
+  const salt = randomBytes4(16);
   const key = await scrypt(password, salt, N, R, P3);
   return `scrypt$${N}$${R}$${P3}$${salt.toString("base64url")}$${key.toString("base64url")}`;
 }
@@ -18245,7 +18329,7 @@ var AdminAuth = class {
   secureCookie;
   allowedOrigins;
   csrfFor(token) {
-    return createHmac3("sha256", this.secret).update(`csrf:${token}`).digest("base64url");
+    return createHmac4("sha256", this.secret).update(`csrf:${token}`).digest("base64url");
   }
   async createAdmin(username, password, role) {
     const hash = await hashPassword(password);
@@ -18381,7 +18465,9 @@ var RETENTION_DAYS = {
   /** Direct messages between friends, by created_at. */
   directMessages: 180,
   /** v0.3: one-time provider sign-in codes (valid 5 minutes; each new sign-in also clears those over 10 minutes old). */
-  authHandoffs: 1
+  authHandoffs: 1,
+  /** V2.0 part E: one-time codes that attach Telegram to an account (valid 10 minutes), counted from expiry. */
+  telegramLinkCodes: 1
 };
 var BATCH = 5e3;
 var DAY_MS = 864e5;
@@ -18408,6 +18494,7 @@ async function purgeExpired(sql2, now = /* @__PURE__ */ new Date(), days = RETEN
   const visitors = cutoff(days.visitors);
   const messages2 = cutoff(days.directMessages);
   const handoffs = cutoff(days.authHandoffs);
+  const linkCodes = cutoff(days.telegramLinkCodes);
   return {
     analyticsEvents: await batched(
       async () => (await sql2`DELETE FROM analytics_events WHERE ctid IN (SELECT ctid FROM analytics_events WHERE occurred_at < ${events} LIMIT ${BATCH})`).count
@@ -18433,7 +18520,10 @@ async function purgeExpired(sql2, now = /* @__PURE__ */ new Date(), days = RETEN
     directMessages: await batched(
       async () => (await sql2`DELETE FROM direct_messages WHERE ctid IN (SELECT ctid FROM direct_messages WHERE created_at < ${messages2} LIMIT ${BATCH})`).count
     ),
-    authHandoffs: await batched(async () => (await sql2`DELETE FROM auth_handoffs WHERE ctid IN (SELECT ctid FROM auth_handoffs WHERE created_at < ${handoffs} LIMIT ${BATCH})`).count)
+    authHandoffs: await batched(async () => (await sql2`DELETE FROM auth_handoffs WHERE ctid IN (SELECT ctid FROM auth_handoffs WHERE created_at < ${handoffs} LIMIT ${BATCH})`).count),
+    telegramLinkCodes: await batched(
+      async () => (await sql2`DELETE FROM telegram_link_codes WHERE ctid IN (SELECT ctid FROM telegram_link_codes WHERE expires_at < ${linkCodes} LIMIT ${BATCH})`).count
+    )
   };
 }
 function scheduleRetention(sql2, log2, opts = {}) {
@@ -18686,7 +18776,7 @@ var PaymentService = class {
 };
 
 // apps/server/src/payments/providers.ts
-import { createHmac as createHmac4, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
+import { createHmac as createHmac5, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 var ProviderError = class extends Error {
 };
 var StripeProvider = class {
@@ -18732,7 +18822,7 @@ var StripeProvider = class {
       else if (k === "v1" && v) sigs.push(v);
     }
     if (!t || sigs.length === 0 || Math.abs(nowSec - t) > 300) return false;
-    const expected = createHmac4("sha256", this.webhookSecret).update(`${t}.`).update(rawBody).digest();
+    const expected = createHmac5("sha256", this.webhookSecret).update(`${t}.`).update(rawBody).digest();
     return sigs.some((s) => {
       const got = Buffer.from(s, "hex");
       return got.length === expected.length && timingSafeEqual4(got, expected);
@@ -18781,7 +18871,7 @@ var NowPaymentsProvider = class {
   /** Verifies `x-nowpayments-sig` (HMAC-SHA512 of the key-sorted JSON body). */
   verifyIpn(body, header) {
     if (!header || !/^[0-9a-f]{128}$/i.test(header)) return false;
-    const expected = createHmac4("sha512", this.ipnSecret).update(JSON.stringify(sortKeysDeep(body))).digest();
+    const expected = createHmac5("sha512", this.ipnSecret).update(JSON.stringify(sortKeysDeep(body))).digest();
     const got = Buffer.from(header, "hex");
     return got.length === expected.length && timingSafeEqual4(got, expected);
   }
@@ -18798,7 +18888,7 @@ var PgInvites = class {
   async create(roomId2, createdBy) {
     const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
     for (let attempt = 0; attempt < 5; attempt++) {
-      const bytes = randomBytes4(8);
+      const bytes = randomBytes5(8);
       let code = "";
       for (let i = 0; i < 8; i++) code += CODE_ALPHABET2[bytes[i] % CODE_ALPHABET2.length];
       const rows = await this.sql`
@@ -18874,21 +18964,229 @@ async function createPersistence(deps) {
   };
 }
 
+// apps/server/src/analytics/growth.ts
+import { randomBytes as randomBytes6 } from "node:crypto";
+var ratio = (a, b2) => b2 > 0 ? a / b2 : null;
+function partnerLinks(code, env2) {
+  return {
+    webUrl: `${env2.PUBLIC_URL.replace(/\/$/, "")}/?p=${code}`,
+    telegramUrl: env2.TELEGRAM_BOT_USERNAME ? `https://t.me/${env2.TELEGRAM_BOT_USERNAME}?start=p_${code}` : null
+  };
+}
+var partnerFromStartParam = (p) => p && /^p_[a-z0-9_]{3,24}$/i.test(p) ? p.slice(2).toLowerCase() : null;
+async function activePartner(sql2, code) {
+  if (!code || !/^[a-z0-9_]{3,24}$/i.test(code)) return null;
+  const [p] = await sql2`SELECT id FROM partners WHERE code = ${code.toLowerCase()} AND active`;
+  return p?.id ?? null;
+}
+async function recordVisitSource(sql2, visitorId, src) {
+  if (!src) return;
+  const partnerId = await activePartner(sql2, src.partner);
+  await sql2`
+    UPDATE visitors SET
+      utm_source = COALESCE(utm_source, ${src.utmSource ?? null}),
+      utm_medium = COALESCE(utm_medium, ${src.utmMedium ?? null}),
+      utm_campaign = COALESCE(utm_campaign, ${src.utmCampaign ?? null}),
+      partner_id = COALESCE(partner_id, ${partnerId})
+    WHERE visitor_id = ${visitorId} AND first_seen_at > now() - interval '1 day'`;
+}
+async function attachSource(sql2, log2, userId, isNew, src, o) {
+  if (!isNew) return;
+  try {
+    const code = o.partnerCode ?? src?.partner ?? null;
+    const partnerId = await activePartner(sql2, code);
+    let channel;
+    let detail = null;
+    if (partnerId) {
+      channel = "partner";
+      detail = code.toLowerCase();
+    } else if (o.referral) channel = "referral";
+    else if (o.invite || src?.invite) channel = "invite";
+    else if (src?.utmSource) {
+      channel = "utm";
+      detail = [src.utmSource, src.utmMedium, src.utmCampaign].filter(Boolean).join(" / ").slice(0, 80);
+    } else if (src?.referrer) {
+      channel = "referrer";
+      detail = src.referrer;
+    } else channel = o.telegram ? "telegram" : "direct";
+    await sql2`UPDATE users SET source_channel = ${channel}, source_detail = ${detail}, partner_id = ${partnerId} WHERE id = ${userId} AND source_channel IS NULL`;
+  } catch (e2) {
+    log2.warn("source attach failed", { err: e2 });
+  }
+}
+var LEVEL_BUCKETS = [
+  ["1", 1, 1],
+  ["2\u20134", 2, 4],
+  ["5\u20139", 5, 9],
+  ["10\u201319", 10, 19],
+  ["20\u201329", 20, 29],
+  ["30\u201349", 30, 49],
+  ["50+", 50, 1e6]
+];
+async function growth(sql2, r, now = /* @__PURE__ */ new Date()) {
+  const from = new Date(r.from);
+  const to = new Date(r.to);
+  const [pl] = await sql2`
+    SELECT
+      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND created_at BETWEEN ${from} AND ${to})::int AS registered,
+      (SELECT count(DISTINCT mp.user_id) FROM match_participants mp JOIN matches m ON m.id = mp.match_id WHERE m.started_at BETWEEN ${from} AND ${to})::int AS unique,
+      (SELECT count(*) FROM (
+         SELECT mp.user_id, min(m.started_at) AS first FROM match_participants mp JOIN matches m ON m.id = mp.match_id GROUP BY mp.user_id
+       ) f WHERE f.first BETWEEN ${from} AND ${to})::int AS first,
+      (SELECT count(*) FROM matches WHERE status = 'completed' AND ended_at BETWEEN ${from} AND ${to})::int AS completed`;
+  const sources = await sql2`
+    SELECT COALESCE(u.source_channel, 'unknown') AS channel, u.source_detail AS detail, count(*)::int AS accounts,
+           count(*) FILTER (WHERE EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id))::int AS first_match,
+           count(*) FILTER (WHERE EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed))::int AS completed,
+           count(*) FILTER (WHERE EXISTS (SELECT 1 FROM user_daily_activity a WHERE a.user_id = u.id AND a.day > (u.created_at AT TIME ZONE 'UTC')::date))::int AS returned
+    FROM users u
+    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}
+    GROUP BY 1, 2 ORDER BY accounts DESC, channel, detail LIMIT 50`;
+  const visits = await sql2`
+    SELECT CASE WHEN v.partner_id IS NOT NULL THEN 'partner' WHEN v.utm_source IS NOT NULL THEN 'utm' WHEN COALESCE(v.referrer, '') <> '' THEN 'referrer' ELSE 'direct' END AS kind,
+           COALESCE(p.code, v.utm_source, NULLIF(v.referrer, ''), '') AS key,
+           count(*)::int AS visitors, count(v.user_id)::int AS registered
+    FROM visitors v LEFT JOIN partners p ON p.id = v.partner_id
+    WHERE v.first_seen_at BETWEEN ${from} AND ${to}
+    GROUP BY 1, 2 ORDER BY visitors DESC, registered DESC, key LIMIT 30`;
+  const [inv] = await sql2`
+    SELECT
+      (SELECT count(*) FROM analytics_events WHERE name = 'invite_created' AND occurred_at BETWEEN ${from} AND ${to})::int AS created,
+      (SELECT count(*) FROM analytics_events WHERE name = 'invite_opened' AND occurred_at BETWEEN ${from} AND ${to})::int AS opened,
+      (SELECT count(DISTINCT user_id) FROM analytics_events
+         WHERE name = 'lobby_joined' AND props->>'viaInvite' = 'true' AND occurred_at BETWEEN ${from} AND ${to})::int AS joined,
+      (SELECT count(DISTINCT mp.user_id) FROM match_participants mp JOIN matches m ON m.id = mp.match_id
+         WHERE mp.via_invite AND mp.completed AND m.started_at BETWEEN ${from} AND ${to})::int AS played,
+      (SELECT count(DISTINCT mp.user_id) FROM match_participants mp JOIN matches m ON m.id = mp.match_id JOIN users u ON u.id = mp.user_id
+         WHERE mp.via_invite AND mp.completed AND m.started_at BETWEEN ${from} AND ${to} AND u.created_at BETWEEN ${from} AND ${to})::int AS new_players,
+      (SELECT count(*) FROM referrals WHERE attached_at BETWEEN ${from} AND ${to})::int AS attached,
+      (SELECT count(*) FROM referrals WHERE attached_at BETWEEN ${from} AND ${to} AND status = 'confirmed')::int AS confirmed`;
+  const levelRows = await sql2`
+    SELECT p.level, count(*)::int AS players FROM profiles p JOIN users u ON u.id = p.user_id
+    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL GROUP BY p.level`;
+  const reached = await sql2`
+    SELECT substring(ref FROM 7)::int AS level, count(*)::int AS players FROM currency_ledger
+    WHERE currency = 'blat' AND reason = 'level' AND ref ~ '^level:[0-9]{1,6}$' AND created_at BETWEEN ${from} AND ${to}
+    GROUP BY 1 ORDER BY 1`;
+  const konRows = await sql2`
+    SELECT kon_format AS format, count(*)::int AS matches FROM matches
+    WHERE kon_format IS NOT NULL AND status = 'completed' AND ended_at BETWEEN ${from} AND ${to} GROUP BY 1`;
+  const [konPlayers] = await sql2`
+    SELECT count(DISTINCT mp.user_id)::int AS n FROM match_participants mp JOIN matches m ON m.id = mp.match_id
+    WHERE m.kon_format IS NOT NULL AND m.status = 'completed' AND m.ended_at BETWEEN ${from} AND ${to}`;
+  const [blat] = await sql2`
+    SELECT COALESCE(sum(delta), 0)::int AS issued,
+           COALESCE(sum(delta) FILTER (WHERE reason = 'level'), 0)::int AS levels,
+           COALESCE(sum(delta) FILTER (WHERE reason = 'referral'), 0)::int AS referrals
+    FROM currency_ledger WHERE currency = 'blat' AND delta > 0 AND created_at BETWEEN ${from} AND ${to}`;
+  const totalPlayers = levelRows.reduce((a, x) => a + x.players, 0);
+  const levelSum = levelRows.reduce((a, x) => a + x.level * x.players, 0);
+  const konBy = new Map(konRows.map((x) => [x.format, x.matches]));
+  return {
+    range: r,
+    generatedAt: now.toISOString(),
+    players: { registered: pl.registered, unique: pl.unique, firstMatch: pl.first, completedMatches: pl.completed },
+    sources: sources.map((x) => ({ channel: x.channel, detail: x.detail, accounts: x.accounts, firstMatch: x.first_match, completed: x.completed, returned: x.returned })),
+    visits: visits.map((x) => ({ kind: x.kind, key: x.key, visitors: x.visitors, registered: x.registered })),
+    invites: {
+      roomInvites: inv.created,
+      opened: inv.opened,
+      joinedLobby: inv.joined,
+      played: inv.played,
+      newPlayers: inv.new_players,
+      conversion: ratio(inv.played, inv.created),
+      referralAttached: inv.attached,
+      referralConfirmed: inv.confirmed,
+      referralConversion: ratio(inv.confirmed, inv.attached)
+    },
+    levels: {
+      buckets: LEVEL_BUCKETS.map(([bucket, lo, hi]) => ({ bucket, players: levelRows.filter((x) => x.level >= lo && x.level <= hi).reduce((a, x) => a + x.players, 0) })),
+      reached: [...reached],
+      average: totalPlayers ? Math.round(levelSum / totalPlayers * 10) / 10 : null,
+      max: levelRows.reduce((a, x) => Math.max(a, x.level), 0)
+    },
+    kon: { matches: konRows.reduce((a, x) => a + x.matches, 0), players: konPlayers.n, byFormat: KON_FORMATS.map((format) => ({ format, matches: konBy.get(format) ?? 0 })) },
+    blat: { issued: blat.issued, fromLevels: blat.levels, fromReferrals: blat.referrals }
+  };
+}
+async function partnersWithStats(sql2, r, env2) {
+  const from = new Date(r.from);
+  const to = new Date(r.to);
+  const rows = await sql2`
+    SELECT p.id, p.code, p.name, p.note, p.active, p.created_at,
+      (SELECT count(*) FROM visitors v WHERE v.partner_id = p.id AND v.first_seen_at BETWEEN ${from} AND ${to})::int AS visitors,
+      count(u.id)::int AS accounts,
+      count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id))::int AS first_match,
+      count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed))::int AS completed,
+      count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM user_daily_activity a WHERE a.user_id = u.id AND a.day > (u.created_at AT TIME ZONE 'UTC')::date))::int AS returned,
+      (SELECT count(*) FROM match_participants mp JOIN matches m ON m.id = mp.match_id JOIN users x ON x.id = mp.user_id
+         WHERE x.partner_id = p.id AND mp.completed AND m.ended_at BETWEEN ${from} AND ${to})::int AS matches
+    FROM partners p
+    LEFT JOIN users u ON u.partner_id = p.id AND u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}
+    GROUP BY p.id ORDER BY p.created_at DESC, p.code`;
+  return rows.map((x) => ({
+    id: x.id,
+    code: x.code,
+    name: x.name,
+    note: x.note,
+    active: x.active,
+    createdAt: x.created_at.toISOString(),
+    ...partnerLinks(x.code, env2),
+    visitors: x.visitors,
+    accounts: x.accounts,
+    firstMatch: x.first_match,
+    completed: x.completed,
+    returned: x.returned,
+    matches: x.matches
+  }));
+}
+var PartnerError = class extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+  }
+  code;
+};
+async function createPartner(sql2, adminId, o) {
+  const base2 = o.code ?? (o.name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 16) || "partner");
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = attempt === 0 && base2.length >= 3 ? base2 : `${base2.slice(0, 16)}_${randomBytes6(3).toString("hex").slice(0, 5)}`.replace(/^_/, "");
+    const rows = await sql2`
+      INSERT INTO partners (code, name, note, created_by) VALUES (${code}, ${o.name}, ${o.note || null}, ${adminId})
+      ON CONFLICT (code) DO NOTHING RETURNING id`;
+    if (rows[0]) return { id: rows[0].id, code };
+    if (o.code) throw new PartnerError("code_taken");
+  }
+  throw new PartnerError("code_taken");
+}
+async function updatePartner(sql2, id, o) {
+  await sql2.begin(async (tx) => {
+    const [p] = await tx`SELECT id FROM partners WHERE id = ${id} FOR UPDATE`;
+    if (!p) throw new PartnerError("not_found");
+    if (o.name !== void 0) await tx`UPDATE partners SET name = ${o.name} WHERE id = ${id}`;
+    if (o.note !== void 0) await tx`UPDATE partners SET note = ${o.note || null} WHERE id = ${id}`;
+    if (o.active !== void 0) await tx`UPDATE partners SET active = ${o.active} WHERE id = ${id}`;
+  });
+}
+
 // apps/server/src/api/auth.ts
 async function attachReferral(sql2, log2, userId, isNew, code) {
-  if (!isNew || !code) return;
+  if (!isNew || !code) return false;
   try {
-    await new BlatRepo(sql2, { publicUrl: "" }).attach(userId, code);
+    return await new BlatRepo(sql2, { publicUrl: "" }).attach(userId, code) === "attached";
   } catch (e2) {
     log2.warn("referral attach failed", { err: e2 });
+    return false;
   }
 }
 var refFromStartParam = (p) => p && /^ref_[A-Za-z0-9_-]{4,32}$/.test(p) ? p.slice(4) : null;
-async function linkVisitor(sql2, visitorId, userId, platform2) {
+var isRoomStartParam = (p) => !!p && !/^(ref|p|link)_/.test(p);
+async function linkVisitor(sql2, visitorId, userId, platform2, source) {
   await sql2`
     INSERT INTO visitors (visitor_id, platform, user_id) VALUES (${visitorId}, ${platform2}, ${userId})
     ON CONFLICT (visitor_id) DO UPDATE SET user_id = COALESCE(visitors.user_id, EXCLUDED.user_id), last_seen_at = now()`;
   await sql2`INSERT INTO visitor_days (visitor_id, day) VALUES (${visitorId}, (now() AT TIME ZONE 'UTC')::date) ON CONFLICT DO NOTHING`;
+  await recordVisitSource(sql2, visitorId, source);
 }
 var REASONS = {
   malformed: "Damaged sign-in data",
@@ -18909,6 +19207,7 @@ var registerAuthRoutes = (router, deps) => {
   const emailUserLimiter = new RateLimiter(6, 6 / 300);
   const byUser = (ctx) => currentUser(ctx).userId;
   const visitLimiter = new RateLimiter(30, 30 / 60);
+  const linkLimiter = new RateLimiter(5, 5 / 600);
   const unavailable = () => {
     throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
   };
@@ -18923,24 +19222,44 @@ var registerAuthRoutes = (router, deps) => {
       throw new HttpError(401, "invalid_init_data", REASONS[v.reason] ?? "Sign-in error");
     }
     const platform2 = body.platform ?? null;
+    let link = null;
+    if (body.link) {
+      link = await useTelegramLinkCode(deps.sql, env2.SESSION_SECRET, body.link, String(v.user.id));
+      deps.log.info("telegram link code used", { outcome: link.outcome, merged: !!link.released });
+    }
     const up = await pg.users.upsertTelegram(v.user, platform2);
-    await attachReferral(deps.sql, deps.log, up.userId, up.isNew, refFromStartParam(v.startParam) ?? body.ref);
+    const referred = await attachReferral(deps.sql, deps.log, up.userId, up.isNew, refFromStartParam(v.startParam) ?? body.ref);
+    await attachSource(deps.sql, deps.log, up.userId, up.isNew, body.source, { referral: referred, telegram: true, partnerCode: partnerFromStartParam(v.startParam), invite: isRoomStartParam(v.startParam) });
     const s = await pg.sessions.issue(up.userId, "telegram", platform2, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform: platform2 };
     services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "telegram" }, evCtx);
     if (up.isNew) services2.analytics.server("profile_created", { method: "telegram" }, evCtx);
-    if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform2);
+    if (link?.outcome === "linked") services2.analytics.server("identity_linked", { provider: "telegram", via: "code", merged: !!link.released }, evCtx);
+    if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform2, body.source);
     const profile = await pg.profiles.get(up.userId);
     if (!profile) throw new HttpError(500, "internal", "Profile not found");
-    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew };
+    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew, ...link ? { telegramLink: link.outcome } : {} };
     ctx.json(200, res);
+  });
+  router.post("/api/auth/telegram/link-code", requireUser(services2.sessions), rateLimit(linkLimiter, byUser), async (ctx) => {
+    if (!deps.sql) return unavailable();
+    const user = currentUser(ctx);
+    if (!env2.TELEGRAM_BOT_TOKEN || !env2.TELEGRAM_BOT_USERNAME) throw new HttpError(503, "telegram_not_configured", "Linking Telegram isn\u2019t set up on this server yet");
+    try {
+      const c = await createTelegramLinkCode(deps.sql, env2.SESSION_SECRET, user.userId);
+      const res = { url: telegramLinkUrl(env2.TELEGRAM_BOT_USERNAME, c.code), expiresAt: c.expiresAt.toISOString() };
+      ctx.json(200, res);
+    } catch (e2) {
+      if (e2 instanceof TelegramLinkError && e2.code === "already_linked") throw new HttpError(409, "already_linked", "Telegram is already linked to this account");
+      throw e2;
+    }
   });
   router.post("/api/auth/guest", rateLimit(limiter), async (ctx) => {
     if (!guestEnabled) throw new HttpError(403, "guest_auth_disabled", "Signing in without Telegram is switched off on this server");
     if (!deps.sql) return unavailable();
     const body = await ctx.body(GuestAuthRequest, 4 * 1024);
     const pg = pgContext(deps.sql, env2, deps.log);
-    const deviceKey = "g1:" + createHmac5("sha256", env2.SESSION_SECRET).update(body.deviceId).digest("base64url");
+    const deviceKey = "g1:" + createHmac6("sha256", env2.SESSION_SECRET).update(body.deviceId).digest("base64url");
     const existing = await pg.users.findGuest(deviceKey);
     if (!existing && (!newGuestPerIp.take(ctx.ip) || !newGuestGlobal.take("all"))) {
       deps.log.warn("guest sign-up rate limited", { ip: ctx.ip });
@@ -18948,8 +19267,9 @@ var registerAuthRoutes = (router, deps) => {
     }
     const platform2 = body.platform ?? null;
     const up = await pg.users.upsertGuest(deviceKey, latinName(body.name, `Comrade_${deviceKey.slice(3, 7).replace(/[^A-Za-z0-9]/g, "X").toUpperCase()}`), platform2);
-    if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform2);
-    await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
+    if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform2, body.source);
+    const referred = await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
+    await attachSource(deps.sql, deps.log, up.userId, up.isNew, body.source, { referral: referred, telegram: false });
     const s = await pg.sessions.issue(up.userId, "guest", platform2, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform: platform2 };
     services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "guest" }, evCtx);
@@ -18964,10 +19284,11 @@ var registerAuthRoutes = (router, deps) => {
     if (!deps.sql) return unavailable();
     const body = await ctx.body(DevAuthRequest, 4 * 1024);
     const pg = pgContext(deps.sql, env2, deps.log);
-    const deviceId = body.deviceId ?? randomBytes5(12).toString("base64url");
+    const deviceId = body.deviceId ?? randomBytes7(12).toString("base64url");
     const platform2 = body.platform ?? null;
     const up = await pg.users.upsertDev(deviceId, latinName(body.name, `Comrade_${deviceId.slice(-4).replace(/[^A-Za-z0-9]/g, "X").toUpperCase()}`), platform2);
-    await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
+    const referred = await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
+    await attachSource(deps.sql, deps.log, up.userId, up.isNew, body.source, { referral: referred, telegram: false });
     const s = await pg.sessions.issue(up.userId, "dev", platform2, body.clientVersion ?? null);
     const evCtx = { userId: up.userId, sessionId: s.sessionId, platform: platform2 };
     services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "dev" }, evCtx);
@@ -18983,8 +19304,10 @@ var registerAuthRoutes = (router, deps) => {
     const referrer = body.referrer ? body.referrer.replace(/^https?:\/\//, "").split("/")[0].slice(0, 80) : null;
     await deps.sql`
       INSERT INTO visitors (visitor_id, platform, referrer) VALUES (${body.visitorId}, ${body.platform ?? null}, ${referrer})
-      ON CONFLICT (visitor_id) DO UPDATE SET last_seen_at = now()`;
+      ON CONFLICT (visitor_id) DO UPDATE SET last_seen_at = now(),
+        referrer = CASE WHEN visitors.referrer IS NULL AND visitors.first_seen_at > now() - interval '1 day' THEN EXCLUDED.referrer ELSE visitors.referrer END`;
     await deps.sql`INSERT INTO visitor_days (visitor_id, day) VALUES (${body.visitorId}, (now() AT TIME ZONE 'UTC')::date) ON CONFLICT DO NOTHING`;
+    await recordVisitSource(deps.sql, body.visitorId, body.source);
     ctx.json(204, null);
   });
   router.post("/api/auth/email/login", rateLimit(emailLimiter), async (ctx) => {
@@ -18995,11 +19318,19 @@ var registerAuthRoutes = (router, deps) => {
     const userId = await pg.emailAuth.verify(body.email, body.password);
     if (!userId) throw new HttpError(401, "bad_credentials", "Wrong email or password");
     const platform2 = body.platform ?? null;
+    let link = null;
+    if (body.initData && env2.TELEGRAM_BOT_TOKEN) {
+      const v = validateInitData(body.initData, env2.TELEGRAM_BOT_TOKEN, env2.TELEGRAM_AUTH_MAX_AGE_SEC);
+      if (v.ok) link = await linkTelegramToAccount(deps.sql, userId, String(v.user.id));
+      else deps.log.info("telegram data with an email sign-in rejected", { reason: v.reason });
+    }
     const s = await pg.sessions.issue(userId, "email", platform2, body.clientVersion ?? null);
-    services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "email" }, { userId, sessionId: s.sessionId, platform: platform2 });
+    const evCtx = { userId, sessionId: s.sessionId, platform: platform2 };
+    services2.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "email" }, evCtx);
+    if (link?.outcome === "linked") services2.analytics.server("identity_linked", { provider: "telegram", via: "email", merged: !!link.released }, evCtx);
     const profile = await pg.profiles.get(userId);
     if (!profile) throw new HttpError(500, "internal", "Profile not found");
-    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: false };
+    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: false, ...link ? { telegramLink: link.outcome } : {} };
     ctx.json(200, res);
   });
   router.post("/api/auth/email/link", requireUser(services2.sessions), rateLimit(emailUserLimiter, byUser), async (ctx) => {
@@ -19173,11 +19504,15 @@ var registerEventRoutes = (router, deps) => {
 import { randomUUID as randomUUID2 } from "node:crypto";
 var DROP_KEY = "blat_drop.announce_at";
 var SNAPSHOT_RULES = Object.freeze({
-  version: 1,
+  version: 2,
   includes: "every existing account whose $BLAT balance is above 0 at the moment of the snapshot",
   balance: "profiles.blat read in one REPEATABLE READ transaction",
-  eligible: "not flagged by an administrator, and the $BLAT ledger adds up to the balance",
-  reasons: { flagged: "an administrator marked the account as suspicious", ledger_mismatch: "the $BLAT ledger does not add up to the balance" },
+  eligible: "not flagged by an administrator, the $BLAT ledger adds up to the balance, and not an empty profile merged into another account",
+  reasons: {
+    flagged: "an administrator marked the account as suspicious",
+    ledger_mismatch: "the $BLAT ledger does not add up to the balance",
+    merged: "an empty first-launch profile that gave its Telegram id to the player\u2019s real account (V2.0 part E); it cannot be signed in to"
+  },
   not: "a snapshot is a record only: it creates no token, wallet, price or transfer"
 });
 var DROP_DATE_BOUNDS = Object.freeze({ min: Date.UTC(2020, 0, 1), maxYearsAhead: 10 });
@@ -19221,8 +19556,8 @@ var BlatDropRepo = class {
         INSERT INTO blat_snapshot_rows (snapshot_id, user_id, display_name, balance, earned, from_levels, from_referrals, from_grants, ledger_sum, flag, eligible, reasons)
         SELECT ${id}, u.id, u.display_name, p.blat, p.blat_earned,
                COALESCE(l.lv, 0), COALESCE(l.rf, 0), COALESCE(l.gr, 0), COALESCE(l.total, 0), u.blat_flag,
-               (u.blat_flag IS NULL AND COALESCE(l.total, 0) = p.blat),
-               array_remove(ARRAY[CASE WHEN u.blat_flag IS NOT NULL THEN 'flagged' END, CASE WHEN COALESCE(l.total, 0) <> p.blat THEN 'ledger_mismatch' END], NULL)
+               (u.blat_flag IS NULL AND COALESCE(l.total, 0) = p.blat AND u.merged_at IS NULL),
+               array_remove(ARRAY[CASE WHEN u.blat_flag IS NOT NULL THEN 'flagged' END, CASE WHEN COALESCE(l.total, 0) <> p.blat THEN 'ledger_mismatch' END, CASE WHEN u.merged_at IS NOT NULL THEN 'merged' END], NULL)
         FROM profiles p
         JOIN users u ON u.id = p.user_id AND u.deleted_at IS NULL
         LEFT JOIN (
@@ -19366,15 +19701,15 @@ function resolveRange(key, fromStr, toStr, now = /* @__PURE__ */ new Date()) {
   }
   return { key: k, from: from.toISOString(), to: to.toISOString(), firstDay: utcDayString(from), lastDay: utcDayString(to) };
 }
-var ratio = (num, den) => den > 0 ? num / den : null;
+var ratio2 = (num, den) => den > 0 ? num / den : null;
 async function overview(sql2, r, activeRooms, now = /* @__PURE__ */ new Date()) {
   const from = new Date(r.from);
   const to = new Date(r.to);
   const today = utcDayString(now);
   const [counts] = await sql2`
     SELECT
-      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND created_at <= ${to})::int AS total_players,
-      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND created_at BETWEEN ${from} AND ${to})::int AS new_players,
+      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND created_at <= ${to})::int AS total_players,
+      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND created_at BETWEEN ${from} AND ${to})::int AS new_players,
       (SELECT count(*) FROM user_daily_activity WHERE day = ${r.lastDay}::date)::int AS dau,
       (SELECT count(DISTINCT user_id) FROM user_daily_activity WHERE day > ${r.lastDay}::date - 7 AND day <= ${r.lastDay}::date)::int AS wau,
       (SELECT count(DISTINCT user_id) FROM user_daily_activity WHERE day > ${r.lastDay}::date - 30 AND day <= ${r.lastDay}::date)::int AS mau,
@@ -19383,16 +19718,21 @@ async function overview(sql2, r, activeRooms, now = /* @__PURE__ */ new Date()) 
       (SELECT avg(duration_ms)::float8 FROM matches WHERE status = 'completed' AND ended_at BETWEEN ${from} AND ${to}) AS avg_match,
       (SELECT avg((props->>'durationMs')::float8) FROM analytics_events
          WHERE name = 'session_ended' AND occurred_at BETWEEN ${from} AND ${to} AND jsonb_typeof(props->'durationMs') = 'number') AS avg_session,
-      (SELECT count(*) FROM app_errors WHERE occurred_at BETWEEN ${from} AND ${to})::int AS errors`;
+      (SELECT count(*) FROM app_errors WHERE occurred_at BETWEEN ${from} AND ${to})::int AS errors,
+      (SELECT count(DISTINCT mp.user_id) FROM match_participants mp JOIN matches m ON m.id = mp.match_id WHERE m.started_at BETWEEN ${from} AND ${to})::int AS unique_players,
+      (SELECT count(*) FROM (
+         SELECT mp.user_id, min(m.started_at) AS first FROM match_participants mp JOIN matches m ON m.id = mp.match_id GROUP BY mp.user_id
+       ) f WHERE f.first BETWEEN ${from} AND ${to})::int AS first_match,
+      (SELECT COALESCE(sum(delta), 0) FROM currency_ledger WHERE currency = 'blat' AND delta > 0 AND created_at BETWEEN ${from} AND ${to})::int AS blat_issued`;
   const [conv] = await sql2`
     SELECT count(*)::int AS cohort,
            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed))::int AS converted
-    FROM users u WHERE u.deleted_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}`;
+    FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}`;
   const [ret] = await sql2`
     WITH cohort AS (
       SELECT u.id, (u.created_at AT TIME ZONE 'UTC')::date AS d
       FROM users u
-      WHERE u.deleted_at IS NULL AND (u.created_at AT TIME ZONE 'UTC')::date BETWEEN ${r.firstDay}::date AND ${r.lastDay}::date
+      WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND (u.created_at AT TIME ZONE 'UTC')::date BETWEEN ${r.firstDay}::date AND ${r.lastDay}::date
     )
     SELECT
       count(*) FILTER (WHERE c.d + 1 < ${today}::date)::int AS d1_size,
@@ -19413,12 +19753,15 @@ async function overview(sql2, r, activeRooms, now = /* @__PURE__ */ new Date()) 
     activeRooms,
     avgMatchDurationMs: counts.avg_match === null ? null : Math.round(counts.avg_match),
     avgSessionDurationMs: counts.avg_session === null ? null : Math.round(counts.avg_session),
-    firstMatchConversion: ratio(conv.converted, conv.cohort),
-    d1Retention: ratio(ret.d1_ret, ret.d1_size),
-    d7Retention: ratio(ret.d7_ret, ret.d7_size),
+    firstMatchConversion: ratio2(conv.converted, conv.cohort),
+    d1Retention: ratio2(ret.d1_ret, ret.d1_size),
+    d7Retention: ratio2(ret.d7_ret, ret.d7_size),
     d1CohortSize: ret.d1_size,
     d7CohortSize: ret.d7_size,
-    errorCount: counts.errors
+    errorCount: counts.errors,
+    uniquePlayers: counts.unique_players,
+    firstMatchPlayers: counts.first_match,
+    blatIssued: counts.blat_issued
   };
 }
 var SESSION_BUCKETS = ["<1 \u043C\u0438\u043D", "1\u20133 \u043C\u0438\u043D", "3\u20135 \u043C\u0438\u043D", "5\u201310 \u043C\u0438\u043D", "10\u201320 \u043C\u0438\u043D", "20\u201330 \u043C\u0438\u043D", "30\u201360 \u043C\u0438\u043D", "60+ \u043C\u0438\u043D"];
@@ -19433,7 +19776,7 @@ async function charts(sql2, r, now = /* @__PURE__ */ new Date()) {
   const today = utcDayString(now);
   const registrations = await sql2`
     SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
-      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL
+      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL
          AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS count
     FROM generate_series(${r.firstDay}::date, ${r.lastDay}::date, interval '1 day') AS g(day)
     ORDER BY g.day`;
@@ -19452,7 +19795,7 @@ async function charts(sql2, r, now = /* @__PURE__ */ new Date()) {
     WITH days AS (SELECT g.day::date AS d FROM generate_series(${r.firstDay}::date, ${r.lastDay}::date, interval '1 day') AS g(day)),
     cohort AS (
       SELECT u.id, (u.created_at AT TIME ZONE 'UTC')::date AS d FROM users u
-      WHERE u.deleted_at IS NULL AND (u.created_at AT TIME ZONE 'UTC')::date BETWEEN ${r.firstDay}::date AND ${r.lastDay}::date
+      WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND (u.created_at AT TIME ZONE 'UTC')::date BETWEEN ${r.firstDay}::date AND ${r.lastDay}::date
     )
     SELECT to_char(days.d, 'YYYY-MM-DD') AS day,
       count(c.id)::int AS cohort,
@@ -19560,12 +19903,12 @@ async function listPlayers(sql2, opts) {
            COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
            (count(*) OVER ())::int AS total
     FROM users u LEFT JOIN profiles p ON p.user_id = u.id
-    WHERE u.deleted_at IS NULL ${filter}
+    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL ${filter}
     ORDER BY ${col} ${order} NULLS LAST, u.id
     LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`;
   let total = rows[0]?.total ?? 0;
   if (rows.length === 0 && page > 1) {
-    const [c] = await sql2`SELECT count(*)::int AS n FROM users u WHERE u.deleted_at IS NULL ${filter}`;
+    const [c] = await sql2`SELECT count(*)::int AS n FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL ${filter}`;
     total = c.n;
   }
   return { rows: rows.map(toPlayerRow), total, page, pageSize, sort, dir };
@@ -19621,7 +19964,7 @@ async function errorGroups(sql2, r, limit = 200) {
 async function dailyMetrics(sql2, r) {
   const rows = await sql2`
     SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
-      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS registrations,
+      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS registrations,
       (SELECT count(*) FROM user_daily_activity a WHERE a.day = g.day::date)::int AS dau,
       (SELECT count(*) FROM matches m WHERE m.started_at >= (g.day AT TIME ZONE 'UTC') AND m.started_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS matches_started,
       (SELECT count(*) FROM matches m WHERE m.status = 'completed' AND m.ended_at >= (g.day AT TIME ZONE 'UTC') AND m.ended_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS matches_completed,
@@ -19648,7 +19991,7 @@ async function funnel(sql2, r) {
     u AS (
       SELECT u.id, u.email, (u.created_at AT TIME ZONE 'UTC')::date AS d,
              EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed) AS played
-      FROM users u WHERE u.deleted_at IS NULL AND u.id IN (SELECT user_id FROM v WHERE user_id IS NOT NULL)
+      FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.id IN (SELECT user_id FROM v WHERE user_id IS NOT NULL)
     )
     SELECT (SELECT count(*) FROM v)::int AS entered,
            (SELECT count(*) FROM u)::int AS registered,
@@ -19660,7 +20003,7 @@ async function funnel(sql2, r) {
     WITH u AS (
       SELECT u.id, u.email, (u.created_at AT TIME ZONE 'UTC')::date AS d,
              EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed) AS played
-      FROM users u WHERE u.deleted_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}
+      FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}
     )
     SELECT (SELECT count(*) FROM u)::int AS entered,
            (SELECT count(*) FROM u)::int AS registered,
@@ -19676,7 +20019,7 @@ async function funnel(sql2, r) {
     SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
       (SELECT count(*) FROM visitor_days vd WHERE vd.day = g.day::date)::int AS unique_visitors,
       (SELECT count(*) FROM visitors x WHERE x.first_seen_at >= (g.day AT TIME ZONE 'UTC') AND x.first_seen_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS new_visitors,
-      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL
+      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL
          AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS registrations
     FROM generate_series(${r.firstDay}::date, ${r.lastDay}::date, interval '1 day') AS g(day)
     ORDER BY g.day`;
@@ -19853,6 +20196,38 @@ var registerAdminRoutes = (router, deps) => {
   router.get("/api/admin/funnel", viewer, async (ctx) => {
     ctx.json(200, await funnel(pg().sql, range(ctx)));
   });
+  router.get("/api/admin/growth", viewer, async (ctx) => {
+    ctx.json(200, await growth(pg().sql, range(ctx)));
+  });
+  router.get("/api/admin/partners", viewer, async (ctx) => {
+    ctx.json(200, await partnersWithStats(pg().sql, range(ctx), deps.env));
+  });
+  router.post("/api/admin/partners", admin, async (ctx) => {
+    const p = pg();
+    const body = await ctx.body(AdminPartnerCreate, 2048);
+    try {
+      const made = await createPartner(p.sql, currentAdmin(ctx).id, body);
+      await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: "partner_created", target: made.code, details: { name: body.name }, ip: ctx.ip });
+      ctx.json(201, made);
+    } catch (e2) {
+      if (e2 instanceof PartnerError) throw new HttpError(409, "code_taken", "\u0422\u0430\u043A\u043E\u0439 \u043A\u043E\u0434 \u0443\u0436\u0435 \u0437\u0430\u043D\u044F\u0442");
+      throw e2;
+    }
+  });
+  router.post("/api/admin/partners/:id", admin, async (ctx) => {
+    const p = pg();
+    const id = ctx.params.id ?? "";
+    if (!UUID_RE3.test(id)) throw new HttpError(404, "not_found", "\u041F\u0430\u0440\u0442\u043D\u0451\u0440 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    const body = await ctx.body(AdminPartnerUpdate, 2048);
+    try {
+      await updatePartner(p.sql, id, body);
+    } catch (e2) {
+      if (e2 instanceof PartnerError) throw new HttpError(404, "not_found", "\u041F\u0430\u0440\u0442\u043D\u0451\u0440 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+      throw e2;
+    }
+    await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: "partner_updated", target: id, details: body, ip: ctx.ip });
+    ctx.json(200, { ok: true });
+  });
   router.get("/api/admin/economy", viewer, async (ctx) => {
     ctx.json(200, await economy(pg().sql, range(ctx)));
   });
@@ -19942,7 +20317,14 @@ var registerAdminRoutes = (router, deps) => {
         referredBy: by ? { id: by.referrer_id, name: by.name, status: by.status } : null,
         referrals: refCounts,
         flag: b2?.blat_flag ?? null
-      }
+      },
+      origin: await (async () => {
+        const [o] = await p.sql`
+          SELECT u.source_channel, u.source_detail, pa.code AS partner, u.merged_into, u.merged_at,
+                 (SELECT count(*) FROM users m WHERE m.merged_into = u.id)::int AS merged_from
+          FROM users u LEFT JOIN partners pa ON pa.id = u.partner_id WHERE u.id = ${id}`;
+        return { channel: o?.source_channel ?? null, detail: o?.source_detail ?? null, partner: o?.partner ?? null, mergedInto: o?.merged_into ?? null, mergedAt: o?.merged_at?.toISOString() ?? null, mergedFrom: o?.merged_from ?? 0 };
+      })()
     };
     ctx.json(200, detail);
   });
@@ -20144,7 +20526,7 @@ var registerAdminRoutes = (router, deps) => {
              COALESCE(p.level, 1) AS level, COALESCE(p.xp, 0) AS xp, COALESCE(p.matches_played, 0) AS matches_played,
              COALESCE(p.wins, 0) AS wins, COALESCE(p.losses, 0) AS losses, COALESCE(p.kills, 0) AS kills,
              COALESCE(p.assists, 0) AS assists, COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec
-      FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.deleted_at IS NULL ORDER BY u.created_at`;
+      FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.deleted_at IS NULL AND u.merged_at IS NULL ORDER BY u.created_at`;
     await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: "export_players", details: { rows: rows.length }, ip: ctx.ip });
     csv(
       ctx,
@@ -20168,6 +20550,37 @@ var registerAdminRoutes = (router, deps) => {
       toCsv(
         ["match_id", "room_id", "map", "private", "status", "started_at", "ended_at", "duration_ms", "end_reason", "players", "fill_players"],
         rows.map((m) => [m.id, m.room_id, isMapId(m.map_id) ? getMap(m.map_id).name : m.map_id, m.is_private, m.status, m.started_at, m.ended_at, m.duration_ms, m.end_reason, m.player_count, m.bot_count])
+      )
+    );
+  });
+  router.get("/api/admin/export/sources.csv", admin, async (ctx) => {
+    const p = pg();
+    const r = range(ctx);
+    const g = await growth(p.sql, r);
+    await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: "export_sources", details: { from: r.firstDay, to: r.lastDay }, ip: ctx.ip });
+    csv(
+      ctx,
+      `sources_${r.firstDay}_${r.lastDay}.csv`,
+      toCsv(
+        ["table", "channel", "detail", "visitors", "accounts", "first_match", "completed_match", "returned"],
+        [
+          ...g.sources.map((x) => ["accounts", x.channel, x.detail, null, x.accounts, x.firstMatch, x.completed, x.returned]),
+          ...g.visits.map((x) => ["first_visits", x.kind, x.key || null, x.visitors, x.registered, null, null, null])
+        ]
+      )
+    );
+  });
+  router.get("/api/admin/export/partners.csv", admin, async (ctx) => {
+    const p = pg();
+    const r = range(ctx);
+    const rows = await partnersWithStats(p.sql, r, deps.env);
+    await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: "export_partners", details: { rows: rows.length, from: r.firstDay, to: r.lastDay }, ip: ctx.ip });
+    csv(
+      ctx,
+      `partners_${r.firstDay}_${r.lastDay}.csv`,
+      toCsv(
+        ["code", "name", "active", "created_at", "web_link", "telegram_link", "visitors", "accounts", "first_match", "completed_match", "returned", "matches"],
+        rows.map((x) => [x.code, x.name, x.active, x.createdAt, x.webUrl, x.telegramUrl, x.visitors, x.accounts, x.firstMatch, x.completed, x.returned, x.matches])
       )
     );
   });
@@ -20368,7 +20781,7 @@ var SocialRepo = class {
       const target = await tx`
         SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level
         FROM users u LEFT JOIN profiles p ON p.user_id = u.id
-        WHERE u.name_key = ${nameKey(name)} AND u.deleted_at IS NULL`;
+        WHERE u.name_key = ${nameKey(name)} AND u.deleted_at IS NULL AND u.merged_at IS NULL`;
       const t = target[0];
       if (!t) return { outcome: "not_found", other: null };
       const other = toCard(t);
@@ -20732,7 +21145,7 @@ var registerSocialRoutes = (router, deps) => {
 };
 
 // apps/server/src/telegram/bot.ts
-import { createHmac as createHmac6, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
+import { createHmac as createHmac7, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
 var BOT_SETTINGS_VERSION = 1;
 var RU_CODES = /* @__PURE__ */ new Set(["ru", "be", "kk", "ky"]);
 var langOf = (code) => code && RU_CODES.has(code.toLowerCase().split("-")[0]) ? "ru" : "en";
@@ -20743,6 +21156,8 @@ var TEXT = {
     invite: (code) => `<b>\u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989</b>: \u0442\u0435\u0431\u044F \u0437\u043E\u0432\u0443\u0442 \u0432 \u043A\u043E\u043C\u043D\u0430\u0442\u0443 <code>${code}</code>.
 \u0421\u0435\u0440\u0432\u0435\u0440 \u043F\u0440\u043E\u0433\u0440\u0435\u0442 \u2014 \u0437\u0430\u0445\u043E\u0434\u0438.`,
     invited: "<b>\u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989</b>: \u0442\u0435\u0431\u044F \u043F\u043E\u0437\u0432\u0430\u043B\u0438 \u0432 \u0440\u0430\u0439\u043E\u043D. \u0421\u0435\u0440\u0432\u0435\u0440 \u043F\u0440\u043E\u0433\u0440\u0435\u0442 \u2014 \u0437\u0430\u0445\u043E\u0434\u0438.\n\u0420\u0430\u0439\u043E\u043D\u043D\u044B\u0435 \u0434\u0435\u043B\u0430 \u2014 \u0441\u0435\u0440\u044C\u0451\u0437\u043D\u044B\u0435 \u0434\u0435\u043B\u0430.",
+    link: "<b>\u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989</b>: \u043F\u0440\u0438\u0432\u044F\u0437\u043A\u0430 Telegram \u043A \u0442\u0432\u043E\u0435\u043C\u0443 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0443 \u0441 \u0441\u0430\u0439\u0442\u0430.\n\u0416\u043C\u0438 \u043A\u043D\u043E\u043F\u043A\u0443 \u2014 \u0438\u0433\u0440\u0430 \u043E\u0442\u043A\u0440\u043E\u0435\u0442\u0441\u044F \u0437\u0434\u0435\u0441\u044C, \u0432 Telegram, \u0441 \u0442\u0432\u043E\u0438\u043C \u043F\u0440\u043E\u0433\u0440\u0435\u0441\u0441\u043E\u043C. \u0421\u0441\u044B\u043B\u043A\u0430 \u043E\u0434\u043D\u043E\u0440\u0430\u0437\u043E\u0432\u0430\u044F \u0438 \u0434\u0435\u0439\u0441\u0442\u0432\u0443\u0435\u0442 10 \u043C\u0438\u043D\u0443\u0442.",
+    linkButton: "\u{1F517} \u041F\u0440\u0438\u0432\u044F\u0437\u0430\u0442\u044C \u0438 \u0438\u0433\u0440\u0430\u0442\u044C",
     play: "\u{1F3AE} \u0418\u0433\u0440\u0430\u0442\u044C \u0432 Telegram",
     join: "\u{1F3AE} \u0412\u043E\u0439\u0442\u0438 \u0432 \u043A\u043E\u043C\u043D\u0430\u0442\u0443",
     browser: "\u{1F310} \u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0432 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0435",
@@ -20759,6 +21174,8 @@ var TEXT = {
     invite: (code) => `<b>BLATKOM \u201989</b>: you\u2019re invited to room <code>${code}</code>.
 The server is warmed up \u2014 come on in.`,
     invited: "<b>BLATKOM \u201989</b>: someone called you into the district. The server is warmed up \u2014 come on in.\nDistrict business is serious business.",
+    link: "<b>BLATKOM \u201989</b>: linking Telegram to your account from the website.\nPress the button \u2014 the game opens here, in Telegram, with your progress. The link works once, for 10 minutes.",
+    linkButton: "\u{1F517} Link and play",
     play: "\u{1F3AE} Play in Telegram",
     join: "\u{1F3AE} Join the room",
     browser: "\u{1F310} Open in the browser",
@@ -20772,7 +21189,7 @@ The server is warmed up \u2014 come on in.`,
   }
 };
 function webhookSecret(botToken) {
-  return createHmac6("sha256", botToken).update("blatkom89 telegram webhook").digest("base64url");
+  return createHmac7("sha256", botToken).update("blatkom89 telegram webhook").digest("base64url");
 }
 function webhookUrl(publicUrl) {
   return `${publicUrl.replace(/\/$/, "")}/api/telegram/webhook?v=${BOT_SETTINGS_VERSION}`;
@@ -20799,10 +21216,22 @@ function botAnswer(update, publicUrl, botUsername) {
   }
   const lang = langOf(m.from?.language_code);
   const T = TEXT[lang];
-  const ref = cmd?.[3] && /^ref_[A-Za-z0-9_-]{4,32}$/.test(cmd[3]) ? cmd[3].slice(4) : null;
-  const code = !ref && cmd?.[3] && CODE.test(cmd[3]) ? cmd[3] : null;
   const base2 = publicUrl.replace(/\/$/, "");
-  const url = ref ? `${base2}/?ref=${encodeURIComponent(ref)}` : code ? `${base2}/?invite=${encodeURIComponent(code)}` : `${base2}/`;
+  const link = isPrivate && cmd?.[3] && /^link_[A-Za-z0-9_-]{16,32}$/.test(cmd[3]) ? cmd[3].slice(5) : null;
+  if (link) {
+    return {
+      method: "sendMessage",
+      chat_id: m.chat.id,
+      text: T.link,
+      parse_mode: "HTML",
+      link_preview_options: { is_disabled: true },
+      reply_markup: { inline_keyboard: [[{ text: T.linkButton, web_app: { url: `${base2}/?tglink=${encodeURIComponent(link)}` } }]] }
+    };
+  }
+  const ref = cmd?.[3] && /^ref_[A-Za-z0-9_-]{4,32}$/.test(cmd[3]) ? cmd[3].slice(4) : null;
+  const partner = cmd?.[3] && /^p_[A-Za-z0-9_]{3,24}$/.test(cmd[3]) ? cmd[3].slice(2).toLowerCase() : null;
+  const code = !ref && !partner && !/^(link|p)_/.test(cmd?.[3] ?? "") && cmd?.[3] && CODE.test(cmd[3]) ? cmd[3] : null;
+  const url = ref ? `${base2}/?ref=${encodeURIComponent(ref)}` : partner ? `${base2}/?p=${partner}` : code ? `${base2}/?invite=${encodeURIComponent(code)}` : `${base2}/`;
   const keyboard = isPrivate ? [[{ text: code ? T.join : T.play, web_app: { url } }], [{ text: T.browser, url }]] : [[{ text: T.groups, url }]];
   return {
     method: "sendMessage",
@@ -20837,7 +21266,7 @@ var registerTelegramRoutes = (router, deps) => {
     remember(update.update_id);
     const answer = botAnswer(update, env2.PUBLIC_URL, env2.TELEGRAM_BOT_USERNAME);
     if (!answer || !perChat.take(String(answer.chat_id))) return ctx.json(200, {});
-    log2.info("telegram bot answered", { chatType: update.message?.chat.type, invite: answer.text.includes("<code>") });
+    log2.info("telegram bot answered", { chatType: update.message?.chat.type, invite: answer.text.includes("<code>"), link: answer.text === TEXT.ru.link || answer.text === TEXT.en.link });
     deps.keepAwake?.extend(env2.BOT_WARM_MINUTES * 6e4);
     ctx.json(200, answer);
   });
@@ -21060,10 +21489,10 @@ var registerClubRoutes = (router, deps) => {
 };
 
 // apps/server/src/api/oauth.ts
-import { randomBytes as randomBytes7 } from "node:crypto";
+import { randomBytes as randomBytes9 } from "node:crypto";
 
 // apps/server/src/auth/oauth.ts
-import { createHash as createHash2, createHmac as createHmac7, randomBytes as randomBytes6, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
+import { createHash as createHash2, createHmac as createHmac8, randomBytes as randomBytes8, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
 var OAUTH_PROVIDERS = ["google", "facebook", "discord", "reddit"];
 var isOAuthProvider = (v) => OAUTH_PROVIDERS.includes(v);
 var str = (v) => typeof v === "string" ? v : typeof v === "number" ? String(v) : "";
@@ -21132,13 +21561,13 @@ function callbackUrl(env2, p) {
 var b64 = (b2) => Buffer.from(b2).toString("base64url");
 function sign(secret, kind, payload) {
   const body = b64(JSON.stringify(payload));
-  const mac = createHmac7("sha256", secret).update(`${kind}.${body}`).digest("base64url");
+  const mac = createHmac8("sha256", secret).update(`${kind}.${body}`).digest("base64url");
   return `${body}.${mac}`;
 }
 function verify(secret, kind, token, maxAgeMs, now = Date.now()) {
   const [body, mac] = token.split(".");
   if (!body || !mac) return null;
-  const want = Buffer.from(createHmac7("sha256", secret).update(`${kind}.${body}`).digest("base64url"));
+  const want = Buffer.from(createHmac8("sha256", secret).update(`${kind}.${body}`).digest("base64url"));
   const got = Buffer.from(mac);
   if (want.length !== got.length || !timingSafeEqual6(want, got)) return null;
   try {
@@ -21149,11 +21578,11 @@ function verify(secret, kind, token, maxAgeMs, now = Date.now()) {
     return null;
   }
 }
-var intentToken = (secret, userId, now = Date.now()) => sign(secret, "intent", { u: userId, t: now, r: b64(randomBytes6(6)) });
+var intentToken = (secret, userId, now = Date.now()) => sign(secret, "intent", { u: userId, t: now, r: b64(randomBytes8(6)) });
 var readIntent = (secret, token, now = Date.now()) => verify(secret, "intent", token, 5 * 6e4, now);
 var stateToken = (secret, s, now = Date.now()) => sign(secret, "state", { ...s, t: now });
 var readState = (secret, token, now = Date.now()) => verify(secret, "state", token, 10 * 6e4, now);
-var newNonce = () => b64(randomBytes6(18));
+var newNonce = () => b64(randomBytes8(18));
 var handoffHash = (code) => createHash2("sha256").update(code).digest("hex");
 function authorizeUrl(spec, clientId, redirectUri, state) {
   const u = new URL(spec.authorize);
@@ -21192,14 +21621,14 @@ async function fetchProfile(spec, creds, redirectUri, code, fetchImpl = fetch) {
 }
 
 // apps/server/src/auth/telegramLogin.ts
-import { createHash as createHash3, createHmac as createHmac8, timingSafeEqual as timingSafeEqual7 } from "node:crypto";
+import { createHash as createHash3, createHmac as createHmac9, timingSafeEqual as timingSafeEqual7 } from "node:crypto";
 var TelegramLoginData = external_exports.record(external_exports.string().max(32), external_exports.union([external_exports.string().max(512), external_exports.number()])).refine((r) => Object.keys(r).length <= 16, "too many fields");
 function validateTelegramLogin(data, botToken, maxAgeSec, nowSec = Math.floor(Date.now() / 1e3)) {
   const hash = String(data.hash ?? "");
   if (!/^[0-9a-f]{64}$/.test(hash)) return { ok: false, reason: "missing_hash" };
   const check = Object.keys(data).filter((k) => k !== "hash").sort().map((k) => `${k}=${String(data[k])}`).join("\n");
   const secret = createHash3("sha256").update(botToken).digest();
-  const want = Buffer.from(createHmac8("sha256", secret).update(check).digest("hex"));
+  const want = Buffer.from(createHmac9("sha256", secret).update(check).digest("hex"));
   const got = Buffer.from(hash);
   if (want.length !== got.length || !timingSafeEqual7(want, got)) return { ok: false, reason: "bad_signature" };
   const at = Number(data.auth_date);
@@ -21260,7 +21689,7 @@ var registerOAuthRoutes = (router, deps) => {
   };
   router.get("/api/auth/providers", (ctx) => {
     const botId = env2.TELEGRAM_BOT_TOKEN ? botIdOf(env2.TELEGRAM_BOT_TOKEN) : null;
-    ctx.json(200, { providers: enabledProviders(env2), telegram: env2.TELEGRAM_WEB_LOGIN && botId ? { botId } : null });
+    ctx.json(200, { providers: enabledProviders(env2), telegram: env2.TELEGRAM_WEB_LOGIN && botId ? { botId } : null, telegramLink: !!(botId && env2.TELEGRAM_BOT_USERNAME) });
   });
   router.post("/api/auth/oauth/intent", rateLimit(intentLimiter), async (ctx) => {
     ctx.json(200, { intent: intentToken(env2.SESSION_SECRET, await currentUserId(ctx)) });
@@ -21298,7 +21727,7 @@ var registerOAuthRoutes = (router, deps) => {
     const sql2 = db();
     const { userId, isNew, linked, refused } = await resolveAccount(sql2, provider, profile, state.u);
     if (refused) return fail(ctx, "already_linked");
-    const handoff = randomBytes7(24).toString("base64url");
+    const handoff = randomBytes9(24).toString("base64url");
     await sql2`DELETE FROM auth_handoffs WHERE created_at < now() - interval '10 minutes'`;
     await sql2`INSERT INTO auth_handoffs (code_hash, user_id, provider, is_new, linked) VALUES (${handoffHash(handoff)}, ${userId}, ${provider}, ${isNew}, ${linked})`;
     deps.log.info("oauth sign-in", { provider, isNew, linked });
@@ -21316,6 +21745,7 @@ var registerOAuthRoutes = (router, deps) => {
     const evCtx = { userId: h.user_id, sessionId: s.sessionId, platform: platform2 };
     deps.services.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "oauth" }, evCtx);
     if (h.is_new) deps.services.analytics.server("profile_created", { method: "oauth" }, evCtx);
+    await attachSource(sql2, deps.log, h.user_id, h.is_new, void 0, { referral: false, telegram: false });
     if (h.linked) deps.services.analytics.server("identity_linked", { provider: h.provider }, evCtx);
     const profile = await pg.profiles.get(h.user_id);
     if (!profile) throw new HttpError(401, "login_expired", "The sign-in has expired \u2014 try again");
@@ -21362,7 +21792,8 @@ var registerOAuthRoutes = (router, deps) => {
     const evCtx = { userId, sessionId: s.sessionId, platform: platform2 };
     deps.services.analytics.server("session_started", { platform: platform2 ?? "unknown", method: "telegram" }, evCtx);
     if (isNew) deps.services.analytics.server("profile_created", { method: "telegram" }, evCtx);
-    if (linked) deps.services.analytics.server("identity_linked", { provider: "telegram" }, evCtx);
+    if (linked) deps.services.analytics.server("identity_linked", { provider: "telegram", via: "widget" }, evCtx);
+    await attachSource(sql2, deps.log, userId, isNew, void 0, { referral: false, telegram: true });
     const profile = await pg.profiles.get(userId);
     if (!profile) throw new HttpError(500, "internal", "Profile not found");
     const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew, linked, provider: "telegram" };
@@ -21469,10 +21900,10 @@ function createApp(deps, modules = ROUTE_MODULES) {
 }
 
 // apps/server/src/rooms/RoomManager.ts
-import { randomBytes as randomBytes9 } from "node:crypto";
+import { randomBytes as randomBytes11 } from "node:crypto";
 
 // apps/server/src/rooms/MatchRoom.ts
-import { randomBytes as randomBytes8, randomUUID as randomUUID4 } from "node:crypto";
+import { randomBytes as randomBytes10, randomUUID as randomUUID4 } from "node:crypto";
 var between = (a, b2) => a + Math.random() * Math.max(0, b2 - a);
 var NAV = /* @__PURE__ */ new Map();
 function navFor(mapId, world) {
@@ -21641,7 +22072,7 @@ var MatchRoom = class {
       queue: [],
       tokens: INPUT_BUCKET_MAX,
       lastQueuedSeq: 0,
-      reconnectToken: randomBytes8(18).toString("base64url"),
+      reconnectToken: randomBytes10(18).toString("base64url"),
       joinedAt: Date.now(),
       matchTimeMs: 0,
       violations: 0,
@@ -22427,7 +22858,7 @@ var MatchRoom = class {
 // apps/server/src/rooms/RoomManager.ts
 var ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 function newRoomId(len = 10) {
-  const bytes = randomBytes9(len);
+  const bytes = randomBytes11(len);
   let s = "";
   for (let i = 0; i < len; i++) s += ID_ALPHABET[bytes[i] % ID_ALPHABET.length];
   return s;

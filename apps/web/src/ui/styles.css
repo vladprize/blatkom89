@@ -545,6 +545,11 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .chip { font: inherit; font-size: 14px; color: var(--beige); background: var(--panel-2); border: 1px solid var(--line); padding: 4px 9px; cursor: pointer; }
 .chip:hover { border-color: var(--tape); }
 .welcome .btn { width: 100%; }
+/* V2.0 part E: «Link Telegram» in the profile's account panel */
+.tglink { margin-top: 8px; }
+.tglink__body { gap: 8px; }
+.tglink a.btn { text-decoration: none; align-self: flex-start; }
+.tglink__wait { font-style: italic; }
 @media (max-width: 520px) {
   .stile { min-height: 56px; padding: 8px 10px; }
   .stile__txt b { font-size: 16px; }

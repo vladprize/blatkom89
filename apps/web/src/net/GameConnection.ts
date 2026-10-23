@@ -1,8 +1,22 @@
-/** WebSocket transport: hello/join, JSON control, binary inputs & snapshots, ping, auto-reconnect. */
+/**
+ * WebSocket transport: hello/join, JSON control, binary inputs & snapshots, ping, auto-reconnect.
+ *
+ * V2.0 part E: a socket can die quietly in the background (a minimised Mini App, a locked phone, a
+ * switched network) and still look open. The server sends snapshots many times a second, so a socket
+ * that has heard nothing for 6 s — confirmed over two ping rounds, never right after the page was held
+ * up — is replaced; coming back to the app (`resume`) checks at once; and while the app is in the
+ * background, failed reconnects don't use up the attempts.
+ */
 import { decodeSnapshot, encodeInputs, PROTOCOL_VERSION, WS_CLOSE } from '@blatkom/shared';
 import type { CharacterId, ClientMessage, InputFrame, ServerMessage, Snapshot } from '@blatkom/shared';
 import { wsUrl, VERSION } from '../app/config.js';
 import { analytics } from '../analytics/client.js';
+import { isPaused } from '../app/lifecycle.js';
+
+/** Silence after which an open socket counts as dead (snapshots come ~20 times a second, pongs every 2 s). */
+const SILENT_MS = 6000;
+/** Coming back to the app: a socket quiet for this long is replaced right away. */
+const STALE_ON_RESUME_MS = 2500;
 
 export type ConnStatus = 'connecting' | 'open' | 'reconnecting' | 'closed';
 
@@ -22,6 +36,11 @@ export class GameConnection {
   private pingTimer: number | null = null;
   private outbox: InputFrame[] = [];
   private closedByUser = false;
+  private retryTimer: number | null = null;
+  /** When the socket last heard anything from the server (performance.now()). */
+  private lastHeard = 0;
+  /** The room accepted this connection at least once (a later refusal means the player was away too long). */
+  everJoined = false;
   reconnectToken: string | null = null;
   rtt: number | null = null;
 
@@ -36,6 +55,8 @@ export class GameConnection {
 
   connect(): void {
     this.closedByUser = false;
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     this.setStatus(this.attempts > 0 ? 'reconnecting' : 'connecting');
     let ws: WebSocket;
     try {
@@ -50,6 +71,8 @@ export class GameConnection {
       ws.send(JSON.stringify(msg));
     };
     ws.onmessage = (ev) => {
+      if (this.ws !== ws) return;
+      this.lastHeard = performance.now();
       if (typeof ev.data === 'string') {
         let msg: ServerMessage;
         try {
@@ -59,6 +82,7 @@ export class GameConnection {
         }
         if (msg.type === 'welcome') {
           this.reconnectToken = msg.reconnectToken;
+          this.everJoined = true;
           if (this.attempts > 0) analytics.track('reconnect_succeeded', { attempt: this.attempts, downtimeMs: Math.min(600_000, Date.now() - this.downSince) });
           this.attempts = 0;
           this.setStatus('open');
@@ -92,8 +116,10 @@ export class GameConnection {
   }
 
   private scheduleReconnect() {
-    if (this.closedByUser) return;
+    if (this.closedByUser || this.retryTimer !== null) return;
     if (this.attempts === 0) this.downSince = Date.now();
+    // in the background the network may simply be asleep: keep trying slowly, give up only in front
+    if (isPaused()) this.attempts = Math.min(this.attempts, 2);
     this.attempts++;
     if (this.attempts > 8) {
       analytics.track('connection_error', { stage: 'gameplay', code: 'reconnect_failed' });
@@ -102,8 +128,44 @@ export class GameConnection {
     }
     analytics.track('reconnect_attempted', { attempt: this.attempts });
     this.setStatus('reconnecting');
-    const delay = Math.min(8000, 400 * 2 ** (this.attempts - 1));
-    window.setTimeout(() => this.connect(), delay);
+    const delay = isPaused() ? 5000 : Math.min(8000, 400 * 2 ** (this.attempts - 1));
+    this.retryTimer = window.setTimeout(() => {
+      this.retryTimer = null;
+      this.connect();
+    }, delay);
+  }
+
+  /** Drops a socket that went quiet (no close handshake to wait for) and connects again now. */
+  private replaceSocket(why: string) {
+    const ws = this.ws;
+    this.ws = null;
+    this.stopPing();
+    if (ws) {
+      ws.onclose = null;
+      ws.onmessage = null;
+      try {
+        ws.close(4000, why);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (this.attempts === 0) this.downSince = Date.now();
+    this.attempts = Math.max(1, Math.min(this.attempts, 2));
+    analytics.track('reconnect_attempted', { attempt: this.attempts });
+    this.connect();
+  }
+
+  /**
+   * The player is back in the app (app/lifecycle.ts): a socket that went quiet is replaced, a reconnect
+   * that waits for its timer goes now.
+   */
+  resume(): void {
+    if (this.closedByUser) return;
+    if (this.status === 'open' && this.ws && performance.now() - this.lastHeard > STALE_ON_RESUME_MS) return this.replaceSocket('stale');
+    if (this.status === 'reconnecting' && this.retryTimer !== null) {
+      this.attempts = Math.min(this.attempts, 2);
+      this.connect();
+    }
   }
 
   private setStatus(s: ConnStatus, reason?: string) {
@@ -113,7 +175,24 @@ export class GameConnection {
 
   private startPing() {
     this.stopPing();
-    const ping = () => this.send({ type: 'ping', t: performance.now() });
+    this.lastHeard = performance.now();
+    let lastTick = 0;
+    let suspect = false;
+    const ping = () => {
+      const now = performance.now();
+      // a page that was held up (a long frame, a throttled timer) may still have messages waiting to be
+      // handled: no verdict on that round
+      const stalled = lastTick > 0 && now - lastTick > 3500;
+      lastTick = now;
+      // a socket that heard nothing for a while is dead even if the browser hasn't noticed — confirmed
+      // over two rounds, with a ping in between that any answer clears (in the background timers sleep:
+      // the check waits for the app to come back — see resume)
+      if (this.status === 'open' && !isPaused() && !stalled && now - this.lastHeard > SILENT_MS) {
+        if (suspect) return this.replaceSocket('silent');
+        suspect = true;
+      } else suspect = false;
+      this.send({ type: 'ping', t: now });
+    };
     ping();
     this.pingTimer = window.setInterval(ping, 2000);
   }
@@ -141,6 +220,8 @@ export class GameConnection {
 
   close(): void {
     this.closedByUser = true;
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     this.stopPing();
     try {
       this.ws?.close(WS_CLOSE.NORMAL, 'bye');

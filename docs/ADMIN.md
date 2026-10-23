@@ -6,7 +6,12 @@ names weapons, characters and maps the way the owner's sheets do). API: `/api/ad
 (`apps/server/src/admin/`). Metric definitions: [ANALYTICS.md](ANALYTICS.md); economy rules:
 [ECONOMY.md](ECONOMY.md).
 
-Tabs: «Обзор» (KPIs and charts), «Воронка» (visitors → account → match → return, sources),
+Tabs: «Обзор» (KPIs and charts; V2.0: unique players, first matches, $BLAT issued), «Воронка» (visitors → account → match → return, sources),
+«Источники» (V2.0 part F: new accounts by how they came — partner link, a player's referral link, room
+invitation, campaign `utm_*`, another site, Telegram, direct — with first match, whole match and return;
+first visits by source; room invitations and referral links with their conversion; **partner links** for
+authors and streamers — created and switched off here, measured only, no payouts; levels; the Kon;
+[ANALYTICS.md](ANALYTICS.md) §6a),
 «Экономика» (talons, diamonds, revenue, purchases, modifications, cases), «Игроки» (search, player
 card with wallet, purchases, ledger, payments and admin actions), «ОПГ» (v0.3 clubs, called gangs —
 «ОПГ» — since v0.2.8: every gang — the game's own marked «игры» — with its rating, people, boss and
@@ -90,7 +95,8 @@ Recorded actions: `login`, `login_failed`, `logout`, `admin_bootstrap`, `admin_c
 `referral_confirm` (inviter, reward, number) / `referral_reject` (note), `blat_flag` / `blat_unflag` (reason),
 `blat_drop_date` (from → to), `blat_snapshot` (accounts, totals), `export_blat_snapshot` (format, rows),
 `blat_snapshot_delete`,
-`export_players`, `export_matches`, `export_daily` (with row counts / date range). Visible to `admin`
+`export_players`, `export_matches`, `export_daily` (with row counts / date range); V2.0 part F:
+`partner_created` (code, name), `partner_updated` (what changed), `export_sources`, `export_partners`. Visible to `admin`
 in the «Аудит» tab (latest 200). Kept 365 days ([PRIVACY.md](PRIVACY.md) §4).
 
 ## 5. API reference
@@ -127,12 +133,18 @@ Range parameters (where noted): `range=24h|7d|30d|90d` (default `7d`) or
 | `POST /api/admin/blat/snapshots` | admin | `{note?}` — freezes every balance now (one transaction); audited (CSRF) |
 | `GET /api/admin/blat/snapshots/:id/export?format=csv\|json` | admin | the rows (CSV formula-safe; JSON with the rules); audited |
 | `DELETE /api/admin/blat/snapshots/:id` | admin | removes a snapshot; audited (CSRF) |
+| `GET /api/admin/growth?range…` | viewer | V2.0 part F: registrations, unique players, first matches, accounts by source, first visits by source, room invitations and players' referral links with their conversion, levels, the Kon, $BLAT issued (`AdminGrowth`; docs/ANALYTICS.md §6a) |
+| `GET /api/admin/partners?range…` | viewer | partner links with their website / Telegram links and what they brought in range (`AdminPartnerRow`) |
+| `POST /api/admin/partners` | admin | `{name, code?, note?}` → `201 {id, code}`; without a code one is made from the name; `409 code_taken`; audited (CSRF). Measuring only — no payouts |
+| `POST /api/admin/partners/:id` | admin | `{name?, note?, active?}` — rename, note, switch off / on; audited (CSRF) |
 | `GET /api/admin/errors?range…` | viewer | errors grouped by fingerprint (≤200 groups) |
 | `GET /api/admin/audit` | admin | latest 200 audit entries |
 | `POST /api/admin/users` | admin | `{username, password, role}` (CSRF) |
 | `GET /api/admin/export/players.csv` | admin | all players |
 | `GET /api/admin/export/matches.csv?range…` | admin | matches started in range |
 | `GET /api/admin/export/daily.csv?range…` | admin | per-day registrations, DAU, matches, errors |
+| `GET /api/admin/export/sources.csv?range…` | admin | accounts by source and first visits by source (V2.0 part F) |
+| `GET /api/admin/export/partners.csv?range…` | admin | partner links and their numbers (V2.0 part F) |
 
 ## 6. Operations checklist
 

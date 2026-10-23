@@ -62,6 +62,7 @@ services:
         sync: false
       # The Telegram bot (docs/TELEGRAM.md §0): a token from @BotFather and the bot's username; the
       # server registers the webhook itself. KEEP_AWAKE=true stops the free service from sleeping.
+      # V2.0: both together switch on «Link Telegram» on the website (§4) and the partners' bot links.
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_BOT_USERNAME

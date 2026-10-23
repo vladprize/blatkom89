@@ -12,6 +12,8 @@ export type LoginProvider = 'google' | 'facebook' | 'discord' | 'reddit' | 'tele
 export interface ProvidersInfo {
   providers: Array<Exclude<LoginProvider, 'telegram'>>;
   telegram: { botId: string } | null;
+  /** V2.0 part E: the bot can attach Telegram to this account (the website's «Link Telegram»). */
+  telegramLink?: boolean;
 }
 
 export type LoginReturn = { kind: 'oauth'; code: string } | { kind: 'telegram'; data: Record<string, string | number> } | { kind: 'error'; reason: string };

@@ -2,7 +2,7 @@
  * Sign-in with Google, Facebook, Discord, Reddit (OAuth, auth/oauth.ts) and Telegram on the website
  * (auth/telegramLogin.ts) — v0.3 part 3.
  *
- *   GET  /api/auth/providers                      which are set up (the page shows only those)
+ *   GET  /api/auth/providers                      which are set up (the page shows only those; `telegramLink`: the bot links accounts)
  *   POST /api/auth/oauth/intent                   a 5-minute token naming the page's current account
  *   GET  /api/auth/oauth/:provider/start?intent=  → the provider (sets the nonce cookie)
  *   GET  /api/auth/oauth/:provider/callback       ← the provider; → /#login=<one-time code> or /?login_error=…
@@ -24,6 +24,7 @@ import { OAuthError, authorizeUrl, callbackUrl, credentials, enabledProviders, f
 import type { OAuthProvider } from '../auth/oauth.js';
 import { TelegramLoginData, botIdOf, validateTelegramLogin } from '../auth/telegramLogin.js';
 import type { Sql } from '../database/db.js';
+import { attachSource } from '../analytics/growth.js';
 
 const NONCE_COOKIE = 'blk_oauth';
 const HANDOFF_TTL_MS = 5 * 60_000;
@@ -74,7 +75,8 @@ export const registerOAuthRoutes: RouteModule = (router, deps) => {
 
   router.get('/api/auth/providers', (ctx) => {
     const botId = env.TELEGRAM_BOT_TOKEN ? botIdOf(env.TELEGRAM_BOT_TOKEN) : null;
-    ctx.json(200, { providers: enabledProviders(env), telegram: env.TELEGRAM_WEB_LOGIN && botId ? { botId } : null });
+    // V2.0 part E: `telegramLink` — the bot can attach Telegram to a website account (docs/TELEGRAM.md §4)
+    ctx.json(200, { providers: enabledProviders(env), telegram: env.TELEGRAM_WEB_LOGIN && botId ? { botId } : null, telegramLink: !!(botId && env.TELEGRAM_BOT_USERNAME) });
   });
 
   router.post('/api/auth/oauth/intent', rateLimit(intentLimiter), async (ctx) => {
@@ -134,6 +136,7 @@ export const registerOAuthRoutes: RouteModule = (router, deps) => {
     const evCtx = { userId: h.user_id, sessionId: s.sessionId, platform };
     deps.services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'oauth' }, evCtx);
     if (h.is_new) deps.services.analytics.server('profile_created', { method: 'oauth' }, evCtx);
+    await attachSource(sql, deps.log, h.user_id, h.is_new, undefined, { referral: false, telegram: false });
     if (h.linked) deps.services.analytics.server('identity_linked', { provider: h.provider }, evCtx);
     const profile = await pg.profiles.get(h.user_id);
     if (!profile) throw new HttpError(401, 'login_expired', 'The sign-in has expired — try again');
@@ -181,7 +184,8 @@ export const registerOAuthRoutes: RouteModule = (router, deps) => {
     const evCtx = { userId, sessionId: s.sessionId, platform };
     deps.services.analytics.server('session_started', { platform: platform ?? 'unknown', method: 'telegram' }, evCtx);
     if (isNew) deps.services.analytics.server('profile_created', { method: 'telegram' }, evCtx);
-    if (linked) deps.services.analytics.server('identity_linked', { provider: 'telegram' }, evCtx);
+    if (linked) deps.services.analytics.server('identity_linked', { provider: 'telegram', via: 'widget' }, evCtx);
+    await attachSource(sql, deps.log, userId, isNew, undefined, { referral: false, telegram: true });
     const profile = await pg.profiles.get(userId);
     if (!profile) throw new HttpError(500, 'internal', 'Profile not found');
     const res: AuthResponse & { linked: boolean; provider: string } = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew, linked, provider: 'telegram' };

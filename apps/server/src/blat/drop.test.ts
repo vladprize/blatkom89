@@ -72,6 +72,10 @@ test('snapshots: one moment, the eligibility checks, totals, CSV and JSON for ad
   await app.db.sql`UPDATE users SET blat_flag = 'one device, many accounts' WHERE id = ${b.userId}`;
   // a balance the ledger doesn't explain (changed by hand)
   await app.db.sql`UPDATE profiles SET blat = 999 WHERE user_id = ${c.userId}`;
+  // V2.0 part E: an empty first-launch profile merged into another account keeps its welcome but isn't eligible
+  const d = await devLogin(app.base, 'Snap Merged');
+  await api(app.base, '/api/me', { token: d.token }); // its own profile read pays the 300 welcome
+  await app.db.sql`UPDATE users SET merged_into = ${a.userId}, merged_at = now() WHERE id = ${d.userId}`;
   const viewer = await api(app.base, '/api/admin/users', { method: 'POST', cookie, csrf, body: { username: 'snapviewer', password: 'viewer-password-123456', role: 'viewer' } });
   assert.equal(viewer.status, 201, viewer.text);
   const vlogin = await api(app.base, '/api/admin/login', { method: 'POST', body: { username: 'snapviewer', password: 'viewer-password-123456' } });
@@ -82,7 +86,7 @@ test('snapshots: one moment, the eligibility checks, totals, CSV and JSON for ad
   assert.equal(s.status, 200, s.text);
   const [want] = await app.db.sql<Array<{ n: number; total: string }>>`SELECT count(*)::int AS n, sum(blat)::text AS total FROM profiles WHERE blat > 0`;
   assert.deepEqual([s.body.accounts, s.body.total], [want!.n, Number(want!.total)]);
-  assert.ok(s.body.eligible <= s.body.accounts - 2 && s.body.eligibleTotal <= s.body.total - 300 - 999);
+  assert.ok(s.body.eligible <= s.body.accounts - 3 && s.body.eligibleTotal <= s.body.total - 300 - 999 - 300);
   const list = await api<AdminBlatSnapshot[]>(app.base, '/api/admin/blat/snapshots', { cookie: vcookie });
   assert.equal(list.body[0]!.id, s.body.id, 'a viewer sees the list');
   // a credit after the snapshot doesn't change it
@@ -95,7 +99,8 @@ test('snapshots: one moment, the eligibility checks, totals, CSV and JSON for ad
   assert.deepEqual([row(a.userId).balance, row(a.userId).eligible, row(a.userId).fromReferrals, row(a.userId).ledgerSum], [5000, true, 4700, 5000]);
   assert.deepEqual([row(b.userId).eligible, row(b.userId).reasons], [false, ['flagged']]);
   assert.deepEqual([row(c.userId).eligible, row(c.userId).reasons, row(c.userId).ledgerSum], [false, ['ledger_mismatch'], 300]);
-  assert.equal(json.body.rules.version, 1);
+  assert.deepEqual([row(d.userId).balance, row(d.userId).eligible, row(d.userId).reasons], [300, false, ['merged']]);
+  assert.equal(json.body.rules.version, 2);
   const csv = await api(app.base, `/api/admin/blat/snapshots/${s.body.id}/export?format=csv`, { cookie });
   assert.equal(csv.status, 200);
   assert.match(csv.headers.get('content-type') ?? '', /text\/csv/);

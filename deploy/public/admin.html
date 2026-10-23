@@ -62,6 +62,7 @@
       .table th.sortable { cursor: pointer; }
       .table th.sortable:hover { color: var(--text); }
       .table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+      .table th.num { text-align: right; }
       .table td.strong { font-weight: 700; color: var(--red2); }
       .table td.msg { white-space: normal; min-width: 260px; max-width: 520px; word-break: break-word; }
       .table tr.clickable { cursor: pointer; }
@@ -103,6 +104,10 @@
       .grow { flex: 1; min-width: 140px; }
       h4.sub { font: 600 13px 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 4px; }
       .action-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+      /* V2.0 part F: the partners' table — small copy buttons next to the links, switched-off rows dimmed */
+      .btn.small { padding: 3px 8px; font-size: 12px; }
+      .table tr.muted td { opacity: .55; }
+      .table code { font-size: 12px; word-break: break-all; white-space: normal; }
       .reset-out { margin-top: 10px; }
       .reset-out input { width: 100%; }
       .funnel { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
@@ -121,6 +126,6 @@
   <body>
     <div id="app" aria-live="polite"></div>
     <noscript>Для панели аналитики нужен JavaScript.</noscript>
-    <script type="module" src="/assets/admin-5N2Z5IKS.js"></script>
+    <script type="module" src="/assets/admin-N4YXJC7U.js"></script>
   </body>
 </html>

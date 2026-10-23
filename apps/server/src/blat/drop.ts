@@ -19,11 +19,15 @@ export const DROP_KEY = 'blat_drop.announce_at';
 
 /** The rules every snapshot is taken by (stored with it, so an old snapshot keeps its own rules). */
 export const SNAPSHOT_RULES = Object.freeze({
-  version: 1,
+  version: 2,
   includes: 'every existing account whose $BLAT balance is above 0 at the moment of the snapshot',
   balance: 'profiles.blat read in one REPEATABLE READ transaction',
-  eligible: 'not flagged by an administrator, and the $BLAT ledger adds up to the balance',
-  reasons: { flagged: 'an administrator marked the account as suspicious', ledger_mismatch: 'the $BLAT ledger does not add up to the balance' },
+  eligible: 'not flagged by an administrator, the $BLAT ledger adds up to the balance, and not an empty profile merged into another account',
+  reasons: {
+    flagged: 'an administrator marked the account as suspicious',
+    ledger_mismatch: 'the $BLAT ledger does not add up to the balance',
+    merged: 'an empty first-launch profile that gave its Telegram id to the player’s real account (V2.0 part E); it cannot be signed in to',
+  },
   not: 'a snapshot is a record only: it creates no token, wallet, price or transfer',
 });
 
@@ -72,8 +76,8 @@ export class BlatDropRepo {
         INSERT INTO blat_snapshot_rows (snapshot_id, user_id, display_name, balance, earned, from_levels, from_referrals, from_grants, ledger_sum, flag, eligible, reasons)
         SELECT ${id}, u.id, u.display_name, p.blat, p.blat_earned,
                COALESCE(l.lv, 0), COALESCE(l.rf, 0), COALESCE(l.gr, 0), COALESCE(l.total, 0), u.blat_flag,
-               (u.blat_flag IS NULL AND COALESCE(l.total, 0) = p.blat),
-               array_remove(ARRAY[CASE WHEN u.blat_flag IS NOT NULL THEN 'flagged' END, CASE WHEN COALESCE(l.total, 0) <> p.blat THEN 'ledger_mismatch' END], NULL)
+               (u.blat_flag IS NULL AND COALESCE(l.total, 0) = p.blat AND u.merged_at IS NULL),
+               array_remove(ARRAY[CASE WHEN u.blat_flag IS NOT NULL THEN 'flagged' END, CASE WHEN COALESCE(l.total, 0) <> p.blat THEN 'ledger_mismatch' END, CASE WHEN u.merged_at IS NOT NULL THEN 'merged' END], NULL)
         FROM profiles p
         JOIN users u ON u.id = p.user_id AND u.deleted_at IS NULL
         LEFT JOIN (

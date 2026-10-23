@@ -55,11 +55,11 @@ export async function overview(sql: Sql, r: AdminRange, activeRooms: number, now
   const to = new Date(r.to);
   const today = utcDayString(now);
   const [counts] = await sql<
-    Array<{ total_players: number; new_players: number; dau: number; wau: number; mau: number; started: number; completed: number; avg_match: number | null; avg_session: number | null; errors: number }>
+    Array<{ total_players: number; new_players: number; dau: number; wau: number; mau: number; started: number; completed: number; avg_match: number | null; avg_session: number | null; errors: number; unique_players: number; first_match: number; blat_issued: number }>
   >`
     SELECT
-      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND created_at <= ${to})::int AS total_players,
-      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND created_at BETWEEN ${from} AND ${to})::int AS new_players,
+      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND created_at <= ${to})::int AS total_players,
+      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND created_at BETWEEN ${from} AND ${to})::int AS new_players,
       (SELECT count(*) FROM user_daily_activity WHERE day = ${r.lastDay}::date)::int AS dau,
       (SELECT count(DISTINCT user_id) FROM user_daily_activity WHERE day > ${r.lastDay}::date - 7 AND day <= ${r.lastDay}::date)::int AS wau,
       (SELECT count(DISTINCT user_id) FROM user_daily_activity WHERE day > ${r.lastDay}::date - 30 AND day <= ${r.lastDay}::date)::int AS mau,
@@ -68,16 +68,21 @@ export async function overview(sql: Sql, r: AdminRange, activeRooms: number, now
       (SELECT avg(duration_ms)::float8 FROM matches WHERE status = 'completed' AND ended_at BETWEEN ${from} AND ${to}) AS avg_match,
       (SELECT avg((props->>'durationMs')::float8) FROM analytics_events
          WHERE name = 'session_ended' AND occurred_at BETWEEN ${from} AND ${to} AND jsonb_typeof(props->'durationMs') = 'number') AS avg_session,
-      (SELECT count(*) FROM app_errors WHERE occurred_at BETWEEN ${from} AND ${to})::int AS errors`;
+      (SELECT count(*) FROM app_errors WHERE occurred_at BETWEEN ${from} AND ${to})::int AS errors,
+      (SELECT count(DISTINCT mp.user_id) FROM match_participants mp JOIN matches m ON m.id = mp.match_id WHERE m.started_at BETWEEN ${from} AND ${to})::int AS unique_players,
+      (SELECT count(*) FROM (
+         SELECT mp.user_id, min(m.started_at) AS first FROM match_participants mp JOIN matches m ON m.id = mp.match_id GROUP BY mp.user_id
+       ) f WHERE f.first BETWEEN ${from} AND ${to})::int AS first_match,
+      (SELECT COALESCE(sum(delta), 0) FROM currency_ledger WHERE currency = 'blat' AND delta > 0 AND created_at BETWEEN ${from} AND ${to})::int AS blat_issued`;
   const [conv] = await sql<Array<{ cohort: number; converted: number }>>`
     SELECT count(*)::int AS cohort,
            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed))::int AS converted
-    FROM users u WHERE u.deleted_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}`;
+    FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}`;
   const [ret] = await sql<Array<{ d1_size: number; d1_ret: number; d7_size: number; d7_ret: number }>>`
     WITH cohort AS (
       SELECT u.id, (u.created_at AT TIME ZONE 'UTC')::date AS d
       FROM users u
-      WHERE u.deleted_at IS NULL AND (u.created_at AT TIME ZONE 'UTC')::date BETWEEN ${r.firstDay}::date AND ${r.lastDay}::date
+      WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND (u.created_at AT TIME ZONE 'UTC')::date BETWEEN ${r.firstDay}::date AND ${r.lastDay}::date
     )
     SELECT
       count(*) FILTER (WHERE c.d + 1 < ${today}::date)::int AS d1_size,
@@ -104,6 +109,9 @@ export async function overview(sql: Sql, r: AdminRange, activeRooms: number, now
     d1CohortSize: ret!.d1_size,
     d7CohortSize: ret!.d7_size,
     errorCount: counts!.errors,
+    uniquePlayers: counts!.unique_players,
+    firstMatchPlayers: counts!.first_match,
+    blatIssued: counts!.blat_issued,
   };
 }
 
@@ -121,7 +129,7 @@ export async function charts(sql: Sql, r: AdminRange, now = new Date()): Promise
   const today = utcDayString(now);
   const registrations = await sql<Array<{ day: string; count: number }>>`
     SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
-      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL
+      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL
          AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS count
     FROM generate_series(${r.firstDay}::date, ${r.lastDay}::date, interval '1 day') AS g(day)
     ORDER BY g.day`;
@@ -140,7 +148,7 @@ export async function charts(sql: Sql, r: AdminRange, now = new Date()): Promise
     WITH days AS (SELECT g.day::date AS d FROM generate_series(${r.firstDay}::date, ${r.lastDay}::date, interval '1 day') AS g(day)),
     cohort AS (
       SELECT u.id, (u.created_at AT TIME ZONE 'UTC')::date AS d FROM users u
-      WHERE u.deleted_at IS NULL AND (u.created_at AT TIME ZONE 'UTC')::date BETWEEN ${r.firstDay}::date AND ${r.lastDay}::date
+      WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND (u.created_at AT TIME ZONE 'UTC')::date BETWEEN ${r.firstDay}::date AND ${r.lastDay}::date
     )
     SELECT to_char(days.d, 'YYYY-MM-DD') AS day,
       count(c.id)::int AS cohort,
@@ -284,12 +292,12 @@ export async function listPlayers(sql: Sql, opts: { q?: string | null; sort?: st
            COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
            (count(*) OVER ())::int AS total
     FROM users u LEFT JOIN profiles p ON p.user_id = u.id
-    WHERE u.deleted_at IS NULL ${filter}
+    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL ${filter}
     ORDER BY ${col} ${order} NULLS LAST, u.id
     LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`;
   let total = rows[0]?.total ?? 0;
   if (rows.length === 0 && page > 1) {
-    const [c] = await sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM users u WHERE u.deleted_at IS NULL ${filter}`;
+    const [c] = await sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL ${filter}`;
     total = c!.n;
   }
   return { rows: rows.map(toPlayerRow), total, page, pageSize, sort, dir };
@@ -350,7 +358,7 @@ export async function errorGroups(sql: Sql, r: AdminRange, limit = 200): Promise
 export async function dailyMetrics(sql: Sql, r: AdminRange): Promise<Array<{ day: string; registrations: number; dau: number; matches_started: number; matches_completed: number; errors: number }>> {
   const rows = await sql<Array<{ day: string; registrations: number; dau: number; matches_started: number; matches_completed: number; errors: number }>>`
     SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
-      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS registrations,
+      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS registrations,
       (SELECT count(*) FROM user_daily_activity a WHERE a.day = g.day::date)::int AS dau,
       (SELECT count(*) FROM matches m WHERE m.started_at >= (g.day AT TIME ZONE 'UTC') AND m.started_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS matches_started,
       (SELECT count(*) FROM matches m WHERE m.status = 'completed' AND m.ended_at >= (g.day AT TIME ZONE 'UTC') AND m.ended_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS matches_completed,

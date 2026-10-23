@@ -33,10 +33,10 @@ import { avatarButton, openAvatarPicker } from '../ui/avatars.js';
 import { MODE_ORDER, modeIcon, modeName, modeRules, modeSub } from '../ui/modes.js';
 import { renderArsenal, characterPriceNote, amount, heroImg } from '../ui/screens/shop.js';
 import type { ArsenalTab, TryOn } from '../ui/screens/shop.js';
-import { renderAccountPanel, openEmailLogin, openPasswordReset } from '../ui/screens/account.js';
+import { renderAccountPanel, openEmailLogin, openPasswordReset, telegramLinkText } from '../ui/screens/account.js';
 import { renderFriends, renderTop, friendsInvitePanel, showInviteCard, friendsSub } from '../ui/screens/social.js';
 import type { SocialSignal } from '../net/SocialClient.js';
-import { needsWelcome, openWelcome } from '../ui/screens/welcome.js';
+import { needsTelegramWelcome, needsWelcome, openTelegramWelcome, openWelcome } from '../ui/screens/welcome.js';
 import { sfx } from '../game/audio/Sfx.js';
 import { music } from '../game/audio/Music.js';
 import { t, count, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
@@ -295,6 +295,13 @@ export class App {
             if (back.ok && !back.isNew && !back.linked && me) storageSet(NICK_CONFIRMED_KEY, me.id);
             const name = PROVIDER_NAME[back.ok ? (back.provider as LoginProvider) : 'google'] ?? (back.ok ? back.provider : '');
             toast(back.ok ? (back.linked ? t('{provider} is linked — your progress is safe', { provider: name }) : t('Signed in with {provider}', { provider: name })) : loginErrorText(back.reason));
+          }
+          // V2.0 part E: the Mini App opened from the bot's linking button — say how attaching Telegram went
+          const link = this.online!.takeTelegramLinkOutcome();
+          if (link) {
+            const me = this.online!.profile;
+            if ((link === 'linked' || link === 'already') && me) storageSet(NICK_CONFIRMED_KEY, me.id);
+            toast(telegramLinkText(link, 'code'));
           }
           this.maybeWelcome();
           void this.online!.loadInventory().then(() => this.refreshStrip()).catch(() => {});
@@ -883,6 +890,15 @@ export class App {
   private maybeWelcome() {
     if (this.screen !== 'menu' || this.welcomeClose || this.nickClose) return;
     const online = this.online;
+    // V2.0 part E: a new profile in Telegram — maybe the player already has an account to bring here
+    if (online && needsTelegramWelcome(online, inTelegram())) {
+      this.welcomeClose = openTelegramWelcome(this.root, online, (outcome) => {
+        this.welcomeClose = null;
+        if (outcome === 'signed_in') return this.afterAccountSwitch();
+        this.maybeAskNickname();
+      });
+      return;
+    }
     if (!online || !needsWelcome(online, inTelegram())) return this.maybeAskNickname();
     this.welcomeClose = openWelcome(this.root, online, (outcome) => {
       this.welcomeClose = null;

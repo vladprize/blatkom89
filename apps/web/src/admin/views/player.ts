@@ -5,6 +5,14 @@ import { apiFetch } from '../api.js';
 import { num, dateTime, playtime, duration, money, itemName, ACHIEVEMENT_NAMES, ACHIEVEMENT_DESCRIPTIONS, MAP_NAMES, CHARACTER_NAMES, PLATFORM_NAMES, ITEM_KINDS, ITEM_SOURCES, LEDGER_REASONS, MOD_NAMES, PAYMENT_PROVIDERS, PAYMENT_STATUSES, SIGN_IN_METHODS, WEAPON_NAMES } from '../format.js';
 
 const CURRENCY_NAMES: Record<string, string> = { tokens: 'талоны', diamonds: 'алмазы', blat: '$BLAT' };
+
+/** V2.0 part F: the account's first touch as one line. */
+const ORIGIN: Record<string, string> = { partner: 'партнёрская ссылка', referral: 'ссылка игрока', invite: 'приглашение в комнату', utm: 'кампания', referrer: 'другой сайт', telegram: 'Telegram', direct: 'прямой заход' };
+function originText(d: AdminPlayerDetail): string {
+  const o = d.origin;
+  if (!o?.channel) return 'неизвестно (аккаунт старше V2.0)';
+  return [ORIGIN[o.channel] ?? o.channel, o.partner ?? o.detail].filter(Boolean).join(': ');
+}
 const REF_STATUS: Record<string, string> = { pending: 'ждёт первого матча', held: 'на проверке', confirmed: 'засчитано', rejected: 'отклонено' };
 
 /** V2.0: $BLAT, the referral code, who invited the player and whom they invited; the admin's flag. */
@@ -169,6 +177,9 @@ export async function renderPlayer(root: HTMLElement, id: string, me?: AdminMe |
             ['Способы входа', d.account.signInMethods.map((m) => SIGN_IN_METHODS[m] ?? m).join(', ') || '—'],
             ['Почта', d.account.emailMasked ? `${d.account.emailMasked} · с ${dateTime(d.account.emailLinkedAt)}` : 'не привязана'],
             ['Версия клиента', d.sessions.lastClientVersion ?? '—'],
+            ['Откуда пришёл', originText(d)],
+            ...(d.origin?.mergedInto ? ([['Объединён', `пустой профиль первого запуска, отдал Telegram аккаунту ${d.origin.mergedInto} · ${dateTime(d.origin.mergedAt)}`]] as Array<[string, string]>) : []),
+            ...(d.origin?.mergedFrom ? ([['Объединённые профили', `${num(d.origin.mergedFrom)} пустых профиля Telegram отдали ему свой Telegram ID`]] as Array<[string, string]>) : []),
           ] as Array<[string, string]>).flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]),
         ),
       ),

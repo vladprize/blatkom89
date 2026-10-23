@@ -92,7 +92,7 @@ export class SocialRepo {
       const target = await tx<CardRow[]>`
         SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level
         FROM users u LEFT JOIN profiles p ON p.user_id = u.id
-        WHERE u.name_key = ${nameKey(name)} AND u.deleted_at IS NULL`;
+        WHERE u.name_key = ${nameKey(name)} AND u.deleted_at IS NULL AND u.merged_at IS NULL`;
       const t = target[0];
       if (!t) return { outcome: 'not_found' as const, other: null };
       const other = toCard(t);

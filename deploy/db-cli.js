@@ -7554,7 +7554,7 @@ var SERVER_EVENT_PROPS = {
   payment_completed: external_exports.object({ provider: external_exports.string(), packId: external_exports.string(), diamonds: external_exports.number().int(), amountCents: external_exports.number().int() }),
   email_linked: external_exports.object({}),
   /** v0.3: a provider attached to an account (google, facebook, discord, reddit, telegram). */
-  identity_linked: external_exports.object({ provider: external_exports.enum(["google", "facebook", "discord", "reddit", "telegram"]) })
+  identity_linked: external_exports.object({ provider: external_exports.enum(["google", "facebook", "discord", "reddit", "telegram"]), via: external_exports.enum(["code", "email", "widget"]).optional(), merged: external_exports.boolean().optional() })
 };
 var ClientEventEnvelopeSchema = external_exports.object({
   id: external_exports.string().uuid(),
@@ -7568,20 +7568,36 @@ var EventsBatchSchema = external_exports.object({ events: external_exports.array
 var displayNameSchema = external_exports.string().trim().min(2).max(MAX_NAME_LENGTH).regex(LATIN_NAME_RE, "A name may contain Latin letters (A\u2013Z), digits, spaces and _ . -");
 var signupNameSchema = external_exports.string().trim().min(1).max(64);
 var refSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
+var partnerCodeSchema = external_exports.string().trim().toLowerCase().regex(/^[a-z0-9_]{3,24}$/, "A partner code: 3\u201324 Latin letters, digits or _");
+var utmValueSchema = external_exports.string().trim().toLowerCase().min(1).max(64).regex(/^[a-z0-9 ._+-]+$/);
+var FirstTouchSchema = external_exports.object({
+  partner: partnerCodeSchema.optional(),
+  utmSource: utmValueSchema.optional(),
+  utmMedium: utmValueSchema.optional(),
+  utmCampaign: utmValueSchema.optional(),
+  invite: external_exports.boolean().optional(),
+  referrer: external_exports.string().max(80).regex(/^[a-z0-9.-]+$/).optional()
+}).strict();
+var telegramLinkCodeSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{16,32}$/);
 var TelegramAuthRequest = external_exports.object({
   initData: external_exports.string().min(10).max(8192),
   platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional(),
   /** Optional anonymous browser id (see VisitRequest) that links a new player to the visitor funnel. */
   visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
-  ref: refSchema.optional()
+  ref: refSchema.optional(),
+  /** V2.0 part E: the one-time code from the bot's link (`?tglink=`): Telegram is attached to the code's account. */
+  link: telegramLinkCodeSchema.optional(),
+  /** V2.0 part F: the first touch, kept with a new account. */
+  source: FirstTouchSchema.optional()
 }).strict();
 var DevAuthRequest = external_exports.object({
   name: signupNameSchema,
   deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
   platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional(),
-  ref: refSchema.optional()
+  ref: refSchema.optional(),
+  source: FirstTouchSchema.optional()
 }).strict();
 var GuestAuthRequest = external_exports.object({
   name: signupNameSchema,
@@ -7589,7 +7605,8 @@ var GuestAuthRequest = external_exports.object({
   platform: PlatformSchema.optional(),
   clientVersion: external_exports.string().max(32).optional(),
   visitorId: external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
-  ref: refSchema.optional()
+  ref: refSchema.optional(),
+  source: FirstTouchSchema.optional()
 }).strict();
 var visitorIdSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{16,64}$/);
 var emailSchema = external_exports.string().trim().toLowerCase().max(254).email("That is not a valid email address");
@@ -7599,13 +7616,15 @@ var EmailLoginRequest = external_exports.object({
   password: external_exports.string().min(1).max(128),
   deviceId: external_exports.string().regex(/^[A-Za-z0-9_-]{20,64}$/).optional(),
   platform: PlatformSchema.optional(),
-  clientVersion: external_exports.string().max(32).optional()
+  clientVersion: external_exports.string().max(32).optional(),
+  /** V2.0 part E: inside Telegram, the signed launch data — this Telegram account gets attached to the email's account. */
+  initData: external_exports.string().min(10).max(8192).optional()
 }).strict();
 var EmailLinkRequest = external_exports.object({ email: emailSchema, password: passwordSchema }).strict();
 var PasswordChangeRequest = external_exports.object({ current: external_exports.string().min(1).max(128), password: passwordSchema }).strict();
 var PasswordResetRequest = external_exports.object({ email: emailSchema }).strict();
 var PasswordResetConfirm = external_exports.object({ token: external_exports.string().regex(/^[A-Za-z0-9_-]{20,64}$/), password: passwordSchema }).strict();
-var VisitRequest = external_exports.object({ visitorId: visitorIdSchema, platform: PlatformSchema.optional(), referrer: external_exports.string().max(120).optional() }).strict();
+var VisitRequest = external_exports.object({ visitorId: visitorIdSchema, platform: PlatformSchema.optional(), referrer: external_exports.string().max(120).optional(), source: FirstTouchSchema.optional() }).strict();
 var BuyRequest = external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget"]), id: external_exports.string().regex(/^[a-z0-9_]{2,24}$/) }).strict();
 var ModBuyRequest = external_exports.object({ weapon: external_exports.enum(WEAPON_IDS), mod: external_exports.enum(MOD_IDS) }).strict();
 var LoadoutRequest = external_exports.object({
@@ -7643,6 +7662,8 @@ var AdminGrantRequest = external_exports.object({
   amount: external_exports.number().int().min(-1e6).max(1e6).refine((v) => v !== 0, "amount must not be 0"),
   note: external_exports.string().trim().min(3).max(120)
 }).strict();
+var AdminPartnerCreate = external_exports.object({ name: external_exports.string().trim().min(1).max(60), code: partnerCodeSchema.optional(), note: external_exports.string().trim().max(300).optional() }).strict();
+var AdminPartnerUpdate = external_exports.object({ name: external_exports.string().trim().min(1).max(60).optional(), note: external_exports.string().trim().max(300).nullable().optional(), active: external_exports.boolean().optional() }).strict();
 
 // packages/shared/src/schemas/social.ts
 var FriendRequestBody = external_exports.object({ name: displayNameSchema }).strict();

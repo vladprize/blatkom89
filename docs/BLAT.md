@@ -159,14 +159,14 @@ when none is set; nothing is shown to players until it is saved.
 
 **Balance snapshots** (`/admin → $BLAT → Снимки балансов`, admin role). A snapshot freezes every
 $BLAT balance at one moment — one `REPEATABLE READ` transaction, so a credit made meanwhile is wholly in
-or wholly out — into `blat_snapshots` / `blat_snapshot_rows`. Rules (version 1, stored with every
-snapshot):
+or wholly out — into `blat_snapshots` / `blat_snapshot_rows`. Rules (version 2 since v0.2.12 — the
+`merged` reason; version 1 before; stored with every snapshot):
 
 | | |
 |---|---|
 | Included | every existing account with a $BLAT balance above 0 at that moment: internal id, alias at that moment, balance, total earned, the sums from levels / invitations / grants, the ledger's sum |
-| Eligible | not flagged by an administrator **and** the $BLAT ledger adds up to the balance |
-| Not eligible (`reasons`) | `flagged` — an administrator marked the account as suspicious; `ledger_mismatch` — the ledger does not explain the balance (look before anything else) |
+| Eligible | not flagged by an administrator **and** the $BLAT ledger adds up to the balance **and** not a merged profile |
+| Not eligible (`reasons`) | `flagged` — an administrator marked the account as suspicious; `ledger_mismatch` — the ledger does not explain the balance (look before anything else); `merged` — an empty first-launch Telegram profile that gave its Telegram id to the player's real account (V2.0 part E, [TELEGRAM.md](TELEGRAM.md) §4): it keeps its welcome $BLAT but can't be signed in to, and the player's real account has its own |
 | Totals | accounts and eligible accounts, $BLAT in all and $BLAT of the eligible ones |
 | Never in it | Telegram ids, emails, sign-in data, anything about devices |
 | Kept | until an administrator deletes the snapshot; an account deleted later leaves every snapshot with its row («сейчас» shows the rows left) |

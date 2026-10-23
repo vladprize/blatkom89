@@ -38,6 +38,15 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
    Mini App) and the time of the last sign-in with it; your first name from the provider becomes the
    starting in-game name (Latin letters, changeable). No email, picture, friends or provider tokens are
    kept; only the basic profile is requested (`openid profile`, `public_profile`, `identify`, `identity`).
+3c. **Where you came from (V2.0):** if the link that brought you carried a partner's code or a campaign
+   label (`?p=…`, `utm_…`), or you came from another site, we keep that label or the other site's domain
+   (never the full address) with your first visit and your new account, to see which channels bring
+   players. Nothing else about you is collected for it, and nobody is paid per player.
+3b. **Linking Telegram to an account you already have (optional, V2.0):** a one-time code (we keep only a
+   keyed hash of it, for 10 minutes and a day after) ties your Telegram ID to that account, so the game in
+   Telegram opens it. If the first launch in Telegram had already made an empty profile (no matches, XP
+   or purchases), that profile is kept as it was, without the Telegram ID, marked as merged into your
+   account.
 4. **Game data:** character, profile avatar (one of the game's portraits, by id), match participation (map, place, eliminations, assists, deaths, damage,
    time), XP, level, achievements, streaks, time in game, match history; the «Блатной кон» rating, wins, losses, draws and streaks (shown
    in the Kon tables with your in-game name); talon and diamond balances and
@@ -128,7 +137,8 @@ When this policy changes, we update the revision date.
 
 | Table | Personal fields | Purpose | Retention |
 |---|---|---|---|
-| `users` | `telegram_id`, `display_name` (+ `name_key`, its case-folded form for uniqueness), `language_code`, `platform`, `dev_device_id` (dev mode, or `g1:` + HMAC of a guest browser secret), `email`, `password_hash` (scrypt), `email_linked_at`, `created_at`, `last_seen_at`; V2.0: `ref_code` (the player's invitation code), `blat_flag` (an admin's «suspicious» mark with its reason) | identity, display, sign-in, analytics, referral programme | until account deletion |
+| `users` | `telegram_id`, `display_name` (+ `name_key`, its case-folded form for uniqueness), `language_code`, `platform`, `dev_device_id` (dev mode, or `g1:` + HMAC of a guest browser secret), `email`, `password_hash` (scrypt), `email_linked_at`, `created_at`, `last_seen_at`; V2.0: `ref_code` (the player's invitation code), `blat_flag` (an admin's «suspicious» mark with its reason), `merged_into` / `merged_at` (an empty first-launch profile that let its Telegram ID go to the player's account; SET NULL when that account is deleted); V2.0 part F: `source_channel` / `source_detail` / `partner_id` (how the account came: a partner link, an invitation, a campaign, another site's domain, Telegram, direct) | identity, display, sign-in, analytics, referral programme | until account deletion |
+| `telegram_link_codes` (V2.0 part E) | HMAC of a one-time code, user id, created / expires / used times | attaching Telegram to an existing account | valid 10 minutes; purged a day after expiry; immediately on account deletion (cascade) |
 | `currency_ledger`, `user_items`, `weapon_mods`, `case_openings` | balance changes (with admin id for grants; V2.0: $BLAT credits `level:<n>` / `referral:<invited player's id>`), owned items (weapon skins included), modifications, case draws (weapons and skins) | economy, support, no double credits | until account deletion (cascade); an inviter's `referral:<id>` row stays with the inviter after the invited player is deleted (the id no longer resolves) |
 | `blat_snapshots`, `blat_snapshot_rows` (V2.0 part C) | a snapshot's moment, admin, note, totals, rules; per account: `user_id` (cascade), the alias at that moment, balance, earned, sums by source, the ledger's sum, the flag, eligibility | balance snapshots ([BLAT.md](BLAT.md) §6) | until an admin deletes the snapshot; an account's rows go with the account |
 | `app_settings` (V2.0 part C) | none (e.g. the BLAT DROP date) and the admin who changed it | central settings | kept |
@@ -137,7 +147,8 @@ When this policy changes, we update the revision date.
 | `user_identities` (v0.3) | provider (`google`/`facebook`/`discord`/`reddit`), the provider's id for the player (`provider_uid`), user id, first/last use | sign-in with a provider | until account deletion (cascade) |
 | `auth_handoffs` (v0.3) | SHA-256 of a one-time code, user id, provider, whether the account is new/linked | handing a provider sign-in back to the page | valid 5 minutes; deleted on use, by the next sign-in once 10 minutes old, by the daily retention job after 1 day; immediately on account deletion (cascade) |
 | `password_resets` | HMAC of the one-time token, user id, who created it (`email`/`admin`) | password reset | 7 days after expiry; immediately on account deletion |
-| `visitors`, `visitor_days` | random browser id, first/last visit, platform, referring domain, `user_id` (SET NULL on deletion) | visitor funnel | 400 days after the last visit |
+| `visitors`, `visitor_days` | random browser id, first/last visit, platform, referring domain, `user_id` (SET NULL on deletion); V2.0 part F: the first visit's campaign (`utm_source` / `utm_medium` / `utm_campaign`) and partner link (`partner_id`) | visitor funnel, sources | 400 days after the last visit |
+| `partners` (V2.0 part F) | none about players: a partner link's code, name, note, active, the admin who made it | measuring partner links (no payouts) | until an admin removes it |
 | `profiles` | counters, XP/level, rating, streaks, preferred character, avatar id; V2.0: `blat`, `blat_earned`, `blat_level`; the «Блатной кон» rating and record (`kon_*`) | progression, Top-100, $BLAT, the Kon tables | until account deletion (cascade) |
 | `friendships` | pairs of user ids, request/accept times | friends, presence | until removed; immediately on account deletion (cascade) |
 | `direct_messages` | sender, recipient, text (≤ 500 chars), sent/read times | private messages between friends | 180 days; immediately on account deletion (cascade) |

@@ -113,6 +113,13 @@ Let the selected range be `[from, to]` (timestamps) with UTC days `firstDay … 
 | D1 retention | see §5 |
 | D7 retention | see §5 |
 | Technical errors | `app_errors` rows with `occurred_at ∈ [from, to]` |
+| Unique players (V2.0) | distinct people with a `match_participants` row in a match with `started_at ∈ [from, to]` |
+| Started their first match (V2.0) | people whose earliest match participation (`min(matches.started_at)`) is in `[from, to]` |
+| $BLAT issued (V2.0) | sum of positive $BLAT ledger deltas with `created_at ∈ [from, to]` |
+
+Since V2.0 part E, «total players», «new players», the cohorts and the player list leave out empty
+first-launch Telegram profiles merged into a player's account (`users.merged_at`, [TELEGRAM.md](TELEGRAM.md) §4):
+they are the same person.
 
 Charts: registrations per day; DAU per day; matches started vs completed per day; D1/D7 per
 registration cohort day; session-duration and match-duration histograms; map popularity (matches
@@ -161,6 +168,51 @@ clients did not send the visitor id; their players appear only in the new-player
 Referrers: only the domain of `document.referrer` (other sites only) is stored; `''` = direct /
 Telegram. Daily chart: unique visitors per day (`visitor_days`), new visitors, registrations.
 
+## 6a. Sources, invitations, partners (dashboard «Источники», V2.0 part F)
+
+**The first touch.** On the first visit of a browser the client reads what the address carries and
+keeps it in that browser (`blatkom89.first-touch`, later visits never change it): a partner's code
+(`?p=<code>`), a campaign (`utm_source`, `utm_medium`, `utm_campaign` — lower-cased, ≤ 64 chars,
+`[a-z0-9 ._+-]`), a room invitation (`?invite=`), and another site's domain (from `document.referrer`,
+domain only). `?p=` and `utm_*` are then taken out of the address. The visit ping stores the partner and
+the campaign on the browser's `visitors` row — only on the first day of that visitor and only into empty
+fields — and the **new** account made by that browser gets `users.source_channel` / `source_detail` /
+`partner_id`, set once:
+
+| Channel (precedence) | When | `source_detail` |
+|---|---|---|
+| `partner` | an **active** partner's code: `?p=` in the browser, or Telegram's **signed** start parameter `p_<code>` (the bot's `t.me/<bot>?start=p_<code>` opens the game with `?p=`) | the code |
+| `referral` | the new account was attached to a player's referral link ([BLAT.md](BLAT.md)) | — |
+| `invite` | the first visit came with a room invitation, or Telegram's start parameter is a room code | — |
+| `utm` | a campaign | `source / medium / campaign` |
+| `referrer` | another site | the domain |
+| `telegram` | made in the Mini App with none of the above | — |
+| `direct` | none of the above | — |
+
+Accounts made before part F have no channel (shown as «Неизвестно (до V2.0)»); an existing account is
+never re-labelled. Nothing in the first touch is personal: no full addresses, no device data; partner
+codes and campaigns are chosen by the operator.
+
+| Metric | Definition |
+|---|---|
+| Registrations | users with `created_at ∈ [from, to]` (merged profiles left out) |
+| Unique players / first match | as in §4 |
+| Sources | accounts made in range per `(source_channel, source_detail)`: accounts; first match (≥ 1 participation, any time); completed (≥ 1 completed participation); returned (active on a UTC day after the registration day) |
+| First visits | visitors first seen in range by what they came with — partner (code), campaign (`utm_source`), another site (domain), direct; with the share that got an account |
+| Room invitations | `invite_created` events in range; opened: `invite_opened` events; joined a lobby by invitation: distinct users of `lobby_joined` events with `viaInvite = true`; played by invitation: distinct people with a completed participation `via_invite` in matches started in range (of them: accounts made in range); conversion = played ÷ invitations |
+| Players' referral links | `referrals` attached in range; of them `confirmed` (a whole match); conversion = confirmed ÷ attached |
+| Levels | every account by its current `profiles.level` in buckets 1, 2–4, 5–9, 10–19, 20–29, 30–49, 50+; average and maximum; «reached in the period» = $BLAT level credits (`ref = level:<n>`) in range — one per player and level (the day $BLAT launched it also holds levels reached earlier) |
+| Блатной кон | completed matches with `kon_format` in range, by format, and the distinct people in them |
+| $BLAT | issued in range: all, from levels, from invitations |
+
+**Partner links** (authors, streamers) — `partners`: a code (`[a-z0-9_]{3,24}`, unique), a name, a note,
+active or not; created and switched off by an administrator (audited). The website link is
+`<PUBLIC_URL>/?p=<code>`, the Telegram link `https://t.me/<bot>?start=p_<code>`. Per link and range: first
+visits, accounts it brought, of them first match / completed / returned, and the whole matches those
+accounts played in range. A switched-off code is ignored for new visits and accounts (the earlier ones
+stay). **Measuring only** — nothing is paid, credited or promised to a partner; the conditions of a
+partner programme are decided separately.
+
 ## 7. Economy (dashboard «Экономика»)
 
 All amounts come from `currency_ledger`, `user_items`, `weapon_mods`, `case_openings` and `payments`
@@ -193,7 +245,9 @@ $BLAT rows never enter the talon / diamond numbers of §7.
 ## 8. Exports
 
 `players.csv`, `matches_<from>_<to>.csv`, `daily_<from>_<to>.csv` (registrations, DAU, matches
-started/completed, errors per day). Admin role only, every export is written to the audit log.
+started/completed, errors per day); V2.0 part F: `sources_<from>_<to>.csv` (accounts by channel and
+detail with first match / completed / returned, and first visits by source) and
+`partners_<from>_<to>.csv` (every partner link with its links and numbers). Admin role only, every export is written to the audit log.
 Files are UTF-8 with BOM and CRLF; cells starting with `=`, `+`, `-`, `@`, TAB or CR are prefixed with
 `'` (formula-injection protection) and quoted when needed; numbers are written as numbers.
 

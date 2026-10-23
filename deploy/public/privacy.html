@@ -78,6 +78,12 @@
           access tokens, and we ask the provider for nothing more than your basic profile.
         </li>
         <li>
+          <strong>Linking Telegram to an account you already have (optional).</strong> A one-time code (we keep only a keyed hash
+          of it, valid for 10 minutes and deleted a day later) ties your Telegram ID to that account, so the game in Telegram opens
+          it. If your first launch in Telegram had already made an empty profile (no matches, XP or purchases), that profile is kept
+          as it was, without the Telegram ID, marked as merged into your account.
+        </li>
+        <li>
           <strong>Game data:</strong> the chosen character and profile avatar, match participation (map, place, eliminations, assists, deaths, damage, time),
           XP, level, achievements, win streaks, time in game, match history; your «Blatnoy Kon» rating, wins, losses, draws and streaks
           (shown in the Kon tables with your in-game name); your talon and diamond balances and every change to them,
@@ -118,7 +124,9 @@
         <li>
           <strong>Visit statistics:</strong> when the game’s website opens, the browser creates a random visitor identifier. We keep it with
           the first and last visit, the days with visits, the platform type and the domain of the site you came from (not the full address)
-          — to count how many visitors become players. Once you sign in, the identifier is linked to your profile.
+          — to count how many visitors become players. Once you sign in, the identifier is linked to your profile. If the link that
+          brought you carried a partner’s code or a campaign label (<code>?p=…</code>, <code>utm_…</code>), we keep that label with your
+          first visit and your new profile, to see which channels bring players; nobody is paid per player.
         </li>
         <li>
           <strong>IP address</strong> is used by the server to handle requests and to protect against abuse (rate limits). It is not stored
@@ -160,6 +168,7 @@
           <tr><td>Profile, statistics, match history, achievements, balances and owned items</td><td>until you delete the profile</td></tr>
           <tr><td>Email address and password hash</td><td>until you delete the profile</td></tr>
           <tr><td>Sign-ins with Google, Discord, Facebook, Reddit (the provider’s identifier for you)</td><td>until you delete the profile</td></tr>
+          <tr><td>One-time codes for linking Telegram (a keyed hash)</td><td>10 minutes; deleted a day after they run out</td></tr>
           <tr><td>Usage events and days active</td><td>up to 400 days</td></tr>
           <tr><td>Visit statistics</td><td>400 days after the last visit</td></tr>
           <tr><td>Private messages to and from friends</td><td>180 days</td></tr>

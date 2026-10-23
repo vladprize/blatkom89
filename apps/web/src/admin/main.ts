@@ -9,6 +9,7 @@ import { renderErrors } from './views/errors.js';
 import { renderExports } from './views/exports.js';
 import { renderAudit } from './views/audit.js';
 import { renderFunnel } from './views/funnel.js';
+import { renderGrowth } from './views/growth.js';
 import { renderEconomy } from './views/economy.js';
 import { renderClubs } from './views/clubs.js';
 import { renderBlat } from './views/blat.js';
@@ -55,6 +56,7 @@ function showLogin(message?: string) {
 const NAV: Array<[string, string, 'viewer' | 'admin']> = [
   ['#/overview', 'Обзор', 'viewer'],
   ['#/funnel', 'Воронка', 'viewer'],
+  ['#/growth', 'Источники', 'viewer'],
   ['#/economy', 'Экономика', 'viewer'],
   ['#/blat', '$BLAT', 'viewer'],
   ['#/players', 'Игроки', 'viewer'],
@@ -109,6 +111,7 @@ async function route(): Promise<void> {
     if (player) await renderPlayer(content, player[1]!, me);
     else if (hash.startsWith('#/players')) await renderPlayers(content);
     else if (hash.startsWith('#/funnel')) await renderFunnel(content);
+    else if (hash.startsWith('#/growth')) await renderGrowth(content, me);
     else if (hash.startsWith('#/economy')) await renderEconomy(content);
     else if (hash.startsWith('#/blat')) await renderBlat(content, me);
     else if (hash.startsWith('#/clubs')) await renderClubs(content, me);

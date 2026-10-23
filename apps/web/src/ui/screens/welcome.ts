@@ -119,3 +119,45 @@ export function openWelcome(root: HTMLElement, online: OnlineClient, onDone: (o:
   setTimeout(() => email.focus(), 60);
   return () => close('guest');
 }
+
+/** V2.0 part E: the Telegram profile the welcome below was shown for (asked once per profile). */
+export const TG_WELCOME_KEY = 'blatkom89.tg-welcome.v1';
+
+/** The first launch in Telegram has just made a new, empty profile. */
+export function needsTelegramWelcome(online: OnlineClient, inTelegram: boolean): boolean {
+  const p = online.profile;
+  return !!p && inTelegram && online.telegramIsNew && p.matchesPlayed === 0 && !p.email && storageGet(TG_WELCOME_KEY) !== p.id;
+}
+
+/**
+ * V2.0 part E: a new profile in Telegram — but the player may already play on the website. An email
+ * sign-in here brings that account (Telegram opens it from then on); a website guest links Telegram from
+ * the website. Or they start here.
+ */
+export function openTelegramWelcome(root: HTMLElement, online: OnlineClient, onDone: (o: 'signed_in' | 'new') => void): () => void {
+  let closed = false;
+  const id = online.profile?.id ?? '';
+  const close = (outcome: 'signed_in' | 'new') => {
+    if (closed) return;
+    closed = true;
+    storageSet(TG_WELCOME_KEY, id);
+    ov.remove();
+    onDone(outcome);
+  };
+  const ov = h(
+    'div',
+    { class: 'overlay overlay--top', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('Welcome to the district'), 'data-testid': 'tg-welcome' },
+    h(
+      'div',
+      { class: 'panel modal col welcome' },
+      h('span', { class: 'tag' }, t('Telegram')),
+      h('div', { class: 'h2', style: 'margin-top:8px' }, t('Welcome to the district')),
+      h('div', { class: 'muted' }, t('Already playing BLATKOM ’89 on the website? Bring that account here — Telegram will open it, with all its progress, instead of a new profile.')),
+      h('button', { class: 'btn btn--red', 'data-testid': 'tg-welcome-login', onclick: () => openEmailLogin(root, online, { onDone: () => close('signed_in') }) }, t('I have an account with an email')),
+      h('div', { class: 'muted' }, t('Played as a guest on the website? Open the game there: Profile → «Link Telegram».')),
+      h('button', { class: 'btn btn--ghost', 'data-testid': 'tg-welcome-new', onclick: () => close('new') }, t('I’m new — start here')),
+    ),
+  );
+  root.append(ov);
+  return () => close('new');
+}

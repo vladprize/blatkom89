@@ -63,10 +63,28 @@ the webhook over (use a separate test bot for that).
 
 * `ready()`, `expand()`, dark header/background/bottom-bar colours, vertical swipe-to-close disabled
   (Bot API 7.7+), BackButton mapped to the in-game «← Back».
-* During a match: fullscreen and orientation lock where supported (Bot API 8.0+) and a closing
-  confirmation, released when the match ends.
-* Safe areas: `safeAreaInset` + `contentSafeAreaInset` (Bot API 8.0 fullscreen) are applied as CSS
-  variables; menus and HUD keep clear of notches and Telegram controls.
+* During a match (V2.0 part E): on a phone (`ios`, `android`) the Mini App asks for **fullscreen**
+  (Bot API 8.0+); the **orientation is locked only while the phone is held sideways** — `lockOrientation()`
+  locks the *current* orientation, so a lock taken upright would keep the game upright; turned sideways
+  later, the lock follows. A closing confirmation is on during the match. After the match the
+  orientation is free again (fullscreen stays: the menus fit it). Fallback: a client without 8.0, a
+  computer, or a refused fullscreen (`fullscreenFailed`) keeps the expanded window — the game plays in
+  both orientations (in portrait the «Turn your phone sideways» hint shows for a few seconds).
+* Safe areas: `safeAreaInset` + `contentSafeAreaInset` (Bot API 8.0 fullscreen: the notch and Telegram's
+  own buttons over the app) become CSS variables (`--tg-*`, combined with `env(safe-area-inset-*)` into
+  `--safe-*`); the menus use them, and the canvas HUD (`app/safeArea.ts`) moves its score box, minimap,
+  kill feed, chat and touch buttons inside them. On a short landscape screen whose top is pushed down,
+  the touch buttons' column is pressed together so it stays under the minimap.
+* Minimised and back (V2.0 part E, `app/lifecycle.ts`): Telegram's `deactivated` / `activated` (Bot API
+  8.0), a hidden page, the back-forward cache and the network coming back all become *pause* /
+  *resume*. On pause the music and the sound effects stop and held touch controls are let go (a finger
+  that was down never comes up). On resume the game socket is checked at once: one that heard nothing
+  for 2.5 s is replaced straight away (the server sends snapshots many times a second), and the same
+  room is rejoined with the session (the server keeps a disconnected player's place for
+  `reconnectGraceMs`, 30 s; after that the player is told «You were away too long — the match went on
+  without you», and in «Блатной кон» that counts as leaving). An open socket that stays quiet for 6 s
+  in front (confirmed over two ping rounds, never right after the page was held up) is replaced too. In the background, failed reconnects don't use up the attempts. The friends'
+  line is pinged on resume and reopened when it doesn't answer within 3 s.
 * Haptic feedback on hits, kills and pickups; native confirmation dialog for account deletion.
 * Invitations: «Call the lads» («Позвать своих») opens Telegram's share sheet (`t.me/share/url`) with
   the invite link and a text in the player's language. When a friend opens the link, Telegram passes
@@ -103,7 +121,53 @@ Tests: `apps/server/src/auth/telegram.test.ts`, `auth.api.test.ts` (valid data, 
 tampered field, stale and future `auth_date`, duplicates, missing user, expired sessions, dev login
 disabled in production).
 
-## 4. Launch checklist
+## 4. Telegram and an existing account (V2.0 part E)
+
+Opening the game in Telegram never makes a second profile of a player who already has one and never
+resets progress. Two ways to bring Telegram to an existing account
+(`apps/server/src/auth/telegramLink.ts`, migration `019_telegram_link.sql`):
+
+**From the website** — Profile → Account → **«Link Telegram»** (shown when the server has
+`TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME`, the account has no Telegram yet, and the page is not
+inside Telegram):
+
+1. `POST /api/auth/telegram/link-code` (signed-in player; 5 per 10 minutes) → a one-time code, valid for
+   **10 minutes**, and the bot's address `https://t.me/<bot>?start=link_<code>`. Only an HMAC of the
+   code is stored (`telegram_link_codes`); a newer code replaces an unused older one.
+2. The player opens the bot and presses **Start**; the bot answers `/start link_<code>` (in a private
+   chat only) with **«🔗 Link and play»** — a Mini App button that opens `https://<domain>/?tglink=<code>`.
+3. The game in Telegram signs in with Telegram's signed launch data (checked on the server, never
+   `initDataUnsafe`) **and** the code (`POST /api/auth/telegram {initData, link}`): the Telegram id is
+   bound to the code's account, and the sign-in lands in that account. The page takes the code out of
+   its address. The website notices by itself (it asks every 4 s while the block is open) and says
+   «Telegram is linked».
+
+**Inside Telegram** — a new Telegram profile is asked once «Already playing on the website?»: **«I have
+an account with an email»** signs in by email and password with the launch data along
+(`POST /api/auth/email/login {email, password, initData}`); the Telegram id is bound to the email's
+account and Telegram opens it from then on. (The same works from Profile → «Already have an account with
+email? Sign in».) A website guest without an email links from the website instead.
+
+The rules, in one transaction (`bind`):
+
+* The account already has this Telegram → `already`; another Telegram → `conflict` (nothing changes).
+* This Telegram belongs to no account → bound (`linked`).
+* It belongs to an **empty** account — made by an earlier launch in Telegram: no match played, no XP,
+  no talons or diamonds, nothing owned, no gang, no friends, no email, device key or other sign-in —
+  that account lets the id go: it is **kept as it was** (nothing is deleted), marked
+  `merged_into` / `merged_at` (left out of player counts), and the id moves (`linked`, `merged`).
+* It belongs to an account **with anything in it** → `conflict`: nothing changes; Telegram keeps
+  opening that account (the player is told so). Two accounts with progress are never merged
+  automatically.
+* A code works once, also when it fails (`invalid`); after 10 minutes → `expired`. Used and run-out
+  codes are purged a day later (`analytics/retention.ts`).
+
+Every successful link writes `identity_linked {provider: 'telegram', via: 'code' | 'email', merged}`.
+Tests: `apps/server/src/auth/telegramLink.test.ts` (5), `tests/e2e/telegram.mjs` (29 checks: the
+website's link, the bot's answer, the same account in Telegram, the website noticing, the email
+sign-in inside Telegram, fullscreen / orientation / safe areas / minimise and back in a Kon match).
+
+## 5. Launch checklist
 
 - [ ] v0.3: `t.me/<bot>` → **Start** → the bot answers (after a sleep: within about a minute) with
       «Play in Telegram» and «Open in the browser»; both open the game.
@@ -117,8 +181,18 @@ disabled in production).
 - [ ] A team match (red vs blue, capture the flag or base capture) with players on both phones.
 - [ ] v0.24: the game is free — the Arsenal shows no diamonds, no «Top up» and no Diamonds tab (inside Telegram and on the website alike); everything is unlocked with talons.
 - [ ] `/admin` shows the two players and the match.
+- [ ] V2.0 part E: on the website (a guest with some XP) Profile → «Link Telegram» → «Open Telegram» →
+      **Start** → «🔗 Link and play» → the game opens in Telegram with the same alias and XP; the website
+      says «Telegram is linked». Closing and reopening the Mini App opens the same account.
+- [ ] V2.0 part E: a new Telegram account → «Welcome to the district» → «I have an account with an
+      email» → that account opens, and after reopening the Mini App too.
+- [ ] V2.0 part E: in a match on a phone held sideways the Mini App goes fullscreen and stays sideways;
+      Telegram's buttons don't cover the minimap or the pause button. Minimise the Mini App for ~10 s
+      and return: «CONNECTION LOST» lasts at most a moment and the match goes on in the same room.
 
-These steps need a real bot and domain and were **not** executed while building this release.
+These steps need a real bot and domain and were **not** executed while building this release (the
+Telegram parts are covered by `tests/e2e/telegram.mjs` with Telegram's object and the bot's webhook
+played by the test).
 
 ## Payments inside Telegram
 

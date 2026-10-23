@@ -38,6 +38,30 @@ export const signupNameSchema = z.string().trim().min(1).max(64);
 
 /** V2.0: the referral code the browser was opened with (a new account is attached to its inviter). */
 const refSchema = z.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
+/**
+ * V2.0 part F: the first touch — what a browser's first visit came with (a partner's link `?p=`, a campaign
+ * `utm_*`, a room invitation, the referring domain). Analytics only: nothing is paid for it.
+ */
+export const partnerCodeSchema = z.string().trim().toLowerCase().regex(/^[a-z0-9_]{3,24}$/, 'A partner code: 3–24 Latin letters, digits or _');
+const utmValueSchema = z.string().trim().toLowerCase().min(1).max(64).regex(/^[a-z0-9 ._+-]+$/);
+export const FirstTouchSchema = z
+  .object({
+    partner: partnerCodeSchema.optional(),
+    utmSource: utmValueSchema.optional(),
+    utmMedium: utmValueSchema.optional(),
+    utmCampaign: utmValueSchema.optional(),
+    invite: z.boolean().optional(),
+    referrer: z.string().max(80).regex(/^[a-z0-9.-]+$/).optional(),
+  })
+  .strict();
+export type FirstTouch = z.infer<typeof FirstTouchSchema>;
+/** How a new account came (kept with the account; `unknown`: made before V2.0 part F). */
+export const SOURCE_CHANNELS = ['partner', 'referral', 'invite', 'utm', 'referrer', 'telegram', 'direct'] as const;
+export type SourceChannel = (typeof SOURCE_CHANNELS)[number];
+/** V2.0 part E: a one-time code that attaches Telegram to an existing account. */
+export const telegramLinkCodeSchema = z.string().regex(/^[A-Za-z0-9_-]{16,32}$/);
+/** How attaching Telegram went: linked now; was already linked; the Telegram account has its own progress; the code ran out; no such code. */
+export type TelegramLinkOutcome = 'linked' | 'already' | 'conflict' | 'expired' | 'invalid';
 export const TelegramAuthRequest = z
   .object({
     initData: z.string().min(10).max(8192),
@@ -46,6 +70,10 @@ export const TelegramAuthRequest = z
     /** Optional anonymous browser id (see VisitRequest) that links a new player to the visitor funnel. */
     visitorId: z.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
     ref: refSchema.optional(),
+    /** V2.0 part E: the one-time code from the bot's link (`?tglink=`): Telegram is attached to the code's account. */
+    link: telegramLinkCodeSchema.optional(),
+    /** V2.0 part F: the first touch, kept with a new account. */
+    source: FirstTouchSchema.optional(),
   })
   .strict();
 export const DevAuthRequest = z
@@ -55,6 +83,7 @@ export const DevAuthRequest = z
     platform: PlatformSchema.optional(),
     clientVersion: z.string().max(32).optional(),
     ref: refSchema.optional(),
+    source: FirstTouchSchema.optional(),
   })
   .strict();
 /**
@@ -69,6 +98,7 @@ export const GuestAuthRequest = z
     clientVersion: z.string().max(32).optional(),
     visitorId: z.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
     ref: refSchema.optional(),
+    source: FirstTouchSchema.optional(),
   })
   .strict();
 /** Optional anonymous browser id (see VisitRequest) that links a sign-up to the visitor funnel. */
@@ -84,6 +114,8 @@ export const EmailLoginRequest = z
     deviceId: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/).optional(),
     platform: PlatformSchema.optional(),
     clientVersion: z.string().max(32).optional(),
+    /** V2.0 part E: inside Telegram, the signed launch data — this Telegram account gets attached to the email's account. */
+    initData: z.string().min(10).max(8192).optional(),
   })
   .strict();
 /** Attach an email + password to the current account so it can be restored on another device. */
@@ -93,7 +125,7 @@ export const PasswordResetRequest = z.object({ email: emailSchema }).strict();
 export const PasswordResetConfirm = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/), password: passwordSchema }).strict();
 /** Anonymous visit (before any sign-up): a random per-browser id, nothing else identifying. */
 export const VisitRequest = z
-  .object({ visitorId: visitorIdSchema, platform: PlatformSchema.optional(), referrer: z.string().max(120).optional() })
+  .object({ visitorId: visitorIdSchema, platform: PlatformSchema.optional(), referrer: z.string().max(120).optional(), source: FirstTouchSchema.optional() })
   .strict();
 
 // ── Economy ────────────────────────────────────────────────────────────────
@@ -210,6 +242,14 @@ export interface AuthResponse {
   expiresAt: string;
   profile: PublicProfile;
   isNew: boolean;
+  /** V2.0 part E: the sign-in also tried to attach Telegram to the account (a code from the bot, or an email sign-in inside Telegram). */
+  telegramLink?: TelegramLinkOutcome;
+}
+
+/** V2.0 part E: the bot's link that attaches Telegram to the current account (valid for 10 minutes, once). */
+export interface TelegramLinkCodeResponse {
+  url: string;
+  expiresAt: string;
 }
 
 export interface CreateRoomResponse {
@@ -330,6 +370,12 @@ export interface AdminOverview {
   d1CohortSize: number;
   d7CohortSize: number;
   errorCount: number;
+  /** V2.0 part F: distinct people who played an online match in the period. */
+  uniquePlayers?: number;
+  /** V2.0 part F: people whose first online match was in the period. */
+  firstMatchPlayers?: number;
+  /** V2.0 part F: $BLAT credited in the period. */
+  blatIssued?: number;
 }
 
 export interface AdminCharts {
@@ -450,6 +496,8 @@ export interface AdminPlayerDetail {
     referrals: Record<AdminReferralRow['status'], number>;
     flag: string | null;
   };
+  /** V2.0 parts E–F: how the account came (null: before part F) and Telegram merges. */
+  origin?: { channel: SourceChannel | null; detail: string | null; partner: string | null; mergedInto: string | null; mergedAt: string | null; mergedFrom: number };
 }
 
 /** V2.0: an invitation as the admin sees it. */
@@ -572,6 +620,90 @@ export interface AdminFunnel {
   referrers: Array<{ key: string; visitors: number; registered: number }>;
   daily: Array<{ day: string; uniqueVisitors: number; newVisitors: number; registrations: number }>;
 }
+
+/** V2.0 part F: GET /api/admin/growth — where players come from, invitations, levels, the Kon, $BLAT issued. */
+export interface AdminSourceRow {
+  channel: SourceChannel | 'unknown';
+  /** The partner's code, «source / medium / campaign», the referring domain; null for the others. */
+  detail: string | null;
+  accounts: number;
+  /** Took part in at least one online match. */
+  firstMatch: number;
+  /** Played a whole match. */
+  completed: number;
+  /** Active on a later day than the sign-up. */
+  returned: number;
+}
+export interface AdminVisitSourceRow {
+  kind: 'partner' | 'utm' | 'referrer' | 'direct';
+  key: string;
+  visitors: number;
+  registered: number;
+}
+export interface AdminGrowth {
+  range: AdminRange;
+  generatedAt: string;
+  players: {
+    /** Accounts made in the period (merged empty profiles left out). */
+    registered: number;
+    /** Distinct people who played an online match in the period. */
+    unique: number;
+    /** People whose very first online match was in the period. */
+    firstMatch: number;
+    completedMatches: number;
+  };
+  sources: AdminSourceRow[];
+  visits: AdminVisitSourceRow[];
+  invites: {
+    /** Room invitations created (`invite_created`). */
+    roomInvites: number;
+    /** Invitation links opened (`invite_opened`). */
+    opened: number;
+    /** Distinct players who entered a lobby through an invitation. */
+    joinedLobby: number;
+    /** Distinct players who played a whole match they joined by invitation. */
+    played: number;
+    /** Of them: accounts made in the period. */
+    newPlayers: number;
+    /** played ÷ roomInvites. */
+    conversion: number | null;
+    /** Players' referral links: new accounts attached in the period, and of them counted (a whole match). */
+    referralAttached: number;
+    referralConfirmed: number;
+    referralConversion: number | null;
+  };
+  levels: {
+    /** Every account by its level now. */
+    buckets: Array<{ bucket: string; players: number }>;
+    /** Levels reached in the period (from the $BLAT level credits: one per player and level). */
+    reached: Array<{ level: number; players: number }>;
+    average: number | null;
+    max: number;
+  };
+  kon: { matches: number; players: number; byFormat: Array<{ format: KonFormat; matches: number }> };
+  blat: { issued: number; fromLevels: number; fromReferrals: number };
+}
+
+/** V2.0 part F: a partner's link (an author, a streamer) and what it brought in the period. Measuring only — no payouts. */
+export interface AdminPartnerRow {
+  id: string;
+  code: string;
+  name: string;
+  note: string | null;
+  active: boolean;
+  createdAt: string;
+  webUrl: string;
+  telegramUrl: string | null;
+  visitors: number;
+  accounts: number;
+  firstMatch: number;
+  completed: number;
+  returned: number;
+  /** Whole matches played in the period by the accounts it brought. */
+  matches: number;
+}
+export const AdminPartnerCreate = z.object({ name: z.string().trim().min(1).max(60), code: partnerCodeSchema.optional(), note: z.string().trim().max(300).optional() }).strict();
+export const AdminPartnerUpdate = z.object({ name: z.string().trim().min(1).max(60).optional(), note: z.string().trim().max(300).nullable().optional(), active: z.boolean().optional() }).strict();
 
 /** GET /api/admin/economy — currency flows by ledger reason, revenue, purchases, mods and cases. */
 export interface AdminCurrencyFlow {

@@ -30,6 +30,8 @@ export const RETENTION_DAYS = {
   directMessages: 180,
   /** v0.3: one-time provider sign-in codes (valid 5 minutes; each new sign-in also clears those over 10 minutes old). */
   authHandoffs: 1,
+  /** V2.0 part E: one-time codes that attach Telegram to an account (valid 10 minutes), counted from expiry. */
+  telegramLinkCodes: 1,
 } as const;
 
 export type RetentionDays = { [K in keyof typeof RETENTION_DAYS]: number };
@@ -63,6 +65,7 @@ export async function purgeExpired(sql: Sql, now = new Date(), days: RetentionDa
   const visitors = cutoff(days.visitors);
   const messages = cutoff(days.directMessages);
   const handoffs = cutoff(days.authHandoffs);
+  const linkCodes = cutoff(days.telegramLinkCodes);
   return {
     analyticsEvents: await batched(
       async () => (await sql`DELETE FROM analytics_events WHERE ctid IN (SELECT ctid FROM analytics_events WHERE occurred_at < ${events} LIMIT ${BATCH})`).count,
@@ -93,6 +96,9 @@ export async function purgeExpired(sql: Sql, now = new Date(), days: RetentionDa
       async () => (await sql`DELETE FROM direct_messages WHERE ctid IN (SELECT ctid FROM direct_messages WHERE created_at < ${messages} LIMIT ${BATCH})`).count,
     ),
     authHandoffs: await batched(async () => (await sql`DELETE FROM auth_handoffs WHERE ctid IN (SELECT ctid FROM auth_handoffs WHERE created_at < ${handoffs} LIMIT ${BATCH})`).count),
+    telegramLinkCodes: await batched(
+      async () => (await sql`DELETE FROM telegram_link_codes WHERE ctid IN (SELECT ctid FROM telegram_link_codes WHERE expires_at < ${linkCodes} LIMIT ${BATCH})`).count,
+    ),
   };
 }
 
