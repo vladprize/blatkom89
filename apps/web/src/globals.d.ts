@@ -28,6 +28,10 @@ interface TelegramWebApp {
   colorScheme: 'light' | 'dark';
   isExpanded: boolean;
   isFullscreen?: boolean;
+  /** Bot API 8.0: the orientation is locked. */
+  isOrientationLocked?: boolean;
+  /** Bot API 8.0: the Mini App is active (not minimised). */
+  isActive?: boolean;
   viewportHeight: number;
   viewportStableHeight: number;
   safeAreaInset?: TelegramSafeArea;

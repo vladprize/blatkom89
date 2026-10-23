@@ -108,6 +108,50 @@ export class SocialClient {
     this.setLink(false);
   }
 
+  /**
+   * V2.0 part E: back from the background — a line that went quiet is replaced and a waiting retry goes
+   * now (the lists are reloaded once the line is up, as on every connect).
+   */
+  resume(): void {
+    if (this.stopped || !this.token) return;
+    const ws = this.ws;
+    if (ws && ws.readyState === 1) {
+      // ask the server: a line that doesn't answer within a few seconds is dead even if it looks open
+      const asked = Date.now();
+      try {
+        ws.send(JSON.stringify({ type: 'ping', t: asked }));
+      } catch {
+        /* the check below replaces it */
+      }
+      setTimeout(() => {
+        if (this.ws === ws && this.lastHeard < asked) this.reopen();
+      }, 3000);
+      return;
+    }
+    if (ws && ws.readyState === 0) return;
+    this.reopen();
+  }
+
+  /** Drops the current line (without waiting for its close) and connects now. */
+  private reopen() {
+    const ws = this.ws;
+    if (ws) {
+      this.ws = null;
+      ws.onclose = null;
+      try {
+        ws.close(4000, 'stale');
+      } catch {
+        /* ignore */
+      }
+      this.stopPing();
+      this.setLink(false);
+    }
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    this.retry = 0;
+    this.connect();
+  }
+
   /** Reloads the lists from the server. */
   async refresh(): Promise<void> {
     const r = await this.api.friends();

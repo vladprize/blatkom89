@@ -1,6 +1,6 @@
 /** /api/admin/* — secure analytics dashboard API (see docs/ADMIN.md). */
-import { AdminBlatDropRequest, AdminBlatFlagRequest, AdminBlatSnapshotRequest, AdminCreateUserRequest, AdminGrantRequest, AdminLoginRequest, AdminReferralDecision, getMap, isMapId, levelForXp } from '@blatkom/shared';
-import type { AdminBlatSummary, AdminMe, AdminPaymentRow, AdminPlayerDetail, AdminReferralRow, AdminResetLink, CharacterId } from '@blatkom/shared';
+import { AdminBlatDropRequest, AdminBlatFlagRequest, AdminBlatSnapshotRequest, AdminCreateUserRequest, AdminGrantRequest, AdminLoginRequest, AdminPartnerCreate, AdminPartnerUpdate, AdminReferralDecision, getMap, isMapId, levelForXp } from '@blatkom/shared';
+import type { AdminBlatSummary, AdminMe, AdminPaymentRow, AdminPlayerDetail, AdminReferralRow, AdminResetLink, CharacterId, SourceChannel } from '@blatkom/shared';
 import { BlatRepo } from '../blat/repo.js';
 import { BlatDropRepo, DROP_DATE_BOUNDS } from '../blat/drop.js';
 import { notifyReferral } from '../api/blat.js';
@@ -18,6 +18,7 @@ import { economy, funnel, maskEmail } from '../analytics/economy.js';
 import { EconomyError } from '../economy/repo.js';
 import { RESET_TTL_MS } from '../auth/email.js';
 import { ClubRepo } from '../clubs/repo.js';
+import { PartnerError, createPartner, growth, partnersWithStats, updatePartner } from '../analytics/growth.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -83,6 +84,43 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
 
   router.get('/api/admin/funnel', viewer, async (ctx) => {
     ctx.json(200, await funnel(pg().sql, range(ctx)));
+  });
+
+  // ── V2.0 part F: where players come from, invitations, levels; partner links (measured, never paid) ──
+  router.get('/api/admin/growth', viewer, async (ctx) => {
+    ctx.json(200, await growth(pg().sql, range(ctx)));
+  });
+
+  router.get('/api/admin/partners', viewer, async (ctx) => {
+    ctx.json(200, await partnersWithStats(pg().sql, range(ctx), deps.env));
+  });
+
+  router.post('/api/admin/partners', admin, async (ctx) => {
+    const p = pg();
+    const body = await ctx.body(AdminPartnerCreate, 2048);
+    try {
+      const made = await createPartner(p.sql, currentAdmin(ctx).id, body);
+      await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: 'partner_created', target: made.code, details: { name: body.name }, ip: ctx.ip });
+      ctx.json(201, made);
+    } catch (e) {
+      if (e instanceof PartnerError) throw new HttpError(409, 'code_taken', 'Такой код уже занят');
+      throw e;
+    }
+  });
+
+  router.post('/api/admin/partners/:id', admin, async (ctx) => {
+    const p = pg();
+    const id = ctx.params.id ?? '';
+    if (!UUID_RE.test(id)) throw new HttpError(404, 'not_found', 'Партнёр не найден');
+    const body = await ctx.body(AdminPartnerUpdate, 2048);
+    try {
+      await updatePartner(p.sql, id, body);
+    } catch (e) {
+      if (e instanceof PartnerError) throw new HttpError(404, 'not_found', 'Партнёр не найден');
+      throw e;
+    }
+    await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: 'partner_updated', target: id, details: body, ip: ctx.ip });
+    ctx.json(200, { ok: true });
   });
 
   router.get('/api/admin/economy', viewer, async (ctx) => {
@@ -182,6 +220,14 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
         referrals: refCounts,
         flag: b?.blat_flag ?? null,
       },
+      origin: await (async () => {
+        // V2.0 parts E–F: how the account came, and the empty profiles merged into it (or the one it was merged into)
+        const [o] = await p.sql<Array<{ source_channel: SourceChannel | null; source_detail: string | null; partner: string | null; merged_into: string | null; merged_at: Date | null; merged_from: number }>>`
+          SELECT u.source_channel, u.source_detail, pa.code AS partner, u.merged_into, u.merged_at,
+                 (SELECT count(*) FROM users m WHERE m.merged_into = u.id)::int AS merged_from
+          FROM users u LEFT JOIN partners pa ON pa.id = u.partner_id WHERE u.id = ${id}`;
+        return { channel: o?.source_channel ?? null, detail: o?.source_detail ?? null, partner: o?.partner ?? null, mergedInto: o?.merged_into ?? null, mergedAt: o?.merged_at?.toISOString() ?? null, mergedFrom: o?.merged_from ?? 0 };
+      })(),
     };
     ctx.json(200, detail);
   });
@@ -414,7 +460,7 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
              COALESCE(p.level, 1) AS level, COALESCE(p.xp, 0) AS xp, COALESCE(p.matches_played, 0) AS matches_played,
              COALESCE(p.wins, 0) AS wins, COALESCE(p.losses, 0) AS losses, COALESCE(p.kills, 0) AS kills,
              COALESCE(p.assists, 0) AS assists, COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec
-      FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.deleted_at IS NULL ORDER BY u.created_at`;
+      FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.deleted_at IS NULL AND u.merged_at IS NULL ORDER BY u.created_at`;
     await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: 'export_players', details: { rows: rows.length }, ip: ctx.ip });
     csv(
       ctx,
@@ -439,6 +485,40 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
       toCsv(
         ['match_id', 'room_id', 'map', 'private', 'status', 'started_at', 'ended_at', 'duration_ms', 'end_reason', 'players', 'fill_players'],
         rows.map((m) => [m.id, m.room_id, isMapId(m.map_id) ? getMap(m.map_id).name : m.map_id, m.is_private, m.status, m.started_at, m.ended_at, m.duration_ms, m.end_reason, m.player_count, m.bot_count]),
+      ),
+    );
+  });
+
+  // V2.0 part F: the sources of new accounts and first visits, and the partners' links
+  router.get('/api/admin/export/sources.csv', admin, async (ctx) => {
+    const p = pg();
+    const r = range(ctx);
+    const g = await growth(p.sql, r);
+    await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: 'export_sources', details: { from: r.firstDay, to: r.lastDay }, ip: ctx.ip });
+    csv(
+      ctx,
+      `sources_${r.firstDay}_${r.lastDay}.csv`,
+      toCsv(
+        ['table', 'channel', 'detail', 'visitors', 'accounts', 'first_match', 'completed_match', 'returned'],
+        [
+          ...g.sources.map((x) => ['accounts', x.channel, x.detail, null, x.accounts, x.firstMatch, x.completed, x.returned]),
+          ...g.visits.map((x) => ['first_visits', x.kind, x.key || null, x.visitors, x.registered, null, null, null]),
+        ],
+      ),
+    );
+  });
+
+  router.get('/api/admin/export/partners.csv', admin, async (ctx) => {
+    const p = pg();
+    const r = range(ctx);
+    const rows = await partnersWithStats(p.sql, r, deps.env);
+    await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: 'export_partners', details: { rows: rows.length, from: r.firstDay, to: r.lastDay }, ip: ctx.ip });
+    csv(
+      ctx,
+      `partners_${r.firstDay}_${r.lastDay}.csv`,
+      toCsv(
+        ['code', 'name', 'active', 'created_at', 'web_link', 'telegram_link', 'visitors', 'accounts', 'first_match', 'completed_match', 'returned', 'matches'],
+        rows.map((x) => [x.code, x.name, x.active, x.createdAt, x.webUrl, x.telegramUrl, x.visitors, x.accounts, x.firstMatch, x.completed, x.returned, x.matches]),
       ),
     );
   });

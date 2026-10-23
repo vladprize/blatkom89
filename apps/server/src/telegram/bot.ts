@@ -10,6 +10,9 @@
  *   (derived from the bot token, never stored); the reply rides in the webhook's own response
  *   (`{"method":"sendMessage",…}`), so answering needs no outgoing request.
  * - `/start <room code>` (a `t.me/<bot>?start=<code>` invitation) answers with a «join the room» button.
+ * - `/start link_<code>` (V2.0 part E, the website's «Link Telegram») answers with a Mini App button that
+ *   opens the game with `?tglink=<code>`: Telegram is attached to the website's account.
+ * - `/start p_<code>` (V2.0 part F, a partner's link) opens the game with `?p=<code>` (measured, never paid).
  * - On start-up (`setupBot`) the webhook, the command list, the menu button and the bot's descriptions
  *   are registered with the Bot API once per webhook address (the address carries a settings version,
  *   so a release that changes the texts registers them again).
@@ -40,6 +43,8 @@ const TEXT = {
     hello: '<b>БЛАТКОМ ’89</b> на связи — сервер прогрет, заходи.\nРайонные дела — серьёзные дела.',
     invite: (code: string) => `<b>БЛАТКОМ ’89</b>: тебя зовут в комнату <code>${code}</code>.\nСервер прогрет — заходи.`,
     invited: '<b>БЛАТКОМ ’89</b>: тебя позвали в район. Сервер прогрет — заходи.\nРайонные дела — серьёзные дела.',
+    link: '<b>БЛАТКОМ ’89</b>: привязка Telegram к твоему аккаунту с сайта.\nЖми кнопку — игра откроется здесь, в Telegram, с твоим прогрессом. Ссылка одноразовая и действует 10 минут.',
+    linkButton: '🔗 Привязать и играть',
     play: '🎮 Играть в Telegram',
     join: '🎮 Войти в комнату',
     browser: '🌐 Открыть в браузере',
@@ -55,6 +60,8 @@ const TEXT = {
     hello: '<b>BLATKOM ’89</b> is on the line — the server is warmed up, come on in.\nDistrict business is serious business.',
     invite: (code: string) => `<b>BLATKOM ’89</b>: you’re invited to room <code>${code}</code>.\nThe server is warmed up — come on in.`,
     invited: '<b>BLATKOM ’89</b>: someone called you into the district. The server is warmed up — come on in.\nDistrict business is serious business.',
+    link: '<b>BLATKOM ’89</b>: linking Telegram to your account from the website.\nPress the button — the game opens here, in Telegram, with your progress. The link works once, for 10 minutes.',
+    linkButton: '🔗 Link and play',
     play: '🎮 Play in Telegram',
     join: '🎮 Join the room',
     browser: '🌐 Open in the browser',
@@ -123,11 +130,26 @@ export function botAnswer(update: TelegramUpdate, publicUrl: string, botUsername
   }
   const lang = langOf(m.from?.language_code);
   const T = TEXT[lang];
-  // V2.0: `/start ref_<code>` is a referral link (the game opens with ?ref=); anything else is a room
-  const ref = cmd?.[3] && /^ref_[A-Za-z0-9_-]{4,32}$/.test(cmd[3]) ? cmd[3].slice(4) : null;
-  const code = !ref && cmd?.[3] && CODE.test(cmd[3]) ? cmd[3] : null;
   const base = publicUrl.replace(/\/$/, '');
-  const url = ref ? `${base}/?ref=${encodeURIComponent(ref)}` : code ? `${base}/?invite=${encodeURIComponent(code)}` : `${base}/`;
+  // V2.0 part E: `/start link_<code>` attaches Telegram to the website's account — in a private chat
+  // only, and only through the Mini App button (the game signs in with Telegram's signed data there)
+  const link = isPrivate && cmd?.[3] && /^link_[A-Za-z0-9_-]{16,32}$/.test(cmd[3]) ? cmd[3].slice(5) : null;
+  if (link) {
+    return {
+      method: 'sendMessage',
+      chat_id: m.chat.id,
+      text: T.link,
+      parse_mode: 'HTML',
+      link_preview_options: { is_disabled: true },
+      reply_markup: { inline_keyboard: [[{ text: T.linkButton, web_app: { url: `${base}/?tglink=${encodeURIComponent(link)}` } }]] },
+    };
+  }
+  // V2.0: `/start ref_<code>` is a referral link (the game opens with ?ref=), part F: `/start p_<code>` a
+  // partner's link (?p=, measured only); anything else is a room
+  const ref = cmd?.[3] && /^ref_[A-Za-z0-9_-]{4,32}$/.test(cmd[3]) ? cmd[3].slice(4) : null;
+  const partner = cmd?.[3] && /^p_[A-Za-z0-9_]{3,24}$/.test(cmd[3]) ? cmd[3].slice(2).toLowerCase() : null;
+  const code = !ref && !partner && !/^(link|p)_/.test(cmd?.[3] ?? '') && cmd?.[3] && CODE.test(cmd[3]) ? cmd[3] : null;
+  const url = ref ? `${base}/?ref=${encodeURIComponent(ref)}` : partner ? `${base}/?p=${partner}` : code ? `${base}/?invite=${encodeURIComponent(code)}` : `${base}/`;
   const keyboard = isPrivate ? [[{ text: code ? T.join : T.play, web_app: { url } }], [{ text: T.browser, url }]] : [[{ text: T.groups, url }]];
   return {
     method: 'sendMessage',
@@ -165,7 +187,7 @@ export const registerTelegramRoutes: RouteModule = (router, deps) => {
     remember(update.update_id);
     const answer = botAnswer(update, env.PUBLIC_URL, env.TELEGRAM_BOT_USERNAME);
     if (!answer || !perChat.take(String(answer.chat_id))) return ctx.json(200, {});
-    log.info('telegram bot answered', { chatType: update.message?.chat.type, invite: answer.text.includes('<code>') });
+    log.info('telegram bot answered', { chatType: update.message?.chat.type, invite: answer.text.includes('<code>'), link: answer.text === TEXT.ru.link || answer.text === TEXT.en.link });
     // the link must still open a running server when it is tapped a few minutes later
     deps.keepAwake?.extend(env.BOT_WARM_MINUTES * 60_000);
     ctx.json(200, answer);

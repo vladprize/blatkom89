@@ -2,17 +2,20 @@
  * Online flow controller: authentication (Telegram initData or dev login), room creation/quick
  * match/invites over HTTP, the game WebSocket, lobby state and the OnlineSession lifecycle.
  */
-import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, KonFormat, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, WeaponId } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, KonFormat, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, TelegramLinkOutcome, WeaponId } from '@blatkom/shared';
 import { latinName } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { readLoginReturn } from './oauth.js';
-import { captureReferral, clearReferral, pendingReferral } from './referral.js';
+import { captureReferral, captureTelegramLink, clearReferral, pendingReferral } from './referral.js';
+import { captureFirstTouch, firstTouchForRequest } from './firstTouch.js';
+import type { FirstTouch } from '@blatkom/shared';
 import type { LoginReturn, ProvidersInfo } from './oauth.js';
 import { GameConnection } from './GameConnection.js';
 import { SocialClient } from './SocialClient.js';
 import { OnlineSession } from '../game/session/OnlineSession.js';
 import type { ResultsData } from '../game/session/types.js';
 import { tg, telegramUserName } from '../telegram/tg.js';
+import { onLifecycle } from '../app/lifecycle.js';
 import { storageGet, storageSet } from '../app/settings.js';
 import { analytics } from '../analytics/client.js';
 import { t } from '../i18n/index.js';
@@ -98,6 +101,14 @@ export class OnlineClient {
   private loginOutcome: { ok: true; provider: string; linked: boolean; isNew: boolean } | { ok: false; reason: string } | null = null;
   /** v0.3: the providers this server offers (loaded once). */
   private providersInfo: Promise<ProvidersInfo | null> | null = null;
+  /** V2.0 part E: the one-time code of the bot's linking button (`?tglink=`), used by the first Telegram sign-in. */
+  private tgLink: string | null = null;
+  /** V2.0 part E: how attaching Telegram went (the bot's code, or an email sign-in inside Telegram) — taken once. */
+  private telegramLinkOutcome: TelegramLinkOutcome | null = null;
+  /** V2.0 part E: this Telegram account was made by this very launch (the menu offers to bring an existing account). */
+  telegramIsNew = false;
+  /** V2.0 part F: what this browser's first visit came with (a partner's link, a campaign…). */
+  private readonly firstTouch: FirstTouch | undefined;
   private conn: GameConnection | null = null;
   private session: OnlineSession | null = null;
   private roomId: string | null = null;
@@ -113,16 +124,34 @@ export class OnlineClient {
   lastResults: ResultsData | null = null;
 
   constructor(private readonly cb: OnlineCallbacks) {
-    // inside the Mini App Telegram signs the player in; elsewhere a provider may have just sent them back
+    // inside the Mini App Telegram signs the player in (V2.0 part E: maybe with the bot's linking code);
+    // elsewhere a provider may have just sent them back
     if (!tg()) this.loginReturn = readLoginReturn();
+    else this.tgLink = captureTelegramLink();
+    // V2.0 part E: back from the background (a minimised Mini App, a locked phone, the network back) —
+    // the room's and the friends' connections are checked at once
+    onLifecycle((e) => {
+      if (e.type !== 'resume') return;
+      this.conn?.resume();
+      this.social.resume();
+    });
     // V2.0: a referral link (?ref=) — kept until the first sign-in from this browser
     captureReferral();
+    // V2.0 part F: the first touch — kept in this browser, sent with the visit ping and the first sign-up
+    this.firstTouch = firstTouchForRequest(captureFirstTouch());
   }
 
   /** The sign-in that just came back from a provider: shown once in the menu. */
   takeLoginOutcome() {
     const o = this.loginOutcome;
     this.loginOutcome = null;
+    return o;
+  }
+
+  /** V2.0 part E: how attaching Telegram went (once). */
+  takeTelegramLinkOutcome(): TelegramLinkOutcome | null {
+    const o = this.telegramLinkOutcome;
+    this.telegramLinkOutcome = null;
     return o;
   }
 
@@ -147,9 +176,13 @@ export class OnlineClient {
       if (signedIn) return signedIn;
     }
     if (app) {
-      const res = await this.api.authTelegram(app.initData, storageGet(VISITOR_KEY) ?? undefined, pendingReferral() ?? undefined);
+      const link = this.tgLink;
+      this.tgLink = null;
+      const res = await this.api.authTelegram(app.initData, storageGet(VISITOR_KEY) ?? undefined, pendingReferral() ?? undefined, link ?? undefined, this.firstTouch);
       clearReferral();
       this.setToken(res.token);
+      this.telegramLinkOutcome = res.telegramLink ?? null;
+      this.telegramIsNew = res.isNew;
       this.profile = res.profile;
       return res.profile;
     }
@@ -185,7 +218,7 @@ export class OnlineClient {
     const fallback = `Comrade_${device.slice(0, 3).toUpperCase()}`;
     const name = latinName(telegramUserName() ?? '', fallback);
     try {
-      const res = await this.api.authGuest(name, device, storageGet(VISITOR_KEY) ?? undefined, pendingReferral() ?? undefined);
+      const res = await this.api.authGuest(name, device, storageGet(VISITOR_KEY) ?? undefined, pendingReferral() ?? undefined, this.firstTouch);
       clearReferral();
       this.setToken(res.token);
       storageSet(TOKEN_KEY, res.token);
@@ -256,15 +289,21 @@ export class OnlineClient {
       ref = undefined;
     }
     void this.api
-      .visit(vid, ref)
+      .visit(vid, ref, this.firstTouch)
       .then(() => storageSet(VISIT_DAY_KEY, day))
       .catch(() => {});
   }
 
   // ── email account ───────────────────────────────────────────────────────
-  /** Signs in to an existing account by email (this browser switches to it). */
+  /**
+   * Signs in to an existing account by email (this browser switches to it). Inside Telegram the signed
+   * launch data goes along: this Telegram account gets attached to that account (V2.0 part E — the
+   * outcome is taken with `takeTelegramLinkOutcome`).
+   */
   async loginEmail(email: string, password: string): Promise<PublicProfile> {
-    const res = await this.api.loginEmail(email, password);
+    const res = await this.api.loginEmail(email, password, tg()?.initData);
+    this.telegramLinkOutcome = res.telegramLink ?? null;
+    if (res.telegramLink === 'linked' || res.telegramLink === 'already') this.telegramIsNew = false;
     this.setToken(res.token);
     storageSet(TOKEN_KEY, res.token);
     storageSet(EMAIL_MODE_KEY, res.profile.email ?? email);
@@ -403,7 +442,9 @@ export class OnlineClient {
         onStatus: (st, reason) => {
           if (this.session) this.session.status = st === 'open' ? 'online' : st === 'reconnecting' || st === 'connecting' ? 'reconnecting' : 'lost';
           if (st === 'closed' && reason !== 'user' && this.conn === conn) {
-            const msg = reason === 'room_full' ? t('The room is full.') : reason === 'room not found' ? t('Room not found.') : reason === 'replaced' ? t('You connected from another device.') : t('Lost the line to the server.');
+            // back after the reconnect grace (V2.0 part E): the room went on without the player
+            const away = conn.everJoined && (reason === 'room_full' || reason === 'room_closed' || reason === 'room not found');
+            const msg = away ? t('You were away too long — the match went on without you.') : reason === 'room_full' ? t('The room is full.') : reason === 'room not found' ? t('Room not found.') : reason === 'replaced' ? t('You connected from another device.') : t('Lost the line to the server.');
             this.cleanup();
             this.cb.onError(msg, true);
           }

@@ -39,7 +39,7 @@ export async function funnel(sql: Sql, r: AdminRange): Promise<AdminFunnel> {
     u AS (
       SELECT u.id, u.email, (u.created_at AT TIME ZONE 'UTC')::date AS d,
              EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed) AS played
-      FROM users u WHERE u.deleted_at IS NULL AND u.id IN (SELECT user_id FROM v WHERE user_id IS NOT NULL)
+      FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.id IN (SELECT user_id FROM v WHERE user_id IS NOT NULL)
     )
     SELECT (SELECT count(*) FROM v)::int AS entered,
            (SELECT count(*) FROM u)::int AS registered,
@@ -51,7 +51,7 @@ export async function funnel(sql: Sql, r: AdminRange): Promise<AdminFunnel> {
     WITH u AS (
       SELECT u.id, u.email, (u.created_at AT TIME ZONE 'UTC')::date AS d,
              EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed) AS played
-      FROM users u WHERE u.deleted_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}
+      FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}
     )
     SELECT (SELECT count(*) FROM u)::int AS entered,
            (SELECT count(*) FROM u)::int AS registered,
@@ -67,7 +67,7 @@ export async function funnel(sql: Sql, r: AdminRange): Promise<AdminFunnel> {
     SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
       (SELECT count(*) FROM visitor_days vd WHERE vd.day = g.day::date)::int AS unique_visitors,
       (SELECT count(*) FROM visitors x WHERE x.first_seen_at >= (g.day AT TIME ZONE 'UTC') AND x.first_seen_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS new_visitors,
-      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL
+      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL
          AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS registrations
     FROM generate_series(${r.firstDay}::date, ${r.lastDay}::date, interval '1 day') AS g(day)
     ORDER BY g.day`;

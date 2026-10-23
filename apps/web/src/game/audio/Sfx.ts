@@ -37,6 +37,14 @@ class SfxEngine {
     if (this.master) this.master.gain.value = v;
   }
 
+  /** V2.0 part E: silent in the background (a minimised Mini App keeps running); back on return — or on the next tap, where the browser insists. */
+  setPaused(paused: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (paused && ctx.state === 'running') void ctx.suspend().catch(() => {});
+    else if (!paused && ctx.state === 'suspended') void ctx.resume().catch(() => {});
+  }
+
   /** The shared AudioContext once unlocked by a gesture (the menu music is routed through it). */
   context(): AudioContext | null {
     return this.ctx;

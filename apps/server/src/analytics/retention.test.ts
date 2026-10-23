@@ -67,8 +67,13 @@ test('retention: purges only rows past their retention period and is idempotent'
   await sql`INSERT INTO auth_handoffs (code_hash, user_id, provider, created_at)
             VALUES ('old-handoff', ${userId}, 'google', ${daysAgo(2)}), ('new-handoff', ${userId}, 'discord', ${new Date(NOW.getTime() - 60_000)})`;
 
+  // Telegram link codes (V2.0 part E): one that ran out two days ago (purge), one still running (keep).
+  await sql`INSERT INTO telegram_link_codes (code_hash, user_id, created_at, expires_at)
+            VALUES ('old-telegram-link-code', ${userId}, ${daysAgo(2)}, ${daysAgo(2)}), ('new-telegram-link-code', ${userId}, ${NOW}, ${new Date(NOW.getTime() + 600_000)})`;
+
   const r = await purgeExpired(sql, NOW);
-  assert.deepEqual(r, { analyticsEvents: 1, dailyActivity: 1, appErrors: 1, sessions: 2, adminSessions: 1, invitations: 1, adminAudit: 1, passwordResets: 1, visitors: 3, directMessages: 1, authHandoffs: 1 });
+  assert.deepEqual(r, { analyticsEvents: 1, dailyActivity: 1, appErrors: 1, sessions: 2, adminSessions: 1, invitations: 1, adminAudit: 1, passwordResets: 1, visitors: 3, directMessages: 1, authHandoffs: 1, telegramLinkCodes: 1 });
+  assert.deepEqual((await sql<Array<{ code_hash: string }>>`SELECT code_hash FROM telegram_link_codes`).map((x) => x.code_hash), ['new-telegram-link-code']);
   assert.deepEqual((await sql<Array<{ code_hash: string }>>`SELECT code_hash FROM auth_handoffs`).map((x) => x.code_hash), ['new-handoff']);
   const dms = await sql<Array<{ body: string }>>`SELECT body FROM direct_messages`;
   assert.deepEqual(dms.map((m) => m.body), ['new']);
@@ -91,7 +96,7 @@ test('retention: purges only rows past their retention period and is idempotent'
   assert.equal(usr!.n, 1);
 
   const again = await purgeExpired(sql, NOW);
-  assert.deepEqual(again, { analyticsEvents: 0, dailyActivity: 0, appErrors: 0, sessions: 0, adminSessions: 0, invitations: 0, adminAudit: 0, passwordResets: 0, visitors: 0, directMessages: 0, authHandoffs: 0 });
+  assert.deepEqual(again, { analyticsEvents: 0, dailyActivity: 0, appErrors: 0, sessions: 0, adminSessions: 0, invitations: 0, adminAudit: 0, passwordResets: 0, visitors: 0, directMessages: 0, authHandoffs: 0, telegramLinkCodes: 0 });
 });
 
 test('retention: large backlogs are deleted in batches', async () => {

@@ -95,7 +95,7 @@ export const SERVER_EVENT_PROPS = {
   payment_completed: z.object({ provider: z.string(), packId: z.string(), diamonds: z.number().int(), amountCents: z.number().int() }),
   email_linked: z.object({}),
   /** v0.3: a provider attached to an account (google, facebook, discord, reddit, telegram). */
-  identity_linked: z.object({ provider: z.enum(['google', 'facebook', 'discord', 'reddit', 'telegram']) }),
+  identity_linked: z.object({ provider: z.enum(['google', 'facebook', 'discord', 'reddit', 'telegram']), via: z.enum(['code', 'email', 'widget']).optional(), merged: z.boolean().optional() }),
 } as const;
 
 export const ClientEventEnvelopeSchema = z

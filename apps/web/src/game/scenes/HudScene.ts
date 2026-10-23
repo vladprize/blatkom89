@@ -7,6 +7,10 @@ import { getMap, PROP_DEFS, propFootprint, WEAPONS, SCORING, BASE_RULES, CTF_RUL
 import type { MapDef, Team, WeaponId } from '@blatkom/shared';
 import type { GameSession, RenderBase, RenderFlag, RenderPlayer } from '../session/types.js';
 import { hudBus, publishHudLayout } from './hudBus.js';
+import { safeInsets, NO_INSETS } from '../../app/safeArea.js';
+import type { Insets } from '../../app/safeArea.js';
+import { onLifecycle } from '../../app/lifecycle.js';
+import { INSETS_EVENT } from '../../telegram/tg.js';
 import type { KillFeedEntry, ObjectiveEntry, PointsEntry, SupplyEntry } from './hudBus.js';
 import { touchState, isTouchDevice } from '../input/TouchState.js';
 import { setWeaponTexture } from '../render/skins.js';
@@ -166,6 +170,10 @@ export class HudScene extends Phaser.Scene {
   private pauseBtn!: Phaser.GameObjects.Container;
   private layoutW = 0;
   private layoutH = 0;
+  /** V2.0 part E: the screen's safe areas in game pixels (the notch, Telegram's buttons over a fullscreen Mini App). */
+  private inset: Insets = { ...NO_INSETS };
+  /** How much the touch buttons' column is pressed together on a short screen (1: not at all). */
+  private btnScaleY = 1;
 
   constructor() {
     super('hud');
@@ -214,6 +222,18 @@ export class HudScene extends Phaser.Scene {
     if (getSettings().showFps) this.fpsText = txt(this, 6, 0, '', 11, '#9a9080', '400').setDepth(100);
     this.layout();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
+    // V2.0 part E: the safe areas change (Telegram's fullscreen, a rotated phone) and the app goes to the
+    // background — a finger that was down then never comes up, so the sticks and buttons are let go
+    const relayout = () => this.layout();
+    window.addEventListener(INSETS_EVENT, relayout);
+    const offLifecycle = onLifecycle((e) => {
+      if (e.type === 'pause') this.releaseTouches();
+      else this.layout();
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener(INSETS_EVENT, relayout);
+      offLifecycle();
+    });
     hudBus.on('killfeed', this.onKillFeed, this);
     hudBus.on('hitmarker', this.onHitMarker, this);
     hudBus.on('scoreboard', this.onScoreboard, this);
@@ -503,6 +523,26 @@ export class HudScene extends Phaser.Scene {
     }
   }
 
+  /** Lets go of every stick and button (the app went to the background mid-touch). */
+  private releaseTouches() {
+    for (const b of this.buttons) {
+      if (b.pointer === null) continue;
+      b.pointer = null;
+      b.onUp?.();
+      b.ring.setAlpha(0.8).clearTint();
+    }
+    for (const [i, s] of this.sticks.entries()) {
+      if (s.id === null && s.x === 0 && s.y === 0) continue;
+      s.id = null;
+      s.x = 0;
+      s.y = 0;
+      this.updateStick(s, i === 0);
+    }
+    touchState.moveX = touchState.moveY = 0;
+    touchState.aimActive = false;
+    touchState.fireHeld = false;
+  }
+
   private updateStick(s: Stick, isMove: boolean) {
     const R = this.stickRadius();
     const active = s.id !== null;
@@ -528,9 +568,10 @@ export class HudScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     const lh = getSettings().leftHanded;
+    const { left: il, right: ir, bottom: ib } = this.inset;
     const rest = [
-      { x: lh ? W - 150 : 150, y: H - 130 },
-      { x: lh ? 150 : W - 150, y: H - 130 },
+      { x: lh ? W - ir - 150 : il + 150, y: H - ib - 130 * this.btnScaleY },
+      { x: lh ? il + 150 : W - ir - 150, y: H - ib - 130 * this.btnScaleY },
     ];
     this.sticks.forEach((s, i) => {
       if (s.id !== null) return;
@@ -545,35 +586,42 @@ export class HudScene extends Phaser.Scene {
     const H = this.scale.height;
     this.layoutW = W;
     this.layoutH = H;
+    // V2.0 part E: the safe areas (CSS px → game px), so nothing sits under a notch or Telegram's buttons
+    const css = safeInsets();
+    const k = this.scale.displayScale.x || 1;
+    const ins = (this.inset = { top: Math.round(css.top * k), right: Math.round(css.right * k), bottom: Math.round(css.bottom * k), left: Math.round(css.left * k) });
     const pad = 14;
+    const padT = pad + ins.top;
+    const padR = pad + ins.right;
+    const padL = pad + ins.left;
     // on narrow (portrait) screens centre the score/health group in the space left of the minimap
-    const reserved = this.mmW + 4 + pad + 48;
-    const cx = W - reserved < 330 ? Math.max(160, (W - reserved) / 2) : W / 2;
+    const reserved = this.mmW + 4 + padR + 48;
+    const cx = W - reserved < 330 + ins.left ? Math.max(160 + ins.left, (W - reserved + ins.left) / 2) : W / 2;
     // kill feed sits top-left; on narrow screens it moves below the centred score/health panels
-    this.feedY0 = W < 760 ? (this.touch ? pad + 100 : pad + 62) + this.extraTop : 14;
+    this.feedY0 = W < 760 ? (this.touch ? padT + 100 : padT + 62) + this.extraTop : 14 + ins.top;
     // score box
     this.scoreBg.clear();
-    this.scoreBg.fillStyle(0x8a1a16, 0.95).fillRect(cx - 118, pad, 50, 40);
-    this.scoreBg.lineStyle(2, 0xd8392e, 1).strokeRect(cx - 117, pad + 1, 48, 38);
-    this.scoreBg.fillStyle(0x14304e, 0.95).fillRect(cx + 68, pad, 50, 40);
-    this.scoreBg.lineStyle(2, 0x4a9be0, 1).strokeRect(cx + 69, pad + 1, 48, 38);
-    this.panel(this.scoreBg, cx - 62, pad, 124, 46 + this.extraTop);
+    this.scoreBg.fillStyle(0x8a1a16, 0.95).fillRect(cx - 118, padT, 50, 40);
+    this.scoreBg.lineStyle(2, 0xd8392e, 1).strokeRect(cx - 117, padT + 1, 48, 38);
+    this.scoreBg.fillStyle(0x14304e, 0.95).fillRect(cx + 68, padT, 50, 40);
+    this.scoreBg.lineStyle(2, 0x4a9be0, 1).strokeRect(cx + 69, padT + 1, 48, 38);
+    this.panel(this.scoreBg, cx - 62, padT, 124, 46 + this.extraTop);
     this.scoreCx = cx;
-    this.scorePad = pad;
-    this.myScore.setPosition(cx - 93, pad + 20);
-    this.leadScore.setPosition(cx + 93, pad + 20);
-    this.timer.setPosition(cx, pad + 2);
-    this.mode.setPosition(cx, pad + 31);
+    this.scorePad = padT;
+    this.myScore.setPosition(cx - 93, padT + 20);
+    this.leadScore.setPosition(cx + 93, padT + 20);
+    this.timer.setPosition(cx, padT + 2);
+    this.mode.setPosition(cx, padT + 31);
     // minimap
-    const mmx = W - pad - this.mmW - 4;
-    const mmy = pad + 14;
+    const mmx = W - padR - this.mmW - 4;
+    const mmy = padT + 14;
     this.mm.setPosition(mmx, mmy);
     this.mmLabel.setPosition(mmx + this.mmW / 2, mmy - 4);
-    this.statusText.setPosition(W - pad, mmy + this.mmH + 10);
-    this.pauseBtn.setPosition(mmx - 26, pad + 18);
+    this.statusText.setPosition(W - padR, mmy + this.mmH + 10);
+    this.pauseBtn.setPosition(mmx - 26, padT + 18);
     // health + weapon panels
     if (this.touch) {
-      const y = pad + 54 + this.extraTop;
+      const y = padT + 54 + this.extraTop;
       this.healthBg.clear();
       this.panel(this.healthBg, cx - 150, y, 300, 36, 0.7);
       this.portrait.setPosition(cx - 147, y + 3).setDisplaySize(30, 30);
@@ -585,15 +633,21 @@ export class HudScene extends Phaser.Scene {
       this.weaponBg.clear();
       this.slotGfx.clear();
       for (const o of [...this.slotIcons, ...this.slotNums]) o.setVisible(false);
-      // buttons
+      // buttons: measured from the button side's edge and the bottom, inside the safe area; on a short
+      // screen whose top edge is pushed down (Telegram's buttons over a fullscreen app) the column is
+      // pressed together so its top button stays under the minimap and its status line
       const lh = getSettings().leftHanded;
-      const bx = (x: number) => (lh ? W - x : x);
+      const bx = (d: number) => (lh ? ins.left + d : W - ins.right - d);
+      const ceiling = mmy + this.mmH + 4 + 22;
+      const room = H - ins.bottom - ceiling;
+      this.btnScaleY = room >= 330 + 32 ? 1 : Math.max(0.6, (room - 32) / 330);
+      const by = (d: number) => H - ins.bottom - d * this.btnScaleY;
       const [fire, reload, swap, interact, gadget] = this.buttons;
-      if (fire) Object.assign(fire, { x: bx(W - 88), y: H - 236 });
-      if (reload) Object.assign(reload, { x: bx(W - 236), y: H - 52 });
-      if (swap) Object.assign(swap, { x: bx(W - 58), y: H - 330 });
-      if (interact) Object.assign(interact, { x: bx(W - 196), y: H - 300 });
-      if (gadget) Object.assign(gadget, { x: bx(W - 268), y: H - 186 });
+      if (fire) Object.assign(fire, { x: bx(88), y: by(236) });
+      if (reload) Object.assign(reload, { x: bx(236), y: by(52) });
+      if (swap) Object.assign(swap, { x: bx(58), y: by(330) });
+      if (interact) Object.assign(interact, { x: bx(196), y: by(300) });
+      if (gadget) Object.assign(gadget, { x: bx(268), y: by(186) });
       for (const b of this.buttons) {
         b.ring.setPosition(b.x, b.y).setScale((b.r * 2) / 112);
         b.icon.setPosition(b.x, b.y);
@@ -604,15 +658,15 @@ export class HudScene extends Phaser.Scene {
       this.restSticks();
     } else {
       // desktop: bottom-left health, bottom-right weapon (like the reference HUD)
-      const hy = H - pad - 74;
+      const hy = H - pad - ins.bottom - 74;
       this.healthBg.clear();
-      this.panel(this.healthBg, pad, hy, 250, 74);
-      this.portrait.setPosition(pad + 6, hy + 6).setDisplaySize(62, 62);
-      this.healthBg.lineStyle(1, 0xd9c7a3, 0.6).strokeRect(pad + 5.5, hy + 5.5, 63, 63);
-      this.nameText.setPosition(pad + 80, hy + 8);
-      this.hpText.setPosition(pad + 80, hy + 30);
-      const wy = H - pad - 74;
-      const wx = W - pad - 380;
+      this.panel(this.healthBg, padL, hy, 250, 74);
+      this.portrait.setPosition(padL + 6, hy + 6).setDisplaySize(62, 62);
+      this.healthBg.lineStyle(1, 0xd9c7a3, 0.6).strokeRect(padL + 5.5, hy + 5.5, 63, 63);
+      this.nameText.setPosition(padL + 80, hy + 8);
+      this.hpText.setPosition(padL + 80, hy + 30);
+      const wy = hy;
+      const wx = W - padR - 380;
       this.weaponBg.clear();
       this.panel(this.weaponBg, wx, wy, 170, 74);
       this.weaponIcon.setPosition(wx + 85, wy + 24);
@@ -632,8 +686,8 @@ export class HudScene extends Phaser.Scene {
       W,
       H,
       touch: this.touch,
-      chatBtn: { x: mmx - 26 - 42, y: pad + 18, size: 34 },
-      chat: this.touch ? { left: pad, width: Math.min(W * 0.42, 420), top: this.feedY0 + 5 * 22 + 8 } : { left: pad, width: Math.min(W * 0.4, 360), bottom: H - (H - pad - 74) + 10 },
+      chatBtn: { x: mmx - 26 - 42, y: padT + 18, size: 34 },
+      chat: this.touch ? { left: padL, width: Math.min(W * 0.42, 420), top: this.feedY0 + 5 * 22 + 8 } : { left: padL, width: Math.min(W * 0.4, 360), bottom: pad + ins.bottom + 74 + 10 },
     });
     this.bigText.setPosition(cx, H * 0.36);
     this.subText.setPosition(cx, H * 0.36 + 48);
@@ -751,7 +805,7 @@ export class HudScene extends Phaser.Scene {
       } else {
         // below the first-match controls card if it is still up, otherwise under the score box
         const tut = this.tutorial?.visible ? this.tutorial.getBounds().bottom + 24 : 0;
-        const y = Math.max(tut, this.touch ? 138 + this.extraTop : Math.max(H * 0.2, 96 + this.extraTop));
+        const y = Math.max(tut, this.touch ? 138 + this.extraTop + this.inset.top : Math.max(H * 0.2, 96 + this.extraTop + this.inset.top));
         this.banner.setPosition(W / 2, y).setAlpha(left < 400 ? left / 400 : Math.min(1, (this.bannerMs - left) / 150));
       }
     }
@@ -790,10 +844,10 @@ export class HudScene extends Phaser.Scene {
     const cx = W / 2;
     const cy = H / 2;
     // the arrows run along an inner frame that keeps clear of the score box and the bottom panels
-    const left = 34;
-    const right = W - 34;
-    const top = this.touch ? 112 : 78;
-    const bottom = H - (this.touch ? 40 : 104);
+    const left = 34 + this.inset.left;
+    const right = W - 34 - this.inset.right;
+    const top = (this.touch ? 112 : 78) + this.inset.top;
+    const bottom = H - (this.touch ? 40 : 104) - this.inset.bottom;
     const pulse = 0.65 + Math.sin(time / 140) * 0.35;
     let li = 0;
     for (const pk of marks) {
@@ -882,7 +936,7 @@ export class HudScene extends Phaser.Scene {
     let fy = this.feedY0;
     for (const f of this.feed) {
       const age = time - f.born;
-      f.container.setPosition(14, fy).setAlpha(age > 5000 ? Math.max(0, 1 - (age - 5000) / 800) : 1);
+      f.container.setPosition(14 + this.inset.left, fy).setAlpha(age > 5000 ? Math.max(0, 1 - (age - 5000) / 800) : 1);
       fy += 22;
     }
     this.feed = this.feed.filter((f) => {

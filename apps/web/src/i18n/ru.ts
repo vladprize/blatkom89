@@ -930,6 +930,28 @@ export const RU: Record<string, string> = {
   'How $BLAT accumulate:': 'Как копятся $BLAT:',
   'every new level — once ({first} at the start, up to {cap} a level)': 'за каждый новый уровень — один раз ({first} на старте, до {cap} за уровень)',
   'every friend who comes through your link and plays a whole online match — from {n}': 'за каждого друга, который пришёл по твоей ссылке и доиграл онлайн-матч, — от {n}',
+  // ── V2.0: Telegram
+  'Signed in — from now on Telegram opens this account': 'Вход выполнен — теперь Telegram открывает этот аккаунт',
+  'Telegram is linked — your progress from the website is here': 'Telegram привязан — прогресс с сайта теперь здесь',
+  'Signed in. This Telegram has progress of its own, so Telegram keeps opening that account': 'Вход выполнен. У этого Telegram свой прогресс, поэтому Telegram и дальше открывает тот аккаунт',
+  'This Telegram has progress of its own — it stays a separate account, nothing was linked': 'У этого Telegram свой прогресс — он остаётся отдельным аккаунтом, привязки не было',
+  'The linking link has run out — ask for a new one on the website: Profile → Link Telegram': 'Ссылка для привязки истекла — возьми новую на сайте: Профиль → Привязать Telegram',
+  'The linking link was already used or is wrong — ask for a new one on the website': 'Ссылка для привязки уже использована или неверна — возьми новую на сайте',
+  'Link Telegram': 'Привязать Telegram',
+  'Play in Telegram too? Link it: the game in Telegram opens this same account, with all your progress — no second profile.': 'Играешь и в Telegram? Привяжи его: игра в Telegram откроет этот же аккаунт со всем прогрессом — без второго профиля.',
+  'Waiting for Telegram…': 'Ждём Telegram…',
+  'Open the bot and press «Start», then «Link and play». The link works once, for 10 minutes.': 'Открой бота и нажми «Запустить», затем «Привязать и играть». Ссылка одноразовая и действует 10 минут.',
+  'Open Telegram': 'Открыть Telegram',
+  'The link has run out — press «Link Telegram» again.': 'Ссылка истекла — нажми «Привязать Telegram» ещё раз.',
+  'Telegram is linked — the game in Telegram opens this account': 'Telegram привязан — игра в Telegram открывает этот аккаунт',
+  'Sign in to the account your email is registered to. If this Telegram profile has no progress yet, Telegram opens that account from now on.': 'Войди в аккаунт, к которому привязана почта. Если у этого профиля в Telegram ещё нет прогресса, дальше Telegram будет открывать тот аккаунт.',
+  'Welcome to the district': 'Добро пожаловать в район',
+  'Telegram': 'Telegram',
+  'Already playing BLATKOM ’89 on the website? Bring that account here — Telegram will open it, with all its progress, instead of a new profile.': 'Уже играешь в БЛАТКОМ ’89 на сайте? Забери тот аккаунт сюда — Telegram будет открывать его со всем прогрессом вместо нового профиля.',
+  'I have an account with an email': 'У меня есть аккаунт с почтой',
+  'Played as a guest on the website? Open the game there: Profile → «Link Telegram».': 'Играл на сайте гостем? Открой игру там: Профиль → «Привязать Telegram».',
+  'I’m new — start here': 'Я новенький — начать здесь',
+  'You were away too long — the match went on without you.': 'Тебя не было слишком долго — матч продолжился без тебя.',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)
@@ -1008,6 +1030,8 @@ export const RU: Record<string, string> = {
   'Invalid gang id': 'Неверный номер ОПГ',
   'A gang name may contain Latin letters (A–Z), digits, spaces and _ . - # ! &': 'Название ОПГ — латинские буквы (A–Z), цифры, пробелы и _ . - # ! &',
   'A gang name needs a letter or a digit': 'В названии ОПГ нужна буква или цифра',
+  'Linking Telegram isn’t set up on this server yet': 'Привязка Telegram на этом сервере ещё не настроена',
+  'Telegram is already linked to this account': 'Telegram уже привязан к этому аккаунту',
 };
 
 /** Russian plural forms [one, few, many] keyed by the English singular passed to plural() / count(). */

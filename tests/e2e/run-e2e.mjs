@@ -30,6 +30,14 @@
 //      BLAT DROP; with E2E_ADMIN_USER the dashboard's $BLAT page and snapshots (tests/e2e/blat.mjs)
 //  16. «Блатной кон» (V2.0): the menu button, the Kon screen, a 1×1 room through an invitation, the
 //      leaver loses and the Kon rating moves, the history and the table, the search (tests/e2e/kon.mjs)
+//  17. sources (V2.0 part F, with E2E_ADMIN_USER): a partner link made on the dashboard's «Источники»,
+//      a phone through it with utm_*, the account and the first visit keep them, the counts, the CSV
+//      (tests/e2e/growth.mjs)
+//  18. the Telegram Mini App (V2.0 part E, on the sign-in server; Telegram's WebApp object and the bot's
+//      webhook calls played by the test): «Link Telegram» on the website → the bot's link → the game in
+//      Telegram opens the same account; an email sign-in inside Telegram brings that account; a Kon 1×1
+//      between two Telegram phones — fullscreen, the landscape lock, the safe areas in the HUD, minimised
+//      with a dead socket and back (tests/e2e/telegram.mjs)
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
 // E2E_PROD=1 runs the prebuilt deploy/ bundle exactly as a host would (NODE_ENV=production, guest login,
 // RENDER_EXTERNAL_URL, TRUST_PROXY) instead of the development server.
@@ -124,6 +132,7 @@ let fillServer = null;
 const signPort = port + 2;
 const signBase = `http://localhost:${signPort}`;
 const E2E_TG_BOT_TOKEN = '7000000002:AAE2E-fake-bot-token-for-the-signin-test';
+const E2E_TG_BOT_USERNAME = 'blatkom_e2e_bot';
 let signServer = null;
 if (prod) console.log('[e2e] production mode: deploy/server.js with guest login');
 let failed = false;
@@ -146,6 +155,8 @@ try {
     REDDIT_CLIENT_SECRET: 'e2e-reddit-secret',
     TELEGRAM_BOT_TOKEN: E2E_TG_BOT_TOKEN,
     TELEGRAM_WEB_LOGIN: 'true',
+    // V2.0 part E: the bot's username makes «Link Telegram» possible (the bot itself is played by the test)
+    TELEGRAM_BOT_USERNAME: E2E_TG_BOT_USERNAME,
   });
   console.log('\n[e2e] offline practice');
   const offline = spawnSync(process.execPath, ['tests/e2e/play.mjs', `${base}/?play=offline&map=factory&bots=3`, join(out, 'offline')], { stdio: 'inherit' });
@@ -181,6 +192,11 @@ try {
   console.log('\n[e2e] «Блатной кон»: a 1×1 room by invitation, the Kon rating, the history, the search (three browsers)');
   const kon = spawnSync(process.execPath, ['tests/e2e/kon.mjs', base, join(out, 'kon')], { stdio: 'inherit' });
   if (kon.status !== 0) failed = true;
+  if (process.env.E2E_ADMIN_USER) {
+    console.log('\n[e2e] sources: a partner link made on the dashboard, a phone through it with a campaign, the counts and the CSV');
+    const growth = spawnSync(process.execPath, ['tests/e2e/growth.mjs', base, join(out, 'growth'), process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? ''], { stdio: 'inherit' });
+    if (growth.status !== 0) failed = true;
+  }
   console.log('\n[e2e] the three new maps: the picker in Russian, the cemetery, the square and the pioneer camp in practice');
   const maps = spawnSync(process.execPath, ['tests/e2e/maps.mjs', base, join(out, 'maps')], { stdio: 'inherit' });
   if (maps.status !== 0) failed = true;
@@ -197,6 +213,9 @@ try {
   await ready(signBase);
   const signin = spawnSync(process.execPath, ['tests/e2e/signin.mjs', signBase, join(out, 'signin'), base], { stdio: 'inherit', env: { ...process.env, E2E_TG_BOT_TOKEN } });
   if (signin.status !== 0) failed = true;
+  console.log('\n[e2e] the Telegram Mini App: Telegram linked to an existing account, fullscreen, safe areas, minimised and back (the third server; Telegram played by the test)');
+  const telegram = spawnSync(process.execPath, ['tests/e2e/telegram.mjs', signBase, join(out, 'telegram'), E2E_TG_BOT_USERNAME], { stdio: 'inherit', env: { ...process.env, E2E_TG_BOT_TOKEN } });
+  if (telegram.status !== 0) failed = true;
   console.log('\n[e2e] filled lineups (second server, MATCH_FILL_BOTS=true): one person always plays');
   await ready(fillBase);
   const fill = spawnSync(process.execPath, ['tests/e2e/fill.mjs', fillBase, join(out, 'fill')], { stdio: 'inherit' });

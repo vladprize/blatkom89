@@ -1,8 +1,18 @@
 /**
  * Thin wrapper over the official Telegram Mini Apps SDK (telegram-web-app.js). Every call is
  * guarded so the same build runs in a regular browser.
+ *
+ * V2.0 part E: in a match on a phone the Mini App asks for fullscreen and, once the phone is held
+ * sideways, locks the landscape orientation (Bot API 8.0; older clients and computers keep the expanded
+ * window — the game works in both orientations, so nothing depends on it); the safe areas (the notch,
+ * Telegram's own buttons over a fullscreen app) reach the page's CSS and the game's HUD; minimising and
+ * coming back (`deactivated` / `activated`) reach app/lifecycle.ts.
  */
 import type { Platform } from '@blatkom/shared';
+import { TG_ACTIVATED, TG_DEACTIVATED } from '../app/lifecycle.js';
+
+/** Sent after the safe areas changed (the HUD moves its edges). */
+export const INSETS_EVENT = 'blatkom:insets';
 
 export function tg(): TelegramWebApp | null {
   const w = window.Telegram?.WebApp;
@@ -16,8 +26,9 @@ export function inTelegram(): boolean {
 export function telegramStartParam(): string | null {
   const t = tg();
   const p = t?.initDataUnsafe?.start_param;
-  // V2.0: `ref_<code>` is a referral (the server reads it from the signed launch data), not a room
-  if (p && /^[A-Za-z0-9_-]{1,64}$/.test(p) && !p.startsWith('ref_')) return p;
+  // V2.0: `ref_<code>` is a referral, `p_<code>` a partner's link, `link_<code>` attaches Telegram (the
+  // server reads them from the signed launch data) — not rooms
+  if (p && /^[A-Za-z0-9_-]{1,64}$/.test(p) && !/^(ref|p|link)_/.test(p)) return p;
   return null;
 }
 
@@ -59,6 +70,27 @@ function applyInsets() {
   root.setProperty('--tg-bottom', `${(s?.bottom ?? 0) + (c?.bottom ?? 0)}px`);
   root.setProperty('--tg-left', `${(s?.left ?? 0) + (c?.left ?? 0)}px`);
   root.setProperty('--tg-right', `${(s?.right ?? 0) + (c?.right ?? 0)}px`);
+  window.dispatchEvent(new Event(INSETS_EVENT));
+}
+
+/** Telegram on a phone: fullscreen and the orientation lock are for these (a computer's window stays as the player set it). */
+function onPhone(t: TelegramWebApp): boolean {
+  const p = (t.platform || '').toLowerCase();
+  return p === 'ios' || p === 'android' || p === 'android_x';
+}
+
+/** In a match (between enterGameMode and leaveGameMode). */
+let gameMode = false;
+
+/** Locks the orientation only while the phone is held sideways: a lock taken upright would keep the game upright. */
+function lockIfLandscape() {
+  const t = tg();
+  if (!t || !gameMode || !onPhone(t) || !t.isVersionAtLeast('8.0')) return;
+  try {
+    if (window.innerWidth > window.innerHeight && !t.isOrientationLocked) t.lockOrientation?.();
+  } catch {
+    /* ignore */
+  }
 }
 
 export function initTelegram(onBack: () => void): void {
@@ -76,33 +108,43 @@ export function initTelegram(onBack: () => void): void {
     t.onEvent('safeAreaChanged', applyInsets);
     t.onEvent('contentSafeAreaChanged', applyInsets);
     t.onEvent('fullscreenChanged', applyInsets);
-    t.onEvent('viewportChanged', () => window.dispatchEvent(new Event('resize')));
+    t.onEvent('viewportChanged', () => {
+      window.dispatchEvent(new Event('resize'));
+      lockIfLandscape();
+    });
+    // a client that can't go fullscreen keeps the expanded window — the game fits it in either orientation
+    t.onEvent('fullscreenFailed', () => applyInsets());
+    // minimised and back (Bot API 8.0): app/lifecycle.ts pauses and resumes the game
+    t.onEvent('deactivated', () => window.dispatchEvent(new Event(TG_DEACTIVATED)));
+    t.onEvent('activated', () => window.dispatchEvent(new Event(TG_ACTIVATED)));
+    window.addEventListener('resize', lockIfLandscape);
   } catch {
     /* older clients */
   }
 }
 
-/** Requests fullscreen + orientation lock where supported (Bot API 8.0+). */
+/** A match starts: fullscreen on a phone (Bot API 8.0+), the landscape lock once sideways, the closing confirmation. */
 export function enterGameMode(): void {
   const t = tg();
   if (!t) return;
+  gameMode = true;
   try {
-    if (t.isVersionAtLeast('8.0')) {
-      if (!t.isFullscreen) t.requestFullscreen?.();
-      t.lockOrientation?.();
-    }
+    if (onPhone(t) && t.isVersionAtLeast('8.0') && !t.isFullscreen) t.requestFullscreen?.();
+    lockIfLandscape();
     t.enableClosingConfirmation();
   } catch {
     /* ignore */
   }
 }
 
+/** The match is over: the orientation is free again (fullscreen stays — the menus fit it). */
 export function leaveGameMode(): void {
   const t = tg();
   if (!t) return;
+  gameMode = false;
   try {
     t.disableClosingConfirmation();
-    if (t.isVersionAtLeast('8.0')) t.unlockOrientation?.();
+    if (t.isVersionAtLeast('8.0') && t.isOrientationLocked !== false) t.unlockOrientation?.();
   } catch {
     /* ignore */
   }

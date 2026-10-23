@@ -50,6 +50,8 @@ export async function renderOverview(root: HTMLElement): Promise<void> {
       { class: 'tiles' },
       tile('Всего игроков', num(o.totalPlayers)),
       tile('Новые игроки', num(o.newPlayers)),
+      tile('Уникальные игроки', o.uniquePlayers === undefined ? 'нет данных' : num(o.uniquePlayers), 'сыграли онлайн-матч в периоде'),
+      tile('Начали первый матч', o.firstMatchPlayers === undefined ? 'нет данных' : num(o.firstMatchPlayers), 'первый онлайн-матч — в периоде'),
       tile('DAU', num(o.dau), `за ${o.range.lastDay}`),
       tile('WAU', num(o.wau), '7 дней до конца периода'),
       tile('MAU', num(o.mau), '30 дней до конца периода'),
@@ -61,6 +63,7 @@ export async function renderOverview(root: HTMLElement): Promise<void> {
       tile('Конверсия в 1-й матч', pct(o.firstMatchConversion), 'новые игроки периода'),
       tile('Удержание D1', pct(o.d1Retention), `когорта: ${num(o.d1CohortSize)}`),
       tile('Удержание D7', pct(o.d7Retention), `когорта: ${num(o.d7CohortSize)}`),
+      tile('$BLAT начислено', o.blatIssued === undefined ? 'нет данных' : num(o.blatIssued), 'за уровни и приглашения'),
       tile('Тех. ошибки', num(o.errorCount)),
     ),
   );

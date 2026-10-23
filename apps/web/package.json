@@ -1,6 +1,6 @@
 {
   "name": "@blatkom/web",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "private": true,
   "type": "module",
   "description": "Telegram Mini App / browser client (Phaser 3) and admin dashboard",

@@ -22,7 +22,8 @@ nickname and play as guests (`GUEST_AUTH_ENABLED=true`); Telegram is not needed.
    and mail keys (Resend) — see the table in §2 and [ECONOMY.md](ECONOMY.md). Empty values keep the
    feature off; nothing is simulated.
 5. Optional (v0.3): the Telegram bot — `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` in the same tab;
-   `/start` then answers with the game's link ([TELEGRAM.md](TELEGRAM.md) §0). `KEEP_AWAKE=true` keeps
+   `/start` then answers with the game's link ([TELEGRAM.md](TELEGRAM.md) §0), and (V2.0) players can link
+   Telegram to their website account from Profile → «Link Telegram» (§4 there). `KEEP_AWAKE=true` keeps
    the free service from sleeping (instant answers, no first-visit minute).
 6. Optional (v0.3): sign-in with Google, Telegram, Discord, Facebook and Reddit — each provider's keys in
    the same tab, step by step in [SIGN_IN.md](SIGN_IN.md). A provider without keys is simply not shown.
@@ -57,7 +58,7 @@ Copy `.env.example` to `.env` and set at least:
 | `DOMAIN` | e.g. `blatkom.example.com` (compose builds `PUBLIC_URL=https://$DOMAIN`) |
 | `POSTGRES_PASSWORD` | random, long; used by the `db` service and the app's `DATABASE_URL` |
 | `SESSION_SECRET` | ≥ 32 random chars: `openssl rand -base64 48` (rotating it logs everyone out) |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_MINIAPP_SHORT_NAME` | from BotFather; with a token and an `https` `PUBLIC_URL` the server registers the bot's webhook itself (TELEGRAM.md §0) |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_MINIAPP_SHORT_NAME` | from BotFather; with a token and an `https` `PUBLIC_URL` the server registers the bot's webhook itself (TELEGRAM.md §0); the token **and** the username switch on «Link Telegram» on the website (V2.0 part E, TELEGRAM.md §4) |
 | `BOT_WARM_MINUTES` | after the bot hands out a link the server keeps itself awake this long (default 20, `0` = off) |
 | `KEEP_AWAKE` | `true`: the server asks its own address every 5 minutes, so a free host (Render) never puts it to sleep |
 | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD` | optional first admin, created on start only when no admin exists — remove after first start (or use the CLI below) |
