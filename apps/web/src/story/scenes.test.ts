@@ -38,7 +38,7 @@ test('every scene has its picture: a 1600×900 JPEG of a sensible weight, a 640�
   }
 });
 
-test('maps point at real scenes; the story’s places with a picture get it', () => {
+test('every map has its picture, and so every mission’s comic', () => {
   for (const [map, sc] of Object.entries(MAP_SCENE)) {
     assert.ok((MAP_ORDER as readonly string[]).includes(map), map);
     assert.ok(SCENE_IDS.includes(sc!), `${map} → ${sc}`);
@@ -46,19 +46,22 @@ test('maps point at real scenes; the story’s places with a picture get it', ()
   assert.equal(sceneForMap('cemetery'), 'cemetery');
   assert.equal(sceneForMap('gastronom'), 'univermag');
   assert.equal(sceneForMap(undefined), null);
-  const withScene = STORY_MISSIONS.filter((m) => sceneForMap(m.map)).map((m) => m.id);
-  for (const id of ['b1', 'b2', 'b6', 'b7', 'b9']) assert.ok(withScene.includes(id), `${id} has its place’s picture`);
+  for (const map of MAP_ORDER) assert.ok(sceneForMap(map), `${map} has its picture (its loading screen)`);
+  for (const m of STORY_MISSIONS) assert.ok(sceneForMap(m.map), `${m.id}: its comic over its place`);
 });
 
-test('a page’s picture: its own, else the comic’s — never in 2089 unless it names one', () => {
+test('a page’s picture: its own, else the BLATKOM hall in 2089, else the comic’s place', () => {
   const b = (x: Partial<Beat>): Beat => ({ who: 'caption', say: ['a', 'а'], ...x });
   assert.equal(beatScene(b({}), 'dk'), 'dk');
   assert.equal(beatScene(b({ fx: 'vhs' }), 'dk'), 'dk');
-  assert.equal(beatScene(b({ fx: 'neon' }), 'dk'), null);
+  assert.equal(beatScene(b({ fx: 'neon' }), 'dk'), 'hall2089');
+  assert.equal(beatScene(b({ fx: 'neon' }), null), 'hall2089');
   assert.equal(beatScene(b({ fx: 'neon', scene: 'square' }), 'dk'), 'square');
   assert.equal(beatScene(b({ scene: null }), 'dk'), null);
   assert.equal(beatScene(b({}), null), null);
   // the words name only scenes that exist
   const all: Beat[] = [...PROLOGUE, ...Object.values(CAMPAIGN_OPENING).flat(), ...Object.values(MISSION_SCRIPTS).flatMap((s) => [...s.intro, ...s.outro])];
   for (const x of all) if (x.scene) assert.ok(SCENE_IDS.includes(x.scene), x.scene);
+  // the prologue: 2089's hall, the last page the tape rolling over the 1989 yard
+  assert.deepEqual([...new Set(PROLOGUE.map((x) => beatScene(x, null)))], ['hall2089', 'yard']);
 });

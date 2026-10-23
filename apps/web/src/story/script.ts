@@ -92,7 +92,7 @@ export const PROLOGUE: Beat[] = [
   { who: 'caption', fx: 'neon', say: ['The developer Arkadia Development wants a parking tower where the yard is. Nine hundred spaces.', 'Застройщик «Аркадия Девелопмент» хочет поставить на месте двора паркинг-башню. На девятьсот мест.'] },
   { who: 'volkov', fx: 'neon', say: ['Someone in BLATKOM wins every single dispute. That doesn’t happen. Find, file, report.', 'Кто-то в БЛАТКОМе выигрывает все споры подряд. Так не бывает. Найти, оформить, доложить.'] },
   { who: 'caption', fx: 'neon', say: ['Getting knocked out in there hurts no one: you just wake up in 2089 with a headache. And lose the case.', 'Если тебя там «устранили» — ничего страшного: просыпаешься в 2089-м с головной болью. И проигрываешь дело.'] },
-  { who: 'caption', fx: 'vhs', say: ['Two cases. One district. Tape’s rolling.', 'Два дела. Один район. Плёнка пошла.'] },
+  { who: 'caption', fx: 'vhs', scene: 'yard', say: ['Two cases. One district. Tape’s rolling.', 'Два дела. Один район. Плёнка пошла.'] },
 ];
 
 export const CAMPAIGN_OPENING: Record<StoryCampaign, Beat[]> = {

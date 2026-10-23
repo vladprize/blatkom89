@@ -1,9 +1,9 @@
 /**
  * The comic before and after a story mission (and the prologue), one page at a time.
  *
- * Where the place has its big picture (story/scenes.ts) the page is that scene on the whole screen —
- * the camera slowly pushing in — with the speaker's portrait and speech bubble along the bottom, or the
- * narrator's caption; a new place fades in. Without a picture (2089, places still being drawn): the
+ * Where the place has its big picture (story/scenes.ts — every map, and 2089's hall) the page is that
+ * scene on the whole screen — the camera slowly pushing in — with the speaker's portrait and speech
+ * bubble along the bottom, or the narrator's caption; a new place fades in. Without a picture: the
  * speaker's art as a card beside the bubble over the place's map, alternating sides when the speaker
  * changes. 2089 in neon, 1989 on tape. A tap, a click, Space, Enter or → turns the page; «Skip» ends it.
  */
@@ -21,7 +21,7 @@ export interface ComicOptions {
   title?: string;
   /** The mission's map, faint behind pages without a scene (where it all happens). */
   map?: MapId;
-  /** The place's big picture behind the pages (a page in 2089 has none unless it names one). */
+  /** The place's big picture behind the pages (a page in 2089 shows the BLATKOM hall unless it names one). */
   scene?: SceneId | null;
   onDone: () => void;
 }

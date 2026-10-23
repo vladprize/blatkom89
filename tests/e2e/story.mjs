@@ -1,8 +1,9 @@
 // The story mode end to end (v0.2.13, part 4a): A (English, desktop) and B (Russian, phone).
-// A: the menu's «Story» button; the first visit plays the prologue by itself (2089 in neon), «Skip»
+// A: the menu's «Story» button; the first visit plays the prologue by itself (2089 in neon over the
+// BLATKOM hall), «Skip»
 // ends it; the hub — two campaigns of five missions in chapter 1, chapters 3–4 on the way, the first
 // mission open and the rest locked, the card index empty; mission 1 of «My Yard»: the campaign's
-// opening and the mission's comic, then the mission — the objective line counts the loafers, the
+// opening and the mission's comic over the yard's big picture, then the mission — the objective line counts the loafers, the
 // characters' lines pop up; everybody down (after the server's shortest time) — the comic after it, the
 // rewards (+60 talons, +40 XP) also in the database, the next mission offered; the hub: mission 1 done
 // with its best time, mission 2 open, Karlych in the card index. Then mission 1 again: three hearts on the
@@ -85,8 +86,8 @@ try {
   await A.page.screenshot({ path: `${outDir}/story_menu_desktop.png` });
   await A.page.getByTestId('menu-story').click();
   await A.page.getByTestId('comic').waitFor({ timeout: 20000 });
-  const neon = await A.page.evaluate(() => document.querySelector('[data-testid=comic]')?.classList.contains('comic--neon'));
-  check(neon && /2089/.test(await text(A.page, '[data-testid=comic-panel]')), `the first visit plays the prologue by itself, 2089 in neon («${(await text(A.page, '[data-testid=comic-panel]')).slice(0, 50)}…»)`);
+  const neon = await A.page.evaluate(() => document.querySelector('[data-testid=comic]')?.classList.contains('comic--neon') && document.querySelector('[data-testid=comic-scene]')?.getAttribute('data-scene') === 'hall2089');
+  check(neon && /2089/.test(await text(A.page, '[data-testid=comic-panel]')), `the first visit plays the prologue by itself, 2089 in neon over the BLATKOM hall («${(await text(A.page, '[data-testid=comic-panel]')).slice(0, 50)}…»)`);
   await A.page.screenshot({ path: `${outDir}/story_prologue.png` });
   await A.page.keyboard.press('Enter');
   await A.page.keyboard.press('Enter');
@@ -113,11 +114,11 @@ try {
   await A.page.getByTestId('story-play-a1').click();
   await A.page.getByTestId('comic').waitFor({ timeout: 15000 });
   const firstPanel = await text(A.page, '[data-testid=comic-panel]');
-  const yardCards = await A.page.evaluate(() => !document.querySelector('[data-testid=comic]')?.classList.contains('comic--scene') && !document.querySelector('[data-testid=comic-scene]'));
+  const yardScene = await A.page.evaluate(() => document.querySelector('[data-testid=comic]')?.classList.contains('comic--scene') && document.querySelector('[data-testid=comic-scene]')?.getAttribute('data-scene'));
   await A.page.screenshot({ path: `${outDir}/story_comic_a1.png` });
   const pages = await readComic(A.page);
   check(pages === 7 && /3rd Microdistrict/.test(firstPanel), `the campaign's opening and the mission's comic: ${pages} pages, the first «${firstPanel.slice(0, 40)}…»`);
-  check(yardCards, 'the yard has no big picture yet: its comic keeps the card layout');
+  check(yardScene === 'yard', `«My Yard» opens over the yard's big picture (${yardScene})`);
   await A.page.getByTestId('story-goal').waitFor({ state: 'visible', timeout: 30000 });
   check(/Free the bench: loafers 3/.test(await text(A.page, '[data-testid=story-goal]')), `the objective line: «${await text(A.page, '[data-testid=story-goal]')}»`);
   await A.page.getByTestId('story-bark').first().waitFor({ timeout: 15000 });

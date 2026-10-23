@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The big pictures of places (v0.2.14): the owner's illustrations in references/4x-scene-*.png become
+"""The big pictures of places (v0.2.14): the owner's illustrations in references/40…50-scene-*.png become
 apps/web/public/assets/scenes/<id>.jpg (1600×900, behind the story's comic pages and on a map's loading
 screen) and scenes/thumbs/<id>.jpg (640×360, a mission's row in the story hub). A 16:9 centre crop.
 
@@ -20,6 +20,11 @@ SCENES = {
     '43-scene-dk.png': 'dk',
     '44-scene-stroyka.png': 'stroyka',
     '45-scene-bolnica.png': 'hospital',
+    '46-scene-dvor.png': 'yard',
+    '47-scene-garazhi.png': 'garages',
+    '48-scene-prohodnaya.png': 'factory',
+    '49-scene-pionerlager.png': 'camp',
+    '50-scene-2089.png': 'hall2089',
 }
 
 

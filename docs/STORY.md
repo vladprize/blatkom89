@@ -57,18 +57,23 @@ loading screens, big beautiful scenes». Where a mission's place has its big pic
 the owner's art, `assets/scenes/<id>.jpg`, 1600×900) a comic page is that scene on the whole screen —
 the camera slowly pushing in towards the picture's focus (on an upright phone: travelling slowly across
 it) — with the speaker's portrait and speech bubble along the bottom over a dark band, or the narrator's
-tape caption; the next place fades in over it. The pages of 2089 keep their neon room. A place without its
-picture keeps the card layout (the speaker's art beside the bubble over the map) until it gets one.
+tape caption; the next place fades in over it. The pages of 2089 are set in the BLATKOM hall, in neon.
+Every map has its picture now; a place added later without one keeps the card layout (the speaker's art
+beside the bubble over the map) until it gets one.
 
 | Picture | Map | Missions |
 |---|---|---|
+| `yard` | Soviet Courtyard | a1 «Подъём», a4 «Кассета №89», a5 «Документы», b5 «Комендант»; the prologue's last page |
+| `garages` | Garage Cooperative | a3 «Лампочки», a6 «Видак», a10 «Ночь в кооперативе», b4 «Обыск» |
+| `factory` | Factory Checkpoint | a7 «Теплотрасса», b8 «Груз» |
+| `camp` | Pioneer Camp | a8 «Посылка», b10 «Облава» |
 | `univermag` (a department store) | Gastronom | a2 «Очередь», a9 «Сонька», b1 «Первый день» |
 | `dk` | House of Culture | b2 «Лиса», b3 «Дискотека» |
 | `square` | Red Square | b6 «Толкучка» |
 | `hospital` | City Hospital No. 3 | b7 «Кооператив» |
 | `cemetery` | Old Cemetery | b9 «Кладбище» |
 | `stroyka` | Construction Site | the finale (to come) |
-| — (asked of the owner) | the yard, the garages, the factory checkpoint, the pioneer camp, 2089 | a1, a3–a8, a10, b4, b5, b8, b10, the prologue |
+| `hall2089` | — | every page in 2089: the prologue, the capsules after a chapter (capsule 02 is Pyotr Petrovich's) |
 
 The same pictures: a mission's row in the hub is a little banner of its place (`scenes/thumbs/<id>.jpg`,
 640×360), a mission's end (done or failed) sits over the place's picture, and a map's **loading screen**
@@ -118,8 +123,8 @@ with a 7-second enemy return. A bot hero is a weak player — the real numbers c
 
 ## 6. Tests
 
-Unit: `story/scenes.test.ts` (every picture 1600×900 with its 640×360 thumbnail, maps point at real
-scenes, a page's picture: its own, else the comic's, never in 2089), `story/StorySession.test.ts` (sides, kit, clear and its waves, three lives and half damage, team
+Unit: `story/scenes.test.ts` (every picture 1600×900 with its 640×360 thumbnail, every map and so every
+mission has one, a page's picture: its own, else the BLATKOM hall in 2089, else the comic's place), `story/StorySession.test.ts` (sides, kit, clear and its waves, three lives and half damage, team
 limits, the clock, every mission starts), `story/script.test.ts` (every mission has its words in both
 languages, placeholders by objective, bubbles fit, no prison nicknames), `story/backend.test.ts` (the
 offline backend), `app/settings.test.ts` (refused storage), shared `story.test.ts` (open missions,
@@ -129,4 +134,4 @@ server: the prologue, mission 1 with its comics, the server's rewards, three liv
 screen, «Протокол» on a phone, its comic over the department store's picture on a desktop and on a phone)
 and `story-offline.mjs` (the single file from disk: chapter 2 with the square's picture inside the file, the
 hub's banners, the end over the picture, and a browser that refuses storage); `maps.mjs` checks the
-loading screens (the cemetery and the square: shown, named, gone once the match is on; the camp: none).
+loading screens (the camp, the cemetery and the square: shown, named, gone once the match is on).

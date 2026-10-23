@@ -1465,6 +1465,7 @@ button.chatline__name:hover { text-decoration: underline; }
   .comic--scene .comic__art { width: 74px; max-height: none; }
   .comic--scene .comic__bubble { font-size: 17px; padding: 11px 14px; }
   .comic--scene .comic__bubble::after, .comic--scene .comic__panel--left .comic__bubble::after, .comic--scene .comic__panel--right .comic__bubble::after { top: auto; bottom: 16px; left: -23px; right: auto; border-color: transparent; border-right-color: #f4ead2; transform: none; }
+  .comic--neon.comic--scene .comic__bubble::after { border-right-color: #ff3b2f; }
   .comic--scene .comic__shade { background: linear-gradient(to top, rgba(8, 6, 5, .95) 0%, rgba(8, 6, 5, .75) 24%, rgba(8, 6, 5, .2) 46%, transparent 60%), linear-gradient(to bottom, rgba(8, 6, 5, .45) 0%, transparent 12%); }
 }
 /* phones on their side: the picture as tall as the room allows */

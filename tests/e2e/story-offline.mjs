@@ -174,7 +174,7 @@ const failure = async (page, name) => {
     const ch2 = await page.evaluate(() => ({ tab: document.querySelector('[data-testid=story-campaign-uchastkovy] .scamp__chapters [aria-pressed=true] b')?.textContent, b6: document.querySelector('[data-testid=story-mission-b6]')?.getAttribute('data-state') }));
     check(ch2.tab === '2' && ch2.b6 === 'open', `«The Report» opens on chapter 2 with «Толкучка» open (${JSON.stringify(ch2)})`);
     const banners = await page.evaluate(() => ['b6', 'b7', 'b8', 'b9'].map((id) => document.querySelector(`[data-testid=story-mission-${id}]`)?.getAttribute('data-scene') ?? '-').join(','));
-    check(banners === 'square,hospital,-,cemetery', `the hub: a mission whose place has its picture is a little banner of it (${banners})`);
+    check(banners === 'square,hospital,factory,cemetery', `the hub: every mission's row is a little banner of its place (${banners})`);
     await page.getByTestId('story-play-b6').click();
     // the flea market by the square: its comic over the square's big picture, from inside the file
     await page.getByTestId('comic-scene').waitFor({ timeout: 15000 });
