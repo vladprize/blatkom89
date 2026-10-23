@@ -17,6 +17,8 @@ import { missionHeading, renderCards, renderStory, renderStoryFail, renderStoryW
 import { StorySession } from './StorySession.js';
 import { StoryOverlay } from './overlay.js';
 import { playComic } from './comic.js';
+import { music } from '../game/audio/Music.js';
+import { sceneForMap, sceneUrl } from './scenes.js';
 import { CAMPAIGN_OPENING, MISSION_SCRIPTS, PROLOGUE } from './script.js';
 
 /** The prologue was seen in this browser (it plays by itself on the first visit only). */
@@ -61,6 +63,7 @@ export class StoryController {
     if (!backend) return;
     this.closeComic?.();
     this.host.go('story', push);
+    music.setWanted(true);
     const body = h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
     const wrap = h('div', { class: 'wrap' }, this.host.topbar(t('Story')), body);
     this.host.render(h('div', { class: 'screen screen--dim' }, wrap));
@@ -129,7 +132,7 @@ export class StoryController {
         this.launch(run);
       };
       this.closeComic?.();
-      if (beats.length > 0) this.closeComic = playComic(this.host.root, beats, { title: missionHeading(m), map: m.map, onDone: go });
+      if (beats.length > 0) this.closeComic = playComic(this.host.root, beats, { title: missionHeading(m), map: m.map, scene: sceneForMap(m.map), onDone: go });
       else go();
     } catch (e) {
       toast(apiErrorText(e));
@@ -163,17 +166,19 @@ export class StoryController {
     const stats = s.heroStats();
     this.host.endSession(true);
     this.host.go('storyEnd', false);
+    // the end of a mission is a menu again: the soundtrack comes back (quietly while the comic after it plays)
+    music.setWanted(true);
     if (out.result === 'fail') {
       this.running = null;
-      this.host.render(h('div', { class: 'screen screen--dim center' }, renderStoryFail({ mission: m, reason: out.reason ?? 'lost', onRetry: () => void this.play(m, { again: true }), onHub: () => this.show(false) })));
+      this.host.render(endScreen(m, renderStoryFail({ mission: m, reason: out.reason ?? 'lost', onRetry: () => void this.play(m, { again: true }), onHub: () => this.show(false) })));
       return;
     }
     // the win: the result goes to the server while the comic after the mission is read
     let reward: StoryReward | null = null;
     let error: string | null = null;
     let comicDone = false;
-    const holder = h('div', { class: 'screen screen--dim center' });
-    this.host.render(holder);
+    const holder = h('div', { class: 'screen__body' });
+    this.host.render(endScreen(m, holder));
     const draw = () => {
       if (!comicDone || this.host.screen() !== 'storyEnd') return;
       const ids = new Set((reward?.done ?? this.done).map((d) => d.id));
@@ -223,7 +228,7 @@ export class StoryController {
       comicDone = true;
       draw();
     };
-    if (outro.length > 0) this.closeComic = playComic(this.host.root, outro, { title: missionHeading(m), map: m.map, onDone: after });
+    if (outro.length > 0) this.closeComic = playComic(this.host.root, outro, { title: missionHeading(m), map: m.map, scene: sceneForMap(m.map), onDone: after });
     else after();
   }
 
@@ -232,4 +237,10 @@ export class StoryController {
     this.running = null;
     this.show(false);
   }
+}
+
+/** The end of a mission, over its place's big picture when the place has one. */
+function endScreen(m: StoryMission, body: HTMLElement): HTMLElement {
+  const sc = sceneForMap(m.map);
+  return h('div', { class: `screen screen--dim center${sc ? ' screen--scene' : ''}` }, sc ? h('img', { class: 'screen__scene', 'data-testid': 'story-end-scene', src: sceneUrl(sc), alt: '', draggable: 'false' }) : null, body);
 }

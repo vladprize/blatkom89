@@ -1,0 +1,8 @@
+{
+  "name": "blatkom89",
+  "productName": "BLATKOM 89",
+  "version": "0.0.0",
+  "description": "БЛАТКОМ ’89 — offline: the story and practice against bots",
+  "main": "main.js",
+  "private": true
+}

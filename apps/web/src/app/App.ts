@@ -57,6 +57,7 @@ import { localBackend, onlineBackend } from '../story/backend.js';
 import type { StoryBackend } from '../story/backend.js';
 import type { StoryReward } from '@blatkom/shared';
 import { StorySession } from '../story/StorySession.js';
+import { showLoadScreen } from '../ui/loadscreen.js';
 
 /** Room capacity shown in the menu. */
 const MAX_ROOM_PLAYERS = DEFAULT_MATCH_CONFIG.maxPlayers;
@@ -157,6 +158,8 @@ export class App {
   private history: Screen[] = [];
   private character: CharacterId;
   private session: GameSession | null = null;
+  /** The map's loading screen over the countdown (ui/loadscreen.ts). */
+  private closeLoad: (() => void) | null = null;
   private online: OnlineClient | null = null;
   private pauseEl: HTMLElement | null = null;
   private lastPractice: { mapId: MapId; bots: number; difficulty: BotDifficulty; gameMode: GameMode } = { mapId: 'factory', bots: 3, difficulty: 'normal', gameMode: 'ffa' };
@@ -1324,10 +1327,14 @@ export class App {
     setTimeout(() => this.root.querySelector('.rotate-hint')?.remove(), 4000);
     enterGameMode();
     this.host.startGame(session);
+    // a story mission has just shown its place in the comic
+    if (!(session instanceof StorySession)) this.closeLoad = showLoadScreen(this.root, session);
     if (session.mode === 'online') this.mountChatOverlay();
   }
 
   private endSession(showPreview = true) {
+    this.closeLoad?.();
+    this.closeLoad = null;
     if (this.pauseEl) this.togglePause();
     this.story.unmount();
     if (this.chatOverlay) {

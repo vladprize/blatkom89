@@ -1,15 +1,18 @@
 // The story mode end to end (v0.2.13, part 4a): A (English, desktop) and B (Russian, phone).
-// A: the menu's «Story» button; the first visit plays the prologue by itself (2089 in neon), «Skip»
+// A: the menu's «Story» button; the first visit plays the prologue by itself (2089 in neon over the
+// BLATKOM hall), «Skip»; the soundtrack very quietly behind every comic, off in the mission
 // ends it; the hub — two campaigns of five missions in chapter 1, chapters 3–4 on the way, the first
 // mission open and the rest locked, the card index empty; mission 1 of «My Yard»: the campaign's
-// opening and the mission's comic, then the mission — the objective line counts the loafers, the
+// opening and the mission's comic over the yard's big picture, then the mission — the objective line counts the loafers, the
 // characters' lines pop up; everybody down (after the server's shortest time) — the comic after it, the
 // rewards (+60 talons, +40 XP) also in the database, the next mission offered; the hub: mission 1 done
 // with its best time, mission 2 open, Karlych in the card index. Then mission 1 again: three hearts on the
 // objective line, the hero dropped three times (a heart each, back after each fall) — «Mission failed»
 // with the narrator's line, «Again» goes straight into the mission, the pause menu's
-// «Back to the story» leaves it, and «← Back» from the hub is the menu. B: the phone menu — «Сюжет» beside «Быстрый матч», friends, Kon and
-// practice in a row, one screen; the hub and the comic upright without sideways scroll.
+// «Back to the story» leaves it, and «← Back» from the hub is the menu; «The Report» opens its comic over
+// the department store's big picture (the speaker's portrait and bubble along the bottom). B: the phone menu — «Сюжет» beside «Быстрый матч», friends, Kon and
+// practice in a row, one screen; the hub and the comic upright without sideways scroll, and the big picture
+// behind «The Report»'s comic on the phone.
 //
 // Usage: DATABASE_URL=… node tests/e2e/story.mjs <baseUrl> <outDir>
 import { chromium } from 'playwright';
@@ -83,8 +86,8 @@ try {
   await A.page.screenshot({ path: `${outDir}/story_menu_desktop.png` });
   await A.page.getByTestId('menu-story').click();
   await A.page.getByTestId('comic').waitFor({ timeout: 20000 });
-  const neon = await A.page.evaluate(() => document.querySelector('[data-testid=comic]')?.classList.contains('comic--neon'));
-  check(neon && /2089/.test(await text(A.page, '[data-testid=comic-panel]')), `the first visit plays the prologue by itself, 2089 in neon («${(await text(A.page, '[data-testid=comic-panel]')).slice(0, 50)}…»)`);
+  const neon = await A.page.evaluate(() => document.querySelector('[data-testid=comic]')?.classList.contains('comic--neon') && document.querySelector('[data-testid=comic-scene]')?.getAttribute('data-scene') === 'hall2089');
+  check(neon && /2089/.test(await text(A.page, '[data-testid=comic-panel]')), `the first visit plays the prologue by itself, 2089 in neon over the BLATKOM hall («${(await text(A.page, '[data-testid=comic-panel]')).slice(0, 50)}…»)`);
   await A.page.screenshot({ path: `${outDir}/story_prologue.png` });
   await A.page.keyboard.press('Enter');
   await A.page.keyboard.press('Enter');
@@ -111,11 +114,17 @@ try {
   await A.page.getByTestId('story-play-a1').click();
   await A.page.getByTestId('comic').waitFor({ timeout: 15000 });
   const firstPanel = await text(A.page, '[data-testid=comic-panel]');
+  const yardScene = await A.page.evaluate(() => document.querySelector('[data-testid=comic]')?.classList.contains('comic--scene') && document.querySelector('[data-testid=comic-scene]')?.getAttribute('data-scene'));
+  const comicMusic = await A.page.evaluate(() => window.__blatkom.music.state());
   await A.page.screenshot({ path: `${outDir}/story_comic_a1.png` });
   const pages = await readComic(A.page);
   check(pages === 7 && /3rd Microdistrict/.test(firstPanel), `the campaign's opening and the mission's comic: ${pages} pages, the first «${firstPanel.slice(0, 40)}…»`);
+  check(yardScene === 'yard', `«My Yard» opens over the yard's big picture (${yardScene})`);
+  check(comicMusic.wanted && comicMusic.quiet && comicMusic.target <= 0.22, `the soundtrack very quietly behind the comic (${JSON.stringify(comicMusic)})`);
   await A.page.getByTestId('story-goal').waitFor({ state: 'visible', timeout: 30000 });
   check(/Free the bench: loafers 3/.test(await text(A.page, '[data-testid=story-goal]')), `the objective line: «${await text(A.page, '[data-testid=story-goal]')}»`);
+  const missionMusic = await A.page.evaluate(() => window.__blatkom.music.state());
+  check(!missionMusic.wanted && !missionMusic.quiet, `the soundtrack fades out with the mission (${JSON.stringify(missionMusic)})`);
   await A.page.getByTestId('story-bark').first().waitFor({ timeout: 15000 });
   check(/No unauthorised persons/.test(await text(A.page, '[data-testid=story-bark]')), `the hero says his line at the start («${await text(A.page, '[data-testid=story-bark]')}»)`);
   await A.page.screenshot({ path: `${outDir}/story_mission_a1.png` });
@@ -135,6 +144,8 @@ try {
   await A.page.getByTestId('story-rewards').waitFor({ timeout: 20000 });
   const rewards = await text(A.page, '[data-testid=story-rewards]');
   check(/\+60 talons/.test(rewards) && /\+40 XP/.test(rewards), `the rewards: ${rewards}`);
+  const endMusic = await A.page.evaluate(() => window.__blatkom.music.state());
+  check(endMusic.wanted && !endMusic.quiet, `after the comic the soundtrack is back at the menu level (${JSON.stringify(endMusic)})`);
   check(/Next: The Queue/i.test(await text(A.page, '[data-testid=story-next]')), 'the next mission is offered');
   await A.page.screenshot({ path: `${outDir}/story_win.png` });
   const [row] = await sql`SELECT best_ms, completions FROM story_progress WHERE user_id = ${me} AND mission_id = 'a1'`;
@@ -179,6 +190,33 @@ try {
   await A.page.locator('.topbar .back').click();
   await A.page.getByTestId('menu-story').waitFor({ timeout: 10000 });
   check(true, '«← Back» from the hub after the missions is the menu (not the hub again)');
+  // «The Report» opens at the department store: its comic is the place's big picture
+  await A.page.getByTestId('menu-story').click();
+  await A.page.getByTestId('story').waitFor({ timeout: 15000 });
+  await A.page.getByTestId('story-play-b1').click();
+  await A.page.getByTestId('comic-scene').waitFor({ timeout: 15000 });
+  await A.page.waitForFunction(() => (document.querySelector('[data-testid=comic-scene]')?.naturalWidth ?? 0) > 0, null, { timeout: 15000 });
+  const sceneA = await A.page.evaluate(() => {
+    const img = document.querySelector('[data-testid=comic-scene]');
+    const r = img.getBoundingClientRect();
+    return { scene: img.getAttribute('data-scene'), w: img.naturalWidth, covers: r.left <= 1 && r.top <= 1 && r.right >= innerWidth - 1 && r.bottom >= innerHeight - 1, mode: document.querySelector('[data-testid=comic]').classList.contains('comic--scene') };
+  });
+  check(sceneA.scene === 'univermag' && sceneA.w === 1600 && sceneA.covers && sceneA.mode, `«The Report», mission 1: the comic over the department store's big picture (${JSON.stringify(sceneA)})`);
+  for (let k = 0; k < 8 && !(await A.page.locator('[data-testid=comic-panel][data-who]').count()); k++) await A.page.keyboard.press('Enter');
+  await A.page.waitForTimeout(400);
+  const speakerA = await A.page.evaluate(() => {
+    const art = document.querySelector('[data-testid=comic-panel] .comic__art')?.getBoundingClientRect();
+    const bub = document.querySelector('[data-testid=comic-panel] .comic__bubble')?.getBoundingClientRect();
+    return { beside: !!art && !!bub && Math.abs(art.bottom - bub.bottom) < 40 && (bub.left >= art.right - 2 || bub.right <= art.left + 2), low: !!bub && bub.top > innerHeight * 0.55 && bub.bottom <= innerHeight, scene: !!document.querySelector('[data-testid=comic-scene]') };
+  });
+  check(speakerA.beside && speakerA.low && speakerA.scene, `a speaker: the portrait beside the bubble along the bottom, the picture behind (${JSON.stringify(speakerA)})`);
+  await A.page.screenshot({ path: `${outDir}/story_scene_desktop.png` });
+  await A.page.getByTestId('comic-skip').click();
+  await A.page.getByTestId('story-goal').waitFor({ state: 'visible', timeout: 30000 });
+  check((await A.page.getByTestId('loadscreen').count()) === 0, 'a story mission has no loading screen (its comic showed the place)');
+  await A.page.keyboard.press('Escape');
+  await A.page.getByRole('button', { name: 'Back to the story' }).click();
+  await A.page.getByTestId('story').waitFor({ timeout: 15000 });
   const [again] = await sql`SELECT completions FROM story_progress WHERE user_id = ${me} AND mission_id = 'a1'`;
   check(again?.completions === 1, 'a lost or abandoned mission is not recorded');
   await A.ctx.close();
@@ -203,9 +241,10 @@ try {
   const comicBox = await B.page.evaluate(() => {
     const art = document.querySelector('.comic__art')?.getBoundingClientRect();
     const bub = document.querySelector('.comic__bubble')?.getBoundingClientRect();
-    return { art: !!art, stacked: !!art && !!bub && bub.top >= art.bottom - 2, inside: !!bub && bub.right <= innerWidth && bub.left >= 0 && bub.bottom <= innerHeight, side: document.scrollingElement.scrollWidth - innerWidth };
+    const scene = document.querySelector('[data-testid=comic-scene]')?.getAttribute('data-scene') ?? null;
+    return { art: !!art, scene, beside: !!art && !!bub && bub.left >= art.right - 2 && Math.abs(art.bottom - bub.bottom) < 40, inside: !!bub && !!art && bub.right <= innerWidth && art.left >= 0 && bub.bottom <= innerHeight, low: !!bub && bub.top > innerHeight * 0.6, side: document.scrollingElement.scrollWidth - innerWidth };
   });
-  check(comicBox.art && comicBox.stacked && comicBox.inside && comicBox.side <= 0, `the comic upright: the picture over the bubble, inside the screen (${JSON.stringify(comicBox)})`);
+  check(comicBox.art && comicBox.scene === 'hall2089' && comicBox.beside && comicBox.inside && comicBox.low && comicBox.side <= 0, `the prologue upright: 2089's hall on the whole screen, the portrait beside the bubble along the bottom (${JSON.stringify(comicBox)})`);
   await B.page.screenshot({ path: `${outDir}/story_comic_phone.png` });
   await B.page.getByTestId('comic-skip').click();
   await B.page.getByTestId('story').waitFor({ timeout: 15000 });
@@ -215,6 +254,19 @@ try {
   });
   check(phoneHub.side <= 0 && phoneHub.title === 'Сюжет' && phoneHub.play === 'Играть', `B’s hub on the phone, in Russian, no sideways scroll (${JSON.stringify(phoneHub)})`);
   await B.page.screenshot({ path: `${outDir}/story_hub_phone.png`, fullPage: true });
+  await B.page.getByTestId('story-play-b1').click();
+  await B.page.getByTestId('comic-scene').waitFor({ timeout: 15000 });
+  await B.page.waitForFunction(() => (document.querySelector('[data-testid=comic-scene]')?.naturalWidth ?? 0) > 0, null, { timeout: 15000 });
+  for (let k = 0; k < 8 && !(await B.page.locator('[data-testid=comic-panel][data-who]').count()); k++) await B.page.keyboard.press('Enter');
+  await B.page.waitForTimeout(500);
+  const sceneB = await B.page.evaluate(() => {
+    const img = document.querySelector('[data-testid=comic-scene]').getBoundingClientRect();
+    const bub = document.querySelector('[data-testid=comic-panel] .comic__bubble')?.getBoundingClientRect();
+    const art = document.querySelector('[data-testid=comic-panel] .comic__art')?.getBoundingClientRect();
+    return { covers: img.left <= 1 && img.top <= 1 && img.right >= innerWidth - 1 && img.bottom >= innerHeight - 1, inside: !!bub && !!art && bub.left >= 0 && bub.right <= innerWidth && bub.bottom <= innerHeight && art.left >= 0, low: !!bub && bub.top > innerHeight * 0.6, side: document.scrollingElement.scrollWidth - innerWidth };
+  });
+  check(sceneB.covers && sceneB.inside && sceneB.low && sceneB.side <= 0, `the phone: the picture fills the screen, the portrait and bubble along the bottom (${JSON.stringify(sceneB)})`);
+  await B.page.screenshot({ path: `${outDir}/story_scene_phone.png` });
   await B.ctx.close();
   check(problems.length === 0, `no page errors (${problems.join(' | ')})`);
 } catch (e) {

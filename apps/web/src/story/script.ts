@@ -1,11 +1,12 @@
 /**
  * The words of the story mode (v0.2.13, part 4a): the prologue in 2089, the openings of the two
- * campaigns and chapter 1 of both — comic panels before and after each mission and the lines the
+ * campaigns and chapters 1–2 of both — comic panels before and after each mission and the lines the
  * characters say during it. Every line is [English, Russian]. The numbers of the missions (maps, kits,
  * enemies, rewards) are in the shared package (packages/shared/src/story/missions.ts).
  */
 import type { CharacterId, StoryCampaign, StoryRole } from '@blatkom/shared';
 import { getLang } from '../i18n/index.js';
+import type { SceneId } from './scenes.js';
 
 /** [English, Russian]. */
 export type Line = readonly [string, string];
@@ -19,6 +20,8 @@ export interface Beat {
   who: Speaker;
   say: Line;
   fx?: 'neon' | 'vhs';
+  /** The picture behind this page, when not the mission's own place (null: none — e.g. 2089). */
+  scene?: SceneId | null;
 }
 
 /** Moments in a mission when somebody says something (each at most once). */
@@ -89,7 +92,7 @@ export const PROLOGUE: Beat[] = [
   { who: 'caption', fx: 'neon', say: ['The developer Arkadia Development wants a parking tower where the yard is. Nine hundred spaces.', 'Застройщик «Аркадия Девелопмент» хочет поставить на месте двора паркинг-башню. На девятьсот мест.'] },
   { who: 'volkov', fx: 'neon', say: ['Someone in BLATKOM wins every single dispute. That doesn’t happen. Find, file, report.', 'Кто-то в БЛАТКОМе выигрывает все споры подряд. Так не бывает. Найти, оформить, доложить.'] },
   { who: 'caption', fx: 'neon', say: ['Getting knocked out in there hurts no one: you just wake up in 2089 with a headache. And lose the case.', 'Если тебя там «устранили» — ничего страшного: просыпаешься в 2089-м с головной болью. И проигрываешь дело.'] },
-  { who: 'caption', fx: 'vhs', say: ['Two cases. One district. Tape’s rolling.', 'Два дела. Один район. Плёнка пошла.'] },
+  { who: 'caption', fx: 'vhs', scene: 'yard', say: ['Two cases. One district. Tape’s rolling.', 'Два дела. Один район. Плёнка пошла.'] },
 ];
 
 export const CAMPAIGN_OPENING: Record<StoryCampaign, Beat[]> = {

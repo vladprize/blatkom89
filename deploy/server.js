@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.13"),
+  SERVER_VERSION: external_exports.string().default("0.2.14"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),

@@ -9,6 +9,7 @@ import { count, plural, t } from '../../i18n/index.js';
 import { achievementText, charName, finishName, mapName, weaponName } from '../../i18n/content.js';
 import { asset, fmtDuration, h, portrait } from '../dom.js';
 import { CAMPAIGNS, CHAPTER_TITLES, FAIL_LINES, MISSION_SCRIPTS, line } from '../../story/script.js';
+import { sceneForMap, sceneThumbUrl } from '../../story/scenes.js';
 import type { StoryFail } from '../../story/StorySession.js';
 import { fmtBlat } from './blat.js';
 
@@ -61,9 +62,11 @@ function missionRow(m: StoryMission, done: Map<string, StoryDone>, ids: Readonly
   const d = done.get(m.id);
   const open = isMissionOpen(m.id, ids);
   const state = d ? 'done' : open ? 'open' : 'locked';
+  // a place with its big picture: the row becomes a little banner of it
+  const sc = sceneForMap(m.map);
   return h(
     'div',
-    { class: `smission smission--${state}`, 'data-testid': `story-mission-${m.id}`, 'data-state': state },
+    { class: `smission smission--${state}${sc ? ' smission--pic' : ''}`, 'data-testid': `story-mission-${m.id}`, 'data-state': state, ...(sc ? { 'data-scene': sc, style: `--pic:url("${sceneThumbUrl(sc)}")` } : {}) },
     h('span', { class: 'smission__n' }, String(m.n)),
     h(
       'div',
