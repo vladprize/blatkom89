@@ -124,6 +124,8 @@ export function renderStory(o: {
   onCards: () => void;
   /** The offline build: progress on this device, experience and achievements only. */
   offline?: boolean;
+  /** …and this browser won't keep it after the tab closes (Safari, a file opened from disk). */
+  unsaved?: boolean;
 }): HTMLElement {
   const done = new Map(o.done.map((d) => [d.id, d]));
   const ids = new Set(done.keys());
@@ -139,7 +141,11 @@ export function renderStory(o: {
       h('div', { class: 'story__btns' }, h('button', { class: 'btn btn--small', 'data-testid': 'story-prologue', onclick: o.onPrologue }, t('Prologue ▶')), h('button', { class: 'btn btn--small', 'data-testid': 'story-cards', onclick: o.onCards }, t('Card index · {n}/{all}', { n: STORY_CARD_INDEX.filter((c) => met.has(c)).length, all: STORY_CARD_INDEX.length }))),
     ),
     h('div', { class: 'story__camps' }, ...CAMPAIGN_ORDER.map((c) => campaignPanel(c, done, ids, o.chapter[c], o.onChapter, o.onPlay, !!o.offline))),
-    o.offline ? h('div', { class: 'muted story__offline' }, t('Offline: the progress stays in this browser on this device.')) : null,
+    o.offline
+      ? o.unsaved
+        ? h('div', { class: 'story__offline story__offline--warn', 'data-testid': 'story-unsaved' }, t('This browser doesn’t save the progress of a file opened from disk: it lasts until you close the tab. Open the file in Chrome or Firefox to keep it.'))
+        : h('div', { class: 'muted story__offline' }, t('Offline: the progress stays in this browser on this device.'))
+      : null,
     h('div', { class: 'panel story__finale' }, h('span', { class: 'tag' }, t('Finale')), h('b', null, t('«The Building Site» — the two of them against Arkadich')), h('span', { class: 'muted' }, t('Opens after both campaigns. The reward: «Neon-2089», a legendary skin for every weapon — only from the story.'))),
   );
 }

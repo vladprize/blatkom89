@@ -1351,6 +1351,7 @@ button.chatline__name:hover { text-decoration: underline; }
 .scamp__soon { display: flex; flex-direction: column; gap: 4px; padding: 14px; border: 1px dashed var(--line); text-align: center; }
 .scamp__soon b { font-family: Oswald, sans-serif; text-transform: uppercase; letter-spacing: .04em; }
 .scamp__reward { font-size: 13px; line-height: 1.3; }
+.story__offline--warn { padding: 10px 12px; border: 1px solid var(--red); border-left-width: 4px; background: rgba(179, 38, 30, .16); font-size: 15px; line-height: 1.35; }
 .story__finale { display: flex; flex-direction: column; gap: 6px; padding-top: 22px; }
 .story__finale b { font-family: Oswald, sans-serif; font-size: 18px; text-transform: uppercase; letter-spacing: .03em; }
 .scards { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }

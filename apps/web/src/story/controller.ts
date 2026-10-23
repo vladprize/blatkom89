@@ -12,7 +12,7 @@ import { apiErrorText } from '../net/errors.js';
 import { t } from '../i18n/index.js';
 import { h, toast } from '../ui/dom.js';
 import { openSheet } from '../ui/sheet.js';
-import { storageGet, storageSet } from '../app/settings.js';
+import { storageGet, storagePersistent, storageSet } from '../app/settings.js';
 import { missionHeading, renderCards, renderStory, renderStoryFail, renderStoryWin } from '../ui/screens/story.js';
 import { StorySession } from './StorySession.js';
 import { StoryOverlay } from './overlay.js';
@@ -75,6 +75,7 @@ export class StoryController {
             draw();
           },
           offline: backend.local,
+          unsaved: backend.local && !storagePersistent(),
           onPlay: (m) => void this.play(m),
           onPrologue: () => this.prologue(),
           onCards: () => openSheet(this.host.root, { title: t('Card index'), body: renderCards(this.done), testid: 'story-cards-sheet' }),

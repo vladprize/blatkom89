@@ -1001,6 +1001,7 @@ export const RU: Record<string, string> = {
   'STORY': 'СЮЖЕТ',
   'First time: +{xp} XP': 'Впервые: +{xp} XP',
   'Offline: the progress stays in this browser on this device.': 'Без интернета: прогресс хранится в этом браузере на этом устройстве.',
+  'This browser doesn’t save the progress of a file opened from disk: it lasts until you close the tab. Open the file in Chrome or Firefox to keep it.': 'Этот браузер не сохраняет прогресс файла, открытого с диска: он живёт, пока открыта вкладка. Открой файл в Chrome или Firefox — там прогресс сохранится.',
   'This version plays without a server: the story and practice against bots. Online matches work on the website and in Telegram.': 'Эта версия играет без сервера: сюжет и тренировка с ботами. Онлайн-матчи — на сайте и в Telegram.',
   'MISSION COMPLETE': 'МИССИЯ ВЫПОЛНЕНА',
   'MISSION FAILED': 'МИССИЯ ПРОВАЛЕНА',
