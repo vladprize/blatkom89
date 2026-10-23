@@ -8,8 +8,10 @@
 // with its best time, mission 2 open, Karlych in the card index. Then mission 1 again: three hearts on the
 // objective line, the hero dropped three times (a heart each, back after each fall) — «Mission failed»
 // with the narrator's line, «Again» goes straight into the mission, the pause menu's
-// «Back to the story» leaves it, and «← Back» from the hub is the menu. B: the phone menu — «Сюжет» beside «Быстрый матч», friends, Kon and
-// practice in a row, one screen; the hub and the comic upright without sideways scroll.
+// «Back to the story» leaves it, and «← Back» from the hub is the menu; «The Report» opens its comic over
+// the department store's big picture (the speaker's portrait and bubble along the bottom). B: the phone menu — «Сюжет» beside «Быстрый матч», friends, Kon and
+// practice in a row, one screen; the hub and the comic upright without sideways scroll, and the big picture
+// behind «The Report»'s comic on the phone.
 //
 // Usage: DATABASE_URL=… node tests/e2e/story.mjs <baseUrl> <outDir>
 import { chromium } from 'playwright';
@@ -111,9 +113,11 @@ try {
   await A.page.getByTestId('story-play-a1').click();
   await A.page.getByTestId('comic').waitFor({ timeout: 15000 });
   const firstPanel = await text(A.page, '[data-testid=comic-panel]');
+  const yardCards = await A.page.evaluate(() => !document.querySelector('[data-testid=comic]')?.classList.contains('comic--scene') && !document.querySelector('[data-testid=comic-scene]'));
   await A.page.screenshot({ path: `${outDir}/story_comic_a1.png` });
   const pages = await readComic(A.page);
   check(pages === 7 && /3rd Microdistrict/.test(firstPanel), `the campaign's opening and the mission's comic: ${pages} pages, the first «${firstPanel.slice(0, 40)}…»`);
+  check(yardCards, 'the yard has no big picture yet: its comic keeps the card layout');
   await A.page.getByTestId('story-goal').waitFor({ state: 'visible', timeout: 30000 });
   check(/Free the bench: loafers 3/.test(await text(A.page, '[data-testid=story-goal]')), `the objective line: «${await text(A.page, '[data-testid=story-goal]')}»`);
   await A.page.getByTestId('story-bark').first().waitFor({ timeout: 15000 });
@@ -179,6 +183,33 @@ try {
   await A.page.locator('.topbar .back').click();
   await A.page.getByTestId('menu-story').waitFor({ timeout: 10000 });
   check(true, '«← Back» from the hub after the missions is the menu (not the hub again)');
+  // «The Report» opens at the department store: its comic is the place's big picture
+  await A.page.getByTestId('menu-story').click();
+  await A.page.getByTestId('story').waitFor({ timeout: 15000 });
+  await A.page.getByTestId('story-play-b1').click();
+  await A.page.getByTestId('comic-scene').waitFor({ timeout: 15000 });
+  await A.page.waitForFunction(() => (document.querySelector('[data-testid=comic-scene]')?.naturalWidth ?? 0) > 0, null, { timeout: 15000 });
+  const sceneA = await A.page.evaluate(() => {
+    const img = document.querySelector('[data-testid=comic-scene]');
+    const r = img.getBoundingClientRect();
+    return { scene: img.getAttribute('data-scene'), w: img.naturalWidth, covers: r.left <= 1 && r.top <= 1 && r.right >= innerWidth - 1 && r.bottom >= innerHeight - 1, mode: document.querySelector('[data-testid=comic]').classList.contains('comic--scene') };
+  });
+  check(sceneA.scene === 'univermag' && sceneA.w === 1600 && sceneA.covers && sceneA.mode, `«The Report», mission 1: the comic over the department store's big picture (${JSON.stringify(sceneA)})`);
+  for (let k = 0; k < 8 && !(await A.page.locator('[data-testid=comic-panel][data-who]').count()); k++) await A.page.keyboard.press('Enter');
+  await A.page.waitForTimeout(400);
+  const speakerA = await A.page.evaluate(() => {
+    const art = document.querySelector('[data-testid=comic-panel] .comic__art')?.getBoundingClientRect();
+    const bub = document.querySelector('[data-testid=comic-panel] .comic__bubble')?.getBoundingClientRect();
+    return { beside: !!art && !!bub && Math.abs(art.bottom - bub.bottom) < 40 && (bub.left >= art.right - 2 || bub.right <= art.left + 2), low: !!bub && bub.top > innerHeight * 0.55 && bub.bottom <= innerHeight, scene: !!document.querySelector('[data-testid=comic-scene]') };
+  });
+  check(speakerA.beside && speakerA.low && speakerA.scene, `a speaker: the portrait beside the bubble along the bottom, the picture behind (${JSON.stringify(speakerA)})`);
+  await A.page.screenshot({ path: `${outDir}/story_scene_desktop.png` });
+  await A.page.getByTestId('comic-skip').click();
+  await A.page.getByTestId('story-goal').waitFor({ state: 'visible', timeout: 30000 });
+  check((await A.page.getByTestId('loadscreen').count()) === 0, 'a story mission has no loading screen (its comic showed the place)');
+  await A.page.keyboard.press('Escape');
+  await A.page.getByRole('button', { name: 'Back to the story' }).click();
+  await A.page.getByTestId('story').waitFor({ timeout: 15000 });
   const [again] = await sql`SELECT completions FROM story_progress WHERE user_id = ${me} AND mission_id = 'a1'`;
   check(again?.completions === 1, 'a lost or abandoned mission is not recorded');
   await A.ctx.close();
@@ -215,6 +246,19 @@ try {
   });
   check(phoneHub.side <= 0 && phoneHub.title === 'Сюжет' && phoneHub.play === 'Играть', `B’s hub on the phone, in Russian, no sideways scroll (${JSON.stringify(phoneHub)})`);
   await B.page.screenshot({ path: `${outDir}/story_hub_phone.png`, fullPage: true });
+  await B.page.getByTestId('story-play-b1').click();
+  await B.page.getByTestId('comic-scene').waitFor({ timeout: 15000 });
+  await B.page.waitForFunction(() => (document.querySelector('[data-testid=comic-scene]')?.naturalWidth ?? 0) > 0, null, { timeout: 15000 });
+  for (let k = 0; k < 8 && !(await B.page.locator('[data-testid=comic-panel][data-who]').count()); k++) await B.page.keyboard.press('Enter');
+  await B.page.waitForTimeout(500);
+  const sceneB = await B.page.evaluate(() => {
+    const img = document.querySelector('[data-testid=comic-scene]').getBoundingClientRect();
+    const bub = document.querySelector('[data-testid=comic-panel] .comic__bubble')?.getBoundingClientRect();
+    const art = document.querySelector('[data-testid=comic-panel] .comic__art')?.getBoundingClientRect();
+    return { covers: img.left <= 1 && img.top <= 1 && img.right >= innerWidth - 1 && img.bottom >= innerHeight - 1, inside: !!bub && !!art && bub.left >= 0 && bub.right <= innerWidth && bub.bottom <= innerHeight && art.left >= 0, low: !!bub && bub.top > innerHeight * 0.6, side: document.scrollingElement.scrollWidth - innerWidth };
+  });
+  check(sceneB.covers && sceneB.inside && sceneB.low && sceneB.side <= 0, `the phone: the picture fills the screen, the portrait and bubble along the bottom (${JSON.stringify(sceneB)})`);
+  await B.page.screenshot({ path: `${outDir}/story_scene_phone.png` });
   await B.ctx.close();
   check(problems.length === 0, `no page errors (${problems.join(' | ')})`);
 } catch (e) {

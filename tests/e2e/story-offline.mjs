@@ -4,7 +4,8 @@
 //     only (no talons without a server); mission 1 — the comic, the objective line with three hearts,
 //     everybody down — the comic after it and «+40 XP» in the local profile, written to the storage;
 //     after a reload mission 1 is done, mission 2 open and the prologue doesn't play again; with chapter 1
-//     of «The Report» done the hub opens chapter 2, whose first mission plays and pays.
+//     of «The Report» done the hub opens chapter 2, whose first mission — its comic over the square's big
+//     picture, carried inside the file — plays and pays.
 //  2. A browser that refuses storage to a file from disk (Safari does — «SecurityError: The operation is
 //     insecure»): the game still starts, the hub warns that the progress lasts until the tab closes, and
 //     within the session the story moves on — mission 1 done opens mission 2, the prologue doesn't come back.
@@ -172,7 +173,18 @@ const failure = async (page, name) => {
     await page.waitForTimeout(400);
     const ch2 = await page.evaluate(() => ({ tab: document.querySelector('[data-testid=story-campaign-uchastkovy] .scamp__chapters [aria-pressed=true] b')?.textContent, b6: document.querySelector('[data-testid=story-mission-b6]')?.getAttribute('data-state') }));
     check(ch2.tab === '2' && ch2.b6 === 'open', `«The Report» opens on chapter 2 with «Толкучка» open (${JSON.stringify(ch2)})`);
+    const banners = await page.evaluate(() => ['b6', 'b7', 'b8', 'b9'].map((id) => document.querySelector(`[data-testid=story-mission-${id}]`)?.getAttribute('data-scene') ?? '-').join(','));
+    check(banners === 'square,hospital,-,cemetery', `the hub: a mission whose place has its picture is a little banner of it (${banners})`);
     await page.getByTestId('story-play-b6').click();
+    // the flea market by the square: its comic over the square's big picture, from inside the file
+    await page.getByTestId('comic-scene').waitFor({ timeout: 15000 });
+    await page.waitForFunction(() => (document.querySelector('[data-testid=comic-scene]')?.naturalWidth ?? 0) > 0, null, { timeout: 15000 });
+    const sq = await page.evaluate(() => {
+      const img = document.querySelector('[data-testid=comic-scene]');
+      return { scene: img.getAttribute('data-scene'), w: img.naturalWidth, inline: img.getAttribute('src').startsWith('data:image/jpeg') };
+    });
+    check(sq.scene === 'square' && sq.w === 1600 && sq.inline, `«Толкучка»: the comic over the square's big picture, inside the file (${JSON.stringify(sq)})`);
+    await page.screenshot({ path: `${outDir}/offline_b6_scene.png` });
     await page.getByTestId('comic-skip').click();
     await page.getByTestId('story-goal').waitFor({ state: 'visible', timeout: 30000 });
     check(/Закрой лотки: осталось 5/.test(await page.getByTestId('story-goal').innerText()), 'chapter 2’s first mission plays');
@@ -181,6 +193,7 @@ const failure = async (page, name) => {
     await readComic(page);
     await page.getByTestId('story-rewards').waitFor({ timeout: 20000 });
     check((await page.getByTestId('story-rewards').innerText()).trim() === '+70 XP', 'and pays its experience');
+    check((await page.getByTestId('story-end-scene').getAttribute('data-testid')) && (await page.evaluate(() => document.querySelector('[data-testid=story-end-scene]')?.getAttribute('src')?.startsWith('data:image/jpeg'))), 'the end of the mission over the square’s picture');
     await page.screenshot({ path: `${outDir}/offline_b6_win.png` });
     check(problems.length === 0, `no page errors, nothing from the network (${problems.join(' | ')})`);
   } catch (e) {

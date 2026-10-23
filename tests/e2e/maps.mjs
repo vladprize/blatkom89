@@ -1,6 +1,7 @@
 // The v0.23 maps end-to-end (in Russian): the practice map picker lists all ten maps with their pictures,
 // the three new ones under their Russian names; then «Кладбище», «Красная площадь» and «Пионерлагерь» each
-// load into a practice match with bots — every prop frame and the new wall and floor textures present,
+// load into a practice match with bots — the cemetery and the square behind their loading screens (the
+// owner's art, gone once the match is on), the camp without one — every prop frame and the new wall and floor textures present,
 // nothing drawn with a missing frame, no errors, the bots move about — and a screenshot of each is saved.
 //
 // Usage: node tests/e2e/maps.mjs <baseUrl> <outDir>
@@ -97,8 +98,17 @@ try {
       await page.getByTestId('practice-start').click();
       first = false;
     }
+    // the map's loading screen over the countdown (the owner's art): the cemetery and the square have one
+    const art = id !== 'camp';
+    const load = await page
+      .getByTestId('loadscreen')
+      .waitFor({ timeout: 4000 })
+      .then(async () => ({ shown: true, name: await page.getByTestId('loadscreen-name').innerText(), scene: await page.getByTestId('loadscreen').getAttribute('data-scene') }))
+      .catch(() => ({ shown: false }));
+    check(art ? load.shown && load.scene === id && load.name.toUpperCase() === ru.toUpperCase() : !load.shown, `«${ru}»: ${art ? `the loading screen with its picture and name (${JSON.stringify(load)})` : 'no picture yet — no loading screen'}`);
     await active(id);
     await page.waitForTimeout(2500);
+    check((await page.getByTestId('loadscreen').count()) === 0, `«${ru}»: the loading screen is gone once the match is on`);
     const before = await page.evaluate(() => [...window.__blatkom.game.scene.getScene('game').session.players()].filter((p) => !p.isLocal).map((p) => [p.x, p.y]));
     await page.waitForTimeout(2500);
     const r = await page.evaluate((ru) => {

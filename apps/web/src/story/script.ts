@@ -1,11 +1,12 @@
 /**
  * The words of the story mode (v0.2.13, part 4a): the prologue in 2089, the openings of the two
- * campaigns and chapter 1 of both — comic panels before and after each mission and the lines the
+ * campaigns and chapters 1–2 of both — comic panels before and after each mission and the lines the
  * characters say during it. Every line is [English, Russian]. The numbers of the missions (maps, kits,
  * enemies, rewards) are in the shared package (packages/shared/src/story/missions.ts).
  */
 import type { CharacterId, StoryCampaign, StoryRole } from '@blatkom/shared';
 import { getLang } from '../i18n/index.js';
+import type { SceneId } from './scenes.js';
 
 /** [English, Russian]. */
 export type Line = readonly [string, string];
@@ -19,6 +20,8 @@ export interface Beat {
   who: Speaker;
   say: Line;
   fx?: 'neon' | 'vhs';
+  /** The picture behind this page, when not the mission's own place (null: none — e.g. 2089). */
+  scene?: SceneId | null;
 }
 
 /** Moments in a mission when somebody says something (each at most once). */
