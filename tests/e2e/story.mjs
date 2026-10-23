@@ -1,6 +1,6 @@
 // The story mode end to end (v0.2.13, part 4a): A (English, desktop) and B (Russian, phone).
 // A: the menu's «Story» button; the first visit plays the prologue by itself (2089 in neon), «Skip»
-// ends it; the hub — two campaigns of five missions in chapter 1, chapters 2–4 on the way, the first
+// ends it; the hub — two campaigns of five missions in chapter 1, chapters 3–4 on the way, the first
 // mission open and the rest locked, the card index empty; mission 1 of «My Yard»: the campaign's
 // opening and the mission's comic, then the mission — the objective line counts the loafers, the
 // characters' lines pop up; everybody down (after the server's shortest time) — the comic after it, the
@@ -8,7 +8,7 @@
 // with its best time, mission 2 open, Karlych in the card index. Then mission 1 again: three hearts on the
 // objective line, the hero dropped three times (a heart each, back after each fall) — «Mission failed»
 // with the narrator's line, «Again» goes straight into the mission, the pause menu's
-// «Back to the story» leaves it. B: the phone menu — «Сюжет» beside «Быстрый матч», friends, Kon and
+// «Back to the story» leaves it, and «← Back» from the hub is the menu. B: the phone menu — «Сюжет» beside «Быстрый матч», friends, Kon and
 // practice in a row, one screen; the hub and the comic upright without sideways scroll.
 //
 // Usage: DATABASE_URL=… node tests/e2e/story.mjs <baseUrl> <outDir>
@@ -97,7 +97,7 @@ try {
     soon: document.querySelectorAll('.scamp__chapters button.soon').length,
     cards: document.querySelector('[data-testid=story-cards]')?.textContent,
   }));
-  check(hub.campaigns === 2 && hub.missions.length === 10 && hub.missions.filter((m) => m.endsWith(':open')).length === 2 && hub.missions.includes('a1:open') && hub.missions.includes('a2:locked') && hub.soon === 6, `the hub: two campaigns, chapter 1 with 5 missions each, the first open, chapters 2–4 on the way (${JSON.stringify(hub)})`);
+  check(hub.campaigns === 2 && hub.missions.length === 10 && hub.missions.filter((m) => m.endsWith(':open')).length === 2 && hub.missions.includes('a1:open') && hub.missions.includes('a2:locked') && hub.soon === 4, `the hub: two campaigns, chapter 1 with 5 missions each, the first open, chapters 3–4 on the way (${JSON.stringify(hub)})`);
   check(/0\/22/.test(hub.cards ?? ''), `the card index is empty (${hub.cards})`);
   await A.page.screenshot({ path: `${outDir}/story_hub_desktop.png`, fullPage: true });
   await A.page.reload();
@@ -176,6 +176,9 @@ try {
   await A.page.getByRole('button', { name: 'Back to the story' }).click();
   await A.page.getByTestId('story').waitFor({ timeout: 15000 });
   check((await A.page.getByTestId('story-overlay').count()) === 0, 'the pause menu’s «Back to the story» leaves the mission and its overlay');
+  await A.page.locator('.topbar .back').click();
+  await A.page.getByTestId('menu-story').waitFor({ timeout: 10000 });
+  check(true, '«← Back» from the hub after the missions is the menu (not the hub again)');
   const [again] = await sql`SELECT completions FROM story_progress WHERE user_id = ${me} AND mission_id = 'a1'`;
   check(again?.completions === 1, 'a lost or abandoned mission is not recorded');
   await A.ctx.close();

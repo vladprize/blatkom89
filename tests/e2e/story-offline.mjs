@@ -75,6 +75,9 @@ const winMission = async (page) => {
   for (let k = 0; k < 8; k++) {
     const done = await page.evaluate(() => {
       const s = window.__blatkom.app.session;
+      // the mission already over and handed back to the story (its outro comic): done
+      if (!s?.world) return true;
+      if (s.outcome()) return true;
       const w = s.world;
       const hero = w.players.get('local');
       hero.invulnUntil = 1e12;
@@ -215,7 +218,10 @@ const failure = async (page, name) => {
     await page.waitForTimeout(400);
     const hub = await hubState(page);
     check(hub.a1 === 'done' && hub.a2 === 'open', `the story moves on: mission 1 done, mission 2 open (${JSON.stringify(hub)})`);
+    // «← Back» from the hub after a mission is the menu (not the hub again)
     await page.locator('.topbar .back').click();
+    await page.getByTestId('menu-story').waitFor({ timeout: 10000 });
+    check(true, '«← Back» from the hub after a mission goes to the menu');
     await page.getByTestId('menu-story').click();
     await page.getByTestId('story').waitFor({ timeout: 20000 });
     await page.waitForTimeout(600);

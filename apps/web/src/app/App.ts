@@ -472,7 +472,9 @@ export class App {
     if (this.pauseEl) return this.togglePause();
     if (this.screen === 'lobby') return void this.online?.leave();
     if (this.screen === 'game') return this.togglePause();
-    const prev = this.history.pop();
+    let prev = this.history.pop();
+    // the screen we are on is no step back (the story hub after a mission: hub → game → hub)
+    while (prev && prev === this.screen) prev = this.history.pop();
     if (!prev || prev === 'game' || prev === 'lobby') return this.goMenu();
     this.open(prev, false);
   }

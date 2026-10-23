@@ -38,6 +38,11 @@
 //      Telegram opens the same account; an email sign-in inside Telegram brings that account; a Kon 1×1
 //      between two Telegram phones — fullscreen, the landscape lock, the safe areas in the HUD, minimised
 //      with a dead socket and back (tests/e2e/telegram.mjs)
+//  19. the story (v0.2.13): the prologue by itself, the hub, mission 1 — its comics, the objective line,
+//      the rewards paid by the server once, the next mission open — three lives and the failure screen,
+//      «The Report» on a phone (tests/e2e/story.mjs); the same story in the single file opened from disk
+//      offline — progress in this browser, chapter 2, and a browser that refuses storage (Safari): the
+//      warning, the story still moves on within the session (tests/e2e/story-offline.mjs)
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
 // E2E_PROD=1 runs the prebuilt deploy/ bundle exactly as a host would (NODE_ENV=production, guest login,
 // RENDER_EXTERNAL_URL, TRUST_PROXY) instead of the development server.
@@ -192,6 +197,9 @@ try {
   console.log('\n[e2e] «Блатной кон»: a 1×1 room by invitation, the Kon rating, the history, the search (three browsers)');
   const kon = spawnSync(process.execPath, ['tests/e2e/kon.mjs', base, join(out, 'kon')], { stdio: 'inherit' });
   if (kon.status !== 0) failed = true;
+  console.log('\n[e2e] the story: the prologue, the hub, missions with comics and rewards paid by the server, three lives, a phone (two browsers)');
+  const story = spawnSync(process.execPath, ['tests/e2e/story.mjs', base, join(out, 'story')], { stdio: 'inherit' });
+  if (story.status !== 0) failed = true;
   if (process.env.E2E_ADMIN_USER) {
     console.log('\n[e2e] sources: a partner link made on the dashboard, a phone through it with a campaign, the counts and the CSV');
     const growth = spawnSync(process.execPath, ['tests/e2e/growth.mjs', base, join(out, 'growth'), process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? ''], { stdio: 'inherit' });
@@ -206,6 +214,9 @@ try {
   console.log('\n[e2e] single-file demo (no server)');
   const demo = spawnSync(process.execPath, ['tests/e2e/demo.mjs', 'apps/web/dist-demo/blatkom89-demo.html', join(out, 'demo')], { stdio: 'inherit' });
   if (demo.status !== 0) failed = true;
+  console.log('\n[e2e] the story in the single file from disk, offline: a browser that keeps storage and one that refuses it (Safari)');
+  const storyOffline = spawnSync(process.execPath, ['tests/e2e/story-offline.mjs', 'apps/web/dist-demo/blatkom89-demo.html', join(out, 'story-offline')], { stdio: 'inherit' });
+  if (storyOffline.status !== 0) failed = true;
   console.log('\n[e2e] equipment: grenades, mines, C4, turret (demo build)');
   const gadgets = spawnSync(process.execPath, ['tests/e2e/gadgets.mjs', 'apps/web/dist-demo/blatkom89-demo.html', join(out, 'gadgets')], { stdio: 'inherit' });
   if (gadgets.status !== 0) failed = true;

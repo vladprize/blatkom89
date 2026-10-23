@@ -74,13 +74,23 @@ test('story: the first completion pays once; later runs keep the best time', asy
 test('story: finishing chapter 1 of «My Yard» — the achievement, 500 talons and the Khokhloma crowbar', async () => {
   const u = await devLogin(app.base, 'Story Commandant');
   const ch = storyChapter('petya', 1)!;
+  const blatSum = async () => (await app.db.sql<Array<{ s: number | null }>>`SELECT sum(delta)::int AS s FROM currency_ledger WHERE user_id = ${u.userId} AND currency = 'blat' AND reason = 'level'`)[0]!.s ?? 0;
+  const blatBefore = await blatSum();
   let last!: StoryReward;
+  let blatGained = 0;
   for (const id of ['a1', 'a2', 'a3', 'a4', 'a5']) {
     const r = await finish(u.token, u.userId, id);
     assert.equal(r.status, 200, `${id}: ${r.text}`);
     last = r.body;
+    blatGained += last.blatGained;
     if (id !== 'a5') assert.equal(last.achievement, null);
   }
+  // V2.0: the levels the story's experience reached (400 XP → level 3) pay their $BLAT, each level once
+  assert.equal(last.level, 3);
+  const levels = await app.db.sql<Array<{ ref: string }>>`SELECT ref FROM currency_ledger WHERE user_id = ${u.userId} AND currency = 'blat' AND reason = 'level' ORDER BY ref`;
+  assert.deepEqual(levels.map((l) => l.ref), ['level:1', 'level:2', 'level:3']);
+  assert.equal(blatGained, (await blatSum()) - blatBefore, 'the responses show what the ledger got');
+  assert.ok(blatGained >= 350 + 400, `levels 2 and 3 at least (${blatGained})`);
   assert.equal(last.achievement, 'story_petya_1');
   assert.equal(last.talons, 120 + ch.talons);
   assert.deepEqual(last.skins, ['montirovka.hohloma']);
