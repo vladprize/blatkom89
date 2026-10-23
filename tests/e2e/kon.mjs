@@ -63,10 +63,10 @@ async function openKon(page) {
 try {
   const A = await player('Konnik', 'en', { width: 1280, height: 760 });
   const B = await player('Konchik', 'ru', { width: 390, height: 844 });
-  // the menu: the button; on the phone three in a row and still one screen
+  // the menu: the button; on the phone three in a row (v0.2.13: «Story» sits beside Quick Match) and still one screen
   const bm = await B.page.evaluate(() => {
     const kon = document.querySelector('[data-testid=menu-kon]')?.getBoundingClientRect();
-    const btns = [...document.querySelectorAll('.menu__play > .btn:not(.btn--red)')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.getBoundingClientRect());
+    const btns = [...document.querySelectorAll('.menu__play > .btn:not(.btn--red):not(.menu__story)')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.getBoundingClientRect());
     return { kon: !!kon, row: btns.length === 3 && btns.every((r) => Math.abs(r.top - btns[0].top) < 2), over: document.scrollingElement.scrollHeight - innerHeight, side: document.scrollingElement.scrollWidth - innerWidth };
   });
   check(bm.kon && bm.row && bm.over <= 0 && bm.side <= 0, `B’s phone menu: «Блатной кон» between the friends and practice, three in a row, one screen (${JSON.stringify(bm)})`);

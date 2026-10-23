@@ -73,7 +73,31 @@ export function onSettings(l: (s: Settings) => void): () => void {
   return () => listeners.delete(l);
 }
 
+/**
+ * Keys whose last write the browser refused: Safari refuses storage to a page opened from disk (the
+ * single-file build), a full quota refuses too. They live here until the tab closes, so the story still
+ * moves on, the prologue doesn't come back and the profile keeps its experience for the session.
+ */
+const memory = new Map<string, string>();
+let persistent: boolean | null = null;
+
+/** Whether this browser keeps what the game stores after the tab closes (checked once). */
+export function storagePersistent(): boolean {
+  if (persistent === null) {
+    try {
+      const k = 'blatkom89.probe';
+      localStorage.setItem(k, '1');
+      persistent = localStorage.getItem(k) === '1';
+      localStorage.removeItem(k);
+    } catch {
+      persistent = false;
+    }
+  }
+  return persistent;
+}
+
 export function storageGet(key: string): string | null {
+  if (memory.has(key)) return memory.get(key)!;
   try {
     return localStorage.getItem(key);
   } catch {
@@ -85,7 +109,11 @@ export function storageSet(key: string, value: string | null): void {
   try {
     if (value === null) localStorage.removeItem(key);
     else localStorage.setItem(key, value);
+    memory.delete(key);
+    return;
   } catch {
-    /* ignore */
+    /* refused: keep it for this session */
   }
+  if (value === null) memory.delete(key);
+  else memory.set(key, value);
 }

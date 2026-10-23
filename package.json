@@ -1,6 +1,6 @@
 {
   "name": "blatkom89",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "private": true,
   "description": "БЛАТКОМ ’89 — top-down 2D multiplayer action for Telegram Mini Apps",
   "type": "module",
@@ -33,6 +33,7 @@
     "db:migrate": "tsx apps/server/src/database/cli.ts migrate",
     "db:status": "tsx apps/server/src/database/cli.ts status",
     "admin:create": "tsx apps/server/src/admin/cli.ts create",
+    "story:balance": "node --import tsx apps/web/src/story/balance.sim.ts",
     "verify": "npm run typecheck && npm run test && npm run build"
   },
   "devDependencies": {

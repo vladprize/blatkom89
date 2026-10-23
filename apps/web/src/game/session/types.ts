@@ -154,6 +154,8 @@ export interface HudState {
   teamScoreLimit: number;
   /** The local player's team (null in free-for-all). */
   myTeam: Team | null;
+  /** A story mission: how it ended (null while it goes on) and why it was lost. */
+  story?: { outcome: 'win' | 'fail' | null; reason: 'down' | 'time' | 'lost' | null; label: string };
 }
 
 export interface ResultsData {

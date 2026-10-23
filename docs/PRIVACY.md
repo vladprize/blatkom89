@@ -49,7 +49,7 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
    account.
 4. **Game data:** character, profile avatar (one of the game's portraits, by id), match participation (map, place, eliminations, assists, deaths, damage,
    time), XP, level, achievements, streaks, time in game, match history; the «Блатной кон» rating, wins, losses, draws and streaks (shown
-   in the Kon tables with your in-game name); talon and diamond balances and
+   in the Kon tables with your in-game name); the story missions you finished, when and your best time; talon and diamond balances and
    every change to them, owned weapons, characters, equipment, modifications and weapon skins, loadout, case openings.
 5. **Purchases (optional):** pack, price, currency, payment provider, the provider’s payment reference,
    status and time. You pay on the provider’s page — Stripe (cards), NOWPayments (cryptocurrency); we
@@ -77,7 +77,7 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
 9. **IP address:** used to handle requests and to protect against abuse; not stored in the profile
    database; may appear in the server’s technical logs for a limited time.
 10. **On your device:** session key, settings and the random identifiers above. No ad or third-party
-   tracking. The server-less demo keeps its alias, XP and statistics only in that browser.
+   tracking. The server-less demo keeps its alias, XP, statistics and story progress only in that browser.
 
 ### 3. Why
 To sign you in and recognise you; to run online matches, the scoreboard, XP, achievements and the
@@ -99,7 +99,7 @@ Google, Discord, Facebook and Reddit when you sign in with them (on their page).
 ### 5. How long we keep it
 | Data | Period |
 |---|---|
-| Profile, statistics, match history, achievements, balances and owned items | until you delete the profile |
+| Profile, statistics, match history, achievements, the story’s progress, balances and owned items | until you delete the profile |
 | Email address and password hash | until you delete the profile |
 | Sign-ins with Google, Discord, Facebook, Reddit (the provider’s id for you) | until you delete the profile |
 | Usage events and days active | up to 400 days |
@@ -119,7 +119,7 @@ Google, Discord, Facebook and Reddit when you sign in with them (on their page).
 
 ### 6. How to delete your data
 **Settings → “Delete my data”** — immediate and irreversible: profile, statistics, match history,
-achievements, balances and owned items (bought ones included), $BLAT and its history, your invitation
+achievements, the story’s progress, balances and owned items (bought ones included), $BLAT and its history, your invitation
 code and who invited you, email and password hash, the sign-ins
 with Google / Discord / Facebook / Reddit, days active and all sessions. A reward your inviter already
 received for you stays with them (as a number in their history, no longer linked to you). Usage events and error reports lose the link to you and expire on schedule; payment
@@ -157,6 +157,7 @@ When this policy changes, we update the revision date.
 | `user_daily_activity` | (user, UTC day) | DAU/WAU/MAU, retention | 400 days; immediately on account deletion |
 | `match_participants` | per-match stats of a player | history, profile, admin | until account deletion (cascade) |
 | `player_achievements` | unlock time | achievements | until account deletion (cascade) |
+| `story_progress` (v0.2.13) | the story missions a player finished: mission id, first completion time, best time, number of completions | the story's progress and its one-time rewards | until account deletion (cascade) |
 | `matches` | none (map, times, player count, end reason) | match statistics | kept (no personal data) |
 | `invitations` | `created_by` (SET NULL on deletion) | invite links | 7 days after expiry |
 | `analytics_events` | `user_id`, `session_id` (SET NULL on deletion), `platform`, props (§ANALYTICS.md) | product analytics | 400 days |
@@ -194,7 +195,7 @@ update the table in Part 1 §5.
 **Self-service** — `DELETE /api/me` (button “Delete my data” in Settings):
 1. revokes all of the player's sessions;
 2. `DELETE FROM users WHERE id = …` — cascades to `profiles`, `sessions`, `user_daily_activity`,
-   `match_participants`, `player_achievements`, `currency_ledger`, `user_items`, `weapon_mods`,
+   `match_participants`, `player_achievements`, `story_progress`, `currency_ledger`, `user_items`, `weapon_mods`,
    `case_openings`, `password_resets`, `user_identities`, `auth_handoffs`, `friendships`, `direct_messages`, `club_members`, `club_requests`, `referrals` (the player's own row; as an inviter, `referrer_id` becomes `NULL`), `blat_snapshot_rows` (before that the
    player leaves their club like a player who quits: a head hands it to the longest-standing member, a last member closes it);
    sets `user_id`/`session_id`/`created_by` to `NULL` in

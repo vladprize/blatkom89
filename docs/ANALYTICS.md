@@ -41,6 +41,8 @@ occurred_at, received_at, platform, props jsonb)`.
 | `match_completed` | `MatchRoom` finish (timer / score limit) | `matchId`, `mapId`, `durationMs`, `players` (people present at the end), `fill`, `reason` |
 | `match_abandoned` | room closed before the match finished | `matchId`, `mapId`, `phase` |
 | `invite_created` | `POST /api/rooms` (private room) | `code`, `roomId` |
+| `story_started` | v0.2.13: `POST /api/story/start` — a ticket for an open mission | `mission` |
+| `story_completed` | v0.2.13: `POST /api/story/complete` — a mission reported done (once per report; `first`: its rewards were paid now) | `mission`, `ms`, `first` |
 
 ### 2.2 Client events (`POST /api/events`, authenticated, ≤50 per batch, 30 req/min per user, 64 KB)
 

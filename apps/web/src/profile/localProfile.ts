@@ -4,7 +4,7 @@
  * server recorder (`applyMatchProgress`), so a level means the same in both builds. Pure functions;
  * persistence is in localStore.ts. The online build never uses this — there the server owns progress.
  */
-import { ACHIEVEMENT_IDS, ACHIEVEMENTS, applyMatchProgress, displayNameSchema, isAvatarId, isCharacterId, isMapId, latinName, levelForXp, RATING_RULES } from '@blatkom/shared';
+import { ACHIEVEMENT_IDS, ACHIEVEMENTS, ACHIEVEMENT_TARGETS, applyMatchProgress, displayNameSchema, isAvatarId, isCharacterId, isMapId, latinName, levelForXp, RATING_RULES } from '@blatkom/shared';
 import type { AchievementId, AchievementStatus, AvatarId, CharacterId, MapId, MatchHistoryEntry, PersonalResult, PublicProfile, Standing, TeamResultSummary } from '@blatkom/shared';
 
 export const LOCAL_HISTORY_MAX = 20;
@@ -213,6 +213,33 @@ export function recordLocalMatch(p: LocalProfile, m: LocalMatchInput, now = new 
     history: [entry, ...p.history].slice(0, LOCAL_HISTORY_MAX),
   };
   return { profile, personal: { xpGained: o.xpGained, totalXp: o.totalXp, level: o.level, leveledUp: o.leveledUp, newAchievements: o.unlocked } };
+}
+
+/**
+ * A story mission done for the first time in the offline build: its experience, the chapter's achievement
+ * when it finished the chapter (with that achievement's experience), and the level achievements the new
+ * total reaches — the same arithmetic as the server's story repository (no talons, characters or skins
+ * offline: there is no economy without a server).
+ */
+export function recordLocalStory(p: LocalProfile, xp: number, chapterAchievement: AchievementId | null, now = new Date()): { profile: LocalProfile; xp: number; achievement: AchievementId | null; leveledUp: boolean } {
+  const at = now.toISOString();
+  const achievements = { ...p.achievements };
+  let gained = Math.max(0, Math.floor(xp));
+  let achievement: AchievementId | null = null;
+  if (chapterAchievement && !achievements[chapterAchievement]) {
+    achievements[chapterAchievement] = at;
+    achievement = chapterAchievement;
+    gained += ACHIEVEMENTS[chapterAchievement].xpReward;
+  }
+  let total = p.xp + gained;
+  for (const [id, lvl] of [['level_10', ACHIEVEMENT_TARGETS.levels[0]!], ['level_25', ACHIEVEMENT_TARGETS.levels[1]!]] as const) {
+    if (!achievements[id] && levelForXp(total).level >= lvl) {
+      achievements[id] = at;
+      total += ACHIEVEMENTS[id].xpReward;
+      gained += ACHIEVEMENTS[id].xpReward;
+    }
+  }
+  return { profile: { ...p, xp: total, achievements }, xp: gained, achievement, leveledUp: levelForXp(total).level > levelForXp(p.xp).level };
 }
 
 /** The same shapes the online profile screen renders (`/api/me`, history, achievements). */

@@ -167,7 +167,7 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
              (array_agg(client_version ORDER BY created_at DESC))[1] AS last_client,
              array_agg(DISTINCT method) AS methods
       FROM sessions WHERE user_id = ${id}`;
-    const items = await p.sql<Array<{ kind: 'weapon' | 'character' | 'gadget'; item_id: string; source: 'tokens' | 'diamonds' | 'case' | 'grant'; acquired_at: Date }>>`
+    const items = await p.sql<Array<{ kind: 'weapon' | 'character' | 'gadget'; item_id: string; source: 'tokens' | 'diamonds' | 'case' | 'grant' | 'story'; acquired_at: Date }>>`
       SELECT kind, item_id, source, acquired_at FROM user_items WHERE user_id = ${id} ORDER BY acquired_at DESC`;
     const mods = await p.sql<Array<{ weapon_id: string; mod_id: string; acquired_at: Date }>>`
       SELECT weapon_id, mod_id, acquired_at FROM weapon_mods WHERE user_id = ${id} ORDER BY acquired_at DESC`;

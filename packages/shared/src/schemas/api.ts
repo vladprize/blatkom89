@@ -183,7 +183,7 @@ export interface LedgerEntry {
   currency: Currency;
   delta: number;
   balanceAfter: number;
-  reason: 'match' | 'purchase' | 'mod' | 'case' | 'topup' | 'grant' | 'refund' | 'level' | 'referral';
+  reason: 'match' | 'purchase' | 'mod' | 'case' | 'topup' | 'grant' | 'refund' | 'level' | 'referral' | 'story';
   ref: string | null;
 }
 
@@ -482,7 +482,7 @@ export interface AdminPlayerDetail {
   /** Email sign-in: the address is masked («d•••r@example.com») — admins never see it in full. */
   account: { emailMasked: string | null; emailLinkedAt: string | null; signInMethods: string[] };
   /** Bought / granted / dropped items (free ones are implicit and not listed). */
-  items: Array<{ kind: 'weapon' | 'character' | 'gadget'; id: string; source: 'tokens' | 'diamonds' | 'case' | 'grant'; acquiredAt: string }>;
+  items: Array<{ kind: 'weapon' | 'character' | 'gadget'; id: string; source: 'tokens' | 'diamonds' | 'case' | 'grant' | 'story'; acquiredAt: string }>;
   mods: Array<{ weapon: string; mod: string; acquiredAt: string }>;
   /** Latest balance changes, newest first; `admin` is set for grants. */
   ledger: Array<{ at: string; currency: 'tokens' | 'diamonds' | 'blat'; delta: number; balanceAfter: number; reason: string; ref: string | null; admin: string | null }>;

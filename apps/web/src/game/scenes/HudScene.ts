@@ -104,6 +104,8 @@ export class HudScene extends Phaser.Scene {
   private objGfx!: Phaser.GameObjects.Graphics;
   private objTexts: Phaser.GameObjects.Text[] = [];
   private extraTop = 0;
+  /** A story mission: its objective line sits under the panels (the kill feed moves down for it on narrow screens). */
+  private storyGoal = false;
   // feed
   private feed: FeedLine[] = [];
   // minimap
@@ -201,6 +203,7 @@ export class HudScene extends Phaser.Scene {
     this.objMode = this.session.gameMode === 'ctf' ? 'ctf' : this.session.gameMode === 'bases' ? 'bases' : null;
     this.edgeLabels = [];
     this.extraTop = this.objMode ? OBJ_STRIP : 0;
+    this.storyGoal = !!this.session.hud().story;
     this.objTexts = [];
   }
 
@@ -597,8 +600,15 @@ export class HudScene extends Phaser.Scene {
     // on narrow (portrait) screens centre the score/health group in the space left of the minimap
     const reserved = this.mmW + 4 + padR + 48;
     const cx = W - reserved < 330 + ins.left ? Math.max(160 + ins.left, (W - reserved + ins.left) / 2) : W / 2;
-    // kill feed sits top-left; on narrow screens it moves below the centred score/health panels
-    this.feedY0 = W < 760 ? (this.touch ? padT + 100 : padT + 62) + this.extraTop : 14 + ins.top;
+    // kill feed sits top-left; on narrow screens it moves below the centred score/health panels (and
+    // below a story mission's objective line, which takes its place there)
+    const narrow = W < 760;
+    let goalY = this.touch ? padT + 54 + this.extraTop + 36 + 6 : padT + 46 + this.extraTop + 8;
+    this.feedY0 = narrow ? (this.touch ? padT + 100 : padT + 62) + this.extraTop : 14 + ins.top;
+    if (this.storyGoal && narrow) {
+      goalY = this.feedY0;
+      this.feedY0 += 30;
+    }
     // score box
     this.scoreBg.clear();
     this.scoreBg.fillStyle(0x8a1a16, 0.95).fillRect(cx - 118, padT, 50, 40);
@@ -688,6 +698,7 @@ export class HudScene extends Phaser.Scene {
       touch: this.touch,
       chatBtn: { x: mmx - 26 - 42, y: padT + 18, size: 34 },
       chat: this.touch ? { left: padL, width: Math.min(W * 0.42, 420), top: this.feedY0 + 5 * 22 + 8 } : { left: padL, width: Math.min(W * 0.4, 360), bottom: pad + ins.bottom + 74 + 10 },
+      goal: { x: cx, y: goalY },
     });
     this.bigText.setPosition(cx, H * 0.36);
     this.subText.setPosition(cx, H * 0.36 + 48);
@@ -909,11 +920,14 @@ export class HudScene extends Phaser.Scene {
     const left = hud.phase === 'active' ? hud.timeLeftMs : hud.phase === 'countdown' || hud.phase === 'ready' ? hud.timeLeftMs : 0;
     this.timer.setText(fmtTime(left));
     this.timer.setColor(hud.phase === 'active' && left < 30_000 ? '#ff6a5a' : BEIGE);
-    const modeSig = `${hud.gameMode}|${hud.scoreLimit}|${hud.teamScoreLimit}|${getLang()}`;
+    const modeSig = `${hud.gameMode}|${hud.scoreLimit}|${hud.teamScoreLimit}|${getLang()}|${hud.story?.label ?? ''}`;
     if (this.modeSig !== modeSig) {
       this.modeSig = modeSig;
       this.mode.setText(
-        hud.gameMode === 'ctf'
+        // a story mission: its title instead of the mode's limits
+        hud.story
+          ? t('STORY · {title}', { title: hud.story.label.toUpperCase() })
+          : hud.gameMode === 'ctf'
           ? t('FLAGS · TO {n}', { n: hud.teamScoreLimit })
           : hud.gameMode === 'bases'
             ? t('BASES · TO {n}', { n: hud.teamScoreLimit })
@@ -1070,7 +1084,7 @@ export class HudScene extends Phaser.Scene {
     }
     // status
     const conn = hud.connection;
-    this.statusText.setText(conn === 'offline' ? t('PRACTICE') : conn === 'reconnecting' ? t('RECONNECTING…') : conn === 'lost' ? t('LINE IS DEAD') : hud.ping !== null ? t('{n} ms', { n: hud.ping }) : '');
+    this.statusText.setText(conn === 'offline' ? (hud.story ? t('STORY') : t('PRACTICE')) : conn === 'reconnecting' ? t('RECONNECTING…') : conn === 'lost' ? t('LINE IS DEAD') : hud.ping !== null ? t('{n} ms', { n: hud.ping }) : '');
     this.statusText.setColor(conn === 'online' ? ((hud.ping ?? 0) > 150 ? '#e8a040' : '#8fae78') : conn === 'offline' ? '#9a9080' : '#ff6a5a');
     // touch interact button only when a weapon can be swapped
     if (this.interactBtn) {
@@ -1206,7 +1220,13 @@ export class HudScene extends Phaser.Scene {
       sub = teams && hud.myTeam !== null ? t('You play for the {team} team', { team: teamName(hud.myTeam) }) : t('District business is serious business');
       if (teams && hud.myTeam !== null) color = TEAM_TEXT[hud.myTeam];
     } else if (hud.phase === 'active' && time < this.goUntil) big = t('FORWARD!');
-    else if (hud.phase === 'finished') {
+    else if (hud.phase === 'finished' && hud.story?.outcome) {
+      // a story mission: done or not, and why not
+      const won = hud.story.outcome === 'win';
+      big = won ? t('MISSION COMPLETE') : t('MISSION FAILED');
+      color = won ? '#e8c060' : '#ff5a4a';
+      sub = won ? '' : hud.story.reason === 'down' ? t('No lives left') : hud.story.reason === 'time' ? t('Time ran out') : t('The other side got there first');
+    } else if (hud.phase === 'finished') {
       big = t('MATCH OVER');
       if (teams) {
         const [r, b] = hud.teamScore;

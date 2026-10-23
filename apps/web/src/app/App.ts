@@ -52,11 +52,16 @@ import type { LoginProvider } from '../net/oauth.js';
 import { clubFlag } from '../ui/clubFlag.js';
 import type { ClubDetails } from '@blatkom/shared';
 import type { UpdateWatch } from './updates.js';
+import { StoryController } from '../story/controller.js';
+import { localBackend, onlineBackend } from '../story/backend.js';
+import type { StoryBackend } from '../story/backend.js';
+import type { StoryReward } from '@blatkom/shared';
+import { StorySession } from '../story/StorySession.js';
 
 /** Room capacity shown in the menu. */
 const MAX_ROOM_PLAYERS = DEFAULT_MATCH_CONFIG.maxPlayers;
 
-type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'social' | 'top' | 'clubs' | 'club' | 'clubEdit' | 'blat' | 'kon' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
+type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'social' | 'top' | 'clubs' | 'club' | 'clubEdit' | 'blat' | 'kon' | 'story' | 'storyEnd' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
 
 /** Profile id whose nickname has been confirmed in the first-launch dialog (online build). */
 const NICK_CONFIRMED_KEY = 'blatkom89.nick-confirmed.v1';
@@ -186,11 +191,26 @@ export class App {
   private updates: UpdateWatch | null = null;
   /** The club page on screen (v0.3). */
   private clubId: string | null = null;
+  /** v0.2.13: the story mode (hub, missions, comics). */
+  private readonly story: StoryController;
+  private storyServer: { online: OnlineClient; backend: StoryBackend } | null = null;
 
   constructor() {
     const saved = storageGet('blatkom89.character');
     this.character = saved && isCharacterId(saved) ? saved : 'petya';
     if (!ONLINE_AVAILABLE) this.localProfile = loadLocalProfile();
+    this.story = new StoryController({
+      root: this.root,
+      backend: () => this.storyBackend(),
+      afterReward: (r) => this.afterStoryReward(r),
+      go: (s, push) => this.go(s, push),
+      screen: () => this.screen,
+      render: (el) => this.render(el),
+      topbar: (title) => this.topbar(title),
+      beginSession: (session) => this.beginSession(session),
+      endSession: (preview) => this.endSession(preview),
+      canvas: () => this.host.game.canvas,
+    });
     hudBus.on('pause', () => this.togglePause());
     hudBus.on('match-end', () => setTimeout(() => this.onMatchFinished(), 2200));
     onLangChange(() => this.relocalize());
@@ -220,6 +240,7 @@ export class App {
       case 'top':
       case 'blat':
       case 'kon':
+      case 'story':
       case 'profile':
       case 'settings':
       case 'arsenal':
@@ -235,6 +256,36 @@ export class App {
       default:
         return;
     }
+  }
+
+  /** The story's progress: the server's online, this browser's in the offline build. */
+  private storyBackend(): StoryBackend | null {
+    if (this.online) {
+      if (this.storyServer?.online !== this.online) this.storyServer = { online: this.online, backend: onlineBackend(this.online) };
+      return this.storyServer.backend;
+    }
+    if (ONLINE_AVAILABLE) return null;
+    return localBackend({
+      profile: () => this.localProfile,
+      saveProfile: (p) => {
+        this.localProfile = p;
+        saveLocalProfile(p);
+      },
+    });
+  }
+
+  /** A story mission paid: the profile on screen follows (online the server's numbers). */
+  private afterStoryReward(r: StoryReward) {
+    const online = this.online;
+    if (online?.profile) {
+      online.profile = { ...online.profile, tokens: r.tokens, xp: r.xpTotal, level: r.level };
+      // $BLAT and the rest of the profile as the server now has them
+      void online
+        .refreshProfile()
+        .then(() => this.refreshStrip())
+        .catch(() => {});
+    }
+    this.refreshStrip();
   }
 
   /** Who made what: music, fonts, engine (licences in THIRD_PARTY_LICENSES.txt). */
@@ -407,7 +458,7 @@ export class App {
 
   // ── navigation ──────────────────────────────────────────────────────────
   private go(s: Screen, push = true) {
-    if (push && this.screen !== s && !['loading', 'error', 'game'].includes(this.screen)) this.history.push(this.screen);
+    if (push && this.screen !== s && !['loading', 'error', 'game', 'storyEnd'].includes(this.screen)) this.history.push(this.screen);
     this.screen = s;
     if (s !== 'game' && this.chatOverlay) {
       this.chatOverlay.destroy();
@@ -421,7 +472,9 @@ export class App {
     if (this.pauseEl) return this.togglePause();
     if (this.screen === 'lobby') return void this.online?.leave();
     if (this.screen === 'game') return this.togglePause();
-    const prev = this.history.pop();
+    let prev = this.history.pop();
+    // the screen we are on is no step back (the story hub after a mission: hub → game → hub)
+    while (prev && prev === this.screen) prev = this.history.pop();
     if (!prev || prev === 'game' || prev === 'lobby') return this.goMenu();
     this.open(prev, false);
   }
@@ -444,6 +497,9 @@ export class App {
         return this.showBlat(push);
       case 'kon':
         return this.showKon(push);
+      case 'story':
+      case 'storyEnd':
+        return this.story.show(push);
       case 'clubs':
       case 'clubEdit':
         return this.showClubs(push);
@@ -482,7 +538,7 @@ export class App {
     // a newer release found while playing: now is the moment (after the menu is on screen)
     setTimeout(() => this.updates?.atMenu(), 0);
     setTimeout(() => this.flushBlatNote(), 0);
-    const onlineNote = ONLINE_AVAILABLE ? null : h('div', { class: 'muted', style: 'font-size:14px' }, t('This is the demo without a server: practice against bots is available. Online matches work in the online version.'));
+    const onlineNote = ONLINE_AVAILABLE ? null : h('div', { class: 'muted', style: 'font-size:14px' }, t('This version plays without a server: the story and practice against bots. Online matches work on the website and in Telegram.'));
     this.stripEl = this.profileTile();
     const menu = h(
       'div',
@@ -503,10 +559,13 @@ export class App {
               { class: `panel menu__play ${this.online ? 'menu__play--kon' : ''}` },
               h('span', { class: 'tag' }, t('District Business')),
               h('button', { class: 'btn btn--red', onclick: () => this.quickMatch(), disabled: !ONLINE_AVAILABLE }, t('Quick Match'), h('span', { class: 'sub' }, t('online, up to {n} comrades', { n: MAX_ROOM_PLAYERS }))),
+              // v0.2.13: the story — two campaigns in 1989 (on phones beside Quick Match)
+              // offline (no server): the story is the main thing to play
+              h('button', { class: ONLINE_AVAILABLE ? 'btn menu__story' : 'btn btn--red menu__story', 'data-testid': 'menu-story', onclick: () => this.story.show() }, t('Story'), h('span', { class: 'sub' }, t('two campaigns · 2089 → 1989'))),
               h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, t('Play with Friends'), h('span', { class: 'sub' }, t('a room by invitation'))),
               // V2.0 part D: ranked matches with fixed sides
               this.online ? h('button', { class: 'btn menu__kon', 'data-testid': 'menu-kon', onclick: () => this.showKon() }, t('Blatnoy Kon'), h('span', { class: 'sub' }, t('ranked 1×1 · 2×2 · 3×3 · 5×5'))) : null,
-              h('button', { class: ONLINE_AVAILABLE ? 'btn' : 'btn btn--red', onclick: () => this.showPractice() }, t('Practice'), h('span', { class: 'sub' }, t('against bots, no internet needed'))),
+              h('button', { class: 'btn', onclick: () => this.showPractice() }, t('Practice'), h('span', { class: 'sub' }, t('against bots, no internet needed'))),
               h('button', { class: 'btn menu__settings', onclick: () => this.showSettings() }, t('Settings'), h('span', { class: 'sub' }, t('picture, sound, controls, language'))),
               this.online ? (this.socialTiles = this.socialRow()) : null,
               onlineNote,
@@ -1270,6 +1329,7 @@ export class App {
 
   private endSession(showPreview = true) {
     if (this.pauseEl) this.togglePause();
+    this.story.unmount();
     if (this.chatOverlay) {
       this.chatOverlay.destroy();
       this.chatOverlay = null;
@@ -1292,6 +1352,7 @@ export class App {
       return;
     }
     const offline = this.session?.mode === 'offline';
+    const story = this.session instanceof StorySession;
     this.chatOverlay?.close();
     hudBus.emit('pause-state', true);
     this.pauseEl = h(
@@ -1301,10 +1362,10 @@ export class App {
         'div',
         { class: 'panel modal col' },
         h('span', { class: 'tag' }, offline ? t('Pause') : t('Menu')),
-        h('div', { class: 'muted', style: 'margin-top:6px' }, offline ? t('Practice is paused.') : t('The match goes on — you take control again when you come back.')),
+        h('div', { class: 'muted', style: 'margin-top:6px' }, story ? t('The mission is paused.') : offline ? t('Practice is paused.') : t('The match goes on — you take control again when you come back.')),
         h('button', { class: 'btn btn--red', onclick: () => this.togglePause() }, t('Resume')),
         h('button', { class: 'btn', onclick: () => (this.togglePause(), this.showSettingsOverlay()) }, t('Settings')),
-        h('button', { class: 'btn', onclick: () => this.leaveMatch() }, offline ? t('Back to menu') : t('Leave the match')),
+        h('button', { class: 'btn', onclick: () => this.leaveMatch() }, story ? t('Back to the story') : offline ? t('Back to menu') : t('Leave the match')),
       ),
     );
     this.root.append(this.pauseEl);
@@ -1318,6 +1379,10 @@ export class App {
   }
 
   private leaveMatch() {
+    if (this.session instanceof StorySession) {
+      this.endSession();
+      return this.story.leave();
+    }
     if (this.session?.mode === 'online') void this.online?.leave();
     this.goMenu();
   }
@@ -1325,6 +1390,10 @@ export class App {
   // ── results ─────────────────────────────────────────────────────────────
   private onMatchFinished() {
     if (!this.session || this.resultsShown) return;
+    if (this.session instanceof StorySession) {
+      this.resultsShown = true;
+      return this.story.finished(this.session);
+    }
     const r = this.session.results();
     if (r) this.showResults(r);
   }

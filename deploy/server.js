@@ -2279,7 +2279,7 @@ var require_websocket = __commonJS({
     var http = __require("http");
     var net2 = __require("net");
     var tls2 = __require("tls");
-    var { randomBytes: randomBytes12, createHash: createHash4 } = __require("crypto");
+    var { randomBytes: randomBytes13, createHash: createHash4 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -2817,7 +2817,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes12(16).toString("base64");
+      const key = randomBytes13(16).toString("base64");
       const request = isSecure ? https.request : http.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.12"),
+  SERVER_VERSION: external_exports.string().default("0.2.13"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -11381,7 +11381,12 @@ var ACHIEVEMENT_IDS = [
   "objective",
   "objectives_3",
   "level_10",
-  "level_25"
+  "level_25",
+  // v0.3 part 4: story chapters (talons and unlocks come with them: story/missions.ts STORY_CHAPTERS)
+  "story_petya_1",
+  "story_uchastkovy_1",
+  "story_petya_2",
+  "story_uchastkovy_2"
 ];
 var WIN_STREAK_TARGET = 3;
 var MULTI_KILL_TARGET = 5;
@@ -11421,7 +11426,11 @@ var ACHIEVEMENTS = {
   objective: { id: "objective", title: "Job Done", description: "Capture a flag or a base.", xpReward: 50 },
   objectives_3: { id: "objectives_3", title: "Raider", description: `Capture ${ACHIEVEMENT_TARGETS.objectives} flags or bases in one match.`, xpReward: 100 },
   level_10: { id: "level_10", title: "Big Name", description: `Reach level ${ACHIEVEMENT_TARGETS.levels[0]}.`, xpReward: 100 },
-  level_25: { id: "level_25", title: "Boss of the District", description: `Reach level ${ACHIEVEMENT_TARGETS.levels[1]}.`, xpReward: 250 }
+  level_25: { id: "level_25", title: "Boss of the District", description: `Reach level ${ACHIEVEMENT_TARGETS.levels[1]}.`, xpReward: 250 },
+  story_petya_1: { id: "story_petya_1", title: "Master of the Yard", description: "Story: finish chapter 1 of \xABMy Yard\xBB.", xpReward: 100 },
+  story_uchastkovy_1: { id: "story_uchastkovy_1", title: "First Report", description: "Story: finish chapter 1 of \xABThe Report\xBB.", xpReward: 100 },
+  story_petya_2: { id: "story_petya_2", title: "Garage Authority", description: "Story: finish chapter 2 of \xABMy Yard\xBB.", xpReward: 150 },
+  story_uchastkovy_2: { id: "story_uchastkovy_2", title: "Market Watch", description: "Story: finish chapter 2 of \xABThe Report\xBB.", xpReward: 150 }
 };
 var LEVEL_ACHIEVEMENTS = [
   ["level_10", ACHIEVEMENT_TARGETS.levels[0]],
@@ -11618,6 +11627,436 @@ function konDeal(players) {
 
 // packages/shared/src/game-rules/konStakes.ts
 var KON_STAKES = Object.freeze({ enabled: false, minStake: 100, maxStake: 1e4 });
+
+// packages/shared/src/story/missions.ts
+var STORY_RULES = Object.freeze({ heroDamage: 0.5, lives: 3, surviveRespawnMs: 7e3 });
+var STORY_MIN_MS = 15e3;
+var STORY_TICKET_TTL_MS = 3 * 36e5;
+var STORY_OWNED_SKIN_TALONS = 150;
+var kit = (sidearm2, melee2, primary2 = null, gadget = null) => ({ sidearm: sidearm2, melee: melee2, primary: primary2, gadget });
+var enemy = (character, role, k, difficulty = "normal", extra = {}) => ({ character, role, side: "enemy", kit: k, difficulty, ...extra });
+var ally = (character, k, difficulty = "normal", role = "self") => ({ character, role, side: "ally", kit: k, difficulty });
+var STORY_MISSIONS = [
+  // ── Petya «My Yard», chapter 1 «The Yard» ─────────────────────────────────
+  {
+    id: "a1",
+    campaign: "petya",
+    chapter: 1,
+    n: 1,
+    map: "yard",
+    hero: "petya",
+    kit: kit("pistol", "montirovka"),
+    objective: { kind: "clear" },
+    timeLimitMs: 24e4,
+    meets: ["vorona"],
+    talons: 60,
+    xp: 40,
+    npcs: [enemy("golub", "loafer", kit("pistol", "bita"), "easy"), enemy("krysa", "loafer", kit("pistol", "bita"), "easy"), enemy("tarakan", "loafer", kit("pistol", "nozh"), "easy")]
+  },
+  {
+    id: "a2",
+    campaign: "petya",
+    chapter: 1,
+    n: 2,
+    map: "gastronom",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "obrez"),
+    objective: { kind: "team", limit: 10 },
+    timeLimitMs: 3e5,
+    meets: ["mihalych"],
+    talons: 80,
+    xp: 50,
+    npcs: [ally("mihalych", kit("pistol", "montirovka", "avtomat", "f1")), enemy("svinya", "queue", kit("pistol", "bita", "ksyuha")), enemy("buyvol", "queue", kit("pistol", "montirovka", "obrez")), enemy("krysa", "queue", kit("tt", "nozh", "uzi"))]
+  },
+  {
+    id: "a3",
+    campaign: "petya",
+    chapter: 1,
+    n: 3,
+    map: "garages",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "ksyuha", "f1"),
+    objective: { kind: "clear" },
+    timeLimitMs: 3e5,
+    waveGapMs: 1500,
+    meets: ["valuta"],
+    talons: 90,
+    xp: 60,
+    npcs: [
+      enemy("popugay", "speculator", kit("pistol", "bita"), "easy"),
+      enemy("lobster", "speculator", kit("pistol", "nozh"), "easy"),
+      enemy("zmeya", "speculator", kit("tt", "nozh", "ksyuha"), "easy", { wave: 1 }),
+      enemy("tarakan", "speculator", kit("pistol", "montirovka", "obrez"), "easy", { wave: 1 }),
+      enemy("krysa", "speculator", kit("tt", "bita", "avtomat"), "normal", { wave: 2 })
+    ]
+  },
+  {
+    id: "a4",
+    campaign: "petya",
+    chapter: 1,
+    n: 4,
+    map: "yard",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "avtomat", "f1"),
+    objective: { kind: "flag", limit: 2 },
+    timeLimitMs: 36e4,
+    meets: [],
+    talons: 100,
+    xp: 70,
+    npcs: [
+      ally("mihalych", kit("pistol", "montirovka", "avtomat", "f1")),
+      ally("vorona", kit("pistol", "nozh", "ksyuha", "smoke")),
+      enemy("svinya", "reseller", kit("pistol", "bita", "obrez")),
+      enemy("popugay", "reseller", kit("tt", "nozh", "mp5")),
+      enemy("krysa", "reseller", kit("pistol", "montirovka", "avtomat"))
+    ]
+  },
+  {
+    id: "a5",
+    campaign: "petya",
+    chapter: 1,
+    n: 5,
+    map: "yard",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "avtomat", "f1"),
+    objective: { kind: "team", limit: 5 },
+    timeLimitMs: 3e5,
+    meets: ["uchastkovy"],
+    talons: 120,
+    xp: 80,
+    npcs: [enemy("uchastkovy", "self", kit("pistol", "bita", "avtomat", "flash"), "hard", { boss: true })]
+  },
+  // ── Uchastkovy «The Report», chapter 1 «The Beat» ─────────────────────────
+  {
+    id: "b1",
+    campaign: "uchastkovy",
+    chapter: 1,
+    n: 1,
+    map: "gastronom",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita"),
+    objective: { kind: "clear" },
+    timeLimitMs: 24e4,
+    meets: ["koshka"],
+    talons: 60,
+    xp: 40,
+    npcs: [enemy("krysa", "pilferer", kit("pistol", "montirovka"), "easy"), enemy("tarakan", "pilferer", kit("pistol", "nozh"), "easy"), enemy("svinya", "pilferer", kit("pistol", "bita"), "easy"), enemy("popugay", "pilferer", kit("tt", "nozh"), "easy")]
+  },
+  {
+    id: "b2",
+    campaign: "uchastkovy",
+    chapter: 1,
+    n: 2,
+    map: "dk",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "ksyuha", "flash"),
+    objective: { kind: "team", limit: 4 },
+    timeLimitMs: 24e4,
+    meets: ["lisa"],
+    talons: 80,
+    xp: 50,
+    npcs: [enemy("lisa", "self", kit("p92", "nozh", "uzi", "smoke"), "normal", { boss: true })]
+  },
+  {
+    id: "b3",
+    campaign: "uchastkovy",
+    chapter: 1,
+    n: 3,
+    map: "dk",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "ksyuha", "f1"),
+    objective: { kind: "clear" },
+    timeLimitMs: 3e5,
+    waveGapMs: 1500,
+    meets: ["piranya"],
+    talons: 90,
+    xp: 60,
+    npcs: [
+      enemy("krysa", "dancer", kit("pistol", "bita"), "easy"),
+      enemy("svinya", "dancer", kit("pistol", "topor"), "easy"),
+      enemy("tarakan", "dancer", kit("tt", "nozh"), "easy", { wave: 1 }),
+      enemy("golub", "dancer", kit("pistol", "bita"), "easy", { wave: 1 }),
+      enemy("piranya", "self", kit("pistol", "topor", "obrez", "molotov"), "normal", { wave: 2, boss: true })
+    ]
+  },
+  {
+    id: "b4",
+    campaign: "uchastkovy",
+    chapter: 1,
+    n: 4,
+    map: "garages",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "avtomat", "f1"),
+    objective: { kind: "bases", limit: 100 },
+    timeLimitMs: 36e4,
+    meets: [],
+    talons: 100,
+    xp: 70,
+    npcs: [ally("koshka", kit("p92", "nozh", "mp5", "smoke")), enemy("varan", "garage", kit("pistol", "montirovka", "obrez"), "easy"), enemy("buyvol", "garage", kit("tt", "bita", "avtomat"), "easy"), enemy("gorilla", "garage", kit("pistol", "montirovka", "uzi"), "easy")]
+  },
+  {
+    id: "b5",
+    campaign: "uchastkovy",
+    chapter: 1,
+    n: 5,
+    map: "yard",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "avtomat", "flash"),
+    objective: { kind: "team", limit: 5 },
+    timeLimitMs: 3e5,
+    meets: ["petya"],
+    talons: 120,
+    xp: 80,
+    npcs: [enemy("petya", "self", kit("pistol", "montirovka", "avtomat", "f1"), "hard", { boss: true })]
+  },
+  // ── Petya «My Yard», chapter 2 «The Garages» ──────────────────────────────
+  {
+    id: "a6",
+    campaign: "petya",
+    chapter: 2,
+    n: 6,
+    map: "garages",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "avtomat", "f1"),
+    objective: { kind: "team", limit: 10 },
+    timeLimitMs: 3e5,
+    meets: ["varan"],
+    talons: 110,
+    xp: 70,
+    npcs: [
+      ally("varan", kit("pistol", "montirovka", "obrez")),
+      enemy("buyvol", "scrapper", kit("pistol", "montirovka", "obrez")),
+      enemy("svinya", "scrapper", kit("pistol", "bita"), "easy"),
+      enemy("gorilla", "scrapper", kit("tt", "kuvalda", "uzi"), "easy")
+    ]
+  },
+  {
+    id: "a7",
+    campaign: "petya",
+    chapter: 2,
+    n: 7,
+    map: "factory",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "avtomat", "molotov"),
+    objective: { kind: "survive" },
+    timeLimitMs: 75e3,
+    meets: ["tarakan"],
+    talons: 120,
+    xp: 75,
+    npcs: [
+      ally("tarakan", kit("pistol", "nozh", "ppsh")),
+      enemy("krysa", "patrol", kit("pistol", "bita"), "easy"),
+      enemy("golub", "patrol", kit("pistol", "bita"), "easy"),
+      enemy("slon", "patrol", kit("tt", "montirovka", "obrez"), "easy"),
+      enemy("nosorog", "patrol", kit("pistol", "bita"))
+    ]
+  },
+  {
+    id: "a8",
+    campaign: "petya",
+    chapter: 2,
+    n: 8,
+    map: "camp",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "ksyuha", "smoke"),
+    objective: { kind: "flag", limit: 2 },
+    timeLimitMs: 36e4,
+    meets: ["popugay"],
+    talons: 130,
+    xp: 80,
+    npcs: [
+      ally("popugay", kit("pistol", "nozh", "mp5")),
+      enemy("leopard", "courier", kit("pistol", "nozh", "uzi")),
+      enemy("krysa", "courier", kit("tt", "bita", "ksyuha"), "easy"),
+      enemy("svinya", "courier", kit("pistol", "montirovka", "obrez"), "easy")
+    ]
+  },
+  {
+    id: "a9",
+    campaign: "petya",
+    chapter: 2,
+    n: 9,
+    map: "gastronom",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "avtomat", "f1"),
+    objective: { kind: "clear" },
+    timeLimitMs: 3e5,
+    waveGapMs: 1500,
+    meets: ["zmeya"],
+    talons: 140,
+    xp: 90,
+    npcs: [
+      enemy("golub", "suitor", kit("pistol", "bita"), "easy"),
+      enemy("buyvol", "suitor", kit("pistol", "nozh"), "easy"),
+      enemy("krysa", "suitor", kit("tt", "bita", "ksyuha"), "easy", { wave: 1 }),
+      enemy("gorilla", "suitor", kit("pistol", "montirovka", "obrez"), "easy", { wave: 1 }),
+      enemy("zmeya", "self", kit("p92", "nozh", "uzi", "smoke"), "normal", { wave: 2, boss: true })
+    ]
+  },
+  {
+    id: "a10",
+    campaign: "petya",
+    chapter: 2,
+    n: 10,
+    map: "garages",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "avtomat", "mine"),
+    objective: { kind: "bases", limit: 100 },
+    timeLimitMs: 36e4,
+    meets: [],
+    talons: 160,
+    xp: 100,
+    npcs: [
+      ally("mihalych", kit("pistol", "montirovka", "avtomat", "f1")),
+      ally("varan", kit("pistol", "montirovka", "obrez")),
+      enemy("slon", "workshop", kit("tt", "bita", "avtomat")),
+      enemy("nosorog", "workshop", kit("pistol", "montirovka", "obrez")),
+      enemy("leopard", "workshop", kit("pistol", "nozh", "mp5"), "easy"),
+      enemy("gorilla", "workshop", kit("pistol", "bita", "ksyuha"), "easy")
+    ]
+  },
+  // ── Uchastkovy «The Report», chapter 2 «The Black Market» ─────────────────
+  {
+    id: "b6",
+    campaign: "uchastkovy",
+    chapter: 2,
+    n: 6,
+    map: "square",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "ksyuha", "flash"),
+    objective: { kind: "clear" },
+    timeLimitMs: 3e5,
+    waveGapMs: 1500,
+    meets: ["lobster"],
+    talons: 110,
+    xp: 70,
+    npcs: [
+      enemy("svinya", "fence", kit("pistol", "bita"), "easy"),
+      enemy("golub", "fence", kit("tt", "nozh"), "easy"),
+      enemy("krysa", "fence", kit("pistol", "montirovka", "uzi"), "easy", { wave: 1 }),
+      enemy("buyvol", "fence", kit("pistol", "bita", "obrez"), "easy", { wave: 1 }),
+      enemy("lobster", "self", kit("tt", "nozh", "tulka", "molotov"), "normal", { wave: 2, boss: true })
+    ]
+  },
+  {
+    id: "b7",
+    campaign: "uchastkovy",
+    chapter: 2,
+    n: 7,
+    map: "hospital",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "avtomat", "f1"),
+    objective: { kind: "team", limit: 10 },
+    timeLimitMs: 3e5,
+    meets: ["akula"],
+    talons: 120,
+    xp: 75,
+    npcs: [
+      ally("koshka", kit("p92", "nozh", "mp5", "smoke")),
+      enemy("gorilla", "guard", kit("pistol", "montirovka", "avtomat")),
+      enemy("slon", "guard", kit("tt", "bita", "uzi"), "easy"),
+      enemy("akula", "self", kit("p92", "nozh", "mp5"), "normal", { boss: true })
+    ]
+  },
+  {
+    id: "b8",
+    campaign: "uchastkovy",
+    chapter: 2,
+    n: 8,
+    map: "factory",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "ksyuha", "smoke"),
+    objective: { kind: "flag", limit: 2 },
+    timeLimitMs: 36e4,
+    meets: ["oryol"],
+    talons: 130,
+    xp: 80,
+    npcs: [
+      ally("koshka", kit("p92", "nozh", "mp5", "smoke")),
+      enemy("krysa", "smuggler", kit("pistol", "montirovka", "ksyuha"), "easy"),
+      enemy("buyvol", "smuggler", kit("tt", "bita", "obrez"), "easy"),
+      enemy("oryol", "self", kit("p92", "nozh", "m4"), "normal", { boss: true })
+    ]
+  },
+  {
+    id: "b9",
+    campaign: "uchastkovy",
+    chapter: 2,
+    n: 9,
+    map: "cemetery",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "avtomat", "flash"),
+    objective: { kind: "survive" },
+    timeLimitMs: 75e3,
+    meets: [],
+    talons: 140,
+    xp: 90,
+    npcs: [
+      ally("koshka", kit("p92", "nozh", "mp5", "smoke")),
+      enemy("golub", "smuggler", kit("pistol", "bita"), "easy"),
+      enemy("svinya", "smuggler", kit("pistol", "montirovka", "obrez"), "easy"),
+      enemy("leopard", "smuggler", kit("pistol", "nozh")),
+      enemy("krysa", "smuggler", kit("tt", "bita"), "easy")
+    ]
+  },
+  {
+    id: "b10",
+    campaign: "uchastkovy",
+    chapter: 2,
+    n: 10,
+    map: "camp",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "avtomat", "f1"),
+    objective: { kind: "bases", limit: 100 },
+    timeLimitMs: 36e4,
+    meets: [],
+    talons: 160,
+    xp: 100,
+    npcs: [
+      ally("koshka", kit("p92", "nozh", "mp5", "smoke")),
+      ally("golub", kit("pistol", "bita", "ksyuha"), "normal", "patrol"),
+      enemy("slon", "smuggler", kit("tt", "bita", "avtomat"), "easy"),
+      enemy("nosorog", "smuggler", kit("pistol", "montirovka", "obrez"), "easy"),
+      enemy("gorilla", "smuggler", kit("pistol", "bita", "uzi"), "easy"),
+      enemy("oryol", "self", kit("p92", "nozh", "m4"), "normal", { boss: true })
+    ]
+  }
+];
+var STORY_CHAPTERS = [
+  { campaign: "petya", chapter: 1, ready: true, achievement: "story_petya_1", talons: 500, characters: [], skins: ["montirovka.hohloma"] },
+  { campaign: "petya", chapter: 2, ready: true, achievement: "story_petya_2", talons: 600, characters: [], skins: [] },
+  { campaign: "petya", chapter: 3, ready: false, achievement: null, talons: 700, characters: ["golub"], skins: [] },
+  { campaign: "petya", chapter: 4, ready: false, achievement: null, talons: 1e3, characters: [], skins: ["avtomat.zoloto"] },
+  { campaign: "uchastkovy", chapter: 1, ready: true, achievement: "story_uchastkovy_1", talons: 500, characters: ["uchastkovy"], skins: [] },
+  { campaign: "uchastkovy", chapter: 2, ready: true, achievement: "story_uchastkovy_2", talons: 600, characters: ["koshka"], skins: ["pistol.gzhel"] },
+  { campaign: "uchastkovy", chapter: 3, ready: false, achievement: null, talons: 700, characters: [], skins: [] },
+  { campaign: "uchastkovy", chapter: 4, ready: false, achievement: null, talons: 1e3, characters: [], skins: [] }
+];
+var STORY_CARD_INDEX = CHARACTER_IDS.filter((c) => c !== "petya" && c !== "uchastkovy");
+var BY_ID = new Map(STORY_MISSIONS.map((m) => [m.id, m]));
+function storyMission(id) {
+  return BY_ID.get(id);
+}
+function campaignMissions(c) {
+  return STORY_MISSIONS.filter((m) => m.campaign === c).sort((a, b2) => a.n - b2.n);
+}
+function chapterMissions(c, chapter) {
+  return campaignMissions(c).filter((m) => m.chapter === chapter);
+}
+function storyChapter(c, chapter) {
+  return STORY_CHAPTERS.find((x) => x.campaign === c && x.chapter === chapter);
+}
+function isMissionOpen(id, done) {
+  const m = BY_ID.get(id);
+  if (!m || !storyChapter(m.campaign, m.chapter)?.ready) return false;
+  if (m.n === 1) return true;
+  const prev = STORY_MISSIONS.find((x) => x.campaign === m.campaign && x.n === m.n - 1);
+  return !!prev && done.has(prev.id);
+}
+function isChapterDone(c, chapter, done) {
+  const ms = chapterMissions(c, chapter);
+  return !!storyChapter(c, chapter)?.ready && ms.length > 0 && ms.every((m) => done.has(m.id));
+}
 
 // packages/shared/src/maps/builder.ts
 var MapBuilder = class {
@@ -13458,7 +13897,8 @@ function createPlayerState(id, slot, name, character, isBot, now, seed, team = n
     lastDamagedBy: null,
     assists: 0,
     objectives: 0,
-    recentDamage: []
+    recentDamage: [],
+    damageTaken: 1
   };
 }
 function stepMovement(p, input, collision, normals) {
@@ -13730,7 +14170,7 @@ var World = class {
   }
   /** Evens the teams out (difference of at most one): the latest arrivals move, bots first. */
   balanceTeams() {
-    if (!this.teams) return;
+    if (!this.teams || this.config.fixedTeams) return;
     for (const p of this.players.values()) if (p.team === null) p.team = this.smallerTeam();
     for (let guard = 0; guard < 16; guard++) {
       const a = this.teamSize(0);
@@ -14192,6 +14632,7 @@ var World = class {
     if (this.time < victim.invulnUntil) return;
     if (this.phase !== "active") return;
     if (attacker && attacker !== victim && !this.hostile(attacker, victim)) return;
+    if (victim.damageTaken !== 1) amount = Math.max(1, Math.round(amount * victim.damageTaken));
     victim.hp = Math.max(0, victim.hp - amount);
     victim.lastHitAt = this.time;
     if (attacker) {
@@ -15367,20 +15808,20 @@ var BotBrain = class {
         this.defender = mates.findIndex((p) => p.id === me.id) % 3 === 2;
       }
       const own = w.flags.find((f2) => f2.team === team);
-      const enemy = w.flags.find((f2) => f2.team !== team);
+      const enemy2 = w.flags.find((f2) => f2.team !== team);
       const dist = (x, y) => Math.hypot(x - me.x, y - me.y);
-      if (enemy.carrierId === me.id) return { x: own.standX, y: own.standY, urgent: true, hold: 0 };
+      if (enemy2.carrierId === me.id) return { x: own.standX, y: own.standY, urgent: true, hold: 0 };
       if (own.status === "dropped" && (this.defender || dist(own.x, own.y) < 700)) return { x: own.x, y: own.y, urgent: true, hold: 0 };
       if (own.status === "carried" && (this.defender || dist(own.x, own.y) < 600)) return { x: own.x, y: own.y, urgent: false, hold: 0 };
       if (this.defender) {
         if (dist(own.standX, own.standY) > 150) return { x: own.standX, y: own.standY, urgent: false, hold: 0 };
         return { x: own.standX, y: own.standY, urgent: false, hold: 120 };
       }
-      if (enemy.status === "carried") {
-        const carrier = enemy.carrierId ? w.players.get(enemy.carrierId) : void 0;
+      if (enemy2.status === "carried") {
+        const carrier = enemy2.carrierId ? w.players.get(enemy2.carrierId) : void 0;
         if (carrier) return { x: carrier.x, y: carrier.y, urgent: false, hold: 0 };
       }
-      return { x: enemy.x, y: enemy.y, urgent: enemy.status === "dropped" && dist(enemy.x, enemy.y) < 400, hold: 0 };
+      return { x: enemy2.x, y: enemy2.y, urgent: enemy2.status === "dropped" && dist(enemy2.x, enemy2.y) < 400, hold: 0 };
     }
     if (w.bases.length > 0) {
       const enemyTeam = team === 0 ? 1 : 0;
@@ -15807,7 +16248,10 @@ var SERVER_EVENT_PROPS = {
   payment_completed: external_exports.object({ provider: external_exports.string(), packId: external_exports.string(), diamonds: external_exports.number().int(), amountCents: external_exports.number().int() }),
   email_linked: external_exports.object({}),
   /** v0.3: a provider attached to an account (google, facebook, discord, reddit, telegram). */
-  identity_linked: external_exports.object({ provider: external_exports.enum(["google", "facebook", "discord", "reddit", "telegram"]), via: external_exports.enum(["code", "email", "widget"]).optional(), merged: external_exports.boolean().optional() })
+  identity_linked: external_exports.object({ provider: external_exports.enum(["google", "facebook", "discord", "reddit", "telegram"]), via: external_exports.enum(["code", "email", "widget"]).optional(), merged: external_exports.boolean().optional() }),
+  /** v0.3 part 4: a story mission started / reported done (first: its rewards were paid now). */
+  story_started: external_exports.object({ mission: external_exports.string().max(16) }),
+  story_completed: external_exports.object({ mission: external_exports.string().max(16), ms: external_exports.number().int(), first: external_exports.boolean() })
 };
 var ClientEventEnvelopeSchema = external_exports.object({
   id: external_exports.string().uuid(),
@@ -15937,6 +16381,16 @@ var SocialClientMessage = external_exports.discriminatedUnion("type", [
 ]);
 var LEADERBOARD_BY = ["rating", "level", "kills"];
 var LEADERBOARD_SIZE = 100;
+
+// packages/shared/src/schemas/story.ts
+var StoryStartBody = external_exports.object({ mission: external_exports.string().regex(/^[a-z0-9_]{1,16}$/) }).strict();
+var StoryCompleteBody = external_exports.object({
+  ticket: external_exports.string().min(10).max(600),
+  /** Time in the mission (the best time of the mission is kept). */
+  ms: external_exports.number().int().min(0).max(3 * 36e5),
+  kills: external_exports.number().int().min(0).max(999),
+  deaths: external_exports.number().int().min(0).max(999)
+}).strict();
 
 // apps/server/src/database/codeSteps.ts
 async function uniqueAliases(tx) {
@@ -21492,7 +21946,33 @@ var registerClubRoutes = (router, deps) => {
 import { randomBytes as randomBytes9 } from "node:crypto";
 
 // apps/server/src/auth/oauth.ts
-import { createHash as createHash2, createHmac as createHmac8, randomBytes as randomBytes8, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
+import { createHash as createHash2, randomBytes as randomBytes8 } from "node:crypto";
+
+// apps/server/src/security/signed.ts
+import { createHmac as createHmac8, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
+var b64 = (b2) => Buffer.from(b2).toString("base64url");
+function signToken(secret, kind, payload) {
+  const body = b64(JSON.stringify(payload));
+  const mac = createHmac8("sha256", secret).update(`${kind}.${body}`).digest("base64url");
+  return `${body}.${mac}`;
+}
+function readToken(secret, kind, token, maxAgeMs, now = Date.now()) {
+  if (typeof token !== "string" || token.length > 2048) return null;
+  const [body, mac, extra] = token.split(".");
+  if (!body || !mac || extra !== void 0) return null;
+  const want = Buffer.from(createHmac8("sha256", secret).update(`${kind}.${body}`).digest("base64url"));
+  const got = Buffer.from(mac);
+  if (want.length !== got.length || !timingSafeEqual6(want, got)) return null;
+  try {
+    const p = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    if (!p || typeof p !== "object" || typeof p.t !== "number" || p.t > now + 6e4 || now - p.t > maxAgeMs) return null;
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+// apps/server/src/auth/oauth.ts
 var OAUTH_PROVIDERS = ["google", "facebook", "discord", "reddit"];
 var isOAuthProvider = (v) => OAUTH_PROVIDERS.includes(v);
 var str = (v) => typeof v === "string" ? v : typeof v === "number" ? String(v) : "";
@@ -21558,31 +22038,14 @@ function enabledProviders(env2) {
 function callbackUrl(env2, p) {
   return `${env2.PUBLIC_URL.replace(/\/$/, "")}/api/auth/oauth/${p}/callback`;
 }
-var b64 = (b2) => Buffer.from(b2).toString("base64url");
-function sign(secret, kind, payload) {
-  const body = b64(JSON.stringify(payload));
-  const mac = createHmac8("sha256", secret).update(`${kind}.${body}`).digest("base64url");
-  return `${body}.${mac}`;
-}
-function verify(secret, kind, token, maxAgeMs, now = Date.now()) {
-  const [body, mac] = token.split(".");
-  if (!body || !mac) return null;
-  const want = Buffer.from(createHmac8("sha256", secret).update(`${kind}.${body}`).digest("base64url"));
-  const got = Buffer.from(mac);
-  if (want.length !== got.length || !timingSafeEqual6(want, got)) return null;
-  try {
-    const p = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
-    if (typeof p.t !== "number" || p.t > now + 6e4 || now - p.t > maxAgeMs) return null;
-    return p;
-  } catch {
-    return null;
-  }
-}
-var intentToken = (secret, userId, now = Date.now()) => sign(secret, "intent", { u: userId, t: now, r: b64(randomBytes8(6)) });
+var b642 = (b2) => Buffer.from(b2).toString("base64url");
+var sign = signToken;
+var verify = readToken;
+var intentToken = (secret, userId, now = Date.now()) => sign(secret, "intent", { u: userId, t: now, r: b642(randomBytes8(6)) });
 var readIntent = (secret, token, now = Date.now()) => verify(secret, "intent", token, 5 * 6e4, now);
 var stateToken = (secret, s, now = Date.now()) => sign(secret, "state", { ...s, t: now });
 var readState = (secret, token, now = Date.now()) => verify(secret, "state", token, 10 * 6e4, now);
-var newNonce = () => b64(randomBytes8(18));
+var newNonce = () => b642(randomBytes8(18));
 var handoffHash = (code) => createHash2("sha256").update(code).digest("hex");
 function authorizeUrl(spec, clientId, redirectUri, state) {
   const u = new URL(spec.authorize);
@@ -21839,8 +22302,154 @@ var registerKonRoutes = (router, deps) => {
   });
 };
 
+// apps/server/src/api/story.ts
+import { randomBytes as randomBytes10 } from "node:crypto";
+
+// apps/server/src/story/repo.ts
+var StoryError = class extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+  }
+  code;
+};
+var LEVEL_ACHIEVEMENTS2 = [
+  ["level_10", ACHIEVEMENT_TARGETS.levels[0]],
+  ["level_25", ACHIEVEMENT_TARGETS.levels[1]]
+];
+var StoryRepo = class {
+  constructor(sql2) {
+    this.sql = sql2;
+  }
+  sql;
+  async done(userId, q = this.sql) {
+    const rows = await q`
+      SELECT mission_id, completed_at, best_ms, completions FROM story_progress WHERE user_id = ${userId} ORDER BY completed_at, mission_id`;
+    return rows.map((r) => ({ id: r.mission_id, at: r.completed_at.toISOString(), bestMs: r.best_ms, completions: r.completions }));
+  }
+  async doneIds(userId) {
+    return new Set((await this.done(userId)).map((d) => d.id));
+  }
+  /** Records a finished mission and pays what it pays (see the file comment). */
+  async complete(userId, m, ms) {
+    return this.sql.begin(async (tx) => {
+      const [prof] = await tx`SELECT xp, level, tokens FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+      if (!prof) throw new StoryError("no_profile");
+      const [row] = await tx`
+        INSERT INTO story_progress (user_id, mission_id, best_ms) VALUES (${userId}, ${m.id}, ${ms})
+        ON CONFLICT (user_id, mission_id) DO UPDATE SET best_ms = LEAST(story_progress.best_ms, EXCLUDED.best_ms), completions = story_progress.completions + 1
+        RETURNING completions`;
+      const first = row.completions === 1;
+      const out = { mission: m.id, first, talons: 0, xp: 0, blatGained: 0, achievement: null, characters: [], skins: [], compensated: [], tokens: prof.tokens, xpTotal: prof.xp, level: prof.level, done: [] };
+      if (first) {
+        let tokens = prof.tokens;
+        const pay = async (amount, ref) => {
+          if (amount <= 0) return;
+          const paid = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${amount}, ${tokens + amount}, 'story', ${ref}) ON CONFLICT DO NOTHING RETURNING id`;
+          if (paid.length === 0) return;
+          tokens += amount;
+          out.talons += amount;
+        };
+        await pay(m.talons, `story:${m.id}`);
+        out.xp += m.xp;
+        const ids = new Set((await tx`SELECT mission_id FROM story_progress WHERE user_id = ${userId}`).map((r) => r.mission_id));
+        const ch = storyChapter(m.campaign, m.chapter);
+        if (ch?.achievement && isChapterDone(m.campaign, m.chapter, ids)) {
+          const got = await tx`INSERT INTO player_achievements (user_id, achievement_id) VALUES (${userId}, ${ch.achievement}) ON CONFLICT DO NOTHING RETURNING achievement_id`;
+          if (got.length > 0) {
+            out.achievement = ch.achievement;
+            out.xp += ACHIEVEMENTS[ch.achievement].xpReward;
+            await pay(ch.talons, `story:${ch.achievement}`);
+            for (const c of ch.characters) await this.give(tx, userId, "character", c, out, (t, ref) => pay(t, ref));
+            for (const s of ch.skins) await this.give(tx, userId, "skin", s, out, (t, ref) => pay(t, ref));
+          }
+        }
+        let xpTotal = prof.xp + out.xp;
+        const owned = new Set((await tx`SELECT achievement_id FROM player_achievements WHERE user_id = ${userId}`).map((r) => r.achievement_id));
+        for (const [id, lvl] of LEVEL_ACHIEVEMENTS2) {
+          if (!owned.has(id) && levelForXp(xpTotal).level >= lvl) {
+            await tx`INSERT INTO player_achievements (user_id, achievement_id) VALUES (${userId}, ${id}) ON CONFLICT DO NOTHING`;
+            xpTotal += ACHIEVEMENTS[id].xpReward;
+            out.xp += ACHIEVEMENTS[id].xpReward;
+          }
+        }
+        const level = levelForXp(xpTotal).level;
+        await tx`UPDATE profiles SET xp = ${xpTotal}, level = ${level}, tokens = ${tokens}, updated_at = now() WHERE user_id = ${userId}`;
+        const blat = await creditLevels(tx, userId, level);
+        out.blatGained = blat.gained;
+        out.tokens = tokens;
+        out.xpTotal = xpTotal;
+        out.level = level;
+      }
+      out.done = await this.done(userId, tx);
+      return out;
+    });
+  }
+  /** A story character or skin: into the inventory, or its worth in talons when it is already there. */
+  async give(tx, userId, kind, id, out, pay) {
+    const got = await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${id}, ${kind}, 'story') ON CONFLICT DO NOTHING RETURNING item_id`;
+    if (got.length > 0) {
+      if (kind === "character") out.characters.push(id);
+      else out.skins.push(id);
+      return;
+    }
+    const worth = kind === "character" ? CHARACTER_PRICES[id]?.amount ?? 0 : STORY_OWNED_SKIN_TALONS;
+    const before = out.talons;
+    await pay(worth, `story:own:${kind}:${id}`);
+    if (out.talons > before) out.compensated.push({ kind, id, talons: out.talons - before });
+  }
+};
+
+// apps/server/src/api/story.ts
+var registerStoryRoutes = (router, deps) => {
+  const auth = requireUser(deps.services.sessions);
+  const byUser = (ctx) => currentUser(ctx).userId;
+  const readLimiter = new RateLimiter(120, 2);
+  const startLimiter = new RateLimiter(30, 30 / 60);
+  const doneLimiter = new RateLimiter(30, 30 / 60);
+  const repo = () => {
+    if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
+    return new StoryRepo(deps.sql);
+  };
+  const secret = deps.env.SESSION_SECRET;
+  router.get("/api/story", auth, rateLimit(readLimiter, byUser), async (ctx) => {
+    const res = { done: await repo().done(currentUser(ctx).userId) };
+    ctx.json(200, res);
+  });
+  router.post("/api/story/start", auth, rateLimit(startLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const body = await ctx.body(StoryStartBody, 1024);
+    const m = storyMission(body.mission);
+    if (!m) throw new HttpError(404, "not_found", "No such mission");
+    if (!isMissionOpen(m.id, await repo().doneIds(me.userId))) throw new HttpError(403, "mission_locked", "Finish the mission before this one first");
+    const res = { ticket: signToken(secret, "story", { u: me.userId, m: m.id, t: Date.now(), r: randomBytes10(6).toString("base64url") }) };
+    deps.services.analytics.server("story_started", { mission: m.id }, { userId: me.userId, sessionId: me.sessionId });
+    ctx.json(200, res);
+  });
+  router.post("/api/story/complete", auth, rateLimit(doneLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const body = await ctx.body(StoryCompleteBody, 2048);
+    const now = Date.now();
+    const t = readToken(secret, "story", body.ticket, STORY_TICKET_TTL_MS, now);
+    if (!t || t.u !== me.userId) throw new HttpError(403, "bad_ticket", "This mission wasn\u2019t started from your account \u2014 start it again");
+    const m = storyMission(t.m);
+    if (!m) throw new HttpError(404, "not_found", "No such mission");
+    if (now - t.t < STORY_MIN_MS) throw new HttpError(409, "too_fast", "That was too quick to be true \u2014 play the mission through");
+    const ms = Math.min(body.ms, now - t.t);
+    try {
+      const reward = await repo().complete(me.userId, m, ms);
+      deps.services.analytics.server("story_completed", { mission: m.id, ms, first: reward.first }, { userId: me.userId, sessionId: me.sessionId });
+      if (reward.first) deps.log.info("story mission done", { userId: me.userId, mission: m.id, talons: reward.talons, achievement: reward.achievement });
+      ctx.json(200, reward);
+    } catch (e2) {
+      if (e2 instanceof StoryError) throw new HttpError(404, "no_profile", "Profile not found");
+      throw e2;
+    }
+  });
+};
+
 // apps/server/src/app.ts
-var ROUTE_MODULES = [registerAuthRoutes, registerOAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerClubRoutes, registerBlatRoutes, registerKonRoutes, registerTelegramRoutes, registerAdminRoutes];
+var ROUTE_MODULES = [registerAuthRoutes, registerOAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerClubRoutes, registerBlatRoutes, registerKonRoutes, registerStoryRoutes, registerTelegramRoutes, registerAdminRoutes];
 function createApp(deps, modules = ROUTE_MODULES) {
   const router = new Router();
   const startedAt = Date.now();
@@ -21900,10 +22509,10 @@ function createApp(deps, modules = ROUTE_MODULES) {
 }
 
 // apps/server/src/rooms/RoomManager.ts
-import { randomBytes as randomBytes11 } from "node:crypto";
+import { randomBytes as randomBytes12 } from "node:crypto";
 
 // apps/server/src/rooms/MatchRoom.ts
-import { randomBytes as randomBytes10, randomUUID as randomUUID4 } from "node:crypto";
+import { randomBytes as randomBytes11, randomUUID as randomUUID4 } from "node:crypto";
 var between = (a, b2) => a + Math.random() * Math.max(0, b2 - a);
 var NAV = /* @__PURE__ */ new Map();
 function navFor(mapId, world) {
@@ -22072,7 +22681,7 @@ var MatchRoom = class {
       queue: [],
       tokens: INPUT_BUCKET_MAX,
       lastQueuedSeq: 0,
-      reconnectToken: randomBytes10(18).toString("base64url"),
+      reconnectToken: randomBytes11(18).toString("base64url"),
       joinedAt: Date.now(),
       matchTimeMs: 0,
       violations: 0,
@@ -22858,7 +23467,7 @@ var MatchRoom = class {
 // apps/server/src/rooms/RoomManager.ts
 var ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 function newRoomId(len = 10) {
-  const bytes = randomBytes11(len);
+  const bytes = randomBytes12(len);
   let s = "";
   for (let i = 0; i < len; i++) s += ID_ALPHABET[bytes[i] % ID_ALPHABET.length];
   return s;

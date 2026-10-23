@@ -128,6 +128,11 @@ export const ACHIEVEMENT_IDS = [
   'objectives_3',
   'level_10',
   'level_25',
+  // v0.3 part 4: story chapters (talons and unlocks come with them: story/missions.ts STORY_CHAPTERS)
+  'story_petya_1',
+  'story_uchastkovy_1',
+  'story_petya_2',
+  'story_uchastkovy_2',
 ] as const;
 export type AchievementId = (typeof ACHIEVEMENT_IDS)[number];
 
@@ -179,6 +184,10 @@ export const ACHIEVEMENTS: Record<AchievementId, AchievementDef> = {
   objectives_3: { id: 'objectives_3', title: 'Raider', description: `Capture ${ACHIEVEMENT_TARGETS.objectives} flags or bases in one match.`, xpReward: 100 },
   level_10: { id: 'level_10', title: 'Big Name', description: `Reach level ${ACHIEVEMENT_TARGETS.levels[0]}.`, xpReward: 100 },
   level_25: { id: 'level_25', title: 'Boss of the District', description: `Reach level ${ACHIEVEMENT_TARGETS.levels[1]}.`, xpReward: 250 },
+  story_petya_1: { id: 'story_petya_1', title: 'Master of the Yard', description: 'Story: finish chapter 1 of «My Yard».', xpReward: 100 },
+  story_uchastkovy_1: { id: 'story_uchastkovy_1', title: 'First Report', description: 'Story: finish chapter 1 of «The Report».', xpReward: 100 },
+  story_petya_2: { id: 'story_petya_2', title: 'Garage Authority', description: 'Story: finish chapter 2 of «My Yard».', xpReward: 150 },
+  story_uchastkovy_2: { id: 'story_uchastkovy_2', title: 'Market Watch', description: 'Story: finish chapter 2 of «The Report».', xpReward: 150 },
 };
 
 /** Achievements unlocked by reaching a level (checked after the match's experience is counted). */

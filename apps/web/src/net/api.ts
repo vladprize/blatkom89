@@ -8,6 +8,9 @@ import type {
   KonFormat,
   KonResponse,
   KonTopResponse,
+  StoryProgressResponse,
+  StoryStartResponse,
+  StoryReward,
   AvatarId,
   CreateRoomResponse,
   InviteInfo,
@@ -191,6 +194,16 @@ export class Api {
   }
   konTop(by: 'players' | 'gangs') {
     return this.req<KonTopResponse>('GET', `/api/kon/top?by=${by}`);
+  }
+  /** v0.2.13: the story — the missions done; a mission's ticket; a mission reported done (its rewards). */
+  story() {
+    return this.req<StoryProgressResponse>('GET', '/api/story');
+  }
+  storyStart(mission: string) {
+    return this.req<StoryStartResponse>('POST', '/api/story/start', { mission });
+  }
+  storyComplete(ticket: string, ms: number, kills: number, deaths: number) {
+    return this.req<StoryReward>('POST', '/api/story/complete', { ticket, ms: Math.round(ms), kills, deaths });
   }
   invite(code: string) {
     return this.req<InviteInfo>('GET', `/api/invites/${encodeURIComponent(code)}`);

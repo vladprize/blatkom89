@@ -567,7 +567,11 @@ export const RU_ACHIEVEMENTS: Record<AchievementId, { title: string; description
   objective: { title: 'Дело сделано', description: 'Захватить флаг или базу.' },
   objectives_3: { title: 'Налётчик', description: 'Захватить 3 флага или базы за один матч.' },
   level_10: { title: 'Человек с положением', description: 'Дойти до 10-го уровня.' },
-  level_25: { title: 'Хозяин района', description: 'Дойти до 25-го уровня.' }
+  level_25: { title: 'Хозяин района', description: 'Дойти до 25-го уровня.' },
+  story_petya_1: { title: 'Хозяин двора', description: 'Сюжет: пройти 1-ю главу «Мой двор».' },
+  story_uchastkovy_1: { title: 'Первый протокол', description: 'Сюжет: пройти 1-ю главу «Протокол».' },
+  story_petya_2: { title: 'Авторитет гаражей', description: 'Сюжет: пройти 2-ю главу «Мой двор».' },
+  story_uchastkovy_2: { title: 'Рыночный надзор', description: 'Сюжет: пройти 2-ю главу «Протокол».' }
 };
 
 /** Weapon skins' finishes (v0.23). */

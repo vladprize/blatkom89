@@ -15,8 +15,9 @@
  *
  * Nothing but the provider's id for the player is kept (no email, no picture, no tokens).
  */
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { Env } from '../config/env.js';
+import { readToken, signToken } from '../security/signed.js';
 
 export const OAUTH_PROVIDERS = ['google', 'facebook', 'discord', 'reddit'] as const;
 export type OAuthProvider = (typeof OAUTH_PROVIDERS)[number];
@@ -113,27 +114,8 @@ export function callbackUrl(env: Pick<Env, 'PUBLIC_URL'>, p: OAuthProvider): str
 // ── signed tokens: the intent (page → start) and the state (start → provider → callback) ─────────────
 
 const b64 = (b: Buffer | string) => Buffer.from(b).toString('base64url');
-
-function sign(secret: string, kind: string, payload: Record<string, unknown>): string {
-  const body = b64(JSON.stringify(payload));
-  const mac = createHmac('sha256', secret).update(`${kind}.${body}`).digest('base64url');
-  return `${body}.${mac}`;
-}
-
-function verify<T>(secret: string, kind: string, token: string, maxAgeMs: number, now = Date.now()): T | null {
-  const [body, mac] = token.split('.');
-  if (!body || !mac) return null;
-  const want = Buffer.from(createHmac('sha256', secret).update(`${kind}.${body}`).digest('base64url'));
-  const got = Buffer.from(mac);
-  if (want.length !== got.length || !timingSafeEqual(want, got)) return null;
-  try {
-    const p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as T & { t?: number };
-    if (typeof p.t !== 'number' || p.t > now + 60_000 || now - p.t > maxAgeMs) return null;
-    return p;
-  } catch {
-    return null;
-  }
-}
+const sign = signToken;
+const verify = readToken;
 
 export interface OAuthIntent {
   /** The account the page is signed in to (it gets the provider linked when the id is new). */
