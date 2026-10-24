@@ -1,7 +1,7 @@
 // The story mode end to end (v0.2.13, part 4a): A (English, desktop) and B (Russian, phone).
 // A: the menu's «Story» button; the first visit plays the prologue by itself (2089 in neon over the
 // BLATKOM hall), «Skip»; the soundtrack very quietly behind every comic, off in the mission
-// ends it; the hub — two campaigns of five missions in chapter 1, chapters 3–4 on the way, the first
+// ends it; the hub — two campaigns of five missions in chapter 1, chapter 4 on the way, the first
 // mission open and the rest locked, the card index empty; mission 1 of «My Yard»: the campaign's
 // opening and the mission's comic over the yard's big picture, then the mission — the objective line counts the loafers, the
 // characters' lines pop up; everybody down (after the server's shortest time) — the comic after it, the
@@ -100,7 +100,7 @@ try {
     soon: document.querySelectorAll('.scamp__chapters button.soon').length,
     cards: document.querySelector('[data-testid=story-cards]')?.textContent,
   }));
-  check(hub.campaigns === 2 && hub.missions.length === 10 && hub.missions.filter((m) => m.endsWith(':open')).length === 2 && hub.missions.includes('a1:open') && hub.missions.includes('a2:locked') && hub.soon === 4, `the hub: two campaigns, chapter 1 with 5 missions each, the first open, chapters 3–4 on the way (${JSON.stringify(hub)})`);
+  check(hub.campaigns === 2 && hub.missions.length === 10 && hub.missions.filter((m) => m.endsWith(':open')).length === 2 && hub.missions.includes('a1:open') && hub.missions.includes('a2:locked') && hub.soon === 2, `the hub: two campaigns, chapter 1 with 5 missions each, the first open, chapter 4 on the way (${JSON.stringify(hub)})`);
   check(/0\/22/.test(hub.cards ?? ''), `the card index is empty (${hub.cards})`);
   await A.page.screenshot({ path: `${outDir}/story_hub_desktop.png`, fullPage: true });
   await A.page.reload();
@@ -154,7 +154,7 @@ try {
   await A.page.getByTestId('story-hub').click();
   await A.page.getByTestId('story').waitFor({ timeout: 15000 });
   const after = await A.page.evaluate(() => ({ a1: document.querySelector('[data-testid=story-mission-a1]')?.getAttribute('data-state'), a2: document.querySelector('[data-testid=story-mission-a2]')?.getAttribute('data-state'), best: document.querySelector('[data-testid=story-mission-a1] .smission__reward')?.textContent, cards: document.querySelector('[data-testid=story-cards]')?.textContent, progress: document.querySelector('[data-testid=story-progress-petya]')?.textContent }));
-  check(after.a1 === 'done' && after.a2 === 'open' && /Best time 0:1\d/.test(after.best ?? '') && /1\/22/.test(after.cards ?? '') && /^1\/10/.test(after.progress ?? ''), `the hub: mission 1 done, mission 2 open (${JSON.stringify(after)})`);
+  check(after.a1 === 'done' && after.a2 === 'open' && /Best time 0:1\d/.test(after.best ?? '') && /1\/22/.test(after.cards ?? '') && /^1\/12/.test(after.progress ?? ''), `the hub: mission 1 done, mission 2 open (${JSON.stringify(after)})`);
   await A.page.getByTestId('story-cards').click();
   await A.page.getByTestId('story-cardgrid').waitFor({ timeout: 10000 });
   const met = await A.page.evaluate(() => [...document.querySelectorAll('[data-met=true]')].map((e) => e.getAttribute('data-testid')));

@@ -571,7 +571,9 @@ export const RU_ACHIEVEMENTS: Record<AchievementId, { title: string; description
   story_petya_1: { title: 'Хозяин двора', description: 'Сюжет: пройти 1-ю главу «Мой двор».' },
   story_uchastkovy_1: { title: 'Первый протокол', description: 'Сюжет: пройти 1-ю главу «Протокол».' },
   story_petya_2: { title: 'Авторитет гаражей', description: 'Сюжет: пройти 2-ю главу «Мой двор».' },
-  story_uchastkovy_2: { title: 'Рыночный надзор', description: 'Сюжет: пройти 2-ю главу «Протокол».' }
+  story_uchastkovy_2: { title: 'Рыночный надзор', description: 'Сюжет: пройти 2-ю главу «Протокол».' },
+  story_petya_3: { title: 'Ночная смена', description: 'Сюжет: пройти 3-ю главу «Мой двор».' },
+  story_uchastkovy_3: { title: 'Главный свидетель', description: 'Сюжет: пройти 3-ю главу «Протокол».' }
 };
 
 /** Weapon skins' finishes (v0.23). */

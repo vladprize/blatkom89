@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.14"),
+  SERVER_VERSION: external_exports.string().default("0.2.15"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -11386,7 +11386,9 @@ var ACHIEVEMENT_IDS = [
   "story_petya_1",
   "story_uchastkovy_1",
   "story_petya_2",
-  "story_uchastkovy_2"
+  "story_uchastkovy_2",
+  "story_petya_3",
+  "story_uchastkovy_3"
 ];
 var WIN_STREAK_TARGET = 3;
 var MULTI_KILL_TARGET = 5;
@@ -11430,7 +11432,9 @@ var ACHIEVEMENTS = {
   story_petya_1: { id: "story_petya_1", title: "Master of the Yard", description: "Story: finish chapter 1 of \xABMy Yard\xBB.", xpReward: 100 },
   story_uchastkovy_1: { id: "story_uchastkovy_1", title: "First Report", description: "Story: finish chapter 1 of \xABThe Report\xBB.", xpReward: 100 },
   story_petya_2: { id: "story_petya_2", title: "Garage Authority", description: "Story: finish chapter 2 of \xABMy Yard\xBB.", xpReward: 150 },
-  story_uchastkovy_2: { id: "story_uchastkovy_2", title: "Market Watch", description: "Story: finish chapter 2 of \xABThe Report\xBB.", xpReward: 150 }
+  story_uchastkovy_2: { id: "story_uchastkovy_2", title: "Market Watch", description: "Story: finish chapter 2 of \xABThe Report\xBB.", xpReward: 150 },
+  story_petya_3: { id: "story_petya_3", title: "Night Shift", description: "Story: finish chapter 3 of \xABMy Yard\xBB.", xpReward: 200 },
+  story_uchastkovy_3: { id: "story_uchastkovy_3", title: "Key Witness", description: "Story: finish chapter 3 of \xABThe Report\xBB.", xpReward: 200 }
 };
 var LEVEL_ACHIEVEMENTS = [
   ["level_10", ACHIEVEMENT_TARGETS.levels[0]],
@@ -12020,16 +12024,111 @@ var STORY_MISSIONS = [
       enemy("gorilla", "smuggler", kit("pistol", "bita", "uzi"), "easy"),
       enemy("oryol", "self", kit("p92", "nozh", "m4"), "normal", { boss: true })
     ]
+  },
+  // ── Petya «My Yard», chapter 3 «The Industrial Zone» (v0.2.15: two missions; the story goes on in updates) ──
+  {
+    id: "a11",
+    campaign: "petya",
+    chapter: 3,
+    n: 11,
+    map: "factory",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "avtomat", "f1"),
+    objective: { kind: "clear" },
+    timeLimitMs: 3e5,
+    waveGapMs: 1500,
+    meets: ["krysa", "buyvol"],
+    talons: 170,
+    xp: 105,
+    npcs: [
+      ally("krysa", kit("pistol", "bita", "ksyuha")),
+      enemy("nosorog", "workshop", kit("pistol", "montirovka", "obrez")),
+      enemy("slon", "workshop", kit("pistol", "bita", "uzi"), "easy"),
+      enemy("leopard", "workshop", kit("pistol", "nozh", "mp5")),
+      enemy("gorilla", "workshop", kit("tt", "kuvalda", "avtomat"), "normal", { wave: 1 }),
+      enemy("lobster", "workshop", kit("pistol", "bita", "obrez"), "easy", { wave: 1 }),
+      enemy("oryol", "workshop", kit("pistol", "nozh", "uzi"), "easy", { wave: 1 }),
+      enemy("buyvol", "self", kit("tt", "kuvalda", "obrez"), "normal", { wave: 2, boss: true }),
+      enemy("akula", "workshop", kit("pistol", "montirovka", "ksyuha"), "easy", { wave: 2 })
+    ]
+  },
+  {
+    id: "a12",
+    campaign: "petya",
+    chapter: 3,
+    n: 12,
+    map: "stroyka",
+    hero: "petya",
+    kit: kit("pistol", "montirovka", "avtomat", "mine"),
+    objective: { kind: "bases", limit: 100 },
+    timeLimitMs: 36e4,
+    meets: ["svinya", "golub"],
+    talons: 190,
+    xp: 115,
+    npcs: [
+      ally("mihalych", kit("pistol", "montirovka", "avtomat", "f1")),
+      ally("golub", kit("pistol", "bita", "ksyuha", "molotov")),
+      ally("svinya", kit("pistol", "montirovka", "obrez"), "easy"),
+      enemy("gorilla", "workshop", kit("tt", "kuvalda", "avtomat")),
+      enemy("slon", "workshop", kit("pistol", "bita", "obrez")),
+      enemy("leopard", "workshop", kit("pistol", "nozh", "mp5")),
+      enemy("nosorog", "workshop", kit("pistol", "montirovka", "uzi"), "easy"),
+      enemy("lobster", "workshop", kit("pistol", "bita", "obrez"), "easy")
+    ]
+  },
+  // ── Uchastkovy «The Report», chapter 3 «Downtown» (v0.2.15: two missions; the story goes on in updates) ──
+  {
+    id: "b11",
+    campaign: "uchastkovy",
+    chapter: 3,
+    n: 11,
+    map: "gastronom",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "avtomat", "flash"),
+    objective: { kind: "team", limit: 10 },
+    timeLimitMs: 3e5,
+    meets: ["leopard", "slon"],
+    talons: 170,
+    xp: 105,
+    npcs: [
+      ally("koshka", kit("p92", "nozh", "mp5", "smoke")),
+      enemy("slon", "self", kit("tt", "bita", "uzi")),
+      enemy("gorilla", "guard", kit("pistol", "montirovka", "obrez")),
+      enemy("buyvol", "guard", kit("pistol", "bita", "obrez"), "easy"),
+      enemy("leopard", "self", kit("p92", "nozh", "avtomat"), "normal", { boss: true })
+    ]
+  },
+  {
+    id: "b12",
+    campaign: "uchastkovy",
+    chapter: 3,
+    n: 12,
+    map: "hospital",
+    hero: "uchastkovy",
+    kit: kit("pistol", "bita", "avtomat", "f1"),
+    objective: { kind: "survive" },
+    timeLimitMs: 75e3,
+    meets: ["nosorog", "gorilla"],
+    talons: 190,
+    xp: 115,
+    npcs: [
+      ally("koshka", kit("p92", "nozh", "mp5", "smoke")),
+      ally("nosorog", kit("pistol", "bita", "obrez")),
+      enemy("gorilla", "self", kit("tt", "kuvalda", "avtomat"), "normal", { boss: true }),
+      enemy("buyvol", "workshop", kit("pistol", "montirovka", "obrez"), "easy"),
+      enemy("svinya", "workshop", kit("pistol", "bita"), "easy"),
+      enemy("krysa", "workshop", kit("tt", "bita", "ksyuha"), "easy")
+    ]
   }
 ];
 var STORY_CHAPTERS = [
   { campaign: "petya", chapter: 1, ready: true, achievement: "story_petya_1", talons: 500, characters: [], skins: ["montirovka.hohloma"] },
   { campaign: "petya", chapter: 2, ready: true, achievement: "story_petya_2", talons: 600, characters: [], skins: [] },
-  { campaign: "petya", chapter: 3, ready: false, achievement: null, talons: 700, characters: ["golub"], skins: [] },
+  { campaign: "petya", chapter: 3, ready: true, achievement: "story_petya_3", talons: 700, characters: ["golub"], skins: [] },
   { campaign: "petya", chapter: 4, ready: false, achievement: null, talons: 1e3, characters: [], skins: ["avtomat.zoloto"] },
   { campaign: "uchastkovy", chapter: 1, ready: true, achievement: "story_uchastkovy_1", talons: 500, characters: ["uchastkovy"], skins: [] },
   { campaign: "uchastkovy", chapter: 2, ready: true, achievement: "story_uchastkovy_2", talons: 600, characters: ["koshka"], skins: ["pistol.gzhel"] },
-  { campaign: "uchastkovy", chapter: 3, ready: false, achievement: null, talons: 700, characters: [], skins: [] },
+  { campaign: "uchastkovy", chapter: 3, ready: true, achievement: "story_uchastkovy_3", talons: 700, characters: [], skins: [] },
   { campaign: "uchastkovy", chapter: 4, ready: false, achievement: null, talons: 1e3, characters: [], skins: [] }
 ];
 var STORY_CARD_INDEX = CHARACTER_IDS.filter((c) => c !== "petya" && c !== "uchastkovy");

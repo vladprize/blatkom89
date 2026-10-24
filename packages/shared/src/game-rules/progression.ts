@@ -133,6 +133,8 @@ export const ACHIEVEMENT_IDS = [
   'story_uchastkovy_1',
   'story_petya_2',
   'story_uchastkovy_2',
+  'story_petya_3',
+  'story_uchastkovy_3',
 ] as const;
 export type AchievementId = (typeof ACHIEVEMENT_IDS)[number];
 
@@ -188,6 +190,8 @@ export const ACHIEVEMENTS: Record<AchievementId, AchievementDef> = {
   story_uchastkovy_1: { id: 'story_uchastkovy_1', title: 'First Report', description: 'Story: finish chapter 1 of «The Report».', xpReward: 100 },
   story_petya_2: { id: 'story_petya_2', title: 'Garage Authority', description: 'Story: finish chapter 2 of «My Yard».', xpReward: 150 },
   story_uchastkovy_2: { id: 'story_uchastkovy_2', title: 'Market Watch', description: 'Story: finish chapter 2 of «The Report».', xpReward: 150 },
+  story_petya_3: { id: 'story_petya_3', title: 'Night Shift', description: 'Story: finish chapter 3 of «My Yard».', xpReward: 200 },
+  story_uchastkovy_3: { id: 'story_uchastkovy_3', title: 'Key Witness', description: 'Story: finish chapter 3 of «The Report».', xpReward: 200 },
 };
 
 /** Achievements unlocked by reaching a level (checked after the match's experience is counted). */

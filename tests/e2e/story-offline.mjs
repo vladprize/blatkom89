@@ -5,7 +5,10 @@
 //     everybody down — the comic after it and «+40 XP» in the local profile, written to the storage;
 //     after a reload mission 1 is done, mission 2 open and the prologue doesn't play again; with chapter 1
 //     of «The Report» done the hub opens chapter 2, whose first mission — its comic over the square's big
-//     picture, carried inside the file — plays and pays.
+//     picture, carried inside the file — plays and pays. The open end (v0.2.15): with «My Yard» done up to
+//     chapter 3 the hub opens chapter 3 (chapter 4 «coming soon»), its last mission «The Foundation Pit»
+//     plays over the building site, its comic looks in on 2089 and ends with «To be continued» over the
+//     yard, the chapter's achievement comes, the end screen says chapter 4 comes in an update.
 //  2. A browser that refuses storage to a file from disk (Safari does — «SecurityError: The operation is
 //     insecure»): the game still starts, the hub warns that the progress lasts until the tab closes, and
 //     within the session the story moves on — mission 1 done opens mission 2, the prologue doesn't come back.
@@ -71,6 +74,22 @@ const readComic = async (page) => {
   }
   return n;
 };
+/** Reads a comic to its end, page by page: the picture behind it, the words, 2089 or not. */
+const comicPages = async (page) => {
+  const pages = [];
+  for (let n = 0; n < 40 && (await page.getByTestId('comic').count()) > 0; n++) {
+    pages.push(
+      await page.evaluate(() => {
+        const imgs = [...document.querySelectorAll('[data-testid=comic-scene]:not(.comic__scene--out)')];
+        const panels = [...document.querySelectorAll('[data-testid=comic-panel]')];
+        return { scene: imgs[imgs.length - 1]?.getAttribute('data-scene') ?? null, text: panels[panels.length - 1]?.textContent ?? '', neon: !!document.querySelector('.comic--neon') };
+      }),
+    );
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(150);
+  }
+  return pages;
+};
 /** Wins the mission on screen: everybody down (team missions: the limit first). */
 const winMission = async (page) => {
   for (let k = 0; k < 8; k++) {
@@ -83,6 +102,8 @@ const winMission = async (page) => {
       const hero = w.players.get('local');
       hero.invulnUntil = 1e12;
       if (s.mission.objective.kind === 'team') w.teamScore[0] = s.mission.objective.limit - 1;
+      // «hold the spots»: the side's points at the limit — the next base tick ends it
+      if (s.mission.objective.kind === 'bases') w.teamScore[0] = s.mission.objective.limit;
       for (const e of [...w.players.values()].filter((p) => p.team === 1 && p.alive)) {
         e.invulnUntil = 0;
         w.applyDamage(e, hero, 999, 'pistol');
@@ -195,6 +216,51 @@ const failure = async (page, name) => {
     check((await page.getByTestId('story-rewards').innerText()).trim() === '+70 XP', 'and pays its experience');
     check((await page.getByTestId('story-end-scene').getAttribute('data-testid')) && (await page.evaluate(() => document.querySelector('[data-testid=story-end-scene]')?.getAttribute('src')?.startsWith('data:image/jpeg'))), 'the end of the mission over the square’s picture');
     await page.screenshot({ path: `${outDir}/offline_b6_win.png` });
+    // the open end (v0.2.15): «My Yard» done up to its last mission so far
+    await page.evaluate(() => {
+      const raw = JSON.parse(localStorage.getItem('blatkom89.story.local.v1'));
+      const have = new Set(raw.done.map((d) => d.id));
+      for (let n = 1; n <= 11; n++) if (!have.has(`a${n}`)) raw.done.push({ id: `a${n}`, at: new Date().toISOString(), bestMs: 60000, completions: 1 });
+      localStorage.setItem('blatkom89.story.local.v1', JSON.stringify(raw));
+    });
+    await page.getByTestId('story-hub').click();
+    await page.locator('.topbar .back').click();
+    await page.getByTestId('menu-story').click();
+    await page.getByTestId('story').waitFor({ timeout: 20000 });
+    await page.waitForTimeout(400);
+    const ch3 = await page.evaluate(() => {
+      const c = document.querySelector('[data-testid=story-campaign-petya]');
+      return {
+        tab: c?.querySelector('.scamp__chapters [aria-pressed=true] b')?.textContent,
+        soon: [...(c?.querySelectorAll('.scamp__chapters button.soon b') ?? [])].map((b) => b.textContent).join(','),
+        a11: document.querySelector('[data-testid=story-mission-a11]')?.getAttribute('data-state'),
+        a12: document.querySelector('[data-testid=story-mission-a12]')?.getAttribute('data-state'),
+        scene: document.querySelector('[data-testid=story-mission-a12]')?.getAttribute('data-scene'),
+        progress: document.querySelector('[data-testid=story-progress-petya] b')?.textContent,
+      };
+    });
+    check(ch3.tab === '3' && ch3.soon === '4' && ch3.a11 === 'done' && ch3.a12 === 'open' && ch3.scene === 'stroyka' && ch3.progress === '11/12', `«Мой двор» opens on chapter 3 — «Котлован» open over the building site, chapter 4 coming soon (${JSON.stringify(ch3)})`);
+    await page.screenshot({ path: `${outDir}/offline_ch3_hub.png` });
+    await page.getByTestId('story-play-a12').click();
+    await page.getByTestId('comic').waitFor({ timeout: 15000 });
+    const intro = await comicPages(page);
+    check(intro.length >= 5 && intro[0].scene === 'stroyka' && /Объект 900/.test(intro[0].text), `«Котлован»: the comic over the building site's picture (${intro.length} pages: ${intro.map((p) => p.scene).join(',')})`);
+    await page.getByTestId('story-goal').waitFor({ state: 'visible', timeout: 30000 });
+    check(/Останови стройку: \d+ из 100 очков/.test(await page.getByTestId('story-goal').innerText()), 'its objective: hold the points');
+    await winMission(page);
+    await page.getByTestId('comic').waitFor({ timeout: 20000 });
+    await page.waitForTimeout(300);
+    const outro = await comicPages(page);
+    const last = outro[outro.length - 1] ?? {};
+    const in2089 = outro.find((p) => p.neon);
+    check(in2089?.scene === 'hall2089' && /Дело отложено/.test(in2089.text), `the comic after it looks in on 2089: «${in2089?.text ?? ''}»`);
+    check(last.scene === 'yard' && !last.neon && /^Продолжение следует\./.test(last.text), `and ends with «to be continued» over the yard («${last.text}», ${last.scene})`);
+    await page.getByTestId('story-rewards').waitFor({ timeout: 20000 });
+    const rew = (await page.getByTestId('story-rewards').innerText()).trim();
+    check(/\+\d+ XP/.test(rew) && /Ночная смена/.test(rew), `the chapter's achievement comes with it («${rew.replace(/\s+/g, ' ')}»)`);
+    const cont = await page.getByTestId('story-continued').innerText().catch(() => '');
+    check(/Продолжение следует: глава 4 выйдет в одном из следующих обновлений/.test(cont) && (await page.getByTestId('story-next').count()) === 0, `the end screen: no next mission, chapter 4 comes in an update («${cont}»)`);
+    await page.screenshot({ path: `${outDir}/offline_open_end.png` });
     check(problems.length === 0, `no page errors, nothing from the network (${problems.join(' | ')})`);
   } catch (e) {
     console.error('[story-offline] failed:', e);

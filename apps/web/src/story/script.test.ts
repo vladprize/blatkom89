@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHARACTER_IDS, STORY_MISSIONS, STORY_ROLES } from '@blatkom/shared';
+import { CHARACTER_IDS, STORY_CAMPAIGNS, STORY_MISSIONS, STORY_ROLES, campaignMissions } from '@blatkom/shared';
 import { CAMPAIGNS, CAMPAIGN_OPENING, CHAPTER_TITLES, FAIL_LINES, MISSION_SCRIPTS, PEOPLE_2089, PROLOGUE, ROLE_NAMES } from './script.js';
 import type { Beat, Line } from './script.js';
 
@@ -57,4 +57,20 @@ test('every line is there in both languages, fits a bubble, and is said by someo
 test('the words keep to the game’s tone: no prison nicknames for the heroes', () => {
   for (const { where, l } of all()) assert.ok(!/петух/i.test(l[1]), `${where}: «${l[1]}»`);
   assert.ok(lines(PROLOGUE).length >= 6, 'the prologue tells the frame');
+});
+
+test('the story so far ends on an open end for both heroes (v0.2.15): the last written mission says «to be continued»', () => {
+  for (const c of STORY_CAMPAIGNS) {
+    const ms = campaignMissions(c);
+    const last = ms[ms.length - 1]!;
+    const end = MISSION_SCRIPTS[last.id]!.outro;
+    const final = end[end.length - 1]!;
+    assert.equal(final.who, 'caption', `${c}: the narrator closes ${last.id}`);
+    assert.match(final.say[0], /^To be continued\./, `${c}: «${final.say[0]}»`);
+    assert.match(final.say[1], /^Продолжение следует\./, `${c}: «${final.say[1]}»`);
+    assert.ok(end.some((b) => b.fx === 'neon'), `${c}: ${last.id} looks in on 2089 before the end`);
+    assert.equal(final.scene, 'yard', `${c}: the end is over the yard, where the prologue left off`);
+    // only the last mission so far says it — the earlier ones lead on to the next
+    for (const m of ms.slice(0, -1)) assert.ok(!MISSION_SCRIPTS[m.id]!.outro.some((b) => /^Продолжение следует/.test(b.say[1])), `${m.id} is not the end`);
+  }
 });

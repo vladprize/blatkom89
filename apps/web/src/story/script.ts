@@ -1,6 +1,7 @@
 /**
- * The words of the story mode (v0.2.13, part 4a): the prologue in 2089, the openings of the two
- * campaigns and chapters 1–2 of both — comic panels before and after each mission and the lines the
+ * The words of the story mode (v0.2.13–v0.2.15): the prologue in 2089, the openings of the two
+ * campaigns and chapters 1–3 of both (chapter 3 ends the story so far on an open end — to be continued
+ * in updates) — comic panels before and after each mission and the lines the
  * characters say during it. Every line is [English, Russian]. The numbers of the missions (maps, kits,
  * enemies, rewards) are in the shared package (packages/shared/src/story/missions.ts).
  */
@@ -549,6 +550,105 @@ export const MISSION_SCRIPTS: Record<string, MissionScript> = {
       { who: 'uchastkovy', say: ['Murka. Come and work with me. Officially.', 'Мурка. Иди ко мне работать. Официально.'] },
       { who: 'koshka', say: ['Officially — no. But I’ll be around.', 'Официально — нет. Но рядом буду.'] },
       { who: 'volkov', fx: 'neon', say: ['2089. Oversight. Inspector Volkov writes in the case file: «Arkadiev. Arkadia Development. Coincidence?»', '2089. Отдел надзора. Инспектор Волков пишет в деле: «Аркадьев. „Аркадия Девелопмент“. Совпадение?»'] },
+    ],
+  },
+  // ── «My Yard», chapter 3 «The Industrial Zone» (v0.2.15) — to be continued ──────────────────
+  a11: {
+    title: ['Workshop No. 3', 'Цех №3'],
+    goal: ['Clear the workshop: {left} left', 'Зачисти цех: осталось {left}'],
+    intro: [
+      { who: 'caption', fx: 'vhs', say: ['The factory. The night shift. Workshop No. 3 makes neither nuts nor bolts — it makes tapes.', 'Завод. Ночная смена. Цех №3 не делает ни гаек, ни болтов — он делает кассеты.'] },
+      { who: 'krysa', say: ['Commandant? Sery. I had a gym in the basement here. Then the «Workshop» lot came and turned it into a copying room.', 'Комендант? Серый. Я тут в подвале качалку держал. Потом пришли цеховые и сделали там копировальную.'] },
+      { who: 'petya', say: ['Tapes. Number eighty-nine?', 'Кассеты. Номер восемьдесят девять?'] },
+      { who: 'krysa', say: ['Hundreds of them. And on the door — Bugai. He doesn’t read passes. He reads faces.', 'Сотни. А на входе — Бугай. Он не читает пропуска. Он читает лица.'] },
+      { who: 'petya', say: ['Then he’s about to read mine.', 'Значит, моё он сейчас прочитает.'] },
+    ],
+    barks: {
+      start: { who: 'krysa', say: ['Warm-up’s over. On to the heavy sets!', 'Разминка окончена. Пошли подходы!'] },
+      firstKill: { who: 'petya', say: ['One went home early.', 'Один ушёл со смены пораньше.'] },
+      wave: { who: 'buyvol', say: ['Who let a bird in here?!', 'Кто пустил сюда птицу?!'] },
+      lowHp: { who: 'krysa', say: ['Breathe, Commandant! Breathe out on the effort!', 'Дыши, Комендант! Выдох — на усилии!'] },
+      win: { who: 'petya', say: ['The workshop is closed. For good.', 'Цех закрыт. Навсегда.'] },
+    },
+    outro: [
+      { who: 'buyvol', say: ['All right, all right… I only stand on the door. The copies go to the building site. To the trailer by the foundation pit.', 'Ладно, ладно… Я только на входе стою. Копии везут на стройку. В вагончик у котлована.'] },
+      { who: 'petya', say: ['A building site? What are they building?', 'Стройка? Что там строят?'] },
+      { who: 'buyvol', say: ['Nobody knows. The fence says «Object 900». The foreman says — whatever the boss says.', 'Никто не знает. На заборе написано «Объект 900». Бригадир говорит — что начальство скажет.'] },
+      { who: 'petya', say: ['Nine hundred. Nine hundred spaces… So that’s where the tower begins.', 'Девятьсот. Девятьсот мест… Так вот откуда начинается башня.'] },
+    ],
+  },
+  a12: {
+    title: ['The Foundation Pit', 'Котлован'],
+    goal: ['Stop the building site: {score} of {limit} points', 'Останови стройку: {score} из {limit} очков'],
+    intro: [
+      { who: 'caption', fx: 'vhs', say: ['The building site behind the yard. A fence, a crane, a sign: «Object 900. Customer: A. A.»', 'Стройка за двором. Забор, кран, табличка: «Объект 900. Заказчик: А. А.»'] },
+      { who: 'svinya', say: ['Commandant! I’m Borka. I ran from the meat plant — and this lot put me to work on their site. At night they pour concrete — right towards your yard.', 'Комендант! Я Борька. С мясокомбината сбежал — так эти меня на стройку загнали. По ночам льют бетон — прямо в сторону твоего двора.'] },
+      { who: 'golub', say: ['Sizy. Chemist. I’ve mixed something for their concrete. One bucket in the mixer — and it won’t set till spring.', 'Сизый. Химик. Я для их бетона кое-что намешал. Одно ведро в мешалку — и он не схватится до весны.'] },
+      { who: 'petya', say: ['Three points: the crane, the mixer, the trailer. Hold them till dawn — and there’s no tower.', 'Три точки: кран, мешалка, вагончик. Продержим до рассвета — башни не будет.'] },
+      { who: 'mihalych', say: ['I went out for bread. Again. The bakery is past the building site anyway.', 'Я опять за хлебом. Булочная всё равно за стройкой.'] },
+    ],
+    barks: {
+      start: { who: 'golub', say: ['The bucket’s ready. Keep them off the mixer!', 'Ведро готово. К мешалке их не подпускай!'] },
+      base: { who: 'svinya', say: ['The crane is ours! You can see the whole district from up here!', 'Кран наш! Отсюда весь район видно!'] },
+      half: { who: 'petya', say: ['Halfway to dawn. The concrete is getting nervous.', 'Полпути до рассвета. Бетон нервничает.'] },
+      lowHp: { who: 'mihalych', say: ['Behind the slabs. I’ve held worse building sites.', 'За плиты. Я и не такие стройки держал.'] },
+      win: { who: 'petya', say: ['The concrete is jelly. There’s no tower.', 'Бетон — кисель. Башни нет.'] },
+    },
+    outro: [
+      { who: 'caption', say: ['Dawn. In the trailer — a drawing: a tower where the yard is. Deadline: 31 December 1989. Signed: «A. Arkadiev».', 'Рассвет. В вагончике — чертёж: башня на месте двора. Срок — 31 декабря 1989-го. Подпись: «А. Аркадьев».'] },
+      { who: 'caption', say: ['The radio in the trailer crackles: «Commandant. You have won a night. I have the whole calendar.»', 'В вагончике хрипит рация: «Комендант. Ты выиграл ночь. У меня — весь календарь».'] },
+      { who: 'petya', say: ['A calendar… We’ll see whose calendar it is.', 'Календарь… Посмотрим, чей это календарь.'] },
+      { who: 'petr', fx: 'neon', say: ['2089. Capsule 2. Pyotr Petrovich opens his eyes. The yard still stands — for now. On the BLATKOM screen: «The case is adjourned. Next hearing: date to be set».', '2089. Капсула №2. Пётр Петрович открывает глаза. Двор пока стоит. На экране БЛАТКОМа: «Дело отложено. Следующее заседание — дата будет назначена».'] },
+      { who: 'caption', fx: 'vhs', scene: 'yard', say: ['To be continued. New cases — in the next updates.', 'Продолжение следует. Новые дела — в следующих обновлениях.'] },
+    ],
+  },
+  // ── «The Report», chapter 3 «Downtown» (v0.2.15) — to be continued ────────────────────────────
+  b11: {
+    title: ['The Roof', 'Крыша'],
+    goal: ['Take the roof down: {score} of {limit}', 'Сними крышу: {score} из {limit}'],
+    intro: [
+      { who: 'caption', fx: 'vhs', say: ['Downtown. The department store. Every stall on the ground floor pays the same man.', 'Центр. Универмаг. Каждый ларёк на первом этаже платит одному человеку.'] },
+      { who: 'koshka', say: ['Batya, chief. He’s the roof over all of downtown. And upstairs he has a new tenant: «Arkadia», a cooperative.', 'Батя, начальник. Он — крыша над всем центром. А наверху у него новый жилец: кооператив «Аркадия».'] },
+      { who: 'slon', say: ['Lieutenant. In my building everybody pays. Even the police — with silence.', 'Лейтенант. В моём доме все платят. Даже милиция — молчанием.'] },
+      { who: 'uchastkovy', say: ['The police pay in reports. I’ve brought one.', 'Милиция платит протоколами. Я принёс.'] },
+      { who: 'leopard', say: ['Batya, this one’s mine. The job is paid for.', 'Батя, это ко мне. Заказ оплачен.'] },
+    ],
+    barks: {
+      start: { who: 'slon', say: ['Lyova, show him the stairs. From the top.', 'Лёва, покажи ему лестницу. Сверху.'] },
+      half: { who: 'koshka', say: ['Half the roof is leaking, chief!', 'Полкрыши протекло, начальник!'] },
+      lowHp: { who: 'koshka', say: ['Chief, the chemist’s counter is on the second floor!', 'Начальник, аптечный отдел — второй этаж!'] },
+      win: { who: 'uchastkovy', say: ['The roof is taken down. For repairs.', 'Крыша снята. На ремонт.'] },
+    },
+    outro: [
+      { who: 'leopard', say: ['Nothing personal, lieutenant. The job was for one day. The day is over.', 'Ничего личного, лейтенант. Заказ был на день. День кончился.'] },
+      { who: 'uchastkovy', say: ['Who placed the order?', 'Кто заказчик?'] },
+      { who: 'slon', say: ['The tenant upstairs. Nobody knows where he came from. Only old Rogov remembers — he’s in City Hospital No. 3.', 'Жилец сверху. Откуда взялся — никто не знает. Помнит только старик Рогов. Он в Третьей городской.'] },
+      { who: 'koshka', say: ['Then somebody will want him quiet. Tonight.', 'Значит, кто-то захочет, чтобы он молчал. Сегодня ночью.'] },
+    ],
+  },
+  b12: {
+    title: ['The Witness', 'Свидетель'],
+    goal: ['Hold the corridor until morning', 'Удержи коридор до утра'],
+    intro: [
+      { who: 'caption', say: ['City Hospital No. 3, the third floor. An old man with a horn on his nose is reading yesterday’s paper upside down.', 'Городская больница №3, третий этаж. Старик с рогом на носу читает вчерашнюю газету вверх ногами.'] },
+      { who: 'nosorog', say: ['A lieutenant. Forty years nobody asked me anything. Now everybody wants to — the Tycoon’s people first of all.', 'Лейтенант. Сорок лет меня никто ни о чём не спрашивал. А теперь все хотят — люди Цеховика первыми.'] },
+      { who: 'uchastkovy', say: ['Citizen Rogov. Who is the Tycoon?', 'Гражданин Рогов. Кто такой Цеховик?'] },
+      { who: 'nosorog', say: ['Hold the corridor till morning and I’ll tell you. Samson is already coming up the stairs with his brigade.', 'Продержишь коридор до утра — скажу. Самсон уже поднимается по лестнице со своей бригадой.'] },
+      { who: 'koshka', say: ['Samson, the market foreman. He keeps the whole market in line. Now he’s come to line us up.', 'Бригадир Самсон. Он на рынке всех строит. Теперь пришёл строить нас.'] },
+    ],
+    barks: {
+      start: { who: 'gorilla', say: ['Brigade! Clear the ward! It’s coming down!', 'Бригада! Палату освободить! Под снос!'] },
+      firstKill: { who: 'uchastkovy', say: ['Visiting hours are over.', 'Часы посещений окончены.'] },
+      lowHp: { who: 'nosorog', say: ['Don’t you die on me, lieutenant. I haven’t told you anything yet.', 'Не помирай, лейтенант. Я тебе ещё ничего не рассказал.'] },
+      win: { who: 'koshka', say: ['Morning, chief. The day shift is here. And the patrol car.', 'Утро, начальник. Пришла дневная смена. И наряд.'] },
+    },
+    outro: [
+      { who: 'nosorog', say: ['Arkadich isn’t from round here, lieutenant. Not from this district. Not from this year.', 'Аркадич не здешний, лейтенант. Не с этого района. И не с этого года.'] },
+      { who: 'uchastkovy', say: ['Explain.', 'Поясните.'] },
+      { who: 'nosorog', say: ['He knows how it all ends. He has already seen it. On a tape.', 'Он знает, чем всё кончится. Он это уже видел. На кассете.'] },
+      { who: 'volkov', fx: 'neon', say: ['2089. Oversight. Inspector Volkov opens the file: Arkadiev’s capsule is not in the BLATKOM register. He isn’t lying in the simulation — he is running it.', '2089. Отдел надзора. Инспектор Волков открывает дело: капсулы Аркадьева нет в реестре БЛАТКОМа. Он не лежит в симуляции — он ею управляет.'] },
+      { who: 'volkov', fx: 'neon', say: ['Case No. 89 is not closed. Find, file, report.', 'Дело №89 не закрыто. Найти, оформить, доложить.'] },
+      { who: 'caption', fx: 'vhs', scene: 'yard', say: ['To be continued. New cases — in the next updates.', 'Продолжение следует. Новые дела — в следующих обновлениях.'] },
     ],
   },
 };

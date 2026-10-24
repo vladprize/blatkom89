@@ -173,8 +173,9 @@ export function renderCards(done: StoryDone[]): HTMLElement {
   );
 }
 
-/** A mission done: what it paid (the first time) and where to go next. */
-export function renderStoryWin(o: { mission: StoryMission; ms: number; reward: StoryReward | null; error: string | null; next: StoryMission | null; offline?: boolean; onNext: () => void; onHub: () => void; onRetrySend: () => void }): HTMLElement {
+/** A mission done: what it paid (the first time) and where to go next — or, after the last mission
+ * written so far, the chapter that comes in an update (`continued`). */
+export function renderStoryWin(o: { mission: StoryMission; ms: number; reward: StoryReward | null; error: string | null; next: StoryMission | null; continued?: number | null; offline?: boolean; onNext: () => void; onHub: () => void; onRetrySend: () => void }): HTMLElement {
   const r = o.reward;
   const lines: HTMLElement[] = [];
   if (r?.first) {
@@ -200,6 +201,7 @@ export function renderStoryWin(o: { mission: StoryMission; ms: number; reward: S
       : r
         ? h('ul', { class: 'sresult__rewards', 'data-testid': 'story-rewards' }, ...lines)
         : h('div', { class: 'spinner' }),
+    o.continued ? h('div', { class: 'sresult__caption', 'data-testid': 'story-continued' }, t('To be continued: chapter {n} comes in one of the next updates.', { n: o.continued })) : null,
     h('div', { class: 'sresult__btns' }, o.next ? h('button', { class: 'btn btn--red', 'data-testid': 'story-next', onclick: o.onNext }, t('Next: {title}', { title: missionTitle(o.next) })) : null, h('button', { class: 'btn', 'data-testid': 'story-hub', onclick: o.onHub }, t('Back to the story'))),
   );
 }

@@ -1,4 +1,4 @@
-# The story mode (v0.2.13–v0.2.14, the owner's list v0.3 part 4)
+# The story mode (v0.2.13–v0.2.15, the owner's list v0.3 part 4)
 
 2089: the city's disputes go to **BLATKOM**. Both sides are plugged into a simulation of 1989 — half
 human, half beast — and whoever holds the district there is right out here. Two campaigns at war with
@@ -18,13 +18,41 @@ the mission in the browser: `apps/web/src/story/StorySession.ts`; the flow (hub,
 | «Мой двор» | 2 «Гаражи» | a6 «Видак», a7 «Теплотрасса», a8 «Посылка», a9 «Сонька», a10 «Ночь в кооперативе» | «Авторитет гаражей»: 600 talons |
 | «Протокол» | 1 «Участок» | b1 «Первый день», b2 «Лиса», b3 «Дискотека», b4 «Обыск», b5 «Комендант» | «Первый протокол»: 500 talons, Участковый |
 | «Протокол» | 2 «Толкучка» | b6 «Толкучка», b7 «Кооператив», b8 «Груз», b9 «Кладбище», b10 «Облава» | «Рыночный надзор»: 600 talons, Кошка, the «Гжель» pistol |
+| «Мой двор» | 3 «Промзона» (v0.2.15) | a11 «Цех №3», a12 «Котлован» | «Ночная смена»: 700 talons, Сизый |
+| «Протокол» | 3 «Центр» (v0.2.15) | b11 «Крыша», b12 «Свидетель» | «Главный свидетель»: 700 talons |
 
-20 missions; a mission's clock runs 75 s («Продержись») to 6 minutes, plus its comics before and after.
-Each chapter's achievement also gives 100–150 XP. Chapters 3 and 4 of each campaign and the finale («Стройка» — the two of them against Аркадич, the
-legendary «Неон-2089» skin for every weapon) are written into the plan (`STORY_CHAPTERS`, `ready: false`)
-and appear as «coming soon» in the hub.
+24 missions, 12 a campaign, on all 10 maps; a mission's clock runs 75 s («Продержись») to 6 minutes,
+plus its comics before and after. Each chapter's achievement also gives 100–200 XP.
 
-Every mission pays the first time: 60–160 talons and 40–100 XP (`STORY_MISSIONS`); experience brings
+**The open end (v0.2.15).** The owner: «finish the story, but with an open end for both heroes, so that
+episodes can be added in updates» — «just two more each». Chapter 3 has two missions in each campaign,
+and the last of them ends the story so far without closing it:
+
+* «Мой двор», a12 «Котлован»: the building site behind the yard is stopped for one night; in the trailer
+  — the drawing of a tower where the yard is, the deadline (31 December 1989) and the signature
+  «А. Аркадьев»; the radio: «You have won a night. I have the whole calendar». In 2089 Пётр Петрович
+  opens his eyes: the yard still stands — for now; «The case is adjourned. Next hearing: date to be set».
+* «Протокол», b12 «Свидетель»: the lieutenant keeps old Рогов alive till morning; Рогов: Аркадич «isn't
+  from this district. Not from this year… he has already seen how it all ends. On a tape». In 2089
+  Inspector Volkov finds no capsule of Arkadiev's in the BLATKOM register — he isn't lying in the
+  simulation, he is running it. «Case No. 89 is not closed».
+* Both end with the narrator's tape caption «Продолжение следует. Новые дела — в следующих обновлениях»
+  over the yard's picture, where the prologue's last page («Два дела. Один район. Плёнка пошла») was.
+
+Chapter 4 of each campaign («Двор против всех», «Кассета №89») and the finale («Стройка» — the two of them
+against Аркадич, the legendary «Неон-2089» skin for every weapon) stay in the plan (`STORY_CHAPTERS`,
+`ready: false`) and appear as «coming soon» in the hub.
+
+**Adding episodes in an update.** New missions go into the next chapter that isn't written (chapter 4),
+never into a finished one (its reward has been paid): add them to `STORY_MISSIONS` with `chapter: 4` and
+the numbers going on (`n: 13`, `14`, …), put the people they meet in `STORY_CAST`, mark the chapter
+`ready: true` with a new achievement (`ACHIEVEMENT_IDS`, `ACHIEVEMENTS`, its Russian name in
+`i18n/ru-content.ts`), write the words in `MISSION_SCRIPTS` and move the «Продолжение следует» caption to
+the new last mission (`story/script.test.ts` checks that only the last one says it). No migration: the
+server keeps progress by mission id and writes new achievements into its table at start; players who
+finished chapter 3 find chapter 4's first mission open.
+
+Every mission pays the first time: 60–190 talons and 40–115 XP (`STORY_MISSIONS`); experience brings
 levels and the levels their $BLAT (V2.0, each level once). A character or skin the player already owns
 is paid in talons instead (the character's price; a skin = a skin case, 150).
 
@@ -65,15 +93,15 @@ beside the bubble over the map) until it gets one.
 |---|---|---|
 | `yard` | Soviet Courtyard | a1 «Подъём», a4 «Кассета №89», a5 «Документы», b5 «Комендант»; the prologue's last page |
 | `garages` | Garage Cooperative | a3 «Лампочки», a6 «Видак», a10 «Ночь в кооперативе», b4 «Обыск» |
-| `factory` | Factory Checkpoint | a7 «Теплотрасса», b8 «Груз» |
+| `factory` | Factory Checkpoint | a7 «Теплотрасса», b8 «Груз», a11 «Цех №3» |
 | `camp` | Pioneer Camp | a8 «Посылка», b10 «Облава» |
-| `univermag` (a department store) | Gastronom | a2 «Очередь», a9 «Сонька», b1 «Первый день» |
+| `univermag` (a department store) | Gastronom | a2 «Очередь», a9 «Сонька», b1 «Первый день», b11 «Крыша» |
 | `dk` | House of Culture | b2 «Лиса», b3 «Дискотека» |
 | `square` | Red Square | b6 «Толкучка» |
-| `hospital` | City Hospital No. 3 | b7 «Кооператив» |
+| `hospital` | City Hospital No. 3 | b7 «Кооператив», b12 «Свидетель» |
 | `cemetery` | Old Cemetery | b9 «Кладбище» |
-| `stroyka` | Construction Site | the finale (to come) |
-| `hall2089` | — | every page in 2089: the prologue, the capsules after a chapter (capsule 02 is Pyotr Petrovich's) |
+| `stroyka` | Construction Site | a12 «Котлован»; the finale (to come) |
+| `hall2089` | — | every page in 2089: the prologue, the capsules after a chapter (capsule 02 is Pyotr Petrovich's), the open ends of a12 and b12 |
 
 Behind the pages the soundtrack plays very quietly (22 % of the menu level, `music.setQuiet`): before a
 mission, after it and in the prologue; it fades out with the mission and comes back to the menu level
@@ -130,7 +158,8 @@ with a 7-second enemy return. A bot hero is a weak player — the real numbers c
 Unit: `story/scenes.test.ts` (every picture 1600×900 with its 640×360 thumbnail, every map and so every
 mission has one, a page's picture: its own, else the BLATKOM hall in 2089, else the comic's place), `story/StorySession.test.ts` (sides, kit, clear and its waves, three lives and half damage, team
 limits, the clock, every mission starts), `story/script.test.ts` (every mission has its words in both
-languages, placeholders by objective, bubbles fit, no prison nicknames), `story/backend.test.ts` (the
+languages, placeholders by objective, bubbles fit, no prison nicknames; the last mission of each campaign
+— and only it — ends with «Продолжение следует» after a look into 2089), `story/backend.test.ts` (the
 offline backend), `app/settings.test.ts` (refused storage), shared `story.test.ts` (open missions,
 chapters, people met), server `api/story.test.ts` (DB-backed: tickets, locks, the 15-second rule, pays
 once under concurrency, chapters, owned rewards in talons, $BLAT for levels). E2E: `story.mjs` (a real

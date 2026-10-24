@@ -169,7 +169,7 @@ for (const [w, hgt, lang] of [
     const narrow = cards.filter((c) => c.querySelector('.col > .muted').getBoundingClientRect().width < c.getBoundingClientRect().width * 0.7).length;
     return { n: cards.length, columns: xs.size, narrow };
   });
-  check(achs.n === 24 && achs.columns === 2 && achs.narrow === 0, `${size}: the profile lists 24 achievements (v0.2.13: 20 and the story's 4) in 2 columns, conditions across the card (${JSON.stringify(achs)})`);
+  check(achs.n === 26 && achs.columns === 2 && achs.narrow === 0, `${size}: the profile lists 26 achievements (20 and the story's 6, v0.2.15) in 2 columns, conditions across the card (${JSON.stringify(achs)})`);
   await page.locator('.achs').scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${outDir}/phone_${w}x${hgt}_${lang}_achievements.png` });
   await page.locator('.back').click();

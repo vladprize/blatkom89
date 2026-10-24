@@ -54,13 +54,15 @@ test('story: every mission is playable as written — map, hero, kits, sides, ob
   }
 });
 
-test('story: chapters — written ones have five missions numbered in order, the rest none; rewards exist', () => {
+test('story: chapters — 1 and 2 have five missions, 3 has two (v0.2.15, the open end), the rest none; numbered in order; rewards exist', () => {
+  const written: Record<number, number> = { 1: 5, 2: 5, 3: 2 };
   for (const c of STORY_CAMPAIGNS) {
     const ms = campaignMissions(c);
+    assert.equal(ms.length, 12, `${c}: twelve missions so far`);
     ms.forEach((m, i) => assert.equal(m.n, i + 1, `${c}: missions numbered 1..n`));
     for (const ch of STORY_CHAPTERS.filter((x) => x.campaign === c)) {
       const list = chapterMissions(c, ch.chapter);
-      assert.equal(list.length, ch.ready ? 5 : 0, `${c} chapter ${ch.chapter}`);
+      assert.equal(list.length, ch.ready ? written[ch.chapter] : 0, `${c} chapter ${ch.chapter}`);
       if (ch.ready) assert.ok(ch.achievement && ACHIEVEMENTS[ch.achievement], `${c} chapter ${ch.chapter}: an achievement`);
       for (const s of ch.skins) assert.ok(parseSkin(s), `skin ${s}`);
       for (const ch2 of ch.characters) assert.ok(CHARACTER_IDS.includes(ch2));
@@ -93,12 +95,23 @@ test('story: what is open — the first mission of each campaign, then one after
   for (const id of ['a2', 'a3', 'a4', 'a5']) done.add(id);
   assert.ok(isChapterDone('petya', 1, done));
   assert.deepEqual([...charactersMet(done)].sort(), ['mihalych', 'uchastkovy', 'valuta', 'vorona']);
-  // chapter 2 follows chapter 1 (v0.2.13); chapter 3 is not written yet
+  // chapter 2 follows chapter 1 (v0.2.13), chapter 3 follows chapter 2 (v0.2.15); chapter 4 is not written yet
   assert.equal(nextMission('petya', done)?.id, 'a6');
   assert.ok(!isChapterDone('petya', 2, done));
   for (const id of ['a6', 'a7', 'a8', 'a9', 'a10']) done.add(id);
   assert.ok(isChapterDone('petya', 2, done));
-  assert.equal(nextMission('petya', done), null, 'chapter 3 is not written yet');
-  assert.ok(!isChapterDone('petya', 3, done), 'an unwritten chapter is never done');
   assert.deepEqual([...charactersMet(done)].sort(), ['mihalych', 'popugay', 'tarakan', 'uchastkovy', 'valuta', 'varan', 'vorona', 'zmeya']);
+  assert.equal(nextMission('petya', done)?.id, 'a11');
+  assert.ok(!isMissionOpen('a12', done));
+  done.add('a11');
+  assert.equal(nextMission('petya', done)?.id, 'a12');
+  assert.ok(!isChapterDone('petya', 3, done));
+  done.add('a12');
+  assert.ok(isChapterDone('petya', 3, done));
+  assert.equal(nextMission('petya', done), null, 'chapter 4 is not written yet');
+  assert.ok(!isChapterDone('petya', 4, done), 'an unwritten chapter is never done');
+  assert.deepEqual([...charactersMet(done)].sort(), ['buyvol', 'golub', 'krysa', 'mihalych', 'popugay', 'svinya', 'tarakan', 'uchastkovy', 'valuta', 'varan', 'vorona', 'zmeya']);
+  // the other campaign is its own line: «The Report» still starts at b1
+  assert.equal(nextMission('uchastkovy', done)?.id, 'b1');
+  assert.ok(!isMissionOpen('b11', done));
 });
