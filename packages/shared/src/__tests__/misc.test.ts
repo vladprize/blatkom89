@@ -217,7 +217,7 @@ test('progression: applyMatchProgress (shared by the server recorder and the dem
 test('achievements v0.3: twenty from matches (and the story’s chapters), each with a title, a description and a reward; feats, team play and levels unlock as described', () => {
   // v0.2.13: the story's chapter achievements come on top (paid by the story, never by a match)
   assert.equal(ACHIEVEMENT_IDS.filter((id) => !id.startsWith('story_')).length, 20);
-  assert.deepEqual(ACHIEVEMENT_IDS.filter((id) => id.startsWith('story_')), ['story_petya_1', 'story_uchastkovy_1', 'story_petya_2', 'story_uchastkovy_2']);
+  assert.deepEqual(ACHIEVEMENT_IDS.filter((id) => id.startsWith('story_')), ['story_petya_1', 'story_uchastkovy_1', 'story_petya_2', 'story_uchastkovy_2', 'story_petya_3', 'story_uchastkovy_3']);
   for (const id of ACHIEVEMENT_IDS) {
     const a = ACHIEVEMENTS[id];
     assert.ok(a && a.id === id && a.title && a.description && a.xpReward > 0, id);

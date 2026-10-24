@@ -1,7 +1,8 @@
 /**
  * Story mode (v0.3 part 4): «2089 → 1989». Two campaigns in the simulation of 1989 — Petya «The
- * Commandant» (the streets) and Uchastkovy (the police) — four chapters of five missions each, then a
- * finale for both. Shared by the server (which missions are open, the rewards, the shortest time a
+ * Commandant» (the streets) and Uchastkovy (the police): chapters 1 and 2 of five missions each, chapter 3
+ * of two that ends the story so far on an open end for both heroes (v0.2.15) — chapter 4 and the finale
+ * come in updates. Shared by the server (which missions are open, the rewards, the shortest time a
  * mission can take) and the client (running a mission). The words — comic panels, lines in battle — live
  * in the client (apps/web/src/story/script.ts); here are ids and numbers only.
  *
@@ -257,17 +258,55 @@ export const STORY_MISSIONS: readonly StoryMission[] = [
       enemy('slon', 'smuggler', kit('tt', 'bita', 'avtomat'), 'easy'), enemy('nosorog', 'smuggler', kit('pistol', 'montirovka', 'obrez'), 'easy'), enemy('gorilla', 'smuggler', kit('pistol', 'bita', 'uzi'), 'easy'), enemy('oryol', 'self', kit('p92', 'nozh', 'm4'), 'normal', { boss: true }),
     ],
   },
+  // ── Petya «My Yard», chapter 3 «The Industrial Zone» (v0.2.15: two missions; the story goes on in updates) ──
+  {
+    id: 'a11', campaign: 'petya', chapter: 3, n: 11, map: 'factory', hero: 'petya', kit: kit('pistol', 'montirovka', 'avtomat', 'f1'),
+    objective: { kind: 'clear' }, timeLimitMs: 300_000, waveGapMs: 1500, meets: ['krysa', 'buyvol'], talons: 170, xp: 105,
+    npcs: [
+      ally('krysa', kit('pistol', 'bita', 'ksyuha')),
+      enemy('nosorog', 'workshop', kit('pistol', 'montirovka', 'obrez')), enemy('slon', 'workshop', kit('pistol', 'bita', 'uzi'), 'easy'), enemy('leopard', 'workshop', kit('pistol', 'nozh', 'mp5')),
+      enemy('gorilla', 'workshop', kit('tt', 'kuvalda', 'avtomat'), 'normal', { wave: 1 }), enemy('lobster', 'workshop', kit('pistol', 'bita', 'obrez'), 'easy', { wave: 1 }), enemy('oryol', 'workshop', kit('pistol', 'nozh', 'uzi'), 'easy', { wave: 1 }),
+      enemy('buyvol', 'self', kit('tt', 'kuvalda', 'obrez'), 'normal', { wave: 2, boss: true }), enemy('akula', 'workshop', kit('pistol', 'montirovka', 'ksyuha'), 'easy', { wave: 2 }),
+    ],
+  },
+  {
+    id: 'a12', campaign: 'petya', chapter: 3, n: 12, map: 'stroyka', hero: 'petya', kit: kit('pistol', 'montirovka', 'avtomat', 'mine'),
+    objective: { kind: 'bases', limit: 100 }, timeLimitMs: 360_000, meets: ['svinya', 'golub'], talons: 190, xp: 115,
+    npcs: [
+      ally('mihalych', kit('pistol', 'montirovka', 'avtomat', 'f1')), ally('golub', kit('pistol', 'bita', 'ksyuha', 'molotov')), ally('svinya', kit('pistol', 'montirovka', 'obrez'), 'easy'),
+      enemy('gorilla', 'workshop', kit('tt', 'kuvalda', 'avtomat')), enemy('slon', 'workshop', kit('pistol', 'bita', 'obrez')), enemy('leopard', 'workshop', kit('pistol', 'nozh', 'mp5')),
+      enemy('nosorog', 'workshop', kit('pistol', 'montirovka', 'uzi'), 'easy'), enemy('lobster', 'workshop', kit('pistol', 'bita', 'obrez'), 'easy'),
+    ],
+  },
+  // ── Uchastkovy «The Report», chapter 3 «Downtown» (v0.2.15: two missions; the story goes on in updates) ──
+  {
+    id: 'b11', campaign: 'uchastkovy', chapter: 3, n: 11, map: 'gastronom', hero: 'uchastkovy', kit: kit('pistol', 'bita', 'avtomat', 'flash'),
+    objective: { kind: 'team', limit: 10 }, timeLimitMs: 300_000, meets: ['leopard', 'slon'], talons: 170, xp: 105,
+    npcs: [
+      ally('koshka', kit('p92', 'nozh', 'mp5', 'smoke')),
+      enemy('slon', 'self', kit('tt', 'bita', 'uzi')), enemy('gorilla', 'guard', kit('pistol', 'montirovka', 'obrez')), enemy('buyvol', 'guard', kit('pistol', 'bita', 'obrez'), 'easy'),
+      enemy('leopard', 'self', kit('p92', 'nozh', 'avtomat'), 'normal', { boss: true }),
+    ],
+  },
+  {
+    id: 'b12', campaign: 'uchastkovy', chapter: 3, n: 12, map: 'hospital', hero: 'uchastkovy', kit: kit('pistol', 'bita', 'avtomat', 'f1'),
+    objective: { kind: 'survive' }, timeLimitMs: 75_000, meets: ['nosorog', 'gorilla'], talons: 190, xp: 115,
+    npcs: [
+      ally('koshka', kit('p92', 'nozh', 'mp5', 'smoke')), ally('nosorog', kit('pistol', 'bita', 'obrez')),
+      enemy('gorilla', 'self', kit('tt', 'kuvalda', 'avtomat'), 'normal', { boss: true }), enemy('buyvol', 'workshop', kit('pistol', 'montirovka', 'obrez'), 'easy'), enemy('svinya', 'workshop', kit('pistol', 'bita'), 'easy'), enemy('krysa', 'workshop', kit('tt', 'bita', 'ksyuha'), 'easy'),
+    ],
+  },
 ];
 
 /** The chapters, the written ones and the ones on the way (with the rewards they will bring). */
 export const STORY_CHAPTERS: readonly StoryChapter[] = [
   { campaign: 'petya', chapter: 1, ready: true, achievement: 'story_petya_1', talons: 500, characters: [], skins: ['montirovka.hohloma'] },
   { campaign: 'petya', chapter: 2, ready: true, achievement: 'story_petya_2', talons: 600, characters: [], skins: [] },
-  { campaign: 'petya', chapter: 3, ready: false, achievement: null, talons: 700, characters: ['golub'], skins: [] },
+  { campaign: 'petya', chapter: 3, ready: true, achievement: 'story_petya_3', talons: 700, characters: ['golub'], skins: [] },
   { campaign: 'petya', chapter: 4, ready: false, achievement: null, talons: 1000, characters: [], skins: ['avtomat.zoloto'] },
   { campaign: 'uchastkovy', chapter: 1, ready: true, achievement: 'story_uchastkovy_1', talons: 500, characters: ['uchastkovy'], skins: [] },
   { campaign: 'uchastkovy', chapter: 2, ready: true, achievement: 'story_uchastkovy_2', talons: 600, characters: ['koshka'], skins: ['pistol.gzhel'] },
-  { campaign: 'uchastkovy', chapter: 3, ready: false, achievement: null, talons: 700, characters: [], skins: [] },
+  { campaign: 'uchastkovy', chapter: 3, ready: true, achievement: 'story_uchastkovy_3', talons: 700, characters: [], skins: [] },
   { campaign: 'uchastkovy', chapter: 4, ready: false, achievement: null, talons: 1000, characters: [], skins: [] },
 ];
 

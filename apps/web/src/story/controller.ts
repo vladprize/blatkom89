@@ -183,6 +183,9 @@ export class StoryController {
       if (!comicDone || this.host.screen() !== 'storyEnd') return;
       const ids = new Set((reward?.done ?? this.done).map((d) => d.id));
       const next = nextMission(m.campaign, ids);
+      // the last mission written so far (v0.2.15): the campaign goes on in an update
+      const all = campaignMissions(m.campaign);
+      const continued = all[all.length - 1]?.id === m.id ? (STORY_CHAPTERS.find((x) => x.campaign === m.campaign && !x.ready)?.chapter ?? null) : null;
       holder.replaceChildren(
         renderStoryWin({
           mission: m,
@@ -191,6 +194,7 @@ export class StoryController {
           error,
           offline: this.host.backend()?.local ?? false,
           next: reward && next && next.id !== m.id ? next : null,
+          continued,
           onNext: () => next && void this.play(next),
           onHub: () => this.show(false),
           onRetrySend: () => {
