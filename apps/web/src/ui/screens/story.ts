@@ -3,7 +3,7 @@
  * chapters and missions, the finale on the way, the card index of the district's people — and the end
  * of a mission: done (with what it paid) or failed (with one tap to go again).
  */
-import { STORY_CARD_INDEX, STORY_CAST, STORY_CHAPTERS, campaignMissions, chapterMissions, charactersMet, isMissionOpen, parseSkin, storyChapter } from '@blatkom/shared';
+import { STORY_CARD_INDEX, STORY_CAST, STORY_CHAPTERS, STORY_OPENED_BEST_MS, campaignMissions, chapterMissions, charactersMet, isMissionOpen, parseSkin, storyChapter } from '@blatkom/shared';
 import type { CharacterId, StoryCampaign, StoryDone, StoryMission, StoryReward } from '@blatkom/shared';
 import { count, plural, t } from '../../i18n/index.js';
 import { achievementText, charName, finishName, mapName, weaponName } from '../../i18n/content.js';
@@ -73,7 +73,7 @@ function missionRow(m: StoryMission, done: Map<string, StoryDone>, ids: Readonly
       { class: 'smission__txt' },
       h('b', null, missionTitle(m)),
       h('small', null, `${missionKind(m)} · ${mapName(m.map)}`),
-      h('small', { class: 'smission__reward' }, d ? t('Best time {time}', { time: fmtDuration(d.bestMs) }) : offline ? t('First time: +{xp} XP', { xp: m.xp }) : t('First time: +{n} {talons}, +{xp} XP', { n: m.talons, talons: plural(m.talons, 'talon'), xp: m.xp })),
+      h('small', { class: 'smission__reward' }, d ? (d.bestMs === STORY_OPENED_BEST_MS ? t('Opened for review') : t('Best time {time}', { time: fmtDuration(d.bestMs) })) : offline ? t('First time: +{xp} XP', { xp: m.xp }) : t('First time: +{n} {talons}, +{xp} XP', { n: m.talons, talons: plural(m.talons, 'talon'), xp: m.xp })),
     ),
     state === 'locked'
       ? h('span', { class: 'smission__lock', 'aria-label': t('Locked: finish the mission before it') }, '🔒')

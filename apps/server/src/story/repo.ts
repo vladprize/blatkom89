@@ -5,7 +5,7 @@
  * and skins — once (the achievement row and a unique ledger reference guard it, also under retries and
  * concurrent requests). A character or skin the player already owns is paid in talons instead.
  */
-import { ACHIEVEMENTS, ACHIEVEMENT_TARGETS, CHARACTER_PRICES, STORY_OWNED_SKIN_TALONS, isChapterDone, levelForXp, storyChapter } from '@blatkom/shared';
+import { ACHIEVEMENTS, ACHIEVEMENT_TARGETS, CHARACTER_PRICES, STORY_OPENED_BEST_MS, STORY_OWNED_SKIN_TALONS, isChapterDone, levelForXp, missionsBefore, storyChapter } from '@blatkom/shared';
 import type { AchievementId, CharacterId, SkinId, StoryDone, StoryMission, StoryReward } from '@blatkom/shared';
 import type postgres from 'postgres';
 import type { Sql } from '../database/db.js';
@@ -45,7 +45,9 @@ export class StoryRepo {
       if (!prof) throw new StoryError('no_profile');
       const [row] = await tx<Array<{ completions: number }>>`
         INSERT INTO story_progress (user_id, mission_id, best_ms) VALUES (${userId}, ${m.id}, ${ms})
-        ON CONFLICT (user_id, mission_id) DO UPDATE SET best_ms = LEAST(story_progress.best_ms, EXCLUDED.best_ms), completions = story_progress.completions + 1
+        ON CONFLICT (user_id, mission_id) DO UPDATE SET
+          best_ms = CASE WHEN story_progress.best_ms = ${STORY_OPENED_BEST_MS} THEN EXCLUDED.best_ms ELSE LEAST(story_progress.best_ms, EXCLUDED.best_ms) END,
+          completions = story_progress.completions + 1
         RETURNING completions`;
       const first = row!.completions === 1;
       const out: StoryReward = { mission: m.id, first, talons: 0, xp: 0, blatGained: 0, achievement: null, characters: [], skins: [], compensated: [], tokens: prof.tokens, xpTotal: prof.xp, level: prof.level, done: [] };
@@ -93,6 +95,26 @@ export class StoryRepo {
       }
       out.done = await this.done(userId, tx);
       return out;
+    });
+  }
+
+  /**
+   * For checking the story (v0.2.16, an administrator's action): the campaign's missions before `m` count
+   * as done, so `m` is open. They are marked with a best time of 0 (STORY_OPENED_BEST_MS) and pay nothing —
+   * no talons, experience or chapter rewards; a chapter's reward still comes when the player finishes the
+   * chapter's last mission for real. Missions already done stay as they were.
+   */
+  async open(userId: string, m: StoryMission): Promise<{ opened: string[]; done: StoryDone[] }> {
+    return this.sql.begin(async (tx) => {
+      // the same lock as a completion: the profile row
+      const [prof] = await tx<Array<{ user_id: string }>>`SELECT user_id FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+      if (!prof) throw new StoryError('no_profile');
+      const opened: string[] = [];
+      for (const x of missionsBefore(m.id)) {
+        const r = await tx`INSERT INTO story_progress (user_id, mission_id, best_ms) VALUES (${userId}, ${x.id}, ${STORY_OPENED_BEST_MS}) ON CONFLICT (user_id, mission_id) DO NOTHING RETURNING mission_id`;
+        if (r.length > 0) opened.push(x.id);
+      }
+      return { opened, done: await this.done(userId, tx) };
     });
   }
 

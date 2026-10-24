@@ -1,6 +1,7 @@
 /** /api/admin/* — secure analytics dashboard API (see docs/ADMIN.md). */
-import { AdminBlatDropRequest, AdminBlatFlagRequest, AdminBlatSnapshotRequest, AdminCreateUserRequest, AdminGrantRequest, AdminLoginRequest, AdminPartnerCreate, AdminPartnerUpdate, AdminReferralDecision, getMap, isMapId, levelForXp } from '@blatkom/shared';
-import type { AdminBlatSummary, AdminMe, AdminPaymentRow, AdminPlayerDetail, AdminReferralRow, AdminResetLink, CharacterId, SourceChannel } from '@blatkom/shared';
+import { AdminBlatDropRequest, AdminBlatFlagRequest, AdminBlatSnapshotRequest, AdminCreateUserRequest, AdminGrantRequest, AdminLoginRequest, AdminPartnerCreate, AdminPartnerUpdate, AdminReferralDecision, AdminStoryOpenRequest, getMap, isMapId, levelForXp, storyChapter, storyMission } from '@blatkom/shared';
+import type { AdminBlatSummary, AdminMe, AdminPaymentRow, AdminPlayerDetail, AdminReferralRow, AdminResetLink, AdminStoryOpenResponse, CharacterId, SourceChannel } from '@blatkom/shared';
+import { StoryError, StoryRepo } from '../story/repo.js';
 import { BlatRepo } from '../blat/repo.js';
 import { BlatDropRepo, DROP_DATE_BOUNDS } from '../blat/drop.js';
 import { notifyReferral } from '../api/blat.js';
@@ -220,6 +221,7 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
         referrals: refCounts,
         flag: b?.blat_flag ?? null,
       },
+      story: await new StoryRepo(p.sql).done(id),
       origin: await (async () => {
         // V2.0 parts E–F: how the account came, and the empty profiles merged into it (or the one it was merged into)
         const [o] = await p.sql<Array<{ source_channel: SourceChannel | null; source_detail: string | null; partner: string | null; merged_into: string | null; merged_at: Date | null; merged_from: number }>>`
@@ -389,6 +391,32 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
     }
     await audit(p.sql, deps.log, { adminId: a.id, action: 'balance_grant', target: id, details: { currency: body.currency, amount: body.amount, note: body.note, balance }, ip: ctx.ip });
     ctx.json(200, { currency: body.currency, balance });
+  });
+
+  /**
+   * For checking the story (v0.2.16): the campaign's missions before the chosen one count as done for this
+   * player — marked as opened, nothing paid (story/repo.ts `open`). Admin only, audited.
+   */
+  router.post('/api/admin/players/:id/story-open', admin, async (ctx) => {
+    const id = ctx.params.id ?? '';
+    if (!UUID_RE.test(id)) throw new HttpError(400, 'bad_id', 'Неверный идентификатор');
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, 'rate_limited', 'Слишком много операций подряд, подождите', { 'retry-after': '60' });
+    const body = await ctx.body(AdminStoryOpenRequest, 512);
+    const m = storyMission(body.mission);
+    if (!m || !storyChapter(m.campaign, m.chapter)?.ready) throw new HttpError(400, 'bad_mission', 'Такой миссии нет');
+    const p = pg();
+    const [u] = await p.sql<Array<{ id: string }>>`SELECT id FROM users WHERE id = ${id} AND deleted_at IS NULL`;
+    if (!u) throw new HttpError(404, 'not_found', 'Игрок не найден');
+    let out: AdminStoryOpenResponse;
+    try {
+      out = await new StoryRepo(p.sql).open(id, m);
+    } catch (e) {
+      if (e instanceof StoryError) throw new HttpError(409, 'no_profile', 'У игрока ещё нет профиля');
+      throw e;
+    }
+    await audit(p.sql, deps.log, { adminId: a.id, action: 'story_opened', target: id, details: { mission: m.id, opened: out.opened }, ip: ctx.ip });
+    ctx.json(200, out);
   });
 
   /** One-time password-reset link (valid for an hour) for a player who registered an email. */
