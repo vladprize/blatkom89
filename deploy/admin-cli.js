@@ -8164,6 +8164,7 @@ var AdminGrantRequest = external_exports.object({
   amount: external_exports.number().int().min(-1e6).max(1e6).refine((v) => v !== 0, "amount must not be 0"),
   note: external_exports.string().trim().min(3).max(120)
 }).strict();
+var AdminStoryOpenRequest = external_exports.object({ mission: external_exports.string().regex(/^[a-z0-9_]{1,16}$/) }).strict();
 var AdminPartnerCreate = external_exports.object({ name: external_exports.string().trim().min(1).max(60), code: partnerCodeSchema.optional(), note: external_exports.string().trim().max(300).optional() }).strict();
 var AdminPartnerUpdate = external_exports.object({ name: external_exports.string().trim().min(1).max(60).optional(), note: external_exports.string().trim().max(300).nullable().optional(), active: external_exports.boolean().optional() }).strict();
 

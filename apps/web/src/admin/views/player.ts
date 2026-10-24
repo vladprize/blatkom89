@@ -1,6 +1,8 @@
 /** Player detail: profile, progression, wallet and purchases, sessions, achievements, match history, errors. */
-import type { AdminMe, AdminPlayerDetail, AdminResetLink } from '@blatkom/shared';
+import { STORY_CAMPAIGNS, STORY_OPENED_BEST_MS, campaignMissions } from '@blatkom/shared';
+import type { AdminMe, AdminPlayerDetail, AdminResetLink, AdminStoryOpenResponse, StoryCampaign } from '@blatkom/shared';
 import { h, clear, toast } from '../dom.js';
+import { RU_ACHIEVEMENTS } from '../../i18n/ru-content.js';
 import { apiFetch } from '../api.js';
 import { num, dateTime, playtime, duration, money, itemName, ACHIEVEMENT_NAMES, ACHIEVEMENT_DESCRIPTIONS, MAP_NAMES, CHARACTER_NAMES, PLATFORM_NAMES, ITEM_KINDS, ITEM_SOURCES, LEDGER_REASONS, MOD_NAMES, PAYMENT_PROVIDERS, PAYMENT_STATUSES, SIGN_IN_METHODS, WEAPON_NAMES } from '../format.js';
 
@@ -72,6 +74,61 @@ function blatCard(d: AdminPlayerDetail, me: AdminMe | null | undefined, onChange
       h('dd', {}, b.flag ? `подозрительный: ${b.flag}` : 'нет'),
     ),
     flagBtn,
+  );
+}
+
+const CAMPAIGN_NAMES: Record<StoryCampaign, string> = { petya: '«Мой двор»', uchastkovy: '«Протокол»' };
+
+/**
+ * v0.2.16: the player's story, and for an admin «open it up to a mission» — to check the story's later
+ * chapters without playing it all through (the missions before are marked done, nothing paid).
+ */
+function storyCard(d: AdminPlayerDetail, me: AdminMe | null | undefined, onChanged: () => void): HTMLElement | null {
+  if (!d.story) return null;
+  const byId = new Map(d.story.map((x) => [x.id, x]));
+  const rows = STORY_CAMPAIGNS.map((c) => {
+    const ms = campaignMissions(c);
+    const got = ms.filter((m) => byId.has(m.id));
+    const opened = got.filter((m) => byId.get(m.id)!.bestMs === STORY_OPENED_BEST_MS).length;
+    const next = ms.find((m) => !byId.has(m.id));
+    return [CAMPAIGN_NAMES[c], `${num(got.length)} из ${num(ms.length)}`, opened ? num(opened) : '—', next ? `миссия ${next.n} (глава ${next.chapter})` : 'все написанные пройдены'];
+  });
+  let form: HTMLElement | null = null;
+  if (me?.role === 'admin') {
+    const select = h(
+      'select',
+      { 'aria-label': 'До какой миссии открыть', 'data-testid': 'story-open-mission' },
+      ...STORY_CAMPAIGNS.flatMap((c) =>
+        campaignMissions(c)
+          .filter((m) => m.n > 1)
+          .map((m) => h('option', { value: m.id }, `${CAMPAIGN_NAMES[c]} — миссия ${m.n} (глава ${m.chapter})`)),
+      ),
+    ) as HTMLSelectElement;
+    const btn = h('button', { class: 'btn', type: 'submit', 'data-testid': 'story-open' }, 'Открыть до неё') as HTMLButtonElement;
+    form = h('form', { class: 'action-form' }, select, btn);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const label = select.selectedOptions[0]?.textContent ?? select.value;
+      if (!confirm(`Открыть игроку «${d.player.displayName}» сюжет до миссии: ${label}? Миссии этой кампании до неё будут отмечены пройденными — без талонов, опыта и наград.`)) return;
+      btn.disabled = true;
+      apiFetch<AdminStoryOpenResponse>(`/api/admin/players/${encodeURIComponent(d.player.id)}/story-open`, { method: 'POST', body: { mission: select.value } })
+        .then((r) => {
+          toast(r.opened.length ? `Готово: отмечено пройденными ${num(r.opened.length)}` : 'Эти миссии уже были пройдены — ничего не изменилось', 'ok');
+          onChanged();
+        })
+        .catch((err: Error) => toast(err.message))
+        .finally(() => (btn.disabled = false));
+    });
+  }
+  return h(
+    'section',
+    { class: 'card', 'data-testid': 'story-admin' },
+    h('h3', {}, 'Сюжет'),
+    table(['Кампания', 'Пройдено', 'Открыто админом', 'Следующая'], rows, [1, 2], ''),
+    form
+      ? h('p', { class: 'note' }, 'Чтобы проверить поздние главы, не проходя всё заново: выберите миссию — миссии кампании до неё отметятся пройденными (без талонов, опыта и наград за главу; награда за главу придёт, когда игрок сам пройдёт её последнюю миссию). Действие пишется в журнал аудита.')
+      : null,
+    form,
   );
 }
 
@@ -235,7 +292,7 @@ export async function renderPlayer(root: HTMLElement, id: string, me?: AdminMe |
       ),
       me?.role === 'admin' ? actions(d, () => void renderPlayer(root, id, me)) : h('section', { class: 'card' }, h('h3', {}, 'Действия администратора'), h('p', { class: 'note' }, 'Начисления и ссылки для сброса пароля доступны роли admin.')),
     ),
-    ...[blatCard(d, me, () => void renderPlayer(root, id, me))].filter((x): x is HTMLElement => x !== null),
+    ...[blatCard(d, me, () => void renderPlayer(root, id, me)), storyCard(d, me, () => void renderPlayer(root, id, me))].filter((x): x is HTMLElement => x !== null),
     h(
       'section',
       { class: 'card' },
@@ -263,7 +320,7 @@ export async function renderPlayer(root: HTMLElement, id: string, me?: AdminMe |
       'section',
       { class: 'card' },
       h('h3', {}, 'Достижения'),
-      h('ul', { class: 'achievements' }, ...d.achievements.map((a) => h('li', { class: a.unlockedAt ? 'got' : '' }, h('b', {}, ACHIEVEMENT_NAMES[a.id] ?? a.title, h('span', { class: 'muted-text' }, ` · в игре «${a.title}»`)), h('span', {}, ACHIEVEMENT_DESCRIPTIONS[a.id] ?? a.description), h('em', {}, a.unlockedAt ? dateTime(a.unlockedAt) : 'не получено')))),
+      h('ul', { class: 'achievements' }, ...d.achievements.map((a) => h('li', { class: a.unlockedAt ? 'got' : '' }, h('b', {}, ACHIEVEMENT_NAMES[a.id] ?? RU_ACHIEVEMENTS[a.id]?.title ?? a.title, h('span', { class: 'muted-text' }, ` · в игре «${a.title}»`)), h('span', {}, ACHIEVEMENT_DESCRIPTIONS[a.id] ?? RU_ACHIEVEMENTS[a.id]?.description ?? a.description), h('em', {}, a.unlockedAt ? dateTime(a.unlockedAt) : 'не получено')))),
     ),
     h(
       'section',

@@ -14,12 +14,16 @@
 // practice in a row, one screen; the hub and the comic upright without sideways scroll, and the big picture
 // behind «The Report»'s comic on the phone.
 //
-// Usage: DATABASE_URL=… node tests/e2e/story.mjs <baseUrl> <outDir>
+// With an administrator (v0.2.16): the dashboard's player card opens «The Report» up to mission 12 for A —
+// the missions before marked done without rewards, A's hub on chapter 3 with them «opened for review» and
+// mission 12 open, the action in the audit log.
+//
+// Usage: DATABASE_URL=… node tests/e2e/story.mjs <baseUrl> <outDir> [<adminUser> <adminPass>]
 import { chromium } from 'playwright';
 import postgres from 'postgres';
 import { mkdirSync } from 'node:fs';
 
-const [base, outDir] = process.argv.slice(2);
+const [base, outDir, adminUser, adminPass] = process.argv.slice(2);
 if (!base || !outDir || !process.env.DATABASE_URL) {
   console.error('usage: DATABASE_URL=… node tests/e2e/story.mjs <baseUrl> <outDir>');
   process.exit(2);
@@ -219,6 +223,46 @@ try {
   await A.page.getByTestId('story').waitFor({ timeout: 15000 });
   const [again] = await sql`SELECT completions FROM story_progress WHERE user_id = ${me} AND mission_id = 'a1'`;
   check(again?.completions === 1, 'a lost or abandoned mission is not recorded');
+  if (adminUser && adminPass) {
+    // v0.2.16: the administrator opens «The Report» up to mission 12 for A (to check the later chapters)
+    const actx = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'ru-RU' });
+    const admin = await actx.newPage();
+    admin.on('pageerror', (e) => problems.push(`[admin pageerror] ${e.message}`));
+    admin.on('dialog', (d) => void d.accept());
+    await admin.goto(base + '/admin');
+    await admin.locator('input[name=username]').fill(adminUser);
+    await admin.locator('input[name=password]').fill(adminPass);
+    await admin.locator('button[type=submit]').click();
+    await admin.locator('nav a', { hasText: 'Обзор' }).waitFor({ timeout: 20000 });
+    await admin.goto(`${base}/admin#/players/${me}`);
+    await admin.getByTestId('story-admin').waitFor({ timeout: 20000 });
+    const before = await admin.getByTestId('story-admin').innerText();
+    await admin.getByTestId('story-open-mission').selectOption('b12');
+    await admin.getByTestId('story-open').click();
+    await admin.waitForFunction(() => /11 из 12/.test(document.querySelector('[data-testid=story-admin]')?.textContent ?? ''), null, { timeout: 15000 });
+    const card = await admin.getByTestId('story-admin').innerText();
+    check(/1 из 12/.test(before) && /«Протокол»\s+11 из 12\s+11\s+миссия 12 \(глава 3\)/.test(card), `the dashboard: «The Report» opened up to mission 12 for A — 11 of 12, 11 opened (${card.replace(/\s+/g, ' ').slice(0, 160)})`);
+    await admin.screenshot({ path: `${outDir}/story_admin_open.png`, fullPage: true });
+    const opened = await sql`SELECT mission_id, best_ms, completions FROM story_progress WHERE user_id = ${me} AND mission_id LIKE 'b%' ORDER BY completed_at, mission_id`;
+    const [paid] = await sql`SELECT count(*)::int AS n FROM currency_ledger WHERE user_id = ${me} AND reason = 'story' AND ref LIKE 'story:b%'`;
+    const [aud] = await sql`SELECT details FROM admin_audit_log WHERE action = 'story_opened' AND target = ${me} ORDER BY id DESC LIMIT 1`;
+    check(opened.length === 11 && opened.every((r) => r.best_ms === 0 && r.completions === 1) && paid.n === 0 && aud?.details?.mission === 'b12' && aud.details.opened?.length === 11, `the database: b1…b11 marked done with no rewards, the action audited (${opened.length} rows, ${paid.n} paid)`);
+    await actx.close();
+    // A's hub after a fresh visit: «The Report» on chapter 3, mission 11 opened for review, mission 12 open
+    await A.page.locator('.topbar .back').click();
+    await A.page.getByTestId('menu-story').click();
+    await A.page.getByTestId('story').waitFor({ timeout: 15000 });
+    await A.page.waitForTimeout(500);
+    const rev = await A.page.evaluate(() => ({
+      tab: document.querySelector('[data-testid=story-campaign-uchastkovy] .scamp__chapters [aria-pressed=true] b')?.textContent,
+      b11: document.querySelector('[data-testid=story-mission-b11]')?.getAttribute('data-state'),
+      b11note: document.querySelector('[data-testid=story-mission-b11] .smission__reward')?.textContent,
+      b12: document.querySelector('[data-testid=story-mission-b12]')?.getAttribute('data-state'),
+      progress: document.querySelector('[data-testid=story-progress-uchastkovy] b')?.textContent,
+    }));
+    check(rev.tab === '3' && rev.b11 === 'done' && rev.b11note === 'Opened for review' && rev.b12 === 'open' && rev.progress === '11/12', `A's hub: «The Report» on chapter 3 — mission 11 «opened for review», mission 12 open (${JSON.stringify(rev)})`);
+    await A.page.screenshot({ path: `${outDir}/story_opened_hub.png` });
+  }
   await A.ctx.close();
 
   // ── B: the phone ──────────────────────────────────────────────────────────

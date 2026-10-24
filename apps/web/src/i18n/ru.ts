@@ -1010,6 +1010,7 @@ export const RU: Record<string, string> = {
   'Time ran out': 'Время вышло',
   'The other side got there first': 'Другая сторона успела первой',
   'To be continued: chapter {n} comes in one of the next updates.': 'Продолжение следует: глава {n} выйдет в одном из следующих обновлений.',
+  'Opened for review': 'Открыта для проверки',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)

@@ -103,6 +103,11 @@ export const STORY_RULES = Object.freeze({ heroDamage: 0.5, lives: 3, surviveRes
 export const STORY_MIN_MS = 15_000;
 /** A mission ticket is good for this long (a long mission plus its comic and some retries). */
 export const STORY_TICKET_TTL_MS = 3 * 3600_000;
+/**
+ * The best time of a mission an administrator opened for checking the story (v0.2.16): it counts as done
+ * but was never played — and paid nothing. A real run takes STORY_MIN_MS at least, so 0 is never a time.
+ */
+export const STORY_OPENED_BEST_MS = 0;
 /** Compensation for a story reward that is already owned: a skin is worth a skin case. */
 export const STORY_OWNED_SKIN_TALONS = 150;
 
@@ -377,6 +382,12 @@ export function isMissionOpen(id: string, done: ReadonlySet<string>): boolean {
 export function isChapterDone(c: StoryCampaign, chapter: number, done: ReadonlySet<string>): boolean {
   const ms = chapterMissions(c, chapter);
   return !!storyChapter(c, chapter)?.ready && ms.length > 0 && ms.every((m) => done.has(m.id));
+}
+
+/** The campaign's missions before this one — the ones an administrator marks done to open it (v0.2.16). */
+export function missionsBefore(id: string): StoryMission[] {
+  const m = BY_ID.get(id);
+  return m ? campaignMissions(m.campaign).filter((x) => x.n < m.n) : [];
 }
 
 /** The next mission to play in a campaign (null when every written mission is done). */

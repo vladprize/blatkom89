@@ -1,4 +1,4 @@
-# The story mode (v0.2.13–v0.2.15, the owner's list v0.3 part 4)
+# The story mode (v0.2.13–v0.2.16, the owner's list v0.3 part 4)
 
 2089: the city's disputes go to **BLATKOM**. Both sides are plugged into a simulation of 1989 — half
 human, half beast — and whoever holds the district there is right out here. Two campaigns at war with
@@ -133,6 +133,17 @@ starts and 30 reports a minute per player. Analytics (server-side): `story_start
 Migration `021_story.sql` (adds only): `story_progress (user_id, mission_id, completed_at, best_ms,
 completions)` with `ON DELETE CASCADE` from `users`; the ledger reason `story` and the unique index
 `currency_ledger_story_once`; the `user_items` source `story`.
+
+## 3a. Checking the story (v0.2.16)
+
+To check the later chapters without playing the story through, an administrator opens it for a player:
+`/admin` → «Игроки» → the player's card → «Сюжет» → pick a mission → «Открыть до неё»
+(`POST /api/admin/players/:id/story-open`, [ADMIN.md](ADMIN.md) §5). The campaign's missions before it
+count as done with a best time of 0 (`STORY_OPENED_BEST_MS` — a real run takes 15 s at least) and **pay
+nothing**: no talons, experience, chapter achievements, characters or skins. The hub shows them «Открыта
+для проверки» and offers «Ещё раз» — every comic can be watched again; a real run of such a mission keeps
+its real time and still pays nothing. The chosen mission is open and pays as usual the first time; when
+it is a chapter's last, the chapter's reward comes with it. The action is audited (`story_opened`).
 
 ## 4. Offline (the single file)
 

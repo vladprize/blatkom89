@@ -198,7 +198,9 @@ try {
   const kon = spawnSync(process.execPath, ['tests/e2e/kon.mjs', base, join(out, 'kon')], { stdio: 'inherit' });
   if (kon.status !== 0) failed = true;
   console.log('\n[e2e] the story: the prologue, the hub, missions with comics and rewards paid by the server, three lives, a phone (two browsers)');
-  const story = spawnSync(process.execPath, ['tests/e2e/story.mjs', base, join(out, 'story')], { stdio: 'inherit' });
+  const storyArgs = ['tests/e2e/story.mjs', base, join(out, 'story')];
+  if (process.env.E2E_ADMIN_USER) storyArgs.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
+  const story = spawnSync(process.execPath, storyArgs, { stdio: 'inherit' });
   if (story.status !== 0) failed = true;
   if (process.env.E2E_ADMIN_USER) {
     console.log('\n[e2e] sources: a partner link made on the dashboard, a phone through it with a campaign, the counts and the CSV');

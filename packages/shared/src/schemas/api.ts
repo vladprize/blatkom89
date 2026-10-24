@@ -18,6 +18,7 @@ import { GAME_MODES } from '../game-rules/match.js';
 import type { GameMode } from '../game-rules/match.js';
 import type { MapId } from '../maps/types.js';
 import type { AchievementId } from '../game-rules/progression.js';
+import type { StoryDone } from './story.js';
 import { MAX_NAME_LENGTH } from '../constants/game.js';
 import { LATIN_NAME_RE } from '../game-rules/aliases.js';
 import { PlatformSchema } from '../events/analytics.js';
@@ -498,6 +499,8 @@ export interface AdminPlayerDetail {
   };
   /** V2.0 parts E–F: how the account came (null: before part F) and Telegram merges. */
   origin?: { channel: SourceChannel | null; detail: string | null; partner: string | null; mergedInto: string | null; mergedAt: string | null; mergedFrom: number };
+  /** v0.2.16: the story missions done (a best time of 0: opened by an administrator, never played). */
+  story?: StoryDone[];
 }
 
 /** V2.0: an invitation as the admin sees it. */
@@ -593,6 +596,18 @@ export const AdminGrantRequest = z
   })
   .strict();
 export type AdminGrantRequest = z.infer<typeof AdminGrantRequest>;
+
+/**
+ * POST /api/admin/players/:id/story-open — for checking the story (v0.2.16): the campaign's missions
+ * before `mission` count as done for the player (a best time of 0, nothing paid), so `mission` is open.
+ */
+export const AdminStoryOpenRequest = z.object({ mission: z.string().regex(/^[a-z0-9_]{1,16}$/) }).strict();
+export type AdminStoryOpenRequest = z.infer<typeof AdminStoryOpenRequest>;
+export interface AdminStoryOpenResponse {
+  /** The missions this call marked done (the ones done before stay as they were). */
+  opened: string[];
+  done: StoryDone[];
+}
 
 /** POST /api/admin/players/:id/reset-link — one-time password-reset link for a player with an email. */
 export interface AdminResetLink {

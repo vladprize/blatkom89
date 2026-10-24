@@ -63,6 +63,7 @@ Passwords: minimum 12 characters; stored as `scrypt$N$r$p$salt$hash` (N=16384, r
 | Overview, charts, live rooms, players list & detail, errors | ✅ | ✅ |
 | Funnel and economy panels | ✅ | ✅ |
 | Balance grants / corrections, password-reset links | — | ✅ |
+| Open a player's story up to a mission (v0.2.16, for checking the story) | see only | ✅ |
 | $BLAT: count / turn down a held invitation, mark an account suspicious | — | ✅ |
 | BLAT DROP date, balance snapshots (take, download, delete) | see only | ✅ |
 | CSV exports | — | ✅ |
@@ -91,7 +92,7 @@ what the role cannot use.
 
 Recorded actions: `login`, `login_failed`, `logout`, `admin_bootstrap`, `admin_created`,
 `admin_created_cli`, `player_viewed` (opening a player's card, target = player id),
-`balance_grant` (currency, amount, reason, balance after), `password_reset_link`, `club_delete` (name, tag, members),
+`balance_grant` (currency, amount, reason, balance after), `password_reset_link`, `story_opened` (v0.2.16: the mission, the missions marked done), `club_delete` (name, tag, members),
 `referral_confirm` (inviter, reward, number) / `referral_reject` (note), `blat_flag` / `blat_unflag` (reason),
 `blat_drop_date` (from → to), `blat_snapshot` (accounts, totals), `export_blat_snapshot` (format, rows),
 `blat_snapshot_delete`,
@@ -118,8 +119,9 @@ Range parameters (where noted): `range=24h|7d|30d|90d` (default `7d`) or
 | `GET /api/admin/funnel?range…` | viewer | visitor and new-player cohorts, referrers, daily visitors (`AdminFunnel`) |
 | `GET /api/admin/economy?range…` | viewer | currency flows, revenue, purchases, modifications, cases (`AdminEconomy`) |
 | `GET /api/admin/players?q=&sort=&dir=&page=&pageSize=` | viewer | search by name (case-insensitive, Cyrillic-safe), exact Telegram ID, internal UUID or exact email (the address itself is never listed); `sort` ∈ `created, last_seen, name, level, xp, matches, wins, losses, kills, assists, playtime`; `pageSize` 5–100 |
-| `GET /api/admin/players/:id` | viewer | profile, progression, sessions summary, sign-in methods, masked email, wallet, owned items and modifications, last 50 ledger rows (talons, diamonds, $BLAT), last 30 payments, achievements, last 50 matches, last 50 errors, `blat` (balance, total, code, invited by, invitations by status, flag) (audited) |
+| `GET /api/admin/players/:id` | viewer | profile, progression, sessions summary, sign-in methods, masked email, wallet, owned items and modifications, last 50 ledger rows (talons, diamonds, $BLAT), last 30 payments, achievements, last 50 matches, last 50 errors, `blat` (balance, total, code, invited by, invitations by status, flag), `story` (v0.2.16: the story missions done; a best time of 0 — opened by an admin) (audited) |
 | `POST /api/admin/players/:id/grant` | admin | `{currency: tokens\|diamonds, amount: ±1…1 000 000, note: 3–120 chars}` → `{balance}`; never below zero (`409 insufficient_balance`); ledger reason `grant` with the admin id; audited; 30 actions / 5 min per admin (CSRF) |
+| `POST /api/admin/players/:id/story-open` | admin | v0.2.16, for checking the story: `{mission}` (a written mission, e.g. `a12`) → `{opened, done}`; the campaign's missions before it count as done for the player — best time 0, **nothing paid** (no talons, experience, chapter achievements or items; a chapter's reward still comes when the player plays its last mission); missions already done stay as they were (repeating it changes nothing); `400 bad_mission`, `404`, `409 no_profile`; audited; 30 actions / 5 min per admin (CSRF). In the dashboard: the player card's «Сюжет» block |
 | `POST /api/admin/players/:id/reset-link` | admin | one-time password-reset link (valid 1 h) for a player with a registered email → `{link, expiresAt}`; `404 no_email` otherwise; audited; hand it over only to the account owner (CSRF) |
 | `GET /api/admin/clubs` | viewer | every club (`AdminClubRow`: rank, tag, name, motto, rating, people, real members, head, requests, recruiting, `house`, created) |
 | `DELETE /api/admin/clubs/:id` | admin | removes a player club; its people get `club_left` (disbanded); `409 house_club` for the game's own clubs; audited; 30 actions / 5 min per admin (CSRF) |

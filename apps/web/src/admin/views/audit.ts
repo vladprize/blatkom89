@@ -24,6 +24,9 @@ const ACTIONS: Record<string, string> = {
   export_matches: 'Экспорт матчей',
   export_daily: 'Экспорт сводки',
   player_viewed: 'Просмотр карточки игрока',
+  balance_grant: 'Начисление или списание',
+  password_reset_link: 'Ссылка для сброса пароля',
+  story_opened: 'Сюжет открыт для проверки',
 };
 
 export async function renderAudit(root: HTMLElement): Promise<void> {
@@ -41,7 +44,7 @@ export async function renderAudit(root: HTMLElement): Promise<void> {
             'table',
             { class: 'table' },
             h('thead', {}, h('tr', {}, ...['Время', 'Администратор', 'Действие', 'Объект', 'IP', 'Детали'].map((t) => h('th', {}, t)))),
-            h('tbody', {}, ...rows.map((r) => h('tr', {}, h('td', {}, dateTime(r.at)), h('td', {}, r.username ?? '—'), h('td', {}, ACTIONS[r.action] ?? r.action), h('td', {}, r.action === 'player_viewed' && r.target && /^[0-9a-f-]{36}$/.test(r.target) ? h('a', { href: `#/players/${r.target}` }, r.target) : (r.target ?? '—')), h('td', { class: 'mono' }, r.ip ?? '—'), h('td', { class: 'mono msg' }, r.details && Object.keys(r.details as object).length ? JSON.stringify(r.details) : '—')))),
+            h('tbody', {}, ...rows.map((r) => h('tr', {}, h('td', {}, dateTime(r.at)), h('td', {}, r.username ?? '—'), h('td', {}, ACTIONS[r.action] ?? r.action), h('td', {}, r.target && /^[0-9a-f-]{36}$/.test(r.target) && ['player_viewed', 'balance_grant', 'password_reset_link', 'story_opened'].includes(r.action) ? h('a', { href: `#/players/${r.target}` }, r.target) : (r.target ?? '—')), h('td', { class: 'mono' }, r.ip ?? '—'), h('td', { class: 'mono msg' }, r.details && Object.keys(r.details as object).length ? JSON.stringify(r.details) : '—')))),
           ),
         )
       : h('div', { class: 'chart-empty' }, 'Записей нет'),

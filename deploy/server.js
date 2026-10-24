@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.15"),
+  SERVER_VERSION: external_exports.string().default("0.2.16"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -11636,6 +11636,7 @@ var KON_STAKES = Object.freeze({ enabled: false, minStake: 100, maxStake: 1e4 })
 var STORY_RULES = Object.freeze({ heroDamage: 0.5, lives: 3, surviveRespawnMs: 7e3 });
 var STORY_MIN_MS = 15e3;
 var STORY_TICKET_TTL_MS = 3 * 36e5;
+var STORY_OPENED_BEST_MS = 0;
 var STORY_OWNED_SKIN_TALONS = 150;
 var kit = (sidearm2, melee2, primary2 = null, gadget = null) => ({ sidearm: sidearm2, melee: melee2, primary: primary2, gadget });
 var enemy = (character, role, k, difficulty = "normal", extra = {}) => ({ character, role, side: "enemy", kit: k, difficulty, ...extra });
@@ -12155,6 +12156,10 @@ function isMissionOpen(id, done) {
 function isChapterDone(c, chapter, done) {
   const ms = chapterMissions(c, chapter);
   return !!storyChapter(c, chapter)?.ready && ms.length > 0 && ms.every((m) => done.has(m.id));
+}
+function missionsBefore(id) {
+  const m = BY_ID.get(id);
+  return m ? campaignMissions(m.campaign).filter((x) => x.n < m.n) : [];
 }
 
 // packages/shared/src/maps/builder.ts
@@ -16462,6 +16467,7 @@ var AdminGrantRequest = external_exports.object({
   amount: external_exports.number().int().min(-1e6).max(1e6).refine((v) => v !== 0, "amount must not be 0"),
   note: external_exports.string().trim().min(3).max(120)
 }).strict();
+var AdminStoryOpenRequest = external_exports.object({ mission: external_exports.string().regex(/^[a-z0-9_]{1,16}$/) }).strict();
 var AdminPartnerCreate = external_exports.object({ name: external_exports.string().trim().min(1).max(60), code: partnerCodeSchema.optional(), note: external_exports.string().trim().max(300).optional() }).strict();
 var AdminPartnerUpdate = external_exports.object({ name: external_exports.string().trim().min(1).max(60).optional(), note: external_exports.string().trim().max(300).nullable().optional(), active: external_exports.boolean().optional() }).strict();
 
@@ -20053,6 +20059,121 @@ var registerEventRoutes = (router, deps) => {
   });
 };
 
+// apps/server/src/story/repo.ts
+var StoryError = class extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+  }
+  code;
+};
+var LEVEL_ACHIEVEMENTS2 = [
+  ["level_10", ACHIEVEMENT_TARGETS.levels[0]],
+  ["level_25", ACHIEVEMENT_TARGETS.levels[1]]
+];
+var StoryRepo = class {
+  constructor(sql2) {
+    this.sql = sql2;
+  }
+  sql;
+  async done(userId, q = this.sql) {
+    const rows = await q`
+      SELECT mission_id, completed_at, best_ms, completions FROM story_progress WHERE user_id = ${userId} ORDER BY completed_at, mission_id`;
+    return rows.map((r) => ({ id: r.mission_id, at: r.completed_at.toISOString(), bestMs: r.best_ms, completions: r.completions }));
+  }
+  async doneIds(userId) {
+    return new Set((await this.done(userId)).map((d) => d.id));
+  }
+  /** Records a finished mission and pays what it pays (see the file comment). */
+  async complete(userId, m, ms) {
+    return this.sql.begin(async (tx) => {
+      const [prof] = await tx`SELECT xp, level, tokens FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+      if (!prof) throw new StoryError("no_profile");
+      const [row] = await tx`
+        INSERT INTO story_progress (user_id, mission_id, best_ms) VALUES (${userId}, ${m.id}, ${ms})
+        ON CONFLICT (user_id, mission_id) DO UPDATE SET
+          best_ms = CASE WHEN story_progress.best_ms = ${STORY_OPENED_BEST_MS} THEN EXCLUDED.best_ms ELSE LEAST(story_progress.best_ms, EXCLUDED.best_ms) END,
+          completions = story_progress.completions + 1
+        RETURNING completions`;
+      const first = row.completions === 1;
+      const out = { mission: m.id, first, talons: 0, xp: 0, blatGained: 0, achievement: null, characters: [], skins: [], compensated: [], tokens: prof.tokens, xpTotal: prof.xp, level: prof.level, done: [] };
+      if (first) {
+        let tokens = prof.tokens;
+        const pay = async (amount, ref) => {
+          if (amount <= 0) return;
+          const paid = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${amount}, ${tokens + amount}, 'story', ${ref}) ON CONFLICT DO NOTHING RETURNING id`;
+          if (paid.length === 0) return;
+          tokens += amount;
+          out.talons += amount;
+        };
+        await pay(m.talons, `story:${m.id}`);
+        out.xp += m.xp;
+        const ids = new Set((await tx`SELECT mission_id FROM story_progress WHERE user_id = ${userId}`).map((r) => r.mission_id));
+        const ch = storyChapter(m.campaign, m.chapter);
+        if (ch?.achievement && isChapterDone(m.campaign, m.chapter, ids)) {
+          const got = await tx`INSERT INTO player_achievements (user_id, achievement_id) VALUES (${userId}, ${ch.achievement}) ON CONFLICT DO NOTHING RETURNING achievement_id`;
+          if (got.length > 0) {
+            out.achievement = ch.achievement;
+            out.xp += ACHIEVEMENTS[ch.achievement].xpReward;
+            await pay(ch.talons, `story:${ch.achievement}`);
+            for (const c of ch.characters) await this.give(tx, userId, "character", c, out, (t, ref) => pay(t, ref));
+            for (const s of ch.skins) await this.give(tx, userId, "skin", s, out, (t, ref) => pay(t, ref));
+          }
+        }
+        let xpTotal = prof.xp + out.xp;
+        const owned = new Set((await tx`SELECT achievement_id FROM player_achievements WHERE user_id = ${userId}`).map((r) => r.achievement_id));
+        for (const [id, lvl] of LEVEL_ACHIEVEMENTS2) {
+          if (!owned.has(id) && levelForXp(xpTotal).level >= lvl) {
+            await tx`INSERT INTO player_achievements (user_id, achievement_id) VALUES (${userId}, ${id}) ON CONFLICT DO NOTHING`;
+            xpTotal += ACHIEVEMENTS[id].xpReward;
+            out.xp += ACHIEVEMENTS[id].xpReward;
+          }
+        }
+        const level = levelForXp(xpTotal).level;
+        await tx`UPDATE profiles SET xp = ${xpTotal}, level = ${level}, tokens = ${tokens}, updated_at = now() WHERE user_id = ${userId}`;
+        const blat = await creditLevels(tx, userId, level);
+        out.blatGained = blat.gained;
+        out.tokens = tokens;
+        out.xpTotal = xpTotal;
+        out.level = level;
+      }
+      out.done = await this.done(userId, tx);
+      return out;
+    });
+  }
+  /**
+   * For checking the story (v0.2.16, an administrator's action): the campaign's missions before `m` count
+   * as done, so `m` is open. They are marked with a best time of 0 (STORY_OPENED_BEST_MS) and pay nothing —
+   * no talons, experience or chapter rewards; a chapter's reward still comes when the player finishes the
+   * chapter's last mission for real. Missions already done stay as they were.
+   */
+  async open(userId, m) {
+    return this.sql.begin(async (tx) => {
+      const [prof] = await tx`SELECT user_id FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+      if (!prof) throw new StoryError("no_profile");
+      const opened = [];
+      for (const x of missionsBefore(m.id)) {
+        const r = await tx`INSERT INTO story_progress (user_id, mission_id, best_ms) VALUES (${userId}, ${x.id}, ${STORY_OPENED_BEST_MS}) ON CONFLICT (user_id, mission_id) DO NOTHING RETURNING mission_id`;
+        if (r.length > 0) opened.push(x.id);
+      }
+      return { opened, done: await this.done(userId, tx) };
+    });
+  }
+  /** A story character or skin: into the inventory, or its worth in talons when it is already there. */
+  async give(tx, userId, kind, id, out, pay) {
+    const got = await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${id}, ${kind}, 'story') ON CONFLICT DO NOTHING RETURNING item_id`;
+    if (got.length > 0) {
+      if (kind === "character") out.characters.push(id);
+      else out.skins.push(id);
+      return;
+    }
+    const worth = kind === "character" ? CHARACTER_PRICES[id]?.amount ?? 0 : STORY_OWNED_SKIN_TALONS;
+    const before = out.talons;
+    await pay(worth, `story:own:${kind}:${id}`);
+    if (out.talons > before) out.compensated.push({ kind, id, talons: out.talons - before });
+  }
+};
+
 // apps/server/src/blat/drop.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
 var DROP_KEY = "blat_drop.announce_at";
@@ -20871,6 +20992,7 @@ var registerAdminRoutes = (router, deps) => {
         referrals: refCounts,
         flag: b2?.blat_flag ?? null
       },
+      story: await new StoryRepo(p.sql).done(id),
       origin: await (async () => {
         const [o] = await p.sql`
           SELECT u.source_channel, u.source_detail, pa.code AS partner, u.merged_into, u.merged_at,
@@ -21019,6 +21141,27 @@ var registerAdminRoutes = (router, deps) => {
     }
     await audit(p.sql, deps.log, { adminId: a.id, action: "balance_grant", target: id, details: { currency: body.currency, amount: body.amount, note: body.note, balance }, ip: ctx.ip });
     ctx.json(200, { currency: body.currency, balance });
+  });
+  router.post("/api/admin/players/:id/story-open", admin, async (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID_RE3.test(id)) throw new HttpError(400, "bad_id", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440");
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
+    const body = await ctx.body(AdminStoryOpenRequest, 512);
+    const m = storyMission(body.mission);
+    if (!m || !storyChapter(m.campaign, m.chapter)?.ready) throw new HttpError(400, "bad_mission", "\u0422\u0430\u043A\u043E\u0439 \u043C\u0438\u0441\u0441\u0438\u0438 \u043D\u0435\u0442");
+    const p = pg();
+    const [u] = await p.sql`SELECT id FROM users WHERE id = ${id} AND deleted_at IS NULL`;
+    if (!u) throw new HttpError(404, "not_found", "\u0418\u0433\u0440\u043E\u043A \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    let out;
+    try {
+      out = await new StoryRepo(p.sql).open(id, m);
+    } catch (e2) {
+      if (e2 instanceof StoryError) throw new HttpError(409, "no_profile", "\u0423 \u0438\u0433\u0440\u043E\u043A\u0430 \u0435\u0449\u0451 \u043D\u0435\u0442 \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
+      throw e2;
+    }
+    await audit(p.sql, deps.log, { adminId: a.id, action: "story_opened", target: id, details: { mission: m.id, opened: out.opened }, ip: ctx.ip });
+    ctx.json(200, out);
   });
   router.post("/api/admin/players/:id/reset-link", admin, async (ctx) => {
     const id = ctx.params.id ?? "";
@@ -22403,103 +22546,6 @@ var registerKonRoutes = (router, deps) => {
 
 // apps/server/src/api/story.ts
 import { randomBytes as randomBytes10 } from "node:crypto";
-
-// apps/server/src/story/repo.ts
-var StoryError = class extends Error {
-  constructor(code) {
-    super(code);
-    this.code = code;
-  }
-  code;
-};
-var LEVEL_ACHIEVEMENTS2 = [
-  ["level_10", ACHIEVEMENT_TARGETS.levels[0]],
-  ["level_25", ACHIEVEMENT_TARGETS.levels[1]]
-];
-var StoryRepo = class {
-  constructor(sql2) {
-    this.sql = sql2;
-  }
-  sql;
-  async done(userId, q = this.sql) {
-    const rows = await q`
-      SELECT mission_id, completed_at, best_ms, completions FROM story_progress WHERE user_id = ${userId} ORDER BY completed_at, mission_id`;
-    return rows.map((r) => ({ id: r.mission_id, at: r.completed_at.toISOString(), bestMs: r.best_ms, completions: r.completions }));
-  }
-  async doneIds(userId) {
-    return new Set((await this.done(userId)).map((d) => d.id));
-  }
-  /** Records a finished mission and pays what it pays (see the file comment). */
-  async complete(userId, m, ms) {
-    return this.sql.begin(async (tx) => {
-      const [prof] = await tx`SELECT xp, level, tokens FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
-      if (!prof) throw new StoryError("no_profile");
-      const [row] = await tx`
-        INSERT INTO story_progress (user_id, mission_id, best_ms) VALUES (${userId}, ${m.id}, ${ms})
-        ON CONFLICT (user_id, mission_id) DO UPDATE SET best_ms = LEAST(story_progress.best_ms, EXCLUDED.best_ms), completions = story_progress.completions + 1
-        RETURNING completions`;
-      const first = row.completions === 1;
-      const out = { mission: m.id, first, talons: 0, xp: 0, blatGained: 0, achievement: null, characters: [], skins: [], compensated: [], tokens: prof.tokens, xpTotal: prof.xp, level: prof.level, done: [] };
-      if (first) {
-        let tokens = prof.tokens;
-        const pay = async (amount, ref) => {
-          if (amount <= 0) return;
-          const paid = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${amount}, ${tokens + amount}, 'story', ${ref}) ON CONFLICT DO NOTHING RETURNING id`;
-          if (paid.length === 0) return;
-          tokens += amount;
-          out.talons += amount;
-        };
-        await pay(m.talons, `story:${m.id}`);
-        out.xp += m.xp;
-        const ids = new Set((await tx`SELECT mission_id FROM story_progress WHERE user_id = ${userId}`).map((r) => r.mission_id));
-        const ch = storyChapter(m.campaign, m.chapter);
-        if (ch?.achievement && isChapterDone(m.campaign, m.chapter, ids)) {
-          const got = await tx`INSERT INTO player_achievements (user_id, achievement_id) VALUES (${userId}, ${ch.achievement}) ON CONFLICT DO NOTHING RETURNING achievement_id`;
-          if (got.length > 0) {
-            out.achievement = ch.achievement;
-            out.xp += ACHIEVEMENTS[ch.achievement].xpReward;
-            await pay(ch.talons, `story:${ch.achievement}`);
-            for (const c of ch.characters) await this.give(tx, userId, "character", c, out, (t, ref) => pay(t, ref));
-            for (const s of ch.skins) await this.give(tx, userId, "skin", s, out, (t, ref) => pay(t, ref));
-          }
-        }
-        let xpTotal = prof.xp + out.xp;
-        const owned = new Set((await tx`SELECT achievement_id FROM player_achievements WHERE user_id = ${userId}`).map((r) => r.achievement_id));
-        for (const [id, lvl] of LEVEL_ACHIEVEMENTS2) {
-          if (!owned.has(id) && levelForXp(xpTotal).level >= lvl) {
-            await tx`INSERT INTO player_achievements (user_id, achievement_id) VALUES (${userId}, ${id}) ON CONFLICT DO NOTHING`;
-            xpTotal += ACHIEVEMENTS[id].xpReward;
-            out.xp += ACHIEVEMENTS[id].xpReward;
-          }
-        }
-        const level = levelForXp(xpTotal).level;
-        await tx`UPDATE profiles SET xp = ${xpTotal}, level = ${level}, tokens = ${tokens}, updated_at = now() WHERE user_id = ${userId}`;
-        const blat = await creditLevels(tx, userId, level);
-        out.blatGained = blat.gained;
-        out.tokens = tokens;
-        out.xpTotal = xpTotal;
-        out.level = level;
-      }
-      out.done = await this.done(userId, tx);
-      return out;
-    });
-  }
-  /** A story character or skin: into the inventory, or its worth in talons when it is already there. */
-  async give(tx, userId, kind, id, out, pay) {
-    const got = await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${id}, ${kind}, 'story') ON CONFLICT DO NOTHING RETURNING item_id`;
-    if (got.length > 0) {
-      if (kind === "character") out.characters.push(id);
-      else out.skins.push(id);
-      return;
-    }
-    const worth = kind === "character" ? CHARACTER_PRICES[id]?.amount ?? 0 : STORY_OWNED_SKIN_TALONS;
-    const before = out.talons;
-    await pay(worth, `story:own:${kind}:${id}`);
-    if (out.talons > before) out.compensated.push({ kind, id, talons: out.talons - before });
-  }
-};
-
-// apps/server/src/api/story.ts
 var registerStoryRoutes = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
   const byUser = (ctx) => currentUser(ctx).userId;
