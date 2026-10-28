@@ -1,7 +1,10 @@
 /** /api/admin/* — secure analytics dashboard API (see docs/ADMIN.md). */
-import { AdminBlatDropRequest, AdminBlatFlagRequest, AdminBlatSnapshotRequest, AdminCreateUserRequest, AdminGrantRequest, AdminLoginRequest, AdminPartnerCreate, AdminPartnerUpdate, AdminReferralDecision, AdminStoryOpenRequest, getMap, isMapId, levelForXp, storyChapter, storyMission } from '@blatkom/shared';
-import type { AdminBlatSummary, AdminMe, AdminPaymentRow, AdminPlayerDetail, AdminReferralRow, AdminResetLink, AdminStoryOpenResponse, CharacterId, SourceChannel } from '@blatkom/shared';
+import { AdminBlatDropRequest, AdminBlatFlagRequest, AdminBlatSnapshotRequest, AdminCreateUserRequest, AdminGrantRequest, AdminLoginRequest, AdminPartnerCreate, AdminPartnerUpdate, AdminReferralDecision, AdminStoryOpenRequest, AdminBlatAllocationRequest, getMap, isMapId, levelForXp, storyChapter, storyMission } from '@blatkom/shared';
+import type { AdminBlatSummary, AdminFounderResult, AdminMe, BlatPool, AdminPaymentRow, AdminPlayerDetail, AdminReferralRow, AdminResetLink, AdminStoryOpenResponse, CharacterId, SourceChannel } from '@blatkom/shared';
 import { StoryError, StoryRepo } from '../story/repo.js';
+import { makeFounder } from './founder.js';
+import { allocateBlat } from '../blat/repo.js';
+import { randomUUID } from 'node:crypto';
 import { BlatRepo } from '../blat/repo.js';
 import { BlatDropRepo, DROP_DATE_BOUNDS } from '../blat/drop.js';
 import { notifyReferral } from '../api/blat.js';
@@ -222,6 +225,7 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
         flag: b?.blat_flag ?? null,
       },
       story: await new StoryRepo(p.sql).done(id),
+      founder: (await p.sql<Array<{ founder: boolean }>>`SELECT founder FROM users WHERE id = ${id}`)[0]?.founder ?? false,
       origin: await (async () => {
         // V2.0 parts E–F: how the account came, and the empty profiles merged into it (or the one it was merged into)
         const [o] = await p.sql<Array<{ source_channel: SourceChannel | null; source_detail: string | null; partner: string | null; merged_into: string | null; merged_at: Date | null; merged_from: number }>>`
@@ -257,6 +261,8 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
       out.issuedInRange[i.reason] = Number(i.range);
     }
     for (const x of refs) out.referrals[x.status] = x.n;
+    // v0.2.17: the supply's pools
+    out.pools = (await sql<Array<{ pool: BlatPool; cap: string; issued: string }>>`SELECT pool, cap, issued FROM blat_pools ORDER BY cap DESC`).map((x) => ({ pool: x.pool, cap: Number(x.cap), issued: Number(x.issued) }));
     ctx.json(200, out);
   });
 
@@ -417,6 +423,43 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
     }
     await audit(p.sql, deps.log, { adminId: a.id, action: 'story_opened', target: id, details: { mission: m.id, opened: out.opened }, ip: ctx.ip });
     ctx.json(200, out);
+  });
+
+  /**
+   * v0.2.17: «Make founder» — the founder's account (admin/founder.ts): the badge and the hidden way into
+   * /admin, level 87, every item, $BLAT up to the founder's share. Admin only, audited; repeating it
+   * changes nothing that was done.
+   */
+  router.post('/api/admin/players/:id/founder', admin, async (ctx) => {
+    const id = ctx.params.id ?? '';
+    if (!UUID_RE.test(id)) throw new HttpError(400, 'bad_id', 'Неверный идентификатор');
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, 'rate_limited', 'Слишком много операций подряд, подождите', { 'retry-after': '60' });
+    const p = pg();
+    const r: AdminFounderResult | null = await makeFounder(p.sql, id);
+    if (!r) throw new HttpError(404, 'not_found', 'Игрок не найден');
+    await audit(p.sql, deps.log, { adminId: a.id, action: 'founder_made', target: id, details: { ...r }, ip: ctx.ip });
+    ctx.json(200, r);
+  });
+
+  /** v0.2.17: a $BLAT share out of the influencers', the friends' or the reserve pool (audited). */
+  router.post('/api/admin/players/:id/blat-allocation', admin, async (ctx) => {
+    const id = ctx.params.id ?? '';
+    if (!UUID_RE.test(id)) throw new HttpError(400, 'bad_id', 'Неверный идентификатор');
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, 'rate_limited', 'Слишком много операций подряд, подождите', { 'retry-after': '60' });
+    const body = await ctx.body(AdminBlatAllocationRequest, 1024);
+    const p = pg();
+    const [u] = await p.sql<Array<{ id: string }>>`SELECT id FROM users WHERE id = ${id} AND deleted_at IS NULL`;
+    if (!u) throw new HttpError(404, 'not_found', 'Игрок не найден');
+    const ref = `allocation:${body.pool}:${randomUUID()}`;
+    const r = await p.sql.begin(async (tx) => {
+      await tx`INSERT INTO profiles (user_id) VALUES (${id}) ON CONFLICT DO NOTHING`;
+      return allocateBlat(tx, id, body.pool, body.amount, ref);
+    });
+    if (!r.ok) throw new HttpError(409, r.reason === 'pool' ? 'pool_exhausted' : 'not_allocated', r.reason === 'pool' ? 'В этом пуле не осталось столько $BLAT' : 'Начислить не получилось');
+    await audit(p.sql, deps.log, { adminId: a.id, action: 'blat_allocation', target: id, details: { pool: body.pool, amount: body.amount, note: body.note, balance: r.balance }, ip: ctx.ip });
+    ctx.json(200, { balance: r.balance });
   });
 
   /** One-time password-reset link (valid for an hour) for a player who registered an email. */

@@ -5,9 +5,9 @@
  * come). Black, red and bordeaux, the coin. An announcement date, not a promise: the panel says that no
  * token, price, profit or listing is guaranteed.
  */
-import { BLAT_LEVEL_CAP_REWARD, BLAT_LEVEL_FIRST, REFERRAL_TIERS, dropCountdown, dropMsLeft } from '@blatkom/shared';
-import type { BlatDropInfo } from '@blatkom/shared';
-import { h } from '../dom.js';
+import { BLAT_POOLS, BLAT_SUPPLY, dropCountdown, dropMsLeft } from '@blatkom/shared';
+import type { BlatDropInfo, BlatPool } from '@blatkom/shared';
+import { asset, h, toast } from '../dom.js';
 import { getLang, plural, t } from '../../i18n/index.js';
 import { blatAmount, blatCoin, fmtBlat } from './blat.js';
 
@@ -36,6 +36,7 @@ export function renderBlatDrop(info: BlatDropInfo, fetchedAt: number = Date.now(
     h('div', { class: 'blatdrop__coin' }, blatCoin(96, '')),
     h('div', { class: 'blatdrop__title' }, 'BLAT DROP'),
     h('div', { class: 'blatdrop__label' }, 'BLAT DROP ANNOUNCE DATE'),
+    h('div', { class: 'blatdrop__chain', 'data-testid': 'drop-solana' }, solanaLogo(18), t('The drop is planned in the Solana network')),
     target !== null
       ? h(
           'div',
@@ -55,20 +56,10 @@ export function renderBlatDrop(info: BlatDropInfo, fetchedAt: number = Date.now(
         )
       : null,
     prep,
-    h(
-      'div',
-      { class: 'blatdrop__how' },
-      h('b', null, t('How $BLAT accumulate:')),
-      h(
-        'ul',
-        null,
-        h('li', null, t('every new level — once ({first} at the start, up to {cap} a level)', { first: fmtBlat(BLAT_LEVEL_FIRST), cap: fmtBlat(BLAT_LEVEL_CAP_REWARD) })),
-        h('li', null, t('every friend who comes through your link and plays a whole online match — from {n}', { n: fmtBlat(REFERRAL_TIERS[0]!.reward) })),
-      ),
-    ),
     h('div', { class: 'blatdrop__note' }, t('$BLAT are in-game points. BLAT DROP is an announcement date, not a promise: no token, price, profit or listing is guaranteed.')),
   );
-  if (target === null) return el;
+  const out = dropGrid(el, target, info.wallet ?? null);
+  if (target === null) return out;
   let seen = false;
   const tick = () => {
     if (el.isConnected) seen = true;
@@ -84,5 +75,117 @@ export function renderBlatDrop(info: BlatDropInfo, fetchedAt: number = Date.now(
   };
   const timer = setInterval(tick, 1000);
   tick();
-  return el;
+  return out;
+}
+
+const solanaLogo = (size: number) => h('img', { class: 'logo-sol', src: asset('assets/ui/logos/solana.png'), alt: 'Solana', width: String(size), height: String(size), draggable: 'false' });
+const phantomLogo = (size: number) => h('img', { class: 'logo-phantom', src: asset('assets/ui/logos/phantom.png'), alt: 'Phantom', width: String(size), height: String(size), draggable: 'false' });
+
+const POOL_LABEL: Record<BlatPool, () => string> = {
+  players: () => t('Players'),
+  founder: () => t('Founder'),
+  influencers: () => t('Influencers'),
+  friends: () => t('Friends of the project'),
+  reserve: () => t('Reserve'),
+};
+
+/**
+ * v0.2.17: BLAT DROP with the owner's additions — the countdown card, Play-to-Earn and the year's plans,
+ * the supply (2 000 000 000, by pools) and the project's Solana wallet with «Copy». On a wide screen the
+ * three stand side by side; on a phone they are tabs (nothing to scroll).
+ */
+function dropGrid(count: HTMLElement, target: number | null, wallet: string | null): HTMLElement {
+  const dateText = target !== null ? new Intl.DateTimeFormat(getLang() === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(target) : t('soon');
+  const plans = h(
+    'section',
+    { class: 'panel col droppane droppane--plans', 'data-testid': 'drop-plans' },
+    h('span', { class: 'tag' }, 'Play-to-Earn'),
+    h('div', { class: 'droppane__lead' }, t('BLATKOM ’89 is out to change the Play-to-Earn market: $BLAT go to everyone who plays, not to those who pay.')),
+    h('b', { class: 'droppane__h' }, t('How to earn $BLAT')),
+    h(
+      'ul',
+      { class: 'droppane__list' },
+      h('li', null, t('Level up — every new level pays $BLAT')),
+      h('li', null, t('Invite friends — for every friend who plays a whole online match')),
+      h('li', null, t('Play the story — missions give experience, experience gives levels')),
+      h('li', null, t('Win the $BLAT Tournament — take your opponents’ stakes')),
+    ),
+    h('b', { class: 'droppane__h' }, t('Plans for the year')),
+    h(
+      'ol',
+      { class: 'droppane__road' },
+      h('li', null, h('b', null, t('Now')), ' — ', t('$BLAT are earned: levels, friends, the story, the tournament')),
+      h('li', null, h('b', null, dateText), ' — ', t('the announcement of the drop date')),
+      h('li', null, h('b', null, t('Then')), ' — ', t('the $BLAT token drop in the Solana network: its date comes with the announcement')),
+      h('li', null, h('b', null, t('Through 2027')), ' — ', t('OPG wars and tournament seasons, new story chapters, maps and characters')),
+    ),
+    h('div', { class: 'muted droppane__small' }, t('Following the path of successful game tokens in Telegram: first players earn points, then the drop. These are plans, not promises.')),
+  );
+  const copy = async () => {
+    if (!wallet) return;
+    try {
+      await navigator.clipboard.writeText(wallet);
+      toast(t('Address copied'));
+    } catch {
+      toast(wallet);
+    }
+  };
+  const tokens = h(
+    'section',
+    { class: 'panel col droppane droppane--tokens', 'data-testid': 'drop-tokenomics' },
+    h('span', { class: 'tag' }, t('Tokenomics')),
+    h('div', { class: 'droppane__supply' }, t('Total supply'), h('b', null, `${fmtBlat(BLAT_SUPPLY)} $BLAT`)),
+    h(
+      'div',
+      { class: 'tokbars' },
+      ...(Object.keys(BLAT_POOLS) as BlatPool[]).map((k) => {
+        const pct = (BLAT_POOLS[k] / BLAT_SUPPLY) * 100;
+        return h(
+          'div',
+          { class: `tokbar tokbar--${k}`, 'data-testid': `pool-${k}` },
+          h('span', { class: 'tokbar__label' }, POOL_LABEL[k]()),
+          h('span', { class: 'tokbar__track' }, h('i', { style: `width:${pct.toFixed(1)}%` })),
+          h('span', { class: 'tokbar__num' }, `${Math.round(pct)}%`, h('small', null, fmtBlat(BLAT_POOLS[k]))),
+        );
+      }),
+    ),
+    wallet
+      ? h(
+          'div',
+          { class: 'dropwallet', 'data-testid': 'drop-wallet' },
+          h('b', { class: 'droppane__h' }, t('Project wallet')),
+          h('div', { class: 'dropwallet__brands' }, h('span', null, solanaLogo(20), 'Solana'), h('span', null, phantomLogo(20), 'Phantom')),
+          h('div', { class: 'dropwallet__row' }, h('code', { class: 'dropwallet__addr', 'data-testid': 'drop-wallet-address' }, wallet), h('button', { class: 'btn btn--small btn--red', 'data-testid': 'drop-wallet-copy', onclick: () => void copy() }, t('Copy'))),
+        )
+      : null,
+  );
+  const panes = [
+    { id: 'count', label: t('Countdown') },
+    { id: 'plans', label: t('Plans') },
+    { id: 'tokens', label: t('Tokenomics') },
+  ];
+  const grid = h('div', { class: 'dropgrid', 'data-pane': 'count' });
+  const tabs = h(
+    'div',
+    { class: 'seg dropgrid__tabs', role: 'tablist' },
+    ...panes.map((p) =>
+      h(
+        'button',
+        {
+          type: 'button',
+          role: 'tab',
+          'aria-pressed': String(p.id === 'count'),
+          'data-testid': `drop-pane-${p.id}`,
+          onclick: (e: Event) => {
+            grid.dataset.pane = p.id;
+            for (const b of tabs.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b === e.currentTarget));
+          },
+        },
+        p.label,
+      ),
+    ),
+  );
+  count.classList.add('droppane', 'droppane--count');
+  grid.append(tabs, count, plans, tokens);
+  return grid;
 }

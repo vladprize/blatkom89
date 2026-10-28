@@ -1,6 +1,7 @@
 /** Room creation, quick match and invitation resolution. */
 import { CreateRoomRequest, QuickMatchRequest, getMap } from '@blatkom/shared';
-import type { CreateRoomResponse, InviteInfo } from '@blatkom/shared';
+import type { CreateRoomResponse, InviteInfo, QuickMatchResponse } from '@blatkom/shared';
+import { STAKE_REFUSAL_TEXT } from '../rooms/MatchRoom.js';
 import type { RouteModule } from '../app.js';
 import { HttpError } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
@@ -27,12 +28,23 @@ export const registerRoomRoutes: RouteModule = (router, { env, services, rooms }
   const createLimiter = new RateLimiter(10, 0.2);
   const lookupLimiter = new RateLimiter(60, 2);
 
+  /** v0.2.17: a stake is for tournament rooms only, and the player has to be able to stake it now. */
+  const stakeFor = async (userId: string, kon: unknown, stake: number | undefined): Promise<number> => {
+    const s = stake ?? 0;
+    if (s <= 0) return 0;
+    if (!kon) throw new HttpError(400, 'validation_error', 'stake: tournament rooms only');
+    const why = services.stakes ? await services.stakes.check(userId, s) : 'stakes_off';
+    if (why) throw new HttpError(409, why, STAKE_REFUSAL_TEXT[why]);
+    return s;
+  };
+
   router.post('/api/rooms', auth, rateLimit(createLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
     const user = currentUser(ctx);
     const body = await ctx.body(CreateRoomRequest);
+    const stake = await stakeFor(user.userId, body.kon, body.stake);
     let room;
     try {
-      room = rooms.create(body.mapId, body.isPrivate, user.userId, null, body.mode, body.kon ?? null);
+      room = rooms.create(body.mapId, body.isPrivate, user.userId, null, body.mode, body.kon ?? null, stake);
     } catch {
       throw new HttpError(503, 'capacity', 'The server is full, try again later');
     }
@@ -48,15 +60,17 @@ export const registerRoomRoutes: RouteModule = (router, { env, services, rooms }
       webUrl = urls.web;
       services.analytics.server('invite_created', { code: inv.code, roomId: room.id }, user);
     }
-    const res: CreateRoomResponse = { roomId: room.id, inviteCode, inviteUrl, webUrl, mapId: room.mapId, mode: room.mode, kon: room.kon };
+    const res: CreateRoomResponse = { roomId: room.id, inviteCode, inviteUrl, webUrl, mapId: room.mapId, mode: room.mode, kon: room.kon, stake: room.stake };
     ctx.json(201, res);
   });
 
   router.post('/api/rooms/quick', auth, rateLimit(lookupLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
     const user = currentUser(ctx);
     const body = await ctx.body(QuickMatchRequest);
-    const room = body.kon ? rooms.konQuick(user.userId, body.kon, body.mapId) : rooms.quickMatch(user.userId, body.mapId, body.mode);
-    ctx.json(200, { roomId: room.id, mapId: room.mapId, mode: room.mode, kon: room.kon });
+    const stake = await stakeFor(user.userId, body.kon, body.stake);
+    const room = body.kon ? rooms.konQuick(user.userId, body.kon, body.mapId, stake) : rooms.quickMatch(user.userId, body.mapId, body.mode);
+    const res: QuickMatchResponse = { roomId: room.id, mapId: room.mapId, mode: room.mode, kon: room.kon, stake: room.stake };
+    ctx.json(200, res);
   });
 
   router.get('/api/rooms/:id', auth, (ctx) => {
@@ -70,14 +84,14 @@ export const registerRoomRoutes: RouteModule = (router, { env, services, rooms }
     const code = ctx.params.code ?? '';
     if (!/^[A-Za-z0-9]{6,16}$/.test(code)) throw new HttpError(400, 'bad_code', 'Invalid invitation code');
     const resolved = await services.invites.resolve(code);
-    let info: InviteInfo = { code, status: 'not_found', roomId: null, mapId: null, mode: null, players: 0, maxPlayers: 0, hostName: null, kon: null };
+    let info: InviteInfo = { code, status: 'not_found', roomId: null, mapId: null, mode: null, players: 0, maxPlayers: 0, hostName: null, kon: null, stake: 0 };
     if (resolved) {
       const room = rooms.get(resolved.roomId);
       if (!room) info = { ...info, status: 'expired' };
       else {
         const phase = room.phase;
         const status: InviteInfo['status'] = room.occupancy >= room.config.maxPlayers ? 'full' : phase === 'finished' ? 'finished' : phase === 'waiting' ? 'joinable' : room.isJoinable() ? 'in_progress' : 'full';
-        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.lineup, maxPlayers: room.config.maxPlayers, hostName: room.hostName(), kon: room.kon };
+        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.lineup, maxPlayers: room.config.maxPlayers, hostName: room.hostName(), kon: room.kon, stake: room.stake };
       }
     }
     ctx.json(200, info);

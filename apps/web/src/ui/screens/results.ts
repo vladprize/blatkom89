@@ -7,7 +7,7 @@ import { t, plural, count } from '../../i18n/index.js';
 import { achievementText, mapName } from '../../i18n/content.js';
 import { konLabel } from './kon.js';
 import { modeName } from '../modes.js';
-import { blatAmount, fmtBlat } from './blat.js';
+import { blatAmount, blatCoin, fmtBlat } from './blat.js';
 
 const teamLabel = (team: Team) => (team === 0 ? t('RED TEAM') : t('BLUE TEAM'));
 
@@ -69,7 +69,7 @@ export function renderResults(o: {
         ? h(
             'div',
             { class: 'ratingline ratingline--kon', 'data-testid': 'kon-line' },
-            t('Kon rating'),
+            t('Tournament rating'),
             ' ',
             h('b', null, String(personal.kon.rating)),
             ' ',
@@ -94,6 +94,27 @@ export function renderResults(o: {
             { class: 'col tokens-gain', style: 'gap:2px' },
             h('div', { class: 'row' }, h('b', null, '+', amount(personal.tokensGained, 'tokens')), h('span', { class: 'muted' }, t('{talons} · {total} in total — spend them in the Arsenal', { talons: plural(personal.tokensGained, 'talon'), total: personal.totalTokens ?? 0 }))),
             how ? h('div', { class: 'muted', style: 'font-size:14px', 'data-testid': 'talon-breakdown' }, how) : null,
+          )
+        : null,
+      // v0.2.17: the $BLAT Tournament's stake — the pool won, the stake lost, or the stake back
+      personal.stake
+        ? h(
+            'div',
+            { class: 'row stakeline', 'data-testid': 'stake-line', 'data-outcome': personal.stake.outcome },
+            blatCoin(16, ''),
+            h('b', null, personal.stake.outcome === 'win' ? `+${fmtBlat(personal.stake.payout - personal.stake.stake)}` : personal.stake.outcome === 'loss' ? `−${fmtBlat(personal.stake.stake)}` : personal.stake.payout > personal.stake.stake ? `+${fmtBlat(personal.stake.payout - personal.stake.stake)}` : '±0'),
+            h(
+              'span',
+              { class: 'muted' },
+              personal.stake.outcome === 'win'
+                ? t('$BLAT: your share of the pool ({n})', { n: fmtBlat(personal.stake.payout) })
+                : personal.stake.outcome === 'loss'
+                  ? t('$BLAT: the stake stays in the pool')
+                  : personal.stake.outcome === 'draw'
+                    ? t('$BLAT: a draw — the stake is back')
+                    : t('$BLAT: the stake is back'),
+              ` · ${t('{total} in total', { total: fmtBlat(personal.totalBlat ?? 0) })}`,
+            ),
           )
         : null,
       // V2.0: $BLAT for the levels reached in this match
@@ -156,7 +177,7 @@ export function renderResults(o: {
     h(
       'div',
       { class: 'wrap' },
-      h('div', { class: 'row' }, h('span', { class: 'tag' }, t('Match report')), h('span', { class: 'muted' }, `${mapName(r.mapId)} · ${o.kon ? t('Blatnoy Kon {f}', { f: konLabel(o.kon) }) : modeName(mode)} · ${fmtDuration(r.durationMs)} · ${reason}`)),
+      h('div', { class: 'row' }, h('span', { class: 'tag' }, t('Match report')), h('span', { class: 'muted' }, `${mapName(r.mapId)} · ${o.kon ? t('$BLAT Tournament {f}', { f: konLabel(o.kon) }) : modeName(mode)} · ${fmtDuration(r.durationMs)} · ${reason}`)),
       banner,
       h(
         'div',

@@ -62,7 +62,7 @@ export class RoomManager {
   }
 
   /** A room; with `kon` a «Блатной кон» room of that format (team deathmatch, fixed sides, people only). */
-  create(mapId: MapId, isPrivate: boolean, hostUserId: string | null, inviteCode: string | null = null, mode: GameMode = 'ffa', kon: KonFormat | null = null): MatchRoom {
+  create(mapId: MapId, isPrivate: boolean, hostUserId: string | null, inviteCode: string | null = null, mode: GameMode = 'ffa', kon: KonFormat | null = null, stake = 0): MatchRoom {
     if (this.rooms.size >= this.opts.maxRooms) throw new Error('room limit reached');
     let id = newRoomId();
     while (this.rooms.has(id)) id = newRoomId();
@@ -75,6 +75,7 @@ export class RoomManager {
         inviteCode,
         mode: kon ? 'teams' : mode,
         kon,
+        stake: kon ? stake : 0,
         config: this.opts.config,
         fillBots: this.opts.fillBots ?? false,
         ...(this.opts.fillTiming ? { fillTiming: this.opts.fillTiming } : {}),
@@ -102,19 +103,30 @@ export class RoomManager {
    * V2.0 part D, «Блатной кон» search: a public Kon room of the format still gathering people (the
    * fullest first, on the chosen map if one was chosen) or a new one. It starts by itself once full.
    */
-  konQuick(userId: string, format: KonFormat, mapId?: MapId): MatchRoom {
+  konQuick(userId: string, format: KonFormat, mapId?: MapId, stake = 0): MatchRoom {
     const candidates = this.list()
-      .filter((r) => !r.isPrivate && r.kon === format && r.phase === 'waiting' && r.isJoinable(userId) && (!mapId || r.mapId === mapId))
+      .filter((r) => !r.isPrivate && r.kon === format && r.stake === stake && r.phase === 'waiting' && r.isJoinable(userId) && (!mapId || r.mapId === mapId))
       .sort((a, b) => b.occupancy - a.occupancy);
     if (candidates[0]) return candidates[0];
     const map = mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)]!;
-    return this.create(map, false, null, null, 'teams', format);
+    return this.create(map, false, null, null, 'teams', format, stake);
   }
 
   /** People waiting in public Kon rooms of each format (the Kon screen shows it). */
   konWaiting(): Record<KonFormat, number> {
     const out: Record<KonFormat, number> = { '1x1': 0, '2x2': 0, '3x3': 0, '5x5': 0 };
     for (const r of this.list()) if (r.kon && !r.isPrivate && r.phase === 'waiting') out[r.kon] += r.connectedCount;
+    return out;
+  }
+
+  /** v0.2.17: the same by stake («0», «100», …): a search only finds rooms of its own stake. */
+  konWaitingByStake(): Record<string, Record<KonFormat, number>> {
+    const out: Record<string, Record<KonFormat, number>> = {};
+    for (const r of this.list()) {
+      if (!r.kon || r.isPrivate || r.phase !== 'waiting') continue;
+      const row = (out[String(r.stake)] ??= { '1x1': 0, '2x2': 0, '3x3': 0, '5x5': 0 });
+      row[r.kon] += r.connectedCount;
+    }
     return out;
   }
 

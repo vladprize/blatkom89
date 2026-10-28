@@ -86,7 +86,7 @@ test('$BLAT for levels: level 1 welcomes with 300 at sign-up, every level is pai
   assert.deepEqual(await ledgerRefs(u.userId), ['level:1', 'level:2', 'level:3', 'level:4', 'level:5', 'level:6', 'level:7', 'level:8']);
   assert.equal(await balanceOf(u.userId), 2000 + 550 + 600 + 650);
   const bySource = (await blat(u.token)).body.bySource;
-  assert.deepEqual(bySource, { level: 3800, referral: 0, grant: 0 });
+  assert.deepEqual(bySource, { level: 3800, referral: 0, grant: 0, allocation: 0, stake: 0, stake_win: 0, stake_refund: 0 });
   // an account made without any profile read (straight in the database) is paid by its first one
   const raw = await new UserRepo(app.db.sql).upsertDev(`dev-${randomUUID().slice(0, 12)}`, 'Raw Leveller', null);
   assert.equal(await balanceOf(raw.userId), 0);

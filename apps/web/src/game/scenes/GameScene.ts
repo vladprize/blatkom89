@@ -173,6 +173,8 @@ export class GameScene extends Phaser.Scene {
 
   private cleanup() {
     this.unsubSettings?.();
+    // the match's key captures must not outlive it (they swallowed W/A/S/D… in the menus' text fields)
+    this.input.keyboard?.removeAllKeys(true, true);
     hudBus.off('pause-state', this.onPauseState, this);
     hudBus.off('chat-open', this.onChatOpen, this);
     hudBus.off('chat-say', this.onChatSay, this);

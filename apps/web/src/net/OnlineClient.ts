@@ -3,7 +3,7 @@
  * match/invites over HTTP, the game WebSocket, lobby state and the OnlineSession lifecycle.
  */
 import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, KonFormat, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, TelegramLinkOutcome, WeaponId } from '@blatkom/shared';
-import { latinName } from '@blatkom/shared';
+import { STAKE_REFUSALS, latinName } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { readLoginReturn } from './oauth.js';
 import { captureReferral, captureTelegramLink, clearReferral, pendingReferral } from './referral.js';
@@ -41,6 +41,9 @@ export interface LobbyState {
   limits?: { teamScoreLimit: number; captureLimit: number; baseScoreLimit: number };
   /** V2.0 part D: a «Блатной кон» room (fixed sides of this format, people only). */
   kon: KonFormat | null;
+  /** v0.2.17: the $BLAT Tournament's stake everyone puts in (0: none); `staking` — being reserved now. */
+  stake: number;
+  staking: boolean;
   /** The match length in this room (ms, from the server's rules). */
   durationMs?: number;
 }
@@ -70,6 +73,9 @@ const VISITOR_KEY = 'blatkom89.visitor';
 const VISIT_DAY_KEY = 'blatkom89.visit-day';
 /** Free hosting (e.g. Render) sleeps after ~15 min without HTTP traffic — ping while in a room. */
 const KEEPALIVE_MS = 4 * 60_000;
+
+/** v0.2.17: the $BLAT Tournament's stake refusals — the player is out of the room. */
+const STAKE_CODES: ReadonlySet<string> = new Set(['stake_confirm', ...STAKE_REFUSALS]);
 
 export class OnlineClient {
   readonly api = new Api();
@@ -404,19 +410,22 @@ export class OnlineClient {
     await this.joinRoom(r.roomId, c);
   }
 
-  /** V2.0 part D: «Блатной кон» search — a public Kon room of the format (on the map, if one is chosen). */
-  async konQuick(c: CharacterId, kon: KonFormat, mapId?: MapId): Promise<void> {
+  /**
+   * V2.0 part D: «Блатной кон» search — a public Kon room of the format (on the map, if one is chosen);
+   * v0.2.17: of the stake (the $BLAT Tournament — everyone stakes the same).
+   */
+  async konQuick(c: CharacterId, kon: KonFormat, mapId?: MapId, stake = 0): Promise<void> {
     await this.ensureAuth();
-    const r = await this.api.quickMatch(mapId, 'teams', kon);
+    const r = await this.api.quickMatch(mapId, 'teams', kon, stake);
     this.inviteUrl = null;
-    await this.joinRoom(r.roomId, c);
+    await this.joinRoom(r.roomId, c, r.stake ?? 0);
   }
 
-  async createRoom(mapId: MapId, c: CharacterId, mode: GameMode = 'ffa', kon?: KonFormat): Promise<void> {
+  async createRoom(mapId: MapId, c: CharacterId, mode: GameMode = 'ffa', kon?: KonFormat, stake = 0): Promise<void> {
     await this.ensureAuth();
-    const r = await this.api.createRoom(mapId, true, mode, kon);
+    const r = await this.api.createRoom(mapId, true, mode, kon, stake);
     this.inviteUrl = r.inviteUrl ?? r.webUrl;
-    await this.joinRoom(r.roomId, c);
+    await this.joinRoom(r.roomId, c, r.stake ?? 0);
   }
 
   async resolveInvite(code: string): Promise<InviteInfo> {
@@ -426,7 +435,8 @@ export class OnlineClient {
     return info;
   }
 
-  async joinRoom(roomId: string, c: CharacterId): Promise<void> {
+  /** `stake` (v0.2.17): the room's $BLAT Tournament stake the player agreed to (0: none). */
+  async joinRoom(roomId: string, c: CharacterId, stake = 0): Promise<void> {
     await this.ensureAuth();
     this.closeConn();
     if (this.chatRoomId !== roomId) {
@@ -450,7 +460,7 @@ export class OnlineClient {
           }
         },
       },
-      { token: this.api.token!, roomId, character: c },
+      { token: this.api.token!, roomId, character: c, ...(stake > 0 ? { stake } : {}) },
     );
     this.conn = conn;
     conn.connect();
@@ -498,6 +508,8 @@ export class OnlineClient {
           mode: m.mode,
           minToStart: m.minToStart ?? this.config?.minPlayers ?? 2,
           kon: m.kon ?? null,
+          stake: m.stake ?? 0,
+          staking: m.staking === true,
           ...(this.config ? { durationMs: this.config.durationMs } : {}),
           ...(this.config ? { limits: { teamScoreLimit: this.config.teamScoreLimit, captureLimit: this.config.captureLimit, baseScoreLimit: this.config.baseScoreLimit } } : {}),
         };
@@ -538,7 +550,7 @@ export class OnlineClient {
           this.pushChat({ id: '', name: '', slot: -1, team: null, text: errorText(m.code, m.message), toTeam: false, at: Date.now(), mine: true, system: true });
           break;
         }
-        this.cb.onError(errorText(m.code, m.message), m.code === 'unauthorized' || m.code === 'room_not_found' || m.code === 'room_full' || m.code === 'version_mismatch');
+        this.cb.onError(errorText(m.code, m.message), m.code === 'unauthorized' || m.code === 'room_not_found' || m.code === 'room_full' || m.code === 'version_mismatch' || STAKE_CODES.has(m.code));
         break;
       case 'kicked':
         this.cb.onError(t('Disconnected by the server.'), true);

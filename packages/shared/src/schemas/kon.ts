@@ -1,5 +1,6 @@
 /** «Блатной кон» (V2.0 part D): the API's shapes. */
 import type { KonFormat, KonOutcome } from '../game-rules/kon.js';
+import type { StakeRefusal } from '../game-rules/konStakes.js';
 import type { CharacterId } from '../game-rules/characters.js';
 import type { MapId } from '../maps/types.js';
 
@@ -30,6 +31,22 @@ export interface KonHistoryEntry {
   character: CharacterId;
   mates: string[];
   rivals: string[];
+  /** v0.2.17: a staked match — the stake and what came back (absent: no stake). */
+  stake?: number;
+  payout?: number;
+}
+
+/** v0.2.17: whether the player can stake now, and what with. */
+export interface KonStakeStatus {
+  /** The server's switch (TOURNAMENT_STAKES). */
+  enabled: boolean;
+  balance: number;
+  /** A reason that stops every stake (a new account, an account held for a check); null: none. */
+  refusal: Extract<StakeRefusal, 'account_new' | 'blat_flagged' | 'stakes_off'> | null;
+  /** What may still be staked in the next 24 hours. */
+  dailyLeft: number;
+  /** When a new account may stake (ISO; account_new only). */
+  from?: string | null;
 }
 
 /** GET /api/kon */
@@ -38,6 +55,10 @@ export interface KonResponse {
   history: KonHistoryEntry[];
   /** People waiting in public Kon rooms of each format right now. */
   waiting: Record<KonFormat, number>;
+  /** v0.2.17: the same by stake («0», «100», …). */
+  waitingByStake?: Record<string, Record<KonFormat, number>>;
+  /** v0.2.17: the player's stakes. */
+  stakes?: KonStakeStatus;
 }
 
 /** A row of the Kon tables (a player or a gang). */

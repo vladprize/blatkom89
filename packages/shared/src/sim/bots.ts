@@ -32,6 +32,19 @@ const DIFFICULTY: Record<BotDifficulty, { reaction: number; aimError: number; tu
   hard: { reaction: 230, aimError: 0.055, turnRate: 10, tolerance: 0.11, vision: 620 },
 };
 
+/**
+ * v0.2.17 — the owner: «practice and the story about 30 % easier, the bots are far too strong». The bots
+ * the player fights (practice's opponents, the story's enemies, the bots that fill an online lineup) are
+ * eased the same way: a bot reacts later, aims wider, turns slower, sees a little less far, and fires in
+ * bursts with pauses (about three quarters of the moments it could fire) — roughly 30 % less damage per
+ * second of a fight. The player's own side (the story's allies, practice team-mates) is not eased.
+ */
+export const BOT_EASE = Object.freeze({ reaction: 1.35, aimError: 1.45, turnRate: 0.78, vision: 0.9, fireDuty: 0.75 });
+
+function eased(d: (typeof DIFFICULTY)[BotDifficulty]): (typeof DIFFICULTY)[BotDifficulty] {
+  return { reaction: d.reaction * BOT_EASE.reaction, aimError: d.aimError * BOT_EASE.aimError, turnRate: d.turnRate * BOT_EASE.turnRate, tolerance: d.tolerance, vision: d.vision * BOT_EASE.vision };
+}
+
 /** Distance a bot tries to keep with the weapon in hand. */
 function preferredRange(w: WeaponId): number {
   const d = WEAPONS[w];
@@ -68,6 +81,9 @@ export class BotBrain {
   private holdSpot: { x: number; y: number; until: number } | null = null;
   private readonly rng: () => number;
   private readonly d: (typeof DIFFICULTY)[BotDifficulty];
+  /** Fire in bursts (BOT_EASE.fireDuty): shooting until `burstUntil`, then a pause until `pauseUntil`. */
+  private burstUntil = 0;
+  private pauseUntil = 0;
 
   constructor(
     readonly id: string,
@@ -75,9 +91,23 @@ export class BotBrain {
     private readonly nav: NavGrid,
     difficulty: BotDifficulty = 'normal',
     seed = 1,
+    /** v0.2.17: an opponent of the player — eased (BOT_EASE); false for the player's own side. */
+    private readonly ease = true,
   ) {
     this.rng = mulberry32(seed);
-    this.d = DIFFICULTY[difficulty];
+    this.d = ease ? eased(DIFFICULTY[difficulty]) : DIFFICULTY[difficulty];
+  }
+
+  /** Bursts with pauses: on for 450–800 ms, off for a share that keeps BOT_EASE.fireDuty on average. */
+  private burstOn(now: number): boolean {
+    if (!this.ease) return true;
+    if (now < this.burstUntil) return true;
+    if (now < this.pauseUntil) return false;
+    const on = 450 + this.rng() * 350;
+    const off = (on * (1 - BOT_EASE.fireDuty)) / BOT_EASE.fireDuty;
+    this.burstUntil = now + on;
+    this.pauseUntil = this.burstUntil + off;
+    return true;
   }
 
   nextInput(): InputFrame {
@@ -153,7 +183,7 @@ export class BotBrain {
       const aimed = Math.abs(angleDiff(this.aim, Math.atan2(dy, dx))) < this.d.tolerance + 8 / Math.max(dist, 8);
       const reacted = now - this.targetSeenAt > this.d.reaction;
       const w = WEAPONS[me.weapon];
-      if (aimed && reacted && dist < w.range * 0.95) frame.buttons |= BTN.FIRE;
+      if (aimed && reacted && dist < w.range * 0.95 && this.burstOn(now)) frame.buttons |= BTN.FIRE;
       // equipment: grenades at mid range, a turret or a mine when an opponent shows up, smoke when hurt
       if (me.gadget && me.gadgetCharges > 0 && aimed && reacted && now >= this.gadgetAt && now >= me.gadgetReadyAt) {
         const g = GADGETS[me.gadget];

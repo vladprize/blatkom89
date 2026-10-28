@@ -71,6 +71,9 @@ Copy `.env.example` to `.env` and set at least:
 | `RESEND_API_KEY` + `MAIL_FROM` | optional: password-reset letters (Resend; the sender domain must be verified there). Without them admins issue one-time reset links in `/admin` |
 | `CASES_ENABLED` | `true` (default) / `false` — paid rare-weapon cases |
 | `BLAT_DROP_ANNOUNCE_AT` | optional (V2.0): the BLAT DROP announcement date players count down to, ISO 8601 (`2027-04-23T12:00:00Z`); an administrator's date set in `/admin → $BLAT` wins over it ([BLAT.md](BLAT.md) §6) |
+| `PROJECT_SOL_WALLET` | optional (v0.2.17): the project's Solana wallet shown in BLAT DROP with «Copy» (default: the owner's address built in); nothing in the game sends to it or reads from it |
+| `SOCIAL_X_URL`, `SOCIAL_TELEGRAM_URL` | optional (v0.2.17): where the menu's X and Telegram buttons lead; without them the buttons say «coming soon» |
+| `TOURNAMENT_STAKES` | `true` (default) / `false` — $BLAT stakes in the $BLAT Tournament ([KON.md](KON.md) §6); off: the tournament plays for the rating only |
 | `MATCH_FILL_BOTS` | complete small lineups with players the server runs itself (default `true`: 4 in free-for-all, 3 a side in team modes; Quick Match after a 5 s head start, rooms with friends at kick-off; see docs/NETCODE.md §2a) |
 | `GUEST_SIGNUPS_PER_IP_HOUR` | new guest accounts per address per hour (default 10; raise it for events where many new players share one Wi-Fi) |
 | `LOG_LEVEL`, `MAX_ROOMS`, `SESSION_TTL_HOURS`, `TELEGRAM_AUTH_MAX_AGE_SEC` | optional |

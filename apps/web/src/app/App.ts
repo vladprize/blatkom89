@@ -2,15 +2,15 @@
  * App shell: screen navigation (HTML/CSS over the canvas), offline practice flow, online flow
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
-import { CHARACTER_IDS, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, REAL_MONEY, isCharacterId, isGameMode, isKonFormat, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
-import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonTopResponse } from '@blatkom/shared';
+import { CHARACTER_IDS, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, REAL_MONEY, isCharacterId, isGameMode, isKonFormat, isKonStake, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonStake, KonTopResponse, SiteConfig } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
 import { hudBus } from '../game/scenes/hudBus.js';
 import { ChatOverlay, ChatPanel, isMuted } from '../ui/chat.js';
 import type { ChatSource } from '../ui/chat.js';
-import { h, toast, portrait, asset, fmtDuration } from '../ui/dom.js';
+import { h, toast, portrait, asset, fmtDuration, founderTag } from '../ui/dom.js';
 import { openSheet } from '../ui/sheet.js';
 import { getSettings, updateSettings, storageGet, storageSet, onSettings } from './settings.js';
 import { ONLINE_AVAILABLE, VERSION } from './config.js';
@@ -44,9 +44,10 @@ import { charText, finishName, gadgetName, modText, weaponName } from '../i18n/c
 import { apiErrorText } from '../net/errors.js';
 import { watchForUpdates } from './updates.js';
 import { renderClubs, renderClub, renderClubEditor, clubLabel } from '../ui/screens/clubs.js';
-import { renderBlat, blatCoin, fmtBlat } from '../ui/screens/blat.js';
+import { renderBlat, blatCoin, blatAmount, fmtBlat } from '../ui/screens/blat.js';
+import { dropBanner } from '../ui/dropBanner.js';
 import { renderBlatDrop } from '../ui/screens/blatDrop.js';
-import { renderKon, konLabel } from '../ui/screens/kon.js';
+import { renderKon, konLabel, confirmStake, playableStake, tourneyIcon } from '../ui/screens/kon.js';
 import { PROVIDER_NAME, loginErrorText } from '../ui/screens/signin.js';
 import type { LoginProvider } from '../net/oauth.js';
 import { clubFlag } from '../ui/clubFlag.js';
@@ -70,6 +71,8 @@ const NICK_CONFIRMED_KEY = 'blatkom89.nick-confirmed.v1';
 const QUICK_MODE_KEY = 'blatkom89.quick-mode';
 /** V2.0 part D: the «Блатной кон» format last chosen. */
 const KON_FORMAT_KEY = 'blatkom89.kon-format';
+/** v0.2.17: the $BLAT Tournament stake last chosen. */
+const KON_STAKE_KEY = 'blatkom89.kon-stake';
 
 
 /** Speaker with sound waves (music on) or a cross (muted), drawn as inline SVG. */
@@ -113,6 +116,26 @@ function gearIcon(): SVGSVGElement {
   p.setAttribute(
     'd',
     'M10.3 2h3.4l.5 2.6c.6.2 1.2.5 1.7.9l2.5-.9 1.7 2.9-2 1.7c.1.6.1 1.2 0 1.8l2 1.7-1.7 2.9-2.5-.9c-.5.4-1.1.7-1.7.9l-.5 2.6h-3.4l-.5-2.6c-.6-.2-1.2-.5-1.7-.9l-2.5.9-1.7-2.9 2-1.7a6 6 0 0 1 0-1.8l-2-1.7 1.7-2.9 2.5.9c.5-.4 1.1-.7 1.7-.9zM12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8z',
+  );
+  svg.append(p);
+  return svg;
+}
+
+/** v0.2.17: X and Telegram, inline SVG (the menu's corner). */
+function brandIcon(kind: 'x' | 'telegram'): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '17');
+  svg.setAttribute('height', '17');
+  svg.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS(NS, 'path');
+  p.setAttribute('fill', 'currentColor');
+  p.setAttribute(
+    'd',
+    kind === 'x'
+      ? 'M17.8 2.5h3.3l-7.2 8.2 8.5 10.8h-6.6l-5.2-6.6-5.9 6.6H1.4l7.7-8.8L1 2.5h6.8l4.7 6.1zm-1.2 17h1.8L7.5 4.4H5.5z'
+      : 'M21.4 3.6 2.9 10.8c-1.3.5-1.2 1.3-.2 1.6l4.7 1.5 1.8 5.6c.2.7.4 1 .9 1s.7-.2 1.1-.6l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.7c.3-1.3-.5-1.9-1.4-1.5zM8.7 13.6l9.4-5.9c.5-.3.9-.1.5.2l-7.6 6.9-.3 3.6z',
   );
   svg.append(p);
   return svg;
@@ -185,6 +208,12 @@ export class App {
   /** The Top-100 tab last looked at. */
   private topBy: LeaderboardBy = 'rating';
   private socialTiles: HTMLElement | null = null;
+  /** v0.2.17: the BLAT DROP date for the banners (by the server's clock), the project's wallet. */
+  private dropInfo: { announceAt: string; serverNow: string; fetchedAt: number; wallet: string | null } | null = null;
+  /** v0.2.17: the menu's X and Telegram links, stakes in the $BLAT Tournament. */
+  private site: SiteConfig | null = null;
+  /** v0.2.17: where the menu's BLAT DROP banner goes (filled when the date is known). */
+  private dropHost: HTMLElement | null = null;
   private inviteCards = new Map<string, () => void>();
   /** Room chat: the panel of the lobby/results (one per room) and the overlay over the match. */
   private chatPanel: ChatPanel | null = null;
@@ -336,6 +365,7 @@ export class App {
         if (this.screen === 'menu') this.flushBlatNote();
       };
       this.online.pingVisit();
+      void this.loadSiteInfo();
       this.online.social.on((e) => this.onSocial(e));
       void this.online
         .ensureAuth()
@@ -383,7 +413,13 @@ export class App {
     if (room && this.online && /^[A-Za-z0-9_-]{4,32}$/.test(room)) {
       this.go('loading');
       this.render(this.loading(t('Connecting to the room…')));
-      void this.online.joinRoom(room, this.onlineCharacter()).catch((e: Error) => this.showError(apiErrorText(e)));
+      const online = this.online;
+      void (async () => {
+        // v0.2.17: a staked tournament room asks for the stake first
+        const stake = await this.askRoomStake(room);
+        if (stake === null) return this.goMenu();
+        await online.joinRoom(room, this.onlineCharacter(), stake);
+      })().catch((e: Error) => this.showError(apiErrorText(e)));
       return;
     }
     this.goMenu();
@@ -531,6 +567,33 @@ export class App {
     return h('div', { class: 'screen screen--dim center' }, h('div', { class: 'col center' }, h('div', { class: 'spinner' }), h('div', { class: 'hand' }, text)));
   }
 
+  /** v0.2.17: the BLAT DROP date (by the server's clock) and the menu's links — fetched once, no sign-in. */
+  private async loadSiteInfo(): Promise<void> {
+    const online = this.online;
+    if (!online) return;
+    try {
+      const sent = Date.now();
+      const d = await online.api.blatDrop();
+      this.dropInfo = d.announceAt ? { announceAt: d.announceAt, serverNow: d.serverNow, fetchedAt: (sent + Date.now()) / 2, wallet: d.wallet ?? null } : null;
+    } catch {
+      this.dropInfo = null;
+    }
+    try {
+      this.site = await online.api.site();
+    } catch {
+      this.site = null;
+    }
+    this.paintDropBanner();
+  }
+
+  /** The menu's BLAT DROP banner (v0.2.17): under the Dossier and the Arsenal; opens BLAT DROP. */
+  private paintDropBanner() {
+    const host = this.dropHost;
+    if (!host || !host.isConnected || !this.dropInfo || !this.online) return;
+    host.replaceChildren(dropBanner('menu', this.dropInfo, () => this.showBlat(true, 'drop')));
+    host.hidden = false;
+  }
+
   // ── menu ────────────────────────────────────────────────────────────────
   goMenu(): void {
     this.history = [];
@@ -567,7 +630,15 @@ export class App {
               h('button', { class: ONLINE_AVAILABLE ? 'btn menu__story' : 'btn btn--red menu__story', 'data-testid': 'menu-story', onclick: () => this.story.show() }, t('Story'), h('span', { class: 'sub' }, t('two campaigns · 2089 → 1989'))),
               h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, t('Play with Friends'), h('span', { class: 'sub' }, t('a room by invitation'))),
               // V2.0 part D: ranked matches with fixed sides
-              this.online ? h('button', { class: 'btn menu__kon', 'data-testid': 'menu-kon', onclick: () => this.showKon() }, t('Blatnoy Kon'), h('span', { class: 'sub' }, t('ranked 1×1 · 2×2 · 3×3 · 5×5'))) : null,
+              // v0.2.17: the $BLAT Tournament (was «Блатной кон») — highlighted, the cup with the coin
+              this.online
+                ? h(
+                    'button',
+                    { class: 'btn menu__kon menu__kon--hot', 'data-testid': 'menu-kon', onclick: () => this.showKon() },
+                    tourneyIcon(28),
+                    h('span', { class: 'menu__kontxt' }, t('$BLAT Tournament'), h('span', { class: 'sub' }, t('stakes in $BLAT · 1×1 … 5×5'))),
+                  )
+                : null,
               h('button', { class: 'btn', onclick: () => this.showPractice() }, t('Practice'), h('span', { class: 'sub' }, t('against bots, no internet needed'))),
               h('button', { class: 'btn menu__settings', onclick: () => this.showSettings() }, t('Settings'), h('span', { class: 'sub' }, t('picture, sound, controls, language'))),
               this.online ? (this.socialTiles = this.socialRow()) : null,
@@ -589,6 +660,8 @@ export class App {
                 h('button', { class: 'btn btn--small menu__charbtn', onclick: () => this.showCharacters() }, t('Change character')),
               ),
               h('div', { class: 'tiles' }, this.stripEl, this.arsenalTile()),
+              // v0.2.17: the BLAT DROP banner (online)
+              (this.dropHost = h('div', { class: 'menu__drop', hidden: true })),
             ),
           ),
         ),
@@ -598,6 +671,7 @@ export class App {
       ),
     );
     this.render(menu);
+    this.paintDropBanner();
     this.maybeWelcome();
     this.showPendingInvites();
   }
@@ -628,6 +702,20 @@ export class App {
     }
     // phones: Settings lives here instead of a fourth big button
     if (this.screen === 'menu') box.append(h('button', { class: 'iconbtn corner__gear', 'aria-label': t('Settings'), title: t('Settings'), 'data-testid': 'corner-settings', onclick: () => this.showSettings() }, gearIcon()));
+    if (this.screen === 'menu' && ONLINE_AVAILABLE) {
+      // v0.2.17: the project's X and Telegram (until the links are set: «coming soon»)
+      const link = (kind: 'x' | 'telegram') => {
+        const url = this.site?.[kind] ?? null;
+        if (url) window.open(url, '_blank', 'noopener');
+        else toast(kind === 'x' ? t('Our X — coming soon') : t('Our Telegram channel — coming soon'));
+      };
+      box.prepend(
+        h('button', { class: 'iconbtn corner__social', 'aria-label': 'X', title: 'X', 'data-testid': 'corner-x', onclick: () => link('x') }, brandIcon('x')),
+        h('button', { class: 'iconbtn corner__social', 'aria-label': 'Telegram', title: 'Telegram', 'data-testid': 'corner-telegram', onclick: () => link('telegram') }, brandIcon('telegram')),
+      );
+      // v0.2.17: the founder's hidden way into the admin (nobody else sees it; /admin still asks for the password)
+      if (this.online?.profile?.founder) box.prepend(h('a', { class: 'iconbtn corner__hq', href: '/admin', target: '_blank', rel: 'noopener', 'aria-label': t('Headquarters'), title: t('Headquarters'), 'data-testid': 'corner-hq' }, '★'));
+    }
     return box;
   }
 
@@ -662,7 +750,7 @@ export class App {
     const pct = lvl.nextLevelCost > 0 ? Math.round((lvl.intoLevel / lvl.nextLevelCost) * 100) : 100;
     const level = this.playerLevel() ?? lvl.level;
     const inv = this.online?.inventory;
-    const nick = h('div', { class: 'nm', 'data-testid': 'menu-nick' }, h('span', { class: 'fit-text' }, name));
+    const nick = h('div', { class: 'nm', 'data-testid': 'menu-nick' }, h('span', { class: 'fit-text' }, name), this.online?.profile?.founder ? founderTag() : null);
     // the whole alias stays visible: a long one gets a smaller font, a very long one two lines
     whenSized(tile, () => fitAlias(nick, { max: 17, min: 12, minTwoLines: 10, margin: 8 }));
     tile.append(
@@ -681,7 +769,8 @@ export class App {
         nick,
         h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
         h('div', { class: 'xp' }, lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} XP` : t('max level')),
-        inv ? h('div', { class: 'tile__wallet' }, amount(inv.tokens, 'tokens'), REAL_MONEY ? amount(inv.diamonds, 'diamonds') : null) : null,
+        // v0.2.17: the talons and the $BLAT side by side
+        inv ? h('div', { class: 'tile__wallet' }, amount(inv.tokens, 'tokens'), this.online ? h('span', { class: 'tile__blat', 'data-testid': 'dossier-blat' }, blatAmount(this.online.profile?.blat ?? 0, 16)) : null, REAL_MONEY ? amount(inv.diamonds, 'diamonds') : null) : null,
       ),
       h('button', { class: 'edit', 'aria-label': t('Change alias'), title: t('Change alias'), onclick: () => this.editNickname() }, '✎'),
     );
@@ -735,7 +824,7 @@ export class App {
       h('button', { type: 'button', role: 'tab', 'aria-pressed': String(tab === id), 'aria-selected': String(tab === id), 'data-testid': `blat-tab-${id}`, onclick: () => tab !== id && this.showBlat(false, id) }, label);
     const tabs = h('div', { class: 'seg blat__tabs', role: 'tablist' }, tabBtn('balance', '$BLAT'), tabBtn('drop', 'BLAT DROP'));
     const body = h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
-    const wrap = h('div', { class: 'wrap' }, this.topbar('$BLAT'), tabs, body);
+    const wrap = h('div', { class: tab === 'drop' ? 'wrap wrap--wide' : 'wrap' }, this.topbar('$BLAT'), tabs, body);
     this.render(h('div', { class: 'screen screen--dim' }, wrap));
     const fail = (e: unknown) => {
       if (this.screen === 'blat' && this.blatTab === tab) body.replaceWith(h('div', { class: 'panel' }, apiErrorText(e)));
@@ -761,7 +850,7 @@ export class App {
       .then((d) => {
         if (this.screen !== 'blat' || this.blatTab !== 'balance') return;
         if (online.profile) online.profile = { ...online.profile, blat: d.balance };
-        body.replaceWith(renderBlat(d));
+        body.replaceWith(renderBlat(d, this.dropInfo ? dropBanner('section', this.dropInfo, () => this.showBlat(false, 'drop')) : null));
         if (d.justCredited > 0) toast(t('+{n} $BLAT for the levels you reached', { n: fmtBlat(d.justCredited) }));
       })
       .catch(fail);
@@ -773,13 +862,19 @@ export class App {
     return isKonFormat(v) ? v : '2x2';
   }
 
+  /** v0.2.17: the $BLAT Tournament stake last chosen (100 the first time). */
+  private konStake(): KonStake {
+    const v = Number(storageGet(KON_STAKE_KEY) ?? 100);
+    return isKonStake(v) ? v : 100;
+  }
+
   /** V2.0 part D: «Блатной кон» — the player's Kon numbers, the format, the search, a room, the tables. */
   private showKon(push = true) {
     const online = this.online;
     if (!online) return;
     this.go('kon', push);
     const body = h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
-    const wrap = h('div', { class: 'wrap' }, this.topbar(t('Blatnoy Kon')), body);
+    const wrap = h('div', { class: 'wrap' }, this.topbar(t('$BLAT Tournament')), body);
     this.render(h('div', { class: 'screen screen--dim' }, wrap));
     let top: KonTopResponse | null = null;
     let busy = false;
@@ -793,8 +888,13 @@ export class App {
           storageSet(KON_FORMAT_KEY, f);
           draw();
         },
-        onFind: () => void go('find'),
-        onCreate: () => void go('create'),
+        stake: this.konStake(),
+        onStake: (s) => {
+          storageSet(KON_STAKE_KEY, String(s));
+          draw();
+        },
+        onFind: () => ask('find'),
+        onCreate: () => ask('create'),
         top,
         topBy: this.konTopBy,
         onTop: (by) => {
@@ -816,7 +916,14 @@ export class App {
           draw();
         })
         .catch((e) => toast(apiErrorText(e)));
-    const go = async (how: 'find' | 'create') => {
+    // v0.2.17: a stake is confirmed first (the stake, the pool, the rules)
+    const ask = (how: 'find' | 'create') => {
+      if (busy || !data) return;
+      const stake = playableStake(data, this.konStake());
+      if (stake <= 0) return void go(how, 0);
+      confirmStake(this.root, { format: this.konFormat(), stake, onYes: () => void go(how, stake) });
+    };
+    const go = async (how: 'find' | 'create', stake: number) => {
       if (busy) return;
       busy = true;
       draw();
@@ -824,8 +931,8 @@ export class App {
       this.go('loading');
       this.render(this.loading(how === 'find' ? t('Looking for opponents…') : t('Creating the room…')));
       try {
-        if (how === 'find') await online.konQuick(this.onlineCharacter(), f);
-        else await online.createRoom('factory', this.onlineCharacter(), 'teams', f);
+        if (how === 'find') await online.konQuick(this.onlineCharacter(), f, undefined, stake);
+        else await online.createRoom('factory', this.onlineCharacter(), 'teams', f, stake);
       } catch (e) {
         this.showError(apiErrorText(e));
       }
@@ -981,6 +1088,9 @@ export class App {
     // V2.0: the menu's $BLAT tile follows the balance
     const bal = this.root.querySelector<HTMLElement>('[data-testid="menu-blat-balance"]');
     if (bal) bal.textContent = fmtBlat(this.online?.profile?.blat ?? 0);
+    // v0.2.17: the founder's ★ in the corner follows the profile (it may come after the menu is drawn)
+    const corner = this.root.querySelector<HTMLElement>('.wrap--menu > .corner');
+    if (corner && this.screen === 'menu' && !!this.online?.profile?.founder !== !!corner.querySelector('[data-testid=corner-hq]')) corner.replaceWith(this.cornerControls());
     if (!this.stripEl?.isConnected) return;
     const next = this.profileTile();
     this.stripEl.replaceWith(next);
@@ -1744,10 +1854,33 @@ export class App {
     this.render(this.loading(t('Entering the room…')));
     try {
       await this.ensureNicknameBeforeJoin();
-      await online.joinRoom(roomId, this.onlineCharacter());
+      const stake = await this.askRoomStake(roomId);
+      if (stake === null) return this.goMenu();
+      await online.joinRoom(roomId, this.onlineCharacter(), stake);
     } catch (e) {
       this.showError(apiErrorText(e));
     }
+  }
+
+  /**
+   * v0.2.17: a $BLAT Tournament room with a stake — the player sees the stake, the pool and the rules and
+   * agrees (the stake to join with), or not (null). A room without a stake: 0 at once.
+   */
+  private askStake(kon: KonFormat | null | undefined, stake: number | undefined): Promise<number | null> {
+    const s = stake ?? 0;
+    if (!kon || s <= 0) return Promise.resolve(0);
+    return new Promise((resolve) => confirmStake(this.root, { format: kon, stake: s, onYes: () => resolve(s), onNo: () => resolve(null) }));
+  }
+
+  /** The same for a room known only by its id (a link, a friend's invitation): its stake is asked first. */
+  private async askRoomStake(roomId: string): Promise<number | null> {
+    let info: { kon: KonFormat | null; stake?: number } | null = null;
+    try {
+      info = await this.online!.api.room(roomId);
+    } catch {
+      info = null;
+    }
+    return this.askStake(info?.kon, info?.stake);
   }
 
   private joinInvite(code: string) {
@@ -1760,13 +1893,16 @@ export class App {
         analytics.track('invite_opened', { code, result: info.status });
         if (info.status === 'joinable' || info.status === 'in_progress') {
           await this.ensureNicknameBeforeJoin();
-          const into = info.kon ? t('Entering the Blatnoy Kon {f} room ({host})…', { f: konLabel(info.kon), host: info.hostName ?? '—' }) : info.hostName ? t('Entering the room ({host})…', { host: info.hostName }) : t('Entering the room…');
+          const into = info.kon ? t('Entering the $BLAT Tournament {f} room ({host})…', { f: konLabel(info.kon), host: info.hostName ?? '—' }) : info.hostName ? t('Entering the room ({host})…', { host: info.hostName }) : t('Entering the room…');
           this.render(this.loading(into));
-          await this.online!.joinRoom(info.roomId!, this.onlineCharacter());
+          // v0.2.17: a staked room — the stake, the pool and the rules first
+          const stake = await this.askStake(info.kon, info.stake);
+          if (stake === null) return this.goMenu();
+          await this.online!.joinRoom(info.roomId!, this.onlineCharacter(), stake);
           return;
         }
         const msg: Record<string, string> = {
-          full: info.kon && info.status === 'full' ? t('The Kon room is full — both sides are taken.') : t('The room is full.'),
+          full: info.kon && info.status === 'full' ? t('The tournament room is full — both sides are taken.') : t('The room is full.'),
           finished: t('That match is already over.'),
           expired: t('The invitation has expired — the room is closed.'),
           not_found: t('Invitation not found.'),

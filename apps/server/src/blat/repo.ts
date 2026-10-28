@@ -14,7 +14,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { BLAT_LIMITS, REFERRAL_RULES, blatForLevel, isRefCode, referralReward } from '@blatkom/shared';
-import type { BlatEntry, BlatReferralRow, BlatResponse, BlatSource } from '@blatkom/shared';
+import type { BlatEntry, BlatPool, BlatReferralRow, BlatResponse, BlatSource } from '@blatkom/shared';
 import type postgres from 'postgres';
 import type { Sql } from '../database/db.js';
 
@@ -35,6 +35,41 @@ export interface ReferralPaid {
 export type ConfirmResult = { status: 'confirmed'; paid: ReferralPaid } | { status: 'held'; referrerId: string; reason: string };
 
 /** Credits the levels 1…`level` not paid yet. Call inside a transaction that holds the profile row. */
+/**
+ * v0.2.17: takes `amount` out of a $BLAT pool (the supply is capped at 2 000 000 000 — game-rules/blat.ts
+ * BLAT_POOLS); false when the pool can't give that much. The pool's row is locked until the transaction
+ * ends, so two credits never take the same $BLAT.
+ */
+export async function takeFromPool(tx: Tx, pool: BlatPool, amount: number): Promise<boolean> {
+  if (amount <= 0) return true;
+  const r = await tx`UPDATE blat_pools SET issued = issued + ${amount} WHERE pool = ${pool} AND issued + ${amount} <= cap RETURNING pool`;
+  return r.length > 0;
+}
+
+/** Gives back what a credit took when the credit turned out to be paid already (a race). */
+async function returnToPool(tx: Tx, pool: BlatPool, amount: number): Promise<void> {
+  if (amount > 0) await tx`UPDATE blat_pools SET issued = GREATEST(0, issued - ${amount}) WHERE pool = ${pool}`;
+}
+
+/**
+ * v0.2.17: an administrator's allocation — `amount` $BLAT out of a pool (not the players') to a player,
+ * once per operation id (`ref`). Not bound by the per-credit limit of the rewards (the founder's share is
+ * one allocation); bound by the pool and the balance's bound.
+ */
+export async function allocateBlat(tx: Tx, userId: string, pool: Exclude<BlatPool, 'players'>, amount: number, ref: string): Promise<{ ok: true; balance: number } | { ok: false; reason: 'no_profile' | 'pool' | 'balance' | 'duplicate'; balance: number }> {
+  const [p] = await tx<Array<{ blat: number; blat_earned: number }>>`SELECT blat, blat_earned FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+  if (!p) return { ok: false, reason: 'no_profile', balance: 0 };
+  if (amount <= 0 || p.blat + amount > BLAT_LIMITS.maxBalance) return { ok: false, reason: 'balance', balance: p.blat };
+  if (!(await takeFromPool(tx, pool, amount))) return { ok: false, reason: 'pool', balance: p.blat };
+  const ins = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'blat', ${amount}, ${p.blat + amount}, 'allocation', ${ref}) ON CONFLICT DO NOTHING RETURNING id`;
+  if (ins.length === 0) {
+    await returnToPool(tx, pool, amount);
+    return { ok: false, reason: 'duplicate', balance: p.blat };
+  }
+  await tx`UPDATE profiles SET blat = ${p.blat + amount}, blat_earned = ${p.blat_earned + amount}, updated_at = now() WHERE user_id = ${userId}`;
+  return { ok: true, balance: p.blat + amount };
+}
+
 export async function creditLevels(tx: Tx, userId: string, level: number): Promise<{ gained: number; balance: number }> {
   const [p] = await tx<Array<{ blat: number; blat_earned: number; blat_level: number }>>`SELECT blat, blat_earned, blat_level FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
   if (!p) return { gained: 0, balance: 0 };
@@ -48,8 +83,13 @@ export async function creditLevels(tx: Tx, userId: string, level: number): Promi
     if (paid.has(ref)) continue;
     const amount = blatForLevel(l);
     if (amount <= 0 || amount > BLAT_LIMITS.maxCredit || balance + amount > BLAT_LIMITS.maxBalance) continue;
+    // v0.2.17: out of the players' pool — when it is spent, levels pay no more $BLAT
+    if (!(await takeFromPool(tx, 'players', amount))) break;
     const ins = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'blat', ${amount}, ${balance + amount}, 'level', ${ref}) ON CONFLICT DO NOTHING RETURNING id`;
-    if (ins.length === 0) continue;
+    if (ins.length === 0) {
+      await returnToPool(tx, 'players', amount);
+      continue;
+    }
     balance += amount;
     earned += amount;
     gained += amount;
@@ -163,12 +203,17 @@ export class BlatRepo {
     let reward = referralReward(ordinal);
     let balance = p?.blat ?? 0;
     if (!p || reward > BLAT_LIMITS.maxCredit || balance + reward > BLAT_LIMITS.maxBalance) reward = 0;
+    // v0.2.17: out of the players' pool
+    if (reward > 0 && !(await takeFromPool(tx, 'players', reward))) reward = 0;
     if (reward > 0) {
       const ins = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${referrerId}, 'blat', ${reward}, ${balance + reward}, 'referral', ${`referral:${refereeId}`}) ON CONFLICT DO NOTHING RETURNING id`;
       if (ins.length) {
         balance += reward;
         await tx`UPDATE profiles SET blat = ${balance}, blat_earned = ${(p?.blat_earned ?? 0) + reward}, updated_at = now() WHERE user_id = ${referrerId}`;
-      } else reward = 0;
+      } else {
+        await returnToPool(tx, 'players', reward);
+        reward = 0;
+      }
     }
     await tx`UPDATE referrals SET status = 'confirmed', decided_at = now(), ordinal = ${ordinal}, reward = ${reward} WHERE referee_id = ${refereeId}`;
     const [u] = await tx<Array<{ display_name: string }>>`SELECT display_name FROM users WHERE id = ${refereeId}`;
@@ -182,7 +227,7 @@ export class BlatRepo {
     const [p] = await this.sql<Array<{ blat: number; blat_earned: number; level: number }>>`SELECT blat, blat_earned, level FROM profiles WHERE user_id = ${userId}`;
     const sums = await this.sql<Array<{ reason: BlatSource; s: number }>>`
       SELECT reason, sum(delta)::int AS s FROM currency_ledger WHERE user_id = ${userId} AND currency = 'blat' GROUP BY reason`;
-    const bySource: Record<BlatSource, number> = { level: 0, referral: 0, grant: 0 };
+    const bySource: Record<BlatSource, number> = { level: 0, referral: 0, grant: 0, allocation: 0, stake: 0, stake_win: 0, stake_refund: 0 };
     for (const r of sums) if (r.reason in bySource) bySource[r.reason] = r.s;
     const counts = await this.sql<Array<{ status: BlatReferralRow['status']; n: number; reward: number }>>`
       SELECT status, count(*)::int AS n, coalesce(sum(reward), 0)::int AS reward FROM referrals WHERE referrer_id = ${userId} GROUP BY status`;

@@ -3,7 +3,7 @@
  * Implementations: services/persistence.ts (PostgreSQL) and services/memory.ts (tests/offline).
  */
 import type { AvatarId, CharacterId, GameMode, KonFormat, Loadout, MapId, PersonalResult, Team } from '@blatkom/shared';
-import type { Platform } from '@blatkom/shared';
+import type { Platform, StakeRefusal } from '@blatkom/shared';
 
 export interface AuthedUser {
   userId: string;
@@ -17,6 +17,8 @@ export interface AuthedUser {
   method?: 'telegram' | 'dev' | 'guest' | 'email';
   /** V2.0 part D: the «Блатной кон» rating (the search deals sides by it; shown in Kon rooms). */
   konRating?: number;
+  /** v0.2.17: the founder's account (its badge in rooms). */
+  founder?: boolean;
 }
 
 /** Validates bearer session tokens (HTTP and WebSocket hello). */
@@ -79,6 +81,8 @@ export interface MatchCompletion {
   participants: MatchParticipantResult[];
   /** V2.0 part D: a «Блатной кон» match — the Kon rating moves, the general rating doesn't. */
   kon?: KonFormat | null;
+  /** v0.2.17: the stake everyone put in (settled in the results transaction); 0 or absent: none. */
+  stake?: number;
 }
 
 export interface MatchRecorder {
@@ -140,10 +144,24 @@ export interface Economy {
   gear(userId: string): Promise<PlayerGear>;
 }
 
+/**
+ * v0.2.17: the $BLAT Tournament's stakes (blat/stakes.ts). Absent: no stakes on this server (rooms with a
+ * stake can't be made).
+ */
+export interface Stakes {
+  /** null: the player may stake this much now. */
+  check(userId: string, stake: number): Promise<StakeRefusal | null>;
+  /** The match row and every player's stake in one transaction — all or nothing. */
+  reserve(r: { matchId: string; roomId: string; mapId: MapId; mode: GameMode; isPrivate: boolean; kon: KonFormat; stake: number; userIds: string[] }): Promise<{ ok: true } | { ok: false; userId: string; reason: StakeRefusal }>;
+  /** Every reserved stake of the match back (the match didn't start after all). */
+  refund(matchId: string): Promise<number>;
+}
+
 export interface Services {
   sessions: SessionVerifier;
   recorder: MatchRecorder;
   invites: InviteRegistry;
   analytics: Analytics;
   economy: Economy;
+  stakes?: Stakes;
 }

@@ -57,6 +57,7 @@ import type {
   MatchConfig,
   RosterEntry,
   ServerMessage,
+  StakeRefusal,
   WorldEvent,
   Standing,
   FinishId,
@@ -87,6 +88,11 @@ export interface RoomOptions {
    * (never filled), the mode can't change, nobody joins a match that is on (game-rules/kon.ts).
    */
   kon?: KonFormat | null;
+  /**
+   * v0.2.17: the $BLAT Tournament's stake (Kon rooms only; 0: none). Everyone stakes the same; the
+   * stakes are reserved before the match starts and settled with its results (blat/stakes.ts).
+   */
+  stake?: number;
 }
 
 /** A player the room runs itself to fill the lineup (never labelled as such to clients). */
@@ -153,6 +159,15 @@ interface Client {
   lastChatAt: number;
 }
 
+/** v0.2.17: why a player couldn't stake (the server's English; the client shows its own text by code). */
+export const STAKE_REFUSAL_TEXT: Readonly<Record<StakeRefusal, string>> = Object.freeze({
+  stakes_off: 'Stakes are switched off on this server',
+  account_new: 'A new account stakes from its second day',
+  blat_flagged: 'Your $BLAT are being checked — stakes are not available',
+  blat_low: 'Not enough $BLAT for the stake',
+  daily_limit: 'The day’s stake limit is reached',
+});
+
 const AUTO_START_DELAY_MS = 4000;
 /** Free gear (used when the economy is unavailable). */
 export const FREE_GEAR: PlayerGear = Object.freeze({ loadout: DEFAULT_LOADOUT, characters: new Set(FREE_CHARACTERS) });
@@ -165,6 +180,10 @@ export class MatchRoom {
   readonly createdAt = Date.now();
   /** V2.0 part D: the «Блатной кон» format (null: an ordinary room). */
   readonly kon: KonFormat | null;
+  /** v0.2.17: the $BLAT Tournament's stake everyone puts in (0: none). */
+  readonly stake: number;
+  /** v0.2.17: the stakes are being reserved (the match starts once they are). */
+  private staking = false;
   /** Match rules; `mode` changes when the host switches between free-for-all and teams. */
   config: MatchConfig;
   mapId: MapId;
@@ -214,6 +233,7 @@ export class MatchRoom {
     this.inviteCode = opts.inviteCode ?? null;
     this.autoStart = opts.autoStart ?? !opts.isPrivate;
     this.kon = opts.kon ?? null;
+    this.stake = this.kon ? Math.max(0, Math.floor(opts.stake ?? 0)) : 0;
     // a Kon room is people only, whatever the server's fill setting
     this.fillBots = this.kon ? false : (opts.fillBots ?? false);
     this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
@@ -255,6 +275,11 @@ export class MatchRoom {
   /** A person connected to this room right now. */
   hasPerson(userId: string): boolean {
     return this.clients.get(userId)?.connected === true;
+  }
+
+  /** A person holding a place in this room (connected or within the reconnect window). */
+  hasMember(userId: string): boolean {
+    return this.clients.has(userId);
   }
 
   /** People the host needs to start: one when the room fills the lineup up itself. */
@@ -478,7 +503,7 @@ export class MatchRoom {
         this.changeMap(msg.mapId);
         return;
       case 'mode':
-        if (this.kon) return this.error(c, 'kon_fixed', 'A Kon room’s format is fixed');
+        if (this.kon) return this.error(c, 'kon_fixed', 'A tournament room’s format is fixed');
         if (c.user.userId !== this.hostId) return this.error(c, 'not_host', 'Only the room’s host changes the mode');
         if (this.world.phase !== 'waiting') return this.error(c, 'match_running', 'The match is already on');
         this.changeMode(msg.mode);
@@ -517,7 +542,7 @@ export class MatchRoom {
         if (c.user.userId !== this.hostId) return this.error(c, 'not_host', 'Only the room’s host starts the match');
         if (this.world.phase !== 'waiting') return this.error(c, 'match_running', 'The match is already on');
         if (this.connectedCount < this.minToStart) return this.error(c, 'not_enough_players', `At least ${this.config.minPlayers} players needed`);
-        this.startMatch();
+        this.requestStart();
         return;
       case 'loadout': {
         // the player changed weapons/upgrades over the API: re-read them (applies from the next spawn)
@@ -767,7 +792,66 @@ export class MatchRoom {
   }
 
   // ── Match lifecycle ─────────────────────────────────────────────────────
-  private startMatch() {
+  /** Starts the match; a staked tournament room first reserves every stake (v0.2.17). */
+  private requestStart() {
+    if (this.stake <= 0 || !this.services.stakes) return this.startMatch();
+    if (this.staking || this.world.phase !== 'waiting') return;
+    void this.reserveAndStart();
+  }
+
+  /**
+   * v0.2.17: every connected player's stake in one transaction, all or nothing; the match starts when
+   * they are reserved and the lineup is still the one that staked. A player who can't stake leaves the
+   * room with the reason (the others wait for someone who can); a lineup that changed meanwhile gets
+   * every stake back.
+   */
+  private async reserveAndStart() {
+    const stakes = this.services.stakes!;
+    this.staking = true;
+    this.broadcastRoster();
+    const matchId = randomUUID();
+    const lineup = [...this.clients.values()].filter((c) => c.connected).map((c) => c.user.userId).sort();
+    let res: Awaited<ReturnType<typeof stakes.reserve>>;
+    try {
+      res = await stakes.reserve({ matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, kon: this.kon!, stake: this.stake, userIds: lineup });
+    } catch (e) {
+      this.staking = false;
+      this.log.error('stake reservation failed', { err: e as Error });
+      this.services.analytics.error({ source: 'server', component: 'stakes', category: 'reserve', message: (e as Error).message });
+      if (this.closed) return;
+      for (const c of this.clients.values()) if (c.connected) this.error(c, 'internal', 'The stakes could not be reserved — try again');
+      this.autoStartAt = 0;
+      this.broadcastRoster();
+      return;
+    }
+    this.staking = false;
+    if (!res.ok) {
+      const c = this.clients.get(res.userId);
+      if (c && !this.closed) {
+        this.error(c, res.reason, STAKE_REFUSAL_TEXT[res.reason]);
+        this.removeClient(c, 'stake');
+        try {
+          c.ws?.close(WS_CLOSE.NORMAL, 'stake');
+        } catch {
+          /* ignore */
+        }
+      }
+      this.autoStartAt = 0;
+      if (!this.closed) this.broadcastRoster();
+      return;
+    }
+    const now = [...this.clients.values()].filter((c) => c.connected).map((c) => c.user.userId).sort();
+    if (this.closed || this.world.phase !== 'waiting' || now.join() !== lineup.join() || now.length < this.minToStart) {
+      void stakes.refund(matchId).catch((e: Error) => this.log.error('stake refund failed', { err: e, matchId }));
+      this.autoStartAt = 0;
+      if (!this.closed) this.broadcastRoster();
+      return;
+    }
+    this.log.info('stakes reserved', { matchId, stake: this.stake, players: lineup.length });
+    this.startMatch(matchId);
+  }
+
+  private startMatch(reservedMatchId?: string) {
     // the lineup fills up (and the sides even out) the moment the match is started
     if (this.fillBots) this.fillNow();
     for (const seat of this.seats.values()) {
@@ -798,7 +882,7 @@ export class MatchRoom {
         this.konLineup.set(c.user.userId, { team: p?.team ?? null, character: c.character, viaInvite: c.viaInvite, kills: 0, assists: 0, deaths: 0, score: 0, damageDealt: 0, playtimeMs: 0 });
       }
     }
-    this.matchId = randomUUID();
+    this.matchId = reservedMatchId ?? randomUUID();
     this.matchStartedAtWall = Date.now();
     this.resultsSent = false;
     const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite, team: this.world.players.get(c.user.userId)?.team ?? null }));
@@ -829,7 +913,7 @@ export class MatchRoom {
       if (!rematch && !this.isPrivate && Math.random() < 0.3) this.dropSeat(seat);
     }
     this.broadcastRoster();
-    if (rematch && this.connectedCount >= this.minToStart) this.startMatch();
+    if (rematch && this.connectedCount >= this.minToStart) this.requestStart();
   }
 
   private finishResults(reason: 'time' | 'score' | 'aborted') {
@@ -909,6 +993,7 @@ export class MatchRoom {
         fillAtEnd,
         participants,
         kon: this.kon,
+        stake: this.stake,
       })
       .then((personal) => {
         let levelChanged = false;
@@ -949,9 +1034,9 @@ export class MatchRoom {
       const allReady = enough && connected.every((c) => c.ready);
       if (allReady) {
         if (!this.autoStartAt) this.autoStartAt = now + (this.autoStart ? AUTO_START_DELAY_MS : 600);
-        if (now >= this.autoStartAt) {
+        if (now >= this.autoStartAt && !this.staking) {
           this.autoStartAt = 0;
-          this.startMatch();
+          this.requestStart();
         }
       } else this.autoStartAt = 0;
     }
@@ -1096,6 +1181,7 @@ export class MatchRoom {
         mods: c.gear.loadout.mods,
         skins: c.gear.loadout.skins ?? {},
         ...(this.kon ? { konRating: c.user.konRating ?? KON_RATING.start } : {}),
+        ...(c.user.founder ? { founder: true } : {}),
       };
     });
     // players the room filled in look exactly like people (always ready; never the host)
@@ -1130,6 +1216,7 @@ export class MatchRoom {
       mode: this.config.mode,
       minToStart: this.minToStart,
       kon: this.kon,
+      ...(this.stake > 0 ? { stake: this.stake, staking: this.staking } : {}),
     };
   }
 
@@ -1181,12 +1268,12 @@ export class MatchRoom {
 
   /** For the admin dashboard: people and filled players counted separately. */
   info() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, fill: this.seats.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, fill: this.seats.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon, stake: this.stake };
   }
 
   /** For players: the lineup as they see it in the room. */
   publicInfo() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon, stake: this.stake };
   }
 
   static protocolVersion = PROTOCOL_VERSION;

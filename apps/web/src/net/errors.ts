@@ -23,6 +23,13 @@ const CODE_TEXT: Record<string, () => string> = {
   team_full: () => t('That team already has more players — the teams must stay even.'),
   character_locked: () => t('This character isn’t unlocked yet.'),
   bad_message: () => t('The server didn’t understand the request.'),
+  // v0.2.17: the $BLAT Tournament's stakes
+  stake_confirm: () => t('This room plays for a $BLAT stake — confirm it to come in.'),
+  stakes_off: () => t('Stakes are switched off for now — play the tournament without a stake.'),
+  account_new: () => t('A new account stakes from its second day — play without a stake for now.'),
+  blat_flagged: () => t('Your $BLAT are being checked — stakes aren’t available until it’s done.'),
+  blat_low: () => t('Not enough $BLAT for this stake.'),
+  daily_limit: () => t('The day’s stake limit is reached — come back tomorrow or play without a stake.'),
   internal: () => t('Something broke on the server. Try again.'),
 };
 

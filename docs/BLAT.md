@@ -1,9 +1,11 @@
-# $BLAT — in-game points, level rewards and the referral programme (V2.0)
+# $BLAT — in-game points, level rewards, the referral programme, the supply (V2.0, v0.2.17)
 
-$BLAT are **in-game points that only accumulate**. They are not money and not a cryptocurrency: they
-cannot be bought, sold, withdrawn, given to another player or exchanged for anything, and the game never
-shows a price, a market value or a «rate» for them. The game screen says so in plain words. There is no
-wallet, no blockchain connection and no token in this release.
+$BLAT are **in-game points**. They are not money: they cannot be bought, sold, withdrawn or exchanged
+for anything, and the game never shows a price, a market value or a «rate» for them. Since v0.2.17 they
+change hands in exactly one way — **stakes in the $BLAT Tournament** (everyone in a staked room stakes the
+same, the winners take the pool; [KON.md](KON.md) §6). The game screen says so in plain words. The
+owner plans a $BLAT drop in the Solana network (§6a); the game itself has no token, connects to no
+wallet and sends no transaction — it only shows the project's wallet address.
 
 Rules live in `packages/shared/src/game-rules/blat.ts`; credits happen only on the server
 (`apps/server/src/blat/repo.ts`), inside database transactions. The client displays what the server
@@ -14,8 +16,8 @@ returns. Admin view: «$BLAT» in `/admin` ([ADMIN.md](ADMIN.md)). BLAT DROP and
 | | |
 |---|---|
 | Balance | `profiles.blat` (integer, 0 … 2 000 000 000), all-time total `profiles.blat_earned`, the highest level already paid `profiles.blat_level` |
-| Every change | a row in `currency_ledger` with `currency = 'blat'`, `reason` = `level` / `referral` (`grant` is reserved — no admin $BLAT grants in this release), `delta`, `balance_after`, `created_at` and an **operation id** `ref` |
-| Operation ids | `level:<n>` — the reward for level *n*; `referral:<invited player's id>` — the reward for one invitation |
+| Every change | a row in `currency_ledger` with `currency = 'blat'`, `reason` = `level` / `referral` / `allocation` (a pool's share, §1a) / `stake` / `stake_win` / `stake_refund` (the tournament, [KON.md](KON.md) §6) (`grant` is reserved — no admin $BLAT grants), `delta`, `balance_after`, `created_at` and an **operation id** `ref` |
+| Operation ids | `level:<n>` — the reward for level *n*; `referral:<invited player's id>` — the reward for one invitation; `allocation:founder`, `allocation:<pool>:<uuid>`; `stake:<match>`, `stake_win:<match>`, `stake_refund:<match>` |
 | Duplicates | impossible: a unique index `currency_ledger_blat_once (user_id, ref) WHERE currency = 'blat'`; a $BLAT row without `ref` is refused by a CHECK |
 | Bounds | one credit ≤ 1 000 000 (`BLAT_LIMITS.maxCredit`), a balance ≤ 2 000 000 000 (`maxBalance`, also a CHECK); balances of tens of millions are shown with thousands separators |
 
@@ -26,6 +28,37 @@ servers can never pay the same operation twice (tested with concurrent requests 
 
 Migration `016_blat.sql` only **adds** columns, a table and constraints; nothing existing is dropped,
 rewritten or reset.
+
+## 1a. The supply and its pools (v0.2.17)
+
+The owner: «the whole supply is capped at 2 000 000 000 $BLAT: 320 000 000 mine (the biggest holding),
+100 000 000 for my friends, 300 000 000 for influencers, 1 260 000 000 for the players» — the 20 000 000
+left over is the reserve.
+
+| Pool (`blat_pools`) | Cap | Pays |
+|---|---|---|
+| `players` | 1 260 000 000 (63 %) | the level rewards and the invitations — automatically |
+| `founder` | 320 000 000 (16 %) | «Make founder» on the owner's card (below) |
+| `influencers` | 300 000 000 (15 %) | an administrator's allocation |
+| `friends` | 100 000 000 (5 %) | an administrator's allocation |
+| `reserve` | 20 000 000 (1 %) | an administrator's allocation |
+
+Every credit takes its amount out of its pool inside the same transaction (`takeFromPool`: `issued +
+amount ≤ cap`, the pool's row locked), so the pools never give more than their caps and the supply never
+passes 2 000 000 000. What was paid before v0.2.17 counts to the players' pool (migration 022). Stakes
+move $BLAT between players and take nothing from a pool. The admin's $BLAT page shows every pool: its
+cap and what it has given.
+
+**The founder's account** (`/admin → the player → «Сделать основателем»`, admin role, audited): the gold
+«Founder» badge by the alias (the menu, the profile, rooms, friends, the Top-100), the ★ in the menu's
+corner that opens `/admin` (the dashboard still asks for its password), level 87 (its levels pay their
+$BLAT from the players' pool as for anyone), every character, weapon, piece of equipment, skin and
+modification, and $BLAT up to 320 000 000 out of the founder's pool (`allocation:founder` — once per
+account). Repeating it changes nothing that was done. The live database is reached only from the server,
+so the owner presses it on his own card (found by his email in /admin → Игроки).
+
+**Allocations** (`/admin → the player → «Доля из фонда»`, admin role, audited): an amount out of the
+influencers', the friends' or the reserve pool with a note; refused when the pool can't give that much.
 
 ## 2. Level rewards
 
@@ -140,7 +173,27 @@ balance snapshot (§6). An inviter keeps a
 reward already paid for that player (the ledger row `referral:<id>` stays with the inviter; the id no
 longer leads anywhere). Details: [PRIVACY.md](PRIVACY.md).
 
-## 6. BLAT DROP and balance snapshots (V2.0 part C)
+## 6. BLAT DROP and balance snapshots (V2.0 part C, v0.2.17)
+
+**v0.2.17:** the owner's date — «one date: in 3 months 15 days» (from 24 October 2026): **8 February
+2027, 23:00 in Cyprus** (21:00 UTC). The release writes it as an administrator's setting (migration 022;
+an administrator can change or clear it in `/admin → $BLAT`); without any setting the same date is built
+in (`BLAT_DROP_DEFAULT_ANNOUNCE_AT`). Two banners in the owner's design count down to it live by the
+server's clock (the design's own digits drawn over its screens, `ui/dropBanner.ts`, made by
+`tools/make-drop-banners.py`): the main menu's under the Dossier and the Arsenal (on phones a band that
+gives up height first, so the menu stays one screen) and the $BLAT tab's under «For levels»; both open
+BLAT DROP and say «Drop on Solana».
+
+**The BLAT DROP tab** (v0.2.17): three panes side by side on a wide screen, three tabs on a phone
+(nothing to scroll): the countdown (as below, with «The drop is planned in the Solana network»);
+**Play-to-Earn** — «BLATKOM ’89 is out to change Play-to-Earn: $BLAT go to everyone who plays, not to
+those who pay», how to earn (levels, friends, the story, the tournament) and the year's plans (now — the
+announcement on 8 February 2027 — the drop in the Solana network, its date in the announcement — through
+2027 OPG wars, tournament seasons, new chapters, maps and characters; «these are plans, not promises»);
+**the tokenomics** — 2 000 000 000 $BLAT by pools (§1a) and **the project's wallet**: the Solana and
+Phantom logos, «Project wallet», the address (`PROJECT_SOL_WALLET`, default the owner's
+`7ktcRxxhp9gijH4Pbbr4HBckP8HocFN8YzngvTqBArJ1`) and «Copy». No caption under it (the owner: «we sell
+nothing»); nothing in the game sends to that wallet or reads from it.
 
 **BLAT DROP tab** (the second tab of the $BLAT screen): black, red and bordeaux, the coin, «BLAT DROP»,
 «BLAT DROP ANNOUNCE DATE», the date in the player's language and time zone and a countdown in days,
@@ -179,6 +232,9 @@ consent — none of that exists in the game.
 
 ## 7. What this release does not do
 
-- no cryptocurrency token, no wallets, no transactions, no automatic exchange of points for anything;
-- no transfers between players, no buying or selling of $BLAT, no prices, no market value;
-- no payouts to partners or streamers (partner links are a later stage).
+- no cryptocurrency token, no wallet connection, no transactions, no automatic exchange of points for
+  anything (the wallet address is shown, nothing more);
+- no transfers between players except the tournament's equal stakes, no buying or selling of $BLAT, no
+  prices, no market value;
+- no payouts to partners or streamers (an administrator's allocation from the influencers' pool is an
+  in-game credit, nothing else).

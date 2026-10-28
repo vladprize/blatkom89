@@ -102,7 +102,8 @@ export class StorySession extends OfflineSession {
       const team: Team = n.side === 'ally' ? 0 : 1;
       this.world.addPlayer(id, npcName(n), n.character as CharacterId, true, kitLoadout(n.kit), isTeamMode(this.gameMode) ? team : undefined);
       if (n.side === 'enemy') this.enemyIds.add(id);
-      this.brains.push(new BotBrain(id, this.world, this.nav, n.difficulty, 1000 + this.npcSeq * 77 + Math.floor(Math.random() * 1000)));
+      // v0.2.17: the enemies are eased (BOT_EASE), the hero's allies are not
+      this.brains.push(new BotBrain(id, this.world, this.nav, n.difficulty, 1000 + this.npcSeq * 77 + Math.floor(Math.random() * 1000), n.side === 'enemy'));
     }
     this.wave = w;
   }

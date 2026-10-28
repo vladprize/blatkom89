@@ -7316,6 +7316,9 @@ var REFERRAL_TIERS = Object.freeze([
   { from: 500, reward: 2e4 }
 ]);
 var REFERRAL_RULES = Object.freeze({ minMatchSec: 60, dailyCap: 20 });
+var BLAT_POOLS = Object.freeze({ players: 126e7, founder: 32e7, influencers: 3e8, friends: 1e8, reserve: 2e7 });
+var BLAT_POOL_IDS = Object.keys(BLAT_POOLS);
+var BLAT_FOUNDER_HOLDING = BLAT_POOLS.founder;
 
 // packages/shared/src/game-rules/kon.ts
 var KON_FORMATS = ["1x1", "2x2", "3x3", "5x5"];
@@ -7328,7 +7331,17 @@ var KON_RULES = Object.freeze({
 var KON_RATING = Object.freeze({ start: 1e3, floor: 100, k: 24, kNew: 40, newMatches: 10 });
 
 // packages/shared/src/game-rules/konStakes.ts
-var KON_STAKES = Object.freeze({ enabled: false, minStake: 100, maxStake: 1e4 });
+var KON_STAKE_AMOUNTS = [100, 500, 1e3, 5e3];
+var KON_STAKES = Object.freeze({
+  amounts: KON_STAKE_AMOUNTS,
+  /** At most this much staked in 24 hours (stakes that came back don't count). */
+  dailyLimit: 2e4,
+  /** An account stakes from its second day on. */
+  minAccountAgeMs: 24 * 36e5
+});
+function isKonStake(v) {
+  return v === 0 || KON_STAKE_AMOUNTS.includes(v);
+}
 
 // packages/shared/src/story/missions.ts
 var STORY_RULES = Object.freeze({ heroDamage: 0.5, lives: 3, surviveRespawnMs: 7e3 });
@@ -7953,6 +7966,9 @@ var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hosp
 // packages/shared/src/sim/math.ts
 var TAU = Math.PI * 2;
 
+// packages/shared/src/sim/bots.ts
+var BOT_EASE = Object.freeze({ reaction: 1.35, aimError: 1.45, turnRate: 0.78, vision: 0.9, fireDuty: 0.75 });
+
 // packages/shared/src/sim/fill.ts
 var FILL_RULES = Object.freeze({
   /** Free-for-all: at least this many players in a match. */
@@ -7984,7 +8000,9 @@ var ClientMessageSchema = external_exports.discriminatedUnion("type", [
     roomId,
     character: external_exports.enum(CHARACTER_IDS),
     reconnectToken: external_exports.string().min(16).max(128).optional(),
-    clientVersion: external_exports.string().max(32).optional()
+    clientVersion: external_exports.string().max(32).optional(),
+    /** v0.2.17: the $BLAT Tournament stake the player agreed to (must equal the room's to come in). */
+    stake: external_exports.number().int().min(0).max(1e5).optional()
   }),
   external_exports.object({ type: external_exports.literal("ready"), ready: external_exports.boolean() }),
   external_exports.object({ type: external_exports.literal("character"), character: external_exports.enum(CHARACTER_IDS) }),
@@ -8147,13 +8165,19 @@ var UpdateProfileRequest = external_exports.object({
   /** A profile avatar (game-rules/avatars.ts); null removes it. */
   avatar: external_exports.enum(AVATAR_IDS).nullable().optional()
 }).strict();
-var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional() }).strict();
-var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional(), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional() }).strict();
+var KonStakeField = external_exports.number().int().refine((v) => isKonStake(v), { message: "not one of the stakes" });
+var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional(), stake: KonStakeField.optional() }).strict();
+var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional(), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional(), stake: KonStakeField.optional() }).strict();
 var AdminLoginRequest = external_exports.object({ username: external_exports.string().min(3).max(32), password: external_exports.string().min(1).max(256) }).strict();
 var AdminCreateUserRequest = external_exports.object({
   username: external_exports.string().regex(/^[a-z0-9_.-]{3,32}$/),
   password: external_exports.string().min(12).max(256),
   role: external_exports.enum(["admin", "viewer"])
+}).strict();
+var AdminBlatAllocationRequest = external_exports.object({
+  pool: external_exports.enum(["influencers", "friends", "reserve"]),
+  amount: external_exports.number().int().min(1).max(1e8),
+  note: external_exports.string().trim().min(3).max(120)
 }).strict();
 var AdminReferralDecision = external_exports.object({ action: external_exports.enum(["confirm", "reject"]), note: external_exports.string().trim().max(200).optional() }).strict();
 var AdminBlatDropRequest = external_exports.object({ announceAt: external_exports.string().datetime({ offset: true }).nullable() }).strict();

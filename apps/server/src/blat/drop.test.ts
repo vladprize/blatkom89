@@ -8,6 +8,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { BLAT_DROP_DEFAULT_ANNOUNCE_AT } from '@blatkom/shared';
 import type { AdminBlatDrop, AdminBlatSnapshot, BlatDropInfo } from '@blatkom/shared';
 import { startTestApp, api, devLogin, cookieFrom } from '../admin/testkit.js';
 import type { TestApp } from '../admin/testkit.js';
@@ -30,8 +31,13 @@ after(async () => {
 
 const drop = () => api<BlatDropInfo>(app.base, '/api/blat/drop');
 
-test('BLAT DROP date: none, the server variable, an administrator’s date (CSRF, audited, bounds), «not set» on purpose; the same for everyone with the server clock', async () => {
-  assert.deepEqual(await new BlatDropRepo(app.db.sql, undefined).date(), { announceAt: null, source: null, updatedAt: null, updatedBy: null }, 'nothing anywhere: not set');
+test('BLAT DROP date: the built-in date, the server variable, an administrator’s date (CSRF, audited, bounds), «not set» on purpose; the same for everyone with the server clock', async () => {
+  // v0.2.17: the release sets the owner's date (migration 022) — an administrator's setting nobody signed
+  const first = await new BlatDropRepo(app.db.sql, undefined).date();
+  assert.deepEqual([first.announceAt, first.source, first.updatedBy], [BLAT_DROP_DEFAULT_ANNOUNCE_AT, 'admin', null], 'the release: the owner’s date');
+  // with nothing set anywhere, the owner's date built into the release
+  await new BlatDropRepo(app.db.sql, undefined).resetDate();
+  assert.deepEqual(await new BlatDropRepo(app.db.sql, undefined).date(), { announceAt: BLAT_DROP_DEFAULT_ANNOUNCE_AT, source: 'default', updatedAt: null, updatedBy: null }, 'nothing set: the built-in date');
   const before0 = Date.now();
   const d0 = await drop();
   assert.equal(d0.status, 200, d0.text);

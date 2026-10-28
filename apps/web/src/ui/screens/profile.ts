@@ -1,5 +1,5 @@
 /** Profile screen («Dossier»): nickname, level and XP, statistics, achievements, recent matches. */
-import { h, fmtDuration } from '../dom.js';
+import { h, fmtDuration, founderTag } from '../dom.js';
 import { fitAlias, whenSized } from '../fit.js';
 import { avatarButton } from '../avatars.js';
 import { ACHIEVEMENTS, isCharacterId } from '@blatkom/shared';
@@ -28,7 +28,7 @@ export function renderProfileView(d: ProfileData, o: { local: boolean; onRename:
   const hours = Math.floor(p.playtimeSec / 3600);
   const mins = Math.floor((p.playtimeSec % 3600) / 60);
   const unlocked = d.achievements.filter((a) => a.unlockedAt).length;
-  const nick = h('div', { class: 'h1 grow nick-line', 'data-testid': 'profile-name' }, h('span', { class: 'fit-text' }, p.displayName));
+  const nick = h('div', { class: 'h1 grow nick-line', 'data-testid': 'profile-name' }, h('span', { class: 'fit-text' }, p.displayName), p.founder ? founderTag() : null);
   const head = h(
     'div',
     { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' },

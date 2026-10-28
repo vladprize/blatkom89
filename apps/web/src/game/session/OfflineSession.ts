@@ -83,7 +83,9 @@ export class OfflineSession implements GameSession {
       const id = `bot${i}`;
       this.world.addPlayer(id, names[i % names.length]!, others[i % others.length]!, true, botLoadout(i + Math.floor(Math.random() * 1000)));
       this.levels.set(id, 2 + Math.floor(Math.random() * 14)); // practice bots wear plausible levels
-      this.brains.push(new BotBrain(id, this.world, this.nav, opts.difficulty, 1000 + i * 77 + Math.floor(Math.random() * 1000)));
+      // v0.2.17: the player's opponents are eased (BOT_EASE); team-mates in team practice are not
+      const mate = isTeamMode(this.gameMode) && this.world.players.get(id)?.team === this.world.players.get(this.localId)?.team;
+      this.brains.push(new BotBrain(id, this.world, this.nav, opts.difficulty, 1000 + i * 77 + Math.floor(Math.random() * 1000), !mate));
     }
     if (!opts.deferStart) this.world.beginMatch(true);
   }

@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.16"),
+  SERVER_VERSION: external_exports.string().default("0.2.17"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -7832,6 +7832,13 @@ var EnvSchema = external_exports.object({
    * used until an administrator sets one in /admin → $BLAT (docs/BLAT.md §6).
    */
   BLAT_DROP_ANNOUNCE_AT: external_exports.string().datetime({ offset: true }).optional(),
+  /** v0.2.17: the project's Solana wallet shown in the $BLAT section (default: the owner's address). */
+  PROJECT_SOL_WALLET: external_exports.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(),
+  /** v0.2.17: the main menu's X and Telegram buttons (left empty: «coming soon»). */
+  SOCIAL_X_URL: external_exports.string().url().optional(),
+  SOCIAL_TELEGRAM_URL: external_exports.string().url().optional(),
+  /** v0.2.17: stakes in the $BLAT Tournament (on by default; `false` switches them off — docs/KON.md §6). */
+  TOURNAMENT_STAKES: bool.default("true"),
   /** Password-reset emails through Resend (https://resend.com); without a key the admin issues reset links. */
   RESEND_API_KEY: external_exports.string().optional(),
   MAIL_FROM: external_exports.string().optional()
@@ -9639,7 +9646,7 @@ var src_default = Postgres;
 function Postgres(a, b2) {
   const options = parseOptions(a, b2), subscribe = options.no_subscribe || Subscribe(Postgres, { ...options });
   let ending = false;
-  const queries = queue_default(), connecting = queue_default(), reserved = queue_default(), closed = queue_default(), ended = queue_default(), open = queue_default(), busy = queue_default(), full = queue_default(), queues = { connecting, reserved, closed, ended, open, busy, full };
+  const queries = queue_default(), connecting = queue_default(), reserved2 = queue_default(), closed = queue_default(), ended = queue_default(), open = queue_default(), busy = queue_default(), full = queue_default(), queues = { connecting, reserved: reserved2, closed, ended, open, busy, full };
   const connections = [...Array(options.max)].map(() => connection_default(options, queues, { onopen, onend, onclose }));
   const sql2 = Sql(handler2);
   Object.assign(sql2, {
@@ -9757,8 +9764,8 @@ function Postgres(a, b2) {
       queries.push(query);
       closed.length && connect(closed.shift(), query);
     });
-    move(c, reserved);
-    c.reserved = () => queue.length ? c.execute(queue.shift()) : move(c, reserved);
+    move(c, reserved2);
+    c.reserved = () => queue.length ? c.execute(queue.shift()) : move(c, reserved2);
     c.reserved.release = true;
     const sql3 = Sql(handler3);
     sql3.release = () => {
@@ -9817,8 +9824,8 @@ function Postgres(a, b2) {
     }
     function onexecute(c) {
       connection2 = c;
-      move(c, reserved);
-      c.reserved = () => queries2.length ? c.execute(queries2.shift()) : move(c, reserved);
+      move(c, reserved2);
+      c.reserved = () => queries2.length ? c.execute(queries2.shift()) : move(c, reserved2);
     }
   }
   function move(c, queue) {
@@ -11025,6 +11032,11 @@ function parseSkin(id) {
   const finish = id.slice(dot + 1);
   return isWeaponId(weapon) && isFinishId(finish) && SKINNABLE_WEAPONS.includes(weapon) ? { weapon, finish } : null;
 }
+function allSkins() {
+  const out = [];
+  for (const w of SKINNABLE_WEAPONS) for (const f2 of FINISH_IDS) out.push(skinId(w, f2));
+  return out;
+}
 function skinCaseOdds(owned) {
   const left = new Map(SKIN_RARITIES.map((r) => [r, 0]));
   for (const w of SKINNABLE_WEAPONS) for (const f2 of FINISH_IDS) if (!owned.has(skinId(w, f2))) left.set(FINISHES[f2].rarity, left.get(FINISHES[f2].rarity) + 1);
@@ -11319,6 +11331,11 @@ var LEVEL_CAP = 99;
 function levelStepCost(level) {
   return 150 + 50 * (level - 1);
 }
+function totalXpForLevel(level) {
+  let total = 0;
+  for (let l = 1; l < level; l++) total += levelStepCost(l);
+  return total;
+}
 function levelForXp(xp) {
   let level = 1;
   let remaining = Math.max(0, Math.floor(xp));
@@ -11591,6 +11608,12 @@ function referralReward(ordinal) {
 var REFERRAL_RULES = Object.freeze({ minMatchSec: 60, dailyCap: 20 });
 var REF_CODE_RE = /^[A-Za-z0-9_-]{4,32}$/;
 var isRefCode = (v) => typeof v === "string" && REF_CODE_RE.test(v);
+var BLAT_POOLS = Object.freeze({ players: 126e7, founder: 32e7, influencers: 3e8, friends: 1e8, reserve: 2e7 });
+var BLAT_POOL_IDS = Object.keys(BLAT_POOLS);
+var BLAT_FOUNDER_HOLDING = BLAT_POOLS.founder;
+var FOUNDER_LEVEL = 87;
+var PROJECT_SOL_WALLET = "7ktcRxxhp9gijH4Pbbr4HBckP8HocFN8YzngvTqBArJ1";
+var BLAT_DROP_DEFAULT_ANNOUNCE_AT = "2027-02-08T21:00:00.000Z";
 
 // packages/shared/src/game-rules/kon.ts
 var KON_FORMATS = ["1x1", "2x2", "3x3", "5x5"];
@@ -11630,7 +11653,55 @@ function konDeal(players) {
 }
 
 // packages/shared/src/game-rules/konStakes.ts
-var KON_STAKES = Object.freeze({ enabled: false, minStake: 100, maxStake: 1e4 });
+var KON_STAKE_AMOUNTS = [100, 500, 1e3, 5e3];
+var KON_STAKES = Object.freeze({
+  amounts: KON_STAKE_AMOUNTS,
+  /** At most this much staked in 24 hours (stakes that came back don't count). */
+  dailyLimit: 2e4,
+  /** An account stakes from its second day on. */
+  minAccountAgeMs: 24 * 36e5
+});
+function isKonStake(v) {
+  return v === 0 || KON_STAKE_AMOUNTS.includes(v);
+}
+function stakeRefusal(o) {
+  if (o.stake <= 0) return null;
+  if (!o.enabled) return "stakes_off";
+  if (o.accountAgeMs < KON_STAKES.minAccountAgeMs) return "account_new";
+  if (o.flagged) return "blat_flagged";
+  if (o.balance < o.stake) return "blat_low";
+  if (o.stakedToday + o.stake > KON_STAKES.dailyLimit) return "daily_limit";
+  return null;
+}
+function share(amount, ids, into) {
+  if (ids.length === 0 || amount <= 0) return;
+  const each = Math.floor(amount / ids.length);
+  let rest = amount - each * ids.length;
+  for (const id of ids) {
+    into.set(id, (into.get(id) ?? 0) + each + (rest > 0 ? 1 : 0));
+    if (rest > 0) rest--;
+  }
+}
+function settleStakes(o) {
+  const stake = Math.max(0, Math.floor(o.stake));
+  const pool = stake * o.players.length;
+  const payouts = /* @__PURE__ */ new Map();
+  for (const p of o.players) payouts.set(p.id, 0);
+  const stayed = o.players.filter((p) => !p.left);
+  if (o.failed || stayed.length === 0) {
+    for (const p of o.players) payouts.set(p.id, stake);
+    return { kind: "refund", payouts, pool };
+  }
+  const winners = o.winner === null ? [] : stayed.filter((p) => p.team === o.winner).map((p) => p.id).sort();
+  if (winners.length > 0) {
+    share(pool, winners, payouts);
+    return { kind: "pool", payouts, pool };
+  }
+  const ids = stayed.map((p) => p.id).sort();
+  for (const id of ids) payouts.set(id, stake);
+  share(stake * (o.players.length - stayed.length), ids, payouts);
+  return { kind: stayed.length === o.players.length ? "refund" : "draw", payouts, pool };
+}
 
 // packages/shared/src/story/missions.ts
 var STORY_RULES = Object.freeze({ heroDamage: 0.5, lives: 3, surviveRespawnMs: 7e3 });
@@ -15714,6 +15785,10 @@ var DIFFICULTY = {
   normal: { reaction: 360, aimError: 0.1, turnRate: 7, tolerance: 0.18, vision: 520 },
   hard: { reaction: 230, aimError: 0.055, turnRate: 10, tolerance: 0.11, vision: 620 }
 };
+var BOT_EASE = Object.freeze({ reaction: 1.35, aimError: 1.45, turnRate: 0.78, vision: 0.9, fireDuty: 0.75 });
+function eased(d) {
+  return { reaction: d.reaction * BOT_EASE.reaction, aimError: d.aimError * BOT_EASE.aimError, turnRate: d.turnRate * BOT_EASE.turnRate, tolerance: d.tolerance, vision: d.vision * BOT_EASE.vision };
+}
 function preferredRange(w) {
   const d = WEAPONS[w];
   if (d.kind === "melee") return 0;
@@ -15723,16 +15798,18 @@ function preferredRange(w) {
   return Math.min(260, d.range * 0.45);
 }
 var BotBrain = class {
-  constructor(id, world, nav, difficulty = "normal", seed = 1) {
+  constructor(id, world, nav, difficulty = "normal", seed = 1, ease = true) {
     this.id = id;
     this.world = world;
     this.nav = nav;
+    this.ease = ease;
     this.rng = mulberry32(seed);
-    this.d = DIFFICULTY[difficulty];
+    this.d = ease ? eased(DIFFICULTY[difficulty]) : DIFFICULTY[difficulty];
   }
   id;
   world;
   nav;
+  ease;
   seq = 0;
   aim = 0;
   path = [];
@@ -15758,6 +15835,20 @@ var BotBrain = class {
   holdSpot = null;
   rng;
   d;
+  /** Fire in bursts (BOT_EASE.fireDuty): shooting until `burstUntil`, then a pause until `pauseUntil`. */
+  burstUntil = 0;
+  pauseUntil = 0;
+  /** Bursts with pauses: on for 450–800 ms, off for a share that keeps BOT_EASE.fireDuty on average. */
+  burstOn(now) {
+    if (!this.ease) return true;
+    if (now < this.burstUntil) return true;
+    if (now < this.pauseUntil) return false;
+    const on = 450 + this.rng() * 350;
+    const off = on * (1 - BOT_EASE.fireDuty) / BOT_EASE.fireDuty;
+    this.burstUntil = now + on;
+    this.pauseUntil = this.burstUntil + off;
+    return true;
+  }
   nextInput() {
     const now = this.world.time;
     const me = this.world.players.get(this.id);
@@ -15826,7 +15917,7 @@ var BotBrain = class {
       const aimed = Math.abs(angleDiff(this.aim, Math.atan2(dy, dx))) < this.d.tolerance + 8 / Math.max(dist, 8);
       const reacted = now - this.targetSeenAt > this.d.reaction;
       const w = WEAPONS[me.weapon];
-      if (aimed && reacted && dist < w.range * 0.95) frame.buttons |= BTN.FIRE;
+      if (aimed && reacted && dist < w.range * 0.95 && this.burstOn(now)) frame.buttons |= BTN.FIRE;
       if (me.gadget && me.gadgetCharges > 0 && aimed && reacted && now >= this.gadgetAt && now >= me.gadgetReadyAt) {
         const g = GADGETS[me.gadget];
         const throwRange = g.throwSpeed * g.throwSpeed / 1400;
@@ -16270,7 +16361,9 @@ var ClientMessageSchema = external_exports.discriminatedUnion("type", [
     roomId,
     character: external_exports.enum(CHARACTER_IDS),
     reconnectToken: external_exports.string().min(16).max(128).optional(),
-    clientVersion: external_exports.string().max(32).optional()
+    clientVersion: external_exports.string().max(32).optional(),
+    /** v0.2.17: the $BLAT Tournament stake the player agreed to (must equal the room's to come in). */
+    stake: external_exports.number().int().min(0).max(1e5).optional()
   }),
   external_exports.object({ type: external_exports.literal("ready"), ready: external_exports.boolean() }),
   external_exports.object({ type: external_exports.literal("character"), character: external_exports.enum(CHARACTER_IDS) }),
@@ -16450,13 +16543,19 @@ var UpdateProfileRequest = external_exports.object({
   /** A profile avatar (game-rules/avatars.ts); null removes it. */
   avatar: external_exports.enum(AVATAR_IDS).nullable().optional()
 }).strict();
-var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional() }).strict();
-var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional(), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional() }).strict();
+var KonStakeField = external_exports.number().int().refine((v) => isKonStake(v), { message: "not one of the stakes" });
+var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional(), stake: KonStakeField.optional() }).strict();
+var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional(), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional(), stake: KonStakeField.optional() }).strict();
 var AdminLoginRequest = external_exports.object({ username: external_exports.string().min(3).max(32), password: external_exports.string().min(1).max(256) }).strict();
 var AdminCreateUserRequest = external_exports.object({
   username: external_exports.string().regex(/^[a-z0-9_.-]{3,32}$/),
   password: external_exports.string().min(12).max(256),
   role: external_exports.enum(["admin", "viewer"])
+}).strict();
+var AdminBlatAllocationRequest = external_exports.object({
+  pool: external_exports.enum(["influencers", "friends", "reserve"]),
+  amount: external_exports.number().int().min(1).max(1e8),
+  note: external_exports.string().trim().min(3).max(120)
 }).strict();
 var AdminReferralDecision = external_exports.object({ action: external_exports.enum(["confirm", "reject"]), note: external_exports.string().trim().max(200).optional() }).strict();
 var AdminBlatDropRequest = external_exports.object({ announceAt: external_exports.string().datetime({ offset: true }).nullable() }).strict();
@@ -16642,7 +16741,7 @@ async function migrate(sql2, dir = DEFAULT_MIGRATIONS_DIR) {
 }
 
 // apps/server/src/app.ts
-import { randomUUID as randomUUID3 } from "node:crypto";
+import { randomUUID as randomUUID5 } from "node:crypto";
 
 // apps/server/src/http/router.ts
 var HttpError = class extends Error {
@@ -16934,6 +17033,1034 @@ function parseRange(header, size2) {
   return { start, end };
 }
 
+// apps/server/src/rooms/MatchRoom.ts
+import { randomBytes, randomUUID } from "node:crypto";
+var between = (a, b2) => a + Math.random() * Math.max(0, b2 - a);
+var NAV = /* @__PURE__ */ new Map();
+function navFor(mapId, world) {
+  let nav = NAV.get(mapId);
+  if (!nav) {
+    nav = new NavGrid(world.collision);
+    NAV.set(mapId, nav);
+  }
+  return nav;
+}
+var STAKE_REFUSAL_TEXT = Object.freeze({
+  stakes_off: "Stakes are switched off on this server",
+  account_new: "A new account stakes from its second day",
+  blat_flagged: "Your $BLAT are being checked \u2014 stakes are not available",
+  blat_low: "Not enough $BLAT for the stake",
+  daily_limit: "The day\u2019s stake limit is reached"
+});
+var AUTO_START_DELAY_MS = 4e3;
+var FREE_GEAR = Object.freeze({ loadout: DEFAULT_LOADOUT, characters: new Set(FREE_CHARACTERS) });
+var SOLO_ABORT_MS = 2e4;
+var MAX_MSGS_PER_SEC = 150;
+var MatchRoom = class {
+  constructor(opts, services2, log2) {
+    this.services = services2;
+    this.id = opts.id;
+    this.mapId = opts.mapId;
+    this.isPrivate = opts.isPrivate;
+    this.hostId = opts.hostUserId;
+    this.inviteCode = opts.inviteCode ?? null;
+    this.autoStart = opts.autoStart ?? !opts.isPrivate;
+    this.kon = opts.kon ?? null;
+    this.stake = this.kon ? Math.max(0, Math.floor(opts.stake ?? 0)) : 0;
+    this.fillBots = this.kon ? false : opts.fillBots ?? false;
+    this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
+    this.onPresence = opts.onPresence ?? (() => {
+    });
+    const base2 = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? "ffa" };
+    this.config = this.kon ? konConfig(base2, this.kon) : base2;
+    this.log = log2.child({ room: this.id });
+    this.world = this.createWorld();
+  }
+  services;
+  id;
+  isPrivate;
+  createdAt = Date.now();
+  /** V2.0 part D: the «Блатной кон» format (null: an ordinary room). */
+  kon;
+  /** v0.2.17: the $BLAT Tournament's stake everyone puts in (0: none). */
+  stake;
+  /** v0.2.17: the stakes are being reserved (the match starts once they are). */
+  staking = false;
+  /** Match rules; `mode` changes when the host switches between free-for-all and teams. */
+  config;
+  mapId;
+  hostId;
+  inviteCode;
+  world;
+  matchId = null;
+  matchStartedAtWall = 0;
+  closed = false;
+  clients = /* @__PURE__ */ new Map();
+  pendingShots = [];
+  pendingEvents = [];
+  emptySince = Date.now();
+  /** The time of the latest tick (the room's clock between ticks; the wall clock before the first). */
+  lastNow = 0;
+  autoStartAt = 0;
+  soloSince = 0;
+  /** Kon: since when one side has nobody left in the match (0: both sides are there). */
+  emptySideSince = 0;
+  /**
+   * Kon: who started the match (side, character, invitation) and what those who left had done — a
+   * player who leaves loses even after the reconnect window has removed them from the room.
+   */
+  konLineup = /* @__PURE__ */ new Map();
+  resultsSent = false;
+  autoStart;
+  fillBots;
+  /** Players the room runs itself, by id (they are in the World like everyone else). */
+  seats = /* @__PURE__ */ new Map();
+  fillTiming;
+  onPresence;
+  /** Quick Match lobby: players start arriving from this time on (0: nobody waiting yet). */
+  fillFrom = 0;
+  /** When the next change of the filled lineup happens (0: none scheduled). */
+  nextFillAt = 0;
+  log;
+  createWorld() {
+    return new World(getMap(this.mapId), getCollision(this.mapId), { config: this.config, lagCompensation: true, seed: Math.floor(Math.random() * 2 ** 31) });
+  }
+  get phase() {
+    return this.world.phase;
+  }
+  get mode() {
+    return this.config.mode;
+  }
+  /** Players occupying a slot (connected or within the reconnect grace window). */
+  get occupancy() {
+    return this.clients.size;
+  }
+  get connectedCount() {
+    let n = 0;
+    for (const c of this.clients.values()) if (c.connected) n++;
+    return n;
+  }
+  /** Everyone in the lineup as players see it: people plus the players the room filled in. */
+  get lineup() {
+    return Math.min(this.config.maxPlayers, this.clients.size + this.seats.size);
+  }
+  /** A person connected to this room right now. */
+  hasPerson(userId) {
+    return this.clients.get(userId)?.connected === true;
+  }
+  /** A person holding a place in this room (connected or within the reconnect window). */
+  hasMember(userId) {
+    return this.clients.has(userId);
+  }
+  /** People the host needs to start: one when the room fills the lineup up itself. */
+  get minToStart() {
+    return this.fillBots ? 1 : this.config.minPlayers;
+  }
+  isJoinable(userId) {
+    if (this.closed || this.world.phase === "closed") return false;
+    if (userId && this.clients.has(userId)) return true;
+    if (this.clients.size >= this.config.maxPlayers) return false;
+    if (this.world.phase === "finished") return false;
+    if ((this.world.phase === "active" || this.world.phase === "countdown" || this.world.phase === "ready") && !this.config.allowJoinInProgress) return false;
+    return true;
+  }
+  hostName() {
+    return this.hostId ? this.clients.get(this.hostId)?.user.displayName ?? null : null;
+  }
+  // ── Connections ─────────────────────────────────────────────────────────
+  /** Adds or resumes a player. Returns an error code when the join is refused. */
+  join(user, ws, requested, viaInvite, gear = FREE_GEAR) {
+    if (this.closed) return "room_closed";
+    const character = gear.characters.has(requested) ? requested : "petya";
+    const existing = this.clients.get(user.userId);
+    if (existing) {
+      existing.gear = gear;
+      this.world.setLoadout(user.userId, gear.loadout);
+      if (existing.ws && existing.ws !== ws) {
+        try {
+          existing.ws.close(WS_CLOSE.REPLACED, "replaced");
+        } catch {
+        }
+      }
+      existing.ws = ws;
+      existing.connected = true;
+      existing.queue = [];
+      existing.lastQueuedSeq = 0;
+      existing.tokens = INPUT_BUCKET_MAX;
+      const p = this.world.players.get(user.userId);
+      if (p) {
+        p.connected = true;
+        if (p.spawned && !p.alive) p.respawnAt = this.world.time + this.config.respawnDelayMs;
+      }
+      this.send(existing, this.welcome(existing, true));
+      this.broadcastRoster();
+      this.services.analytics.server("lobby_joined", { roomId: this.id, viaInvite: existing.viaInvite, resumed: true }, user);
+      this.onPresence(user.userId);
+      return "resumed";
+    }
+    if (!this.isJoinable()) return this.world.phase === "finished" || this.world.phase === "closed" ? "room_closed" : "room_full";
+    if (this.world.players.size >= this.config.maxPlayers && this.seats.size > 0) {
+      const seats = [...this.seats.values()];
+      const crowded = isTeamMode(this.config.mode) ? this.world.teamSize(0) >= this.world.teamSize(1) ? 0 : 1 : null;
+      const pool = crowded === null ? seats : seats.filter((x) => this.world.players.get(x.id)?.team === crowded);
+      this.dropSeat(this.leaver(pool.length ? pool : seats));
+    }
+    const client = {
+      user,
+      ws,
+      character,
+      gear,
+      lastGearAt: 0,
+      ready: this.autoStart,
+      rematch: false,
+      viaInvite,
+      connected: true,
+      disconnectedAt: 0,
+      queue: [],
+      tokens: INPUT_BUCKET_MAX,
+      lastQueuedSeq: 0,
+      reconnectToken: randomBytes(18).toString("base64url"),
+      joinedAt: Date.now(),
+      matchTimeMs: 0,
+      violations: 0,
+      msgWindowStart: Date.now(),
+      msgCount: 0,
+      chatTokens: CHAT_RULES.burst,
+      chatRefillAt: Date.now(),
+      lastChat: "",
+      lastChatAt: 0
+    };
+    this.clients.set(user.userId, client);
+    if (!this.hostId) this.hostId = user.userId;
+    this.world.addPlayer(user.userId, user.displayName, character, false, gear.loadout);
+    this.send(client, this.welcome(client, false));
+    this.broadcastRoster();
+    this.services.analytics.server("lobby_joined", { roomId: this.id, viaInvite }, user);
+    this.log.info("player joined", { user: user.userId, players: this.clients.size });
+    this.onPresence(user.userId);
+    return "ok";
+  }
+  welcome(c, resumed) {
+    const p = this.world.players.get(c.user.userId);
+    return {
+      type: "welcome",
+      playerId: c.user.userId,
+      slot: p?.slot ?? -1,
+      roomId: this.id,
+      reconnectToken: c.reconnectToken,
+      mode: this.config.mode,
+      serverTime: this.world.time,
+      tick: this.world.tick,
+      mapId: this.mapId,
+      config: this.config,
+      resumed
+    };
+  }
+  onSocketClose(ws) {
+    for (const c of this.clients.values()) {
+      if (c.ws !== ws) continue;
+      c.ws = null;
+      c.connected = false;
+      c.disconnectedAt = this.clock();
+      c.queue = [];
+      const p = this.world.players.get(c.user.userId);
+      if (p) {
+        p.connected = false;
+        if (p.alive && this.world.phase === "active") {
+          p.alive = false;
+          p.respawnAt = Number.MAX_SAFE_INTEGER;
+        }
+      }
+      if (this.world.phase === "waiting") this.removeClient(c, "left");
+      else this.broadcastRoster();
+      this.onPresence(c.user.userId);
+      return;
+    }
+  }
+  removeClient(c, reason) {
+    const kl = this.konLineup.get(c.user.userId);
+    const wp = this.world.players.get(c.user.userId);
+    if (kl && wp && this.matchId && !this.resultsSent) Object.assign(kl, { kills: wp.kills, assists: wp.assists, deaths: wp.deaths, score: wp.score, damageDealt: wp.damageDealt, playtimeMs: Math.round(c.matchTimeMs) });
+    this.clients.delete(c.user.userId);
+    this.world.removePlayer(c.user.userId);
+    this.services.analytics.server("lobby_left", { roomId: this.id, phase: this.world.phase, reason }, c.user);
+    if (this.hostId === c.user.userId) {
+      const next = [...this.clients.values()].find((x) => x.connected) ?? [...this.clients.values()][0];
+      this.hostId = next ? next.user.userId : null;
+    }
+    this.broadcastRoster();
+  }
+  // ── Messages ────────────────────────────────────────────────────────────
+  onMessage(ws, data, isBinary) {
+    const c = [...this.clients.values()].find((x) => x.ws === ws);
+    if (!c) return;
+    const now = Date.now();
+    if (now - c.msgWindowStart > 1e3) {
+      c.msgWindowStart = now;
+      c.msgCount = 0;
+    }
+    if (++c.msgCount > MAX_MSGS_PER_SEC) return this.violation(c, "rate");
+    const buf = Array.isArray(data) ? Buffer.concat(data) : Buffer.isBuffer(data) ? data : Buffer.from(data);
+    if (isBinary) {
+      let frames;
+      try {
+        frames = decodeInputs(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength));
+      } catch (e2) {
+        if (e2 instanceof ProtocolError) return this.violation(c, "bad_input");
+        throw e2;
+      }
+      for (const f2 of frames) {
+        if (f2.seq <= c.lastQueuedSeq) continue;
+        c.lastQueuedSeq = f2.seq;
+        c.queue.push(f2);
+      }
+      if (c.queue.length > INPUT_QUEUE_MAX) c.queue.splice(0, c.queue.length - INPUT_QUEUE_MAX);
+      return;
+    }
+    let msg;
+    try {
+      const parsed = ClientMessageSchema.safeParse(JSON.parse(buf.toString("utf8")));
+      if (!parsed.success) return this.violation(c, "bad_message");
+      msg = parsed.data;
+    } catch {
+      return this.violation(c, "bad_json");
+    }
+    this.handleControl(c, msg);
+  }
+  violation(c, kind) {
+    c.violations++;
+    if (c.violations === 1 || c.violations % 20 === 0) this.log.warn("protocol violation", { user: c.user.userId, kind, count: c.violations });
+    if (c.violations > 50 && c.ws) {
+      this.send(c, { type: "kicked", reason: "protocol" });
+      c.ws.close(WS_CLOSE.POLICY, "protocol violations");
+    }
+  }
+  handleControl(c, msg) {
+    switch (msg.type) {
+      case "ping":
+        this.send(c, { type: "pong", t: msg.t, serverTime: this.world.time });
+        return;
+      case "ready":
+        c.ready = msg.ready;
+        this.broadcastRoster();
+        return;
+      case "character": {
+        if (!c.gear.characters.has(msg.character)) return this.error(c, "character_locked", "This character isn\u2019t unlocked yet");
+        c.character = msg.character;
+        const p = this.world.players.get(c.user.userId);
+        if (p && (this.world.phase === "waiting" || !p.alive)) p.character = msg.character;
+        this.broadcastRoster();
+        return;
+      }
+      case "map":
+        if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host changes the map");
+        if (this.world.phase !== "waiting") return this.error(c, "match_running", "The match is already on");
+        if (!isMapId(msg.mapId)) return;
+        this.changeMap(msg.mapId);
+        return;
+      case "mode":
+        if (this.kon) return this.error(c, "kon_fixed", "A tournament room\u2019s format is fixed");
+        if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host changes the mode");
+        if (this.world.phase !== "waiting") return this.error(c, "match_running", "The match is already on");
+        this.changeMode(msg.mode);
+        return;
+      case "team": {
+        if (!isTeamMode(this.config.mode)) return;
+        if (this.world.phase !== "waiting") return this.error(c, "match_running", "Teams are fixed once the match is on");
+        const p = this.world.players.get(c.user.userId);
+        if (!p || p.team === msg.team) return;
+        if (this.kon) {
+          if (this.world.teamSize(msg.team) + 1 > KON_RULES[this.kon].size) return this.error(c, "team_full", "That side is full");
+          this.world.setTeam(c.user.userId, msg.team);
+          this.broadcastRoster();
+          return;
+        }
+        if (this.fillBots) {
+          let there = 0;
+          for (const x of this.clients.values()) if (x !== c && this.world.players.get(x.user.userId)?.team === msg.team) there++;
+          if (there + 1 > Math.floor(this.config.maxPlayers / 2)) return this.error(c, "team_full", "That team already has more players");
+          this.world.setTeam(c.user.userId, msg.team);
+          this.settleLobby();
+          this.broadcastRoster();
+          return;
+        }
+        const to = this.world.teamSize(msg.team) + 1;
+        const from = this.world.teamSize(msg.team === 0 ? 1 : 0) - (p.team === null ? 0 : 1);
+        if (to - from > 1) return this.error(c, "team_full", "That team already has more players");
+        this.world.setTeam(c.user.userId, msg.team);
+        this.broadcastRoster();
+        return;
+      }
+      case "start":
+        if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host starts the match");
+        if (this.world.phase !== "waiting") return this.error(c, "match_running", "The match is already on");
+        if (this.connectedCount < this.minToStart) return this.error(c, "not_enough_players", `At least ${this.config.minPlayers} players needed`);
+        this.requestStart();
+        return;
+      case "loadout": {
+        const now = Date.now();
+        if (now - c.lastGearAt < 1500) return;
+        c.lastGearAt = now;
+        const userId = c.user.userId;
+        void this.services.economy.gear(userId).then((g) => {
+          const cur = this.clients.get(userId);
+          if (!cur || this.closed) return;
+          cur.gear = g;
+          this.world.setLoadout(userId, g.loadout);
+          this.broadcastRoster();
+        }).catch((e2) => this.log.warn("loadout refresh failed", { user: userId, err: e2 }));
+        return;
+      }
+      case "rematch":
+        if (this.world.phase !== "finished") return;
+        c.rematch = true;
+        this.broadcastRoster();
+        if ([...this.clients.values()].filter((x) => x.connected).every((x) => x.rematch)) this.toLobby(true);
+        return;
+      case "leave":
+        if (c.ws) c.ws.close(WS_CLOSE.NORMAL, "leave");
+        this.removeClient(c, "leave");
+        return;
+      case "chat":
+        return this.chat(c, msg.text, msg.team === true);
+      case "hello":
+        return;
+    }
+  }
+  changeMap(mapId) {
+    this.mapId = mapId;
+    this.rebuildWorld(true);
+  }
+  /**
+   * A new game mode: the roster stays; teams carry over between team modes and are dealt anew
+   * (alternating by arrival) when coming from free-for-all.
+   */
+  changeMode(mode) {
+    if (mode === this.config.mode) return;
+    const keepTeams = isTeamMode(this.config.mode) && isTeamMode(mode);
+    this.config = { ...this.config, mode };
+    this.rebuildWorld(keepTeams);
+    this.services.analytics.server("lobby_created", { roomId: this.id, mapId: this.mapId, isPrivate: this.isPrivate, mode }, { userId: this.hostId });
+  }
+  rebuildWorld(keepTeams) {
+    const roster = [...this.world.players.values()].sort((a, b2) => a.joinedAt - b2.joinedAt || a.slot - b2.slot);
+    this.world = this.createWorld();
+    for (const p of roster) {
+      const team = keepTeams && isTeamMode(this.config.mode) && p.team !== null ? p.team : void 0;
+      this.world.addPlayer(p.id, p.name, p.character, p.isBot, { sidearm: p.sidearm, melee: p.melee, primary: p.primary, gadget: p.gadget, mods: p.mods }, team).connected = p.connected;
+    }
+    this.broadcastRoster();
+  }
+  // ── Filling the lineup ──────────────────────────────────────────────────
+  /**
+   * How many players the room should add: in total (free-for-all) or per side (teams), so that the
+   * people present get a full match (FILL_RULES). Null when the room does not fill or nobody is there.
+   */
+  fillWant() {
+    if (!this.fillBots) return null;
+    let total = 0;
+    let red = 0;
+    let blue = 0;
+    for (const c of this.clients.values()) {
+      if (!c.connected) continue;
+      total++;
+      const team = this.world.players.get(c.user.userId)?.team;
+      if (team === 0) red++;
+      else if (team === 1) blue++;
+    }
+    if (total === 0) return null;
+    const target = fillTarget(this.config.mode, { total, red, blue }, this.config.maxPlayers);
+    if ("side" in target) return { red: Math.max(0, target.side - red), blue: Math.max(0, target.side - blue) };
+    return { total: Math.max(0, target.total - total) };
+  }
+  hasFreeSlot() {
+    return this.world.players.size < this.config.maxPlayers;
+  }
+  /** Who leaves first: in a match the one doing worst (latest arrival on a tie), in the lobby the latest arrival. */
+  leaver(list) {
+    const inMatch = this.world.phase !== "waiting";
+    const score = (x) => this.world.players.get(x.id)?.score ?? 0;
+    return [...list].sort((a, b2) => (inMatch ? score(a) - score(b2) : 0) || b2.addedAt - a.addedAt)[0];
+  }
+  /** The next change towards the wanted lineup (null: it is right as it is). */
+  fillStep() {
+    const seats = [...this.seats.values()];
+    const want = this.fillWant();
+    if (!want) return null;
+    if ("total" in want) {
+      if (seats.length > want.total) return { kind: "remove", seat: this.leaver(seats) };
+      if (seats.length < want.total && this.hasFreeSlot()) return { kind: "add", team: null };
+      return null;
+    }
+    const red = seats.filter((x) => this.world.players.get(x.id)?.team === 0);
+    const blue = seats.filter((x) => this.world.players.get(x.id)?.team !== 0);
+    const extraRed = red.length - want.red;
+    const extraBlue = blue.length - want.blue;
+    if (this.world.phase === "waiting") {
+      if (extraRed > 0 && extraBlue < 0) return { kind: "move", seat: this.leaver(red), team: 1 };
+      if (extraBlue > 0 && extraRed < 0) return { kind: "move", seat: this.leaver(blue), team: 0 };
+    }
+    if (extraRed > 0 || extraBlue > 0) return { kind: "remove", seat: this.leaver(extraRed >= extraBlue ? red : blue) };
+    if ((extraRed < 0 || extraBlue < 0) && this.hasFreeSlot()) return { kind: "add", team: extraRed <= extraBlue ? 0 : 1 };
+    return null;
+  }
+  /** A new player for the lineup: a name, level, avatar, character and gear like everyone else's. */
+  addSeat(team) {
+    if (!this.hasFreeSlot()) return null;
+    let levels = 0;
+    let people = 0;
+    let cyrillic = false;
+    for (const c of this.clients.values()) {
+      if (!c.connected) continue;
+      people++;
+      levels += Math.max(1, c.user.level ?? 1);
+      if (/[а-яё]/i.test(c.user.displayName)) cyrillic = true;
+    }
+    const lang = Math.random() < (cyrillic ? 0.8 : 0.45) ? "ru" : "en";
+    const taken = /* @__PURE__ */ new Set();
+    for (const p of this.world.players.values()) taken.add(p.name.toLowerCase());
+    const persona = fillPersona(Math.random, { lang, aroundLevel: people ? levels / people : 1, taken });
+    const id = randomUUID();
+    this.world.addPlayer(id, persona.name, persona.character, true, persona.loadout, team ?? void 0);
+    const seat = {
+      id,
+      name: persona.name,
+      character: persona.character,
+      level: persona.level,
+      avatar: persona.avatar,
+      skins: persona.loadout.skins ?? {},
+      difficulty: persona.difficulty,
+      addedAt: this.clock(),
+      brain: null,
+      brainWorld: null,
+      rematch: false,
+      rematchAt: 0
+    };
+    this.seats.set(id, seat);
+    return seat;
+  }
+  dropSeat(seat) {
+    this.seats.delete(seat.id);
+    this.world.removePlayer(seat.id);
+  }
+  applyStep(step) {
+    if (step.kind === "add") this.addSeat(step.team);
+    else if (step.kind === "remove") this.dropSeat(step.seat);
+    else this.world.setTeam(step.seat.id, step.team);
+  }
+  /** Brings the lineup to what it should be right away (the match is being started). */
+  fillNow() {
+    for (let guard = 0; guard < 2 * this.config.maxPlayers + 4; guard++) {
+      const step = this.fillStep();
+      if (!step) return;
+      this.applyStep(step);
+    }
+  }
+  /** Lobby: sides are evened out at once (moves only); arrivals and departures keep their pace. */
+  settleLobby() {
+    for (let guard = 0; guard < this.config.maxPlayers; guard++) {
+      const step = this.fillStep();
+      if (!step || step.kind !== "move") return;
+      this.applyStep(step);
+    }
+  }
+  /**
+   * Keeps the filled lineup right, at a human pace: Quick Match lobbies wait FILL_RULES.waitMs for
+   * people, then players arrive one by one; rooms with friends fill up when the match is started;
+   * during a match empty places are taken (and places a person takes are given up) after a while.
+   */
+  fillTick(now) {
+    const phase = this.world.phase;
+    if (this.clients.size === 0) {
+      if (this.seats.size > 0) {
+        for (const seat of [...this.seats.values()]) this.dropSeat(seat);
+        this.broadcastRoster();
+      }
+      this.fillFrom = 0;
+      this.nextFillAt = 0;
+      return;
+    }
+    if (phase === "finished") {
+      let voted = false;
+      for (const seat of this.seats.values()) {
+        if (!seat.rematch && seat.rematchAt && now >= seat.rematchAt) {
+          seat.rematch = true;
+          voted = true;
+        }
+      }
+      if (voted) this.broadcastRoster();
+      return;
+    }
+    if (phase === "closed") return;
+    const inLobby = phase === "waiting";
+    if (inLobby && this.connectedCount === 0) this.fillFrom = 0;
+    else if (inLobby && !this.fillFrom) this.fillFrom = now + this.fillTiming.waitMs;
+    const step = this.fillStep();
+    if (!step) {
+      this.nextFillAt = 0;
+      return;
+    }
+    if (step.kind === "move") {
+      this.applyStep(step);
+      this.broadcastRoster();
+      return;
+    }
+    if (step.kind === "add" && inLobby) {
+      if (!this.autoStart || now < this.fillFrom) {
+        this.nextFillAt = 0;
+        return;
+      }
+    }
+    if (!this.nextFillAt) {
+      const t = this.fillTiming;
+      this.nextFillAt = now + (step.kind === "remove" ? between(t.leaveMinMs, t.leaveMaxMs) : inLobby ? between(t.arriveMinMs, t.arriveMaxMs) : between(t.joinMinMs, t.joinMaxMs));
+      return;
+    }
+    if (now < this.nextFillAt) return;
+    this.nextFillAt = 0;
+    this.applyStep(step);
+    this.broadcastRoster();
+  }
+  // ── Match lifecycle ─────────────────────────────────────────────────────
+  /** Starts the match; a staked tournament room first reserves every stake (v0.2.17). */
+  requestStart() {
+    if (this.stake <= 0 || !this.services.stakes) return this.startMatch();
+    if (this.staking || this.world.phase !== "waiting") return;
+    void this.reserveAndStart();
+  }
+  /**
+   * v0.2.17: every connected player's stake in one transaction, all or nothing; the match starts when
+   * they are reserved and the lineup is still the one that staked. A player who can't stake leaves the
+   * room with the reason (the others wait for someone who can); a lineup that changed meanwhile gets
+   * every stake back.
+   */
+  async reserveAndStart() {
+    const stakes = this.services.stakes;
+    this.staking = true;
+    this.broadcastRoster();
+    const matchId = randomUUID();
+    const lineup = [...this.clients.values()].filter((c) => c.connected).map((c) => c.user.userId).sort();
+    let res;
+    try {
+      res = await stakes.reserve({ matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, kon: this.kon, stake: this.stake, userIds: lineup });
+    } catch (e2) {
+      this.staking = false;
+      this.log.error("stake reservation failed", { err: e2 });
+      this.services.analytics.error({ source: "server", component: "stakes", category: "reserve", message: e2.message });
+      if (this.closed) return;
+      for (const c of this.clients.values()) if (c.connected) this.error(c, "internal", "The stakes could not be reserved \u2014 try again");
+      this.autoStartAt = 0;
+      this.broadcastRoster();
+      return;
+    }
+    this.staking = false;
+    if (!res.ok) {
+      const c = this.clients.get(res.userId);
+      if (c && !this.closed) {
+        this.error(c, res.reason, STAKE_REFUSAL_TEXT[res.reason]);
+        this.removeClient(c, "stake");
+        try {
+          c.ws?.close(WS_CLOSE.NORMAL, "stake");
+        } catch {
+        }
+      }
+      this.autoStartAt = 0;
+      if (!this.closed) this.broadcastRoster();
+      return;
+    }
+    const now = [...this.clients.values()].filter((c) => c.connected).map((c) => c.user.userId).sort();
+    if (this.closed || this.world.phase !== "waiting" || now.join() !== lineup.join() || now.length < this.minToStart) {
+      void stakes.refund(matchId).catch((e2) => this.log.error("stake refund failed", { err: e2, matchId }));
+      this.autoStartAt = 0;
+      if (!this.closed) this.broadcastRoster();
+      return;
+    }
+    this.log.info("stakes reserved", { matchId, stake: this.stake, players: lineup.length });
+    this.startMatch(matchId);
+  }
+  startMatch(reservedMatchId) {
+    if (this.fillBots) this.fillNow();
+    for (const seat of this.seats.values()) {
+      seat.brain = null;
+      seat.rematch = false;
+    }
+    for (const c of this.clients.values()) {
+      const p = this.world.players.get(c.user.userId);
+      if (p) p.character = c.character;
+      c.matchTimeMs = 0;
+      c.rematch = false;
+      c.queue = [];
+      c.lastQueuedSeq = 0;
+    }
+    if (this.kon && !this.isPrivate) {
+      const people = [...this.clients.values()].filter((c) => c.connected).map((c) => ({ id: c.user.userId, rating: c.user.konRating ?? KON_RATING.start }));
+      for (const [id, team] of konDeal(people)) this.world.setTeam(id, team);
+    }
+    this.emptySideSince = 0;
+    this.world.beginMatch();
+    this.konLineup.clear();
+    if (this.kon) {
+      for (const c of this.clients.values()) {
+        const p = this.world.players.get(c.user.userId);
+        this.konLineup.set(c.user.userId, { team: p?.team ?? null, character: c.character, viaInvite: c.viaInvite, kills: 0, assists: 0, deaths: 0, score: 0, damageDealt: 0, playtimeMs: 0 });
+      }
+    }
+    this.matchId = reservedMatchId ?? randomUUID();
+    this.matchStartedAtWall = Date.now();
+    this.resultsSent = false;
+    const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite, team: this.world.players.get(c.user.userId)?.team ?? null }));
+    const fill = this.seats.size;
+    this.services.recorder.matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, startedAt: /* @__PURE__ */ new Date(), players, fill }).catch((e2) => this.log.error("matchStarted failed", { err: e2 }));
+    this.services.analytics.server("match_started", { matchId: this.matchId, roomId: this.id, mapId: this.mapId, players: players.length, fill, mode: this.config.mode });
+    this.services.analytics.server("map_played", { matchId: this.matchId, mapId: this.mapId });
+    this.log.info("match started", { matchId: this.matchId, players: players.length, fill, map: this.mapId, mode: this.config.mode });
+    this.broadcastRoster();
+  }
+  toLobby(rematch) {
+    this.world.resetToLobby();
+    this.matchId = null;
+    for (const [id, c] of [...this.clients]) {
+      if (!c.connected) {
+        this.clients.delete(id);
+        this.world.removePlayer(id);
+      }
+      c.rematch = false;
+      c.ready = this.autoStart || rematch;
+    }
+    for (const seat of [...this.seats.values()]) {
+      seat.rematch = false;
+      if (!rematch && !this.isPrivate && Math.random() < 0.3) this.dropSeat(seat);
+    }
+    this.broadcastRoster();
+    if (rematch && this.connectedCount >= this.minToStart) this.requestStart();
+  }
+  finishResults(reason) {
+    if (this.resultsSent || !this.matchId) return;
+    this.resultsSent = true;
+    const standings = this.world.standings();
+    const durationMs = Math.max(0, this.world.time - this.world.matchStartedAt);
+    let teams = isTeamMode(this.config.mode) ? this.world.teamResult() : void 0;
+    if (this.kon && teams) {
+      const stayed = (t) => standings.some((st) => !st.isBot && st.team === t && this.clients.get(st.id)?.connected === true);
+      const winner = stayed(0) && !stayed(1) ? 0 : stayed(1) && !stayed(0) ? 1 : teams.winner;
+      if (winner !== teams.winner) teams = { ...teams, winner };
+    }
+    this.flush();
+    const shown = standings.map((s) => s.isBot ? { ...s, isBot: false } : s);
+    this.broadcast({ type: "results", matchId: this.matchId, reason, durationMs, standings: shown, mapId: this.mapId, mode: this.config.mode, ...teams ? { teams } : {} });
+    const matchId = this.matchId;
+    const presentAtEnd = standings.filter((s) => this.clients.get(s.id)?.connected || this.seats.has(s.id));
+    const presentPlaces = rankPlaces(presentAtEnd);
+    const peopleAtEnd = presentAtEnd.filter((s) => !s.isBot).length;
+    const fillAtEnd = presentAtEnd.length - peopleAtEnd;
+    const now = this.clock();
+    for (const seat of this.seats.values()) {
+      seat.rematch = false;
+      seat.rematchAt = now + between(1500, 6e3);
+    }
+    const participants = standings.filter((s) => !s.isBot && this.clients.has(s.id)).map((s) => {
+      const c = this.clients.get(s.id);
+      const presentIdx = presentAtEnd.findIndex((x) => x.id === s.id);
+      const team = s.team ?? null;
+      return {
+        userId: s.id,
+        character: c.character,
+        // team matches: 1 for the winning team (both on a draw), 2 for the other
+        place: teams ? s.place : presentIdx >= 0 ? presentPlaces[presentIdx] : standings.length,
+        team,
+        ...teams ? { teamOutcome: teams.winner === null ? "draw" : team === teams.winner ? "win" : "loss" } : {},
+        kills: s.kills,
+        assists: s.assists,
+        deaths: s.deaths,
+        score: s.score,
+        damageDealt: s.damageDealt,
+        objectives: s.objectives ?? 0,
+        completed: c.connected,
+        viaInvite: c.viaInvite,
+        playtimeMs: Math.round(c.matchTimeMs)
+      };
+    });
+    if (this.kon) {
+      for (const [userId, k] of this.konLineup) {
+        if (participants.some((p) => p.userId === userId)) continue;
+        participants.push({ userId, character: k.character, place: 2, team: k.team, teamOutcome: "loss", kills: k.kills, assists: k.assists, deaths: k.deaths, score: k.score, damageDealt: k.damageDealt, objectives: 0, completed: false, viaInvite: k.viaInvite, playtimeMs: k.playtimeMs });
+      }
+    }
+    this.services.analytics.server("match_completed", { matchId, mapId: this.mapId, durationMs, players: peopleAtEnd, fill: fillAtEnd, reason, mode: this.config.mode });
+    this.services.recorder.matchCompleted({
+      matchId,
+      roomId: this.id,
+      mapId: this.mapId,
+      mode: this.config.mode,
+      winnerTeam: teams ? teams.winner : null,
+      isPrivate: this.isPrivate,
+      startedAt: new Date(this.matchStartedAtWall),
+      endedAt: /* @__PURE__ */ new Date(),
+      durationMs,
+      endReason: reason,
+      playersAtEnd: presentAtEnd.length,
+      peopleAtEnd,
+      fillAtEnd,
+      participants,
+      kon: this.kon,
+      stake: this.stake
+    }).then((personal) => {
+      let levelChanged = false;
+      for (const [userId, result] of personal) {
+        const c = this.clients.get(userId);
+        if (!c) continue;
+        if (c.user.level !== result.level) {
+          c.user = { ...c.user, level: result.level };
+          levelChanged = true;
+        }
+        this.send(c, { type: "progress", matchId, result });
+      }
+      if (levelChanged && !this.closed) this.broadcastRoster();
+    }).catch((e2) => {
+      this.log.error("matchCompleted failed", { err: e2, matchId });
+      this.services.analytics.error({ source: "server", component: "results", category: "persist", message: e2.message });
+    });
+  }
+  // ── Tick ────────────────────────────────────────────────────────────────
+  clock() {
+    return this.lastNow || Date.now();
+  }
+  tick(now) {
+    if (this.closed) return;
+    this.lastNow = now;
+    const w = this.world;
+    if (this.fillBots || this.seats.size > 0) this.fillTick(now);
+    if (w.phase === "waiting") {
+      const connected = [...this.clients.values()].filter((c) => c.connected);
+      const enough = connected.length > 0 && connected.length + this.seats.size >= this.config.minPlayers;
+      const allReady = enough && connected.every((c) => c.ready);
+      if (allReady) {
+        if (!this.autoStartAt) this.autoStartAt = now + (this.autoStart ? AUTO_START_DELAY_MS : 600);
+        if (now >= this.autoStartAt && !this.staking) {
+          this.autoStartAt = 0;
+          this.requestStart();
+        }
+      } else this.autoStartAt = 0;
+    }
+    if (this.seats.size > 0 && (w.phase === "countdown" || w.phase === "active")) {
+      const nav = navFor(this.mapId, w);
+      for (const seat of this.seats.values()) {
+        if (!seat.brain || seat.brainWorld !== w) {
+          seat.brain = new BotBrain(seat.id, w, nav, seat.difficulty, Math.floor(Math.random() * 2 ** 31));
+          seat.brainWorld = w;
+        }
+        w.applyInput(seat.id, seat.brain.nextInput());
+      }
+    }
+    for (const c of this.clients.values()) {
+      if (!c.connected) continue;
+      if (w.phase === "active") c.matchTimeMs += TICK_MS;
+      c.tokens = Math.min(INPUT_BUCKET_MAX, c.tokens + 1);
+      let n = 0;
+      while (c.queue.length > 0 && c.tokens >= 1 && n < MAX_INPUTS_PER_TICK) {
+        w.applyInput(c.user.userId, c.queue.shift());
+        c.tokens -= 1;
+        n++;
+      }
+    }
+    w.update();
+    for (const e2 of w.drainEvents()) {
+      if (e2.t === "shot" || e2.t === "melee") this.pendingShots.push(e2);
+      else {
+        this.pendingEvents.push(e2);
+        if (e2.t === "phase") {
+          this.broadcastRoster();
+          if (e2.phase === "ready" || e2.phase === "finished") {
+            for (const c of this.clients.values()) if (c.connected) this.onPresence(c.user.userId);
+          }
+        }
+        if (e2.t === "matchEnd") this.finishResults(e2.reason);
+      }
+    }
+    if (w.phase === "finished" && w.phaseEndsAt && w.time >= w.phaseEndsAt) this.toLobby(false);
+    if (this.kon && w.phase === "active") {
+      const there = (t) => [...this.clients.values()].some((c) => c.connected && w.players.get(c.user.userId)?.team === t);
+      if (there(0) !== there(1)) {
+        if (!this.emptySideSince) this.emptySideSince = now;
+        else if (now - this.emptySideSince > SOLO_ABORT_MS) {
+          this.emptySideSince = 0;
+          w.finish("aborted");
+        }
+      } else this.emptySideSince = 0;
+    }
+    if (w.phase === "active" && this.connectedCount + this.seats.size < 2) {
+      if (!this.soloSince) this.soloSince = now;
+      else if (now - this.soloSince > SOLO_ABORT_MS) {
+        this.soloSince = 0;
+        w.finish("aborted");
+      }
+    } else this.soloSince = 0;
+    for (const c of [...this.clients.values()]) {
+      if (!c.connected && now - c.disconnectedAt > this.config.reconnectGraceMs) this.removeClient(c, "timeout");
+    }
+    if (w.tick % SNAPSHOT_EVERY_TICKS === 0) this.flush();
+    if (this.connectedCount === 0) {
+      if (now - this.emptySince > this.config.emptyRoomTtlMs) this.close("empty");
+    } else this.emptySince = now;
+  }
+  flush() {
+    const w = this.world;
+    const snapshot = encodeSnapshot({
+      tick: w.tick,
+      time: w.time,
+      phase: w.phase,
+      phaseRemaining: w.phase === "active" ? w.matchTimeLeftMs : w.phaseEndsAt ? Math.max(0, w.phaseEndsAt - w.time) : 0,
+      teamScore: w.teamScore,
+      players: w.players.values(),
+      pickups: w.pickups,
+      gadgets: w.gadgets,
+      flags: w.flags,
+      bases: w.bases,
+      events: this.pendingShots,
+      now: w.time
+    });
+    this.pendingShots = [];
+    const evMsg = this.pendingEvents.length ? JSON.stringify({ type: "ev", tick: w.tick, events: this.pendingEvents }) : null;
+    this.pendingEvents = [];
+    for (const c of this.clients.values()) {
+      if (!c.connected || !c.ws || c.ws.readyState !== 1) continue;
+      if (c.ws.bufferedAmount > 256 * 1024) continue;
+      c.ws.send(snapshot, { binary: true });
+      if (evMsg) c.ws.send(evMsg);
+    }
+  }
+  close(reason) {
+    if (this.closed) return;
+    if (this.matchId && (this.world.phase === "active" || this.world.phase === "countdown" || this.world.phase === "ready") && !this.resultsSent) {
+      const id = this.matchId;
+      this.services.recorder.matchAbandoned(id, reason).catch((e2) => this.log.error("matchAbandoned failed", { err: e2 }));
+      this.services.analytics.server("match_abandoned", { matchId: id, mapId: this.mapId, phase: this.world.phase });
+    }
+    this.closed = true;
+    this.world.close();
+    for (const c of this.clients.values()) {
+      try {
+        c.ws?.close(WS_CLOSE.ROOM_CLOSED, "room closed");
+      } catch {
+      }
+    }
+    this.clients.clear();
+    this.seats.clear();
+    this.log.info("room closed", { reason });
+  }
+  // ── Output helpers ──────────────────────────────────────────────────────
+  roster() {
+    const finished = this.world.phase === "finished";
+    const order = (id) => {
+      const p = this.world.players.get(id);
+      return p ? p.joinedAt * 16 + p.slot : Number.MAX_SAFE_INTEGER;
+    };
+    const people = [...this.clients.values()].map((c) => {
+      const p = this.world.players.get(c.user.userId);
+      return {
+        id: c.user.userId,
+        slot: p?.slot ?? -1,
+        name: c.user.displayName,
+        character: c.character,
+        ready: finished ? c.rematch : c.ready,
+        connected: c.connected,
+        isHost: c.user.userId === this.hostId,
+        isBot: false,
+        level: c.user.level,
+        avatar: c.user.avatar ?? null,
+        team: p?.team ?? null,
+        mods: c.gear.loadout.mods,
+        skins: c.gear.loadout.skins ?? {},
+        ...this.kon ? { konRating: c.user.konRating ?? KON_RATING.start } : {},
+        ...c.user.founder ? { founder: true } : {}
+      };
+    });
+    const filled = [...this.seats.values()].map((seat) => {
+      const p = this.world.players.get(seat.id);
+      return {
+        id: seat.id,
+        slot: p?.slot ?? -1,
+        name: seat.name,
+        character: seat.character,
+        ready: finished ? seat.rematch : true,
+        connected: true,
+        isHost: false,
+        isBot: false,
+        level: seat.level,
+        avatar: seat.avatar,
+        team: p?.team ?? null,
+        mods: {},
+        skins: seat.skins
+      };
+    });
+    const players = [...people, ...filled].sort((a, b2) => order(a.id) - order(b2.id));
+    return {
+      type: "roster",
+      players,
+      hostId: this.hostId,
+      mapId: this.mapId,
+      phase: this.world.phase,
+      inviteCode: this.inviteCode,
+      isPrivate: this.isPrivate,
+      maxPlayers: this.config.maxPlayers,
+      mode: this.config.mode,
+      minToStart: this.minToStart,
+      kon: this.kon,
+      ...this.stake > 0 ? { stake: this.stake, staking: this.staking } : {}
+    };
+  }
+  broadcastRoster() {
+    this.broadcast(this.roster());
+  }
+  /**
+   * Room chat (lobby and match): people only, a few lines at once then one every 2.5 s, the same line
+   * twice in a row is dropped; team lines go to your own team in team modes. Lines are relayed, never
+   * stored.
+   */
+  chat(c, raw, team) {
+    if (!c.connected) return;
+    const text = cleanChat(raw);
+    if (!text) return;
+    const now = Date.now();
+    c.chatTokens = Math.min(CHAT_RULES.burst, c.chatTokens + Math.max(0, now - c.chatRefillAt) / CHAT_RULES.refillMs);
+    c.chatRefillAt = now;
+    if (c.chatTokens < 1) return this.error(c, "chat_rate", "Not so fast \u2014 wait a moment before the next line");
+    if (text === c.lastChat && now - c.lastChatAt < CHAT_RULES.repeatMs) return;
+    c.chatTokens -= 1;
+    c.lastChat = text;
+    c.lastChatAt = now;
+    const p = this.world.players.get(c.user.userId);
+    const myTeam = p?.team ?? null;
+    const toTeam = team && isTeamMode(this.config.mode) && myTeam !== null;
+    const line = { type: "chat", id: c.user.userId, name: c.user.displayName, slot: p?.slot ?? -1, team: myTeam, text, toTeam, at: now };
+    const data = JSON.stringify(line);
+    for (const other of this.clients.values()) {
+      if (!other.connected || !other.ws || other.ws.readyState !== 1) continue;
+      if (toTeam && this.world.players.get(other.user.userId)?.team !== myTeam) continue;
+      other.ws.send(data);
+    }
+  }
+  broadcast(msg) {
+    const s = JSON.stringify(msg);
+    for (const c of this.clients.values()) if (c.connected && c.ws && c.ws.readyState === 1) c.ws.send(s);
+  }
+  send(c, msg) {
+    if (c.ws && c.ws.readyState === 1) c.ws.send(JSON.stringify(msg));
+  }
+  error(c, code, message) {
+    this.send(c, { type: "error", code, message });
+  }
+  /** For the admin dashboard: people and filled players counted separately. */
+  info() {
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, fill: this.seats.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon, stake: this.stake };
+  }
+  /** For players: the lineup as they see it in the room. */
+  publicInfo() {
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon, stake: this.stake };
+  }
+  static protocolVersion = PROTOCOL_VERSION;
+};
+
 // apps/server/src/http/auth.ts
 function bearerToken(ctx) {
   const h = String(ctx.req.headers.authorization ?? "");
@@ -17000,12 +18127,21 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
   const auth = requireUser(services2.sessions);
   const createLimiter = new RateLimiter(10, 0.2);
   const lookupLimiter = new RateLimiter(60, 2);
+  const stakeFor = async (userId, kon, stake) => {
+    const s = stake ?? 0;
+    if (s <= 0) return 0;
+    if (!kon) throw new HttpError(400, "validation_error", "stake: tournament rooms only");
+    const why = services2.stakes ? await services2.stakes.check(userId, s) : "stakes_off";
+    if (why) throw new HttpError(409, why, STAKE_REFUSAL_TEXT[why]);
+    return s;
+  };
   router.post("/api/rooms", auth, rateLimit(createLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
     const user = currentUser(ctx);
     const body = await ctx.body(CreateRoomRequest);
+    const stake = await stakeFor(user.userId, body.kon, body.stake);
     let room;
     try {
-      room = rooms2.create(body.mapId, body.isPrivate, user.userId, null, body.mode, body.kon ?? null);
+      room = rooms2.create(body.mapId, body.isPrivate, user.userId, null, body.mode, body.kon ?? null, stake);
     } catch {
       throw new HttpError(503, "capacity", "The server is full, try again later");
     }
@@ -17021,14 +18157,16 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
       webUrl = urls.web;
       services2.analytics.server("invite_created", { code: inv.code, roomId: room.id }, user);
     }
-    const res = { roomId: room.id, inviteCode, inviteUrl, webUrl, mapId: room.mapId, mode: room.mode, kon: room.kon };
+    const res = { roomId: room.id, inviteCode, inviteUrl, webUrl, mapId: room.mapId, mode: room.mode, kon: room.kon, stake: room.stake };
     ctx.json(201, res);
   });
   router.post("/api/rooms/quick", auth, rateLimit(lookupLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
     const user = currentUser(ctx);
     const body = await ctx.body(QuickMatchRequest);
-    const room = body.kon ? rooms2.konQuick(user.userId, body.kon, body.mapId) : rooms2.quickMatch(user.userId, body.mapId, body.mode);
-    ctx.json(200, { roomId: room.id, mapId: room.mapId, mode: room.mode, kon: room.kon });
+    const stake = await stakeFor(user.userId, body.kon, body.stake);
+    const room = body.kon ? rooms2.konQuick(user.userId, body.kon, body.mapId, stake) : rooms2.quickMatch(user.userId, body.mapId, body.mode);
+    const res = { roomId: room.id, mapId: room.mapId, mode: room.mode, kon: room.kon, stake: room.stake };
+    ctx.json(200, res);
   });
   router.get("/api/rooms/:id", auth, (ctx) => {
     const room = rooms2.get(ctx.params.id ?? "");
@@ -17040,14 +18178,14 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
     const code = ctx.params.code ?? "";
     if (!/^[A-Za-z0-9]{6,16}$/.test(code)) throw new HttpError(400, "bad_code", "Invalid invitation code");
     const resolved = await services2.invites.resolve(code);
-    let info = { code, status: "not_found", roomId: null, mapId: null, mode: null, players: 0, maxPlayers: 0, hostName: null, kon: null };
+    let info = { code, status: "not_found", roomId: null, mapId: null, mode: null, players: 0, maxPlayers: 0, hostName: null, kon: null, stake: 0 };
     if (resolved) {
       const room = rooms2.get(resolved.roomId);
       if (!room) info = { ...info, status: "expired" };
       else {
         const phase = room.phase;
         const status = room.occupancy >= room.config.maxPlayers ? "full" : phase === "finished" ? "finished" : phase === "waiting" ? "joinable" : room.isJoinable() ? "in_progress" : "full";
-        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.lineup, maxPlayers: room.config.maxPlayers, hostName: room.hostName(), kon: room.kon };
+        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.lineup, maxPlayers: room.config.maxPlayers, hostName: room.hostName(), kon: room.kon, stake: room.stake };
       }
     }
     ctx.json(200, info);
@@ -17055,7 +18193,7 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
 };
 
 // apps/server/src/api/auth.ts
-import { createHmac as createHmac6, randomBytes as randomBytes7 } from "node:crypto";
+import { createHmac as createHmac6, randomBytes as randomBytes8 } from "node:crypto";
 
 // apps/server/src/auth/telegram.ts
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -17118,7 +18256,7 @@ function displayNameFromTelegram(u) {
 }
 
 // apps/server/src/auth/telegramLink.ts
-import { createHmac as createHmac2, randomBytes } from "node:crypto";
+import { createHmac as createHmac2, randomBytes as randomBytes2 } from "node:crypto";
 var TELEGRAM_LINK_TTL_MS = 10 * 6e4;
 var LINK_CODE_RE = /^[A-Za-z0-9_-]{16,32}$/;
 var hashCode = (secret, code) => createHmac2("sha256", secret).update(`tglink:${code}`).digest("base64url");
@@ -17133,7 +18271,7 @@ async function createTelegramLinkCode(sql2, secret, userId, now = Date.now()) {
   const [u] = await sql2`SELECT telegram_id::text FROM users WHERE id = ${userId} AND deleted_at IS NULL`;
   if (!u) throw new TelegramLinkError("no_user");
   if (u.telegram_id) throw new TelegramLinkError("already_linked");
-  const code = randomBytes(12).toString("base64url");
+  const code = randomBytes2(12).toString("base64url");
   const expiresAt = new Date(now + TELEGRAM_LINK_TTL_MS);
   await sql2.begin(async (tx) => {
     await tx`DELETE FROM telegram_link_codes WHERE user_id = ${userId} AND used_at IS NULL`;
@@ -17181,7 +18319,7 @@ function telegramLinkUrl(botUsername, code) {
 }
 
 // apps/server/src/services/persistence.ts
-import { randomBytes as randomBytes5 } from "node:crypto";
+import { randomBytes as randomBytes6 } from "node:crypto";
 
 // apps/server/src/auth/activity.ts
 function utcDay(d = /* @__PURE__ */ new Date()) {
@@ -17316,9 +18454,9 @@ var UserRepo = class {
 };
 
 // apps/server/src/auth/tokens.ts
-import { createHmac as createHmac3, randomBytes as randomBytes2, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import { createHmac as createHmac3, randomBytes as randomBytes3, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 function newToken(bytes = 32) {
-  return randomBytes2(bytes).toString("base64url");
+  return randomBytes3(bytes).toString("base64url");
 }
 function hashToken(secret, token, purpose = "session") {
   return createHmac3("sha256", secret).update(`${purpose}:${token}`).digest();
@@ -17360,7 +18498,7 @@ var SessionStore = class {
   async verify(token) {
     if (!TOKEN_RE.test(token)) return null;
     const rows = await this.sql`
-      SELECT s.id AS session_id, s.user_id, s.platform, s.method, s.last_seen_at, u.display_name, p.level, p.avatar, p.kon_rating
+      SELECT s.id AS session_id, s.user_id, s.platform, s.method, s.last_seen_at, u.display_name, p.level, p.avatar, p.kon_rating, u.founder
       FROM sessions s
       JOIN users u ON u.id = s.user_id
       LEFT JOIN profiles p ON p.user_id = u.id
@@ -17379,7 +18517,7 @@ var SessionStore = class {
       this.sql`UPDATE users SET last_seen_at = now() WHERE id = ${r.user_id}`.catch((e2) => this.log.warn("user touch failed", { err: e2 }));
     }
     void this.activity.touch(r.user_id);
-    return { userId: r.user_id, sessionId: r.session_id, displayName: r.display_name, level: r.level ?? 1, avatar: isAvatarId(r.avatar) ? r.avatar : null, platform: r.platform ?? null, method: r.method, konRating: r.kon_rating ?? 1e3 };
+    return { userId: r.user_id, sessionId: r.session_id, displayName: r.display_name, level: r.level ?? 1, avatar: isAvatarId(r.avatar) ? r.avatar : null, platform: r.platform ?? null, method: r.method, konRating: r.kon_rating ?? 1e3, ...r.founder ? { founder: true } : {} };
   }
   async revoke(token) {
     if (!TOKEN_RE.test(token)) return false;
@@ -17392,8 +18530,29 @@ var SessionStore = class {
 };
 
 // apps/server/src/blat/repo.ts
-import { randomBytes as randomBytes3 } from "node:crypto";
+import { randomBytes as randomBytes4 } from "node:crypto";
 var CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+async function takeFromPool(tx, pool, amount) {
+  if (amount <= 0) return true;
+  const r = await tx`UPDATE blat_pools SET issued = issued + ${amount} WHERE pool = ${pool} AND issued + ${amount} <= cap RETURNING pool`;
+  return r.length > 0;
+}
+async function returnToPool(tx, pool, amount) {
+  if (amount > 0) await tx`UPDATE blat_pools SET issued = GREATEST(0, issued - ${amount}) WHERE pool = ${pool}`;
+}
+async function allocateBlat(tx, userId, pool, amount, ref) {
+  const [p] = await tx`SELECT blat, blat_earned FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+  if (!p) return { ok: false, reason: "no_profile", balance: 0 };
+  if (amount <= 0 || p.blat + amount > BLAT_LIMITS.maxBalance) return { ok: false, reason: "balance", balance: p.blat };
+  if (!await takeFromPool(tx, pool, amount)) return { ok: false, reason: "pool", balance: p.blat };
+  const ins = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'blat', ${amount}, ${p.blat + amount}, 'allocation', ${ref}) ON CONFLICT DO NOTHING RETURNING id`;
+  if (ins.length === 0) {
+    await returnToPool(tx, pool, amount);
+    return { ok: false, reason: "duplicate", balance: p.blat };
+  }
+  await tx`UPDATE profiles SET blat = ${p.blat + amount}, blat_earned = ${p.blat_earned + amount}, updated_at = now() WHERE user_id = ${userId}`;
+  return { ok: true, balance: p.blat + amount };
+}
 async function creditLevels(tx, userId, level) {
   const [p] = await tx`SELECT blat, blat_earned, blat_level FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
   if (!p) return { gained: 0, balance: 0 };
@@ -17407,8 +18566,12 @@ async function creditLevels(tx, userId, level) {
     if (paid.has(ref)) continue;
     const amount = blatForLevel(l);
     if (amount <= 0 || amount > BLAT_LIMITS.maxCredit || balance + amount > BLAT_LIMITS.maxBalance) continue;
+    if (!await takeFromPool(tx, "players", amount)) break;
     const ins = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'blat', ${amount}, ${balance + amount}, 'level', ${ref}) ON CONFLICT DO NOTHING RETURNING id`;
-    if (ins.length === 0) continue;
+    if (ins.length === 0) {
+      await returnToPool(tx, "players", amount);
+      continue;
+    }
     balance += amount;
     earned += amount;
     gained += amount;
@@ -17436,7 +18599,7 @@ var BlatRepo = class {
     const [u] = await this.sql`SELECT ref_code FROM users WHERE id = ${userId}`;
     if (u?.ref_code) return u.ref_code;
     for (let attempt = 0; attempt < 8; attempt++) {
-      const bytes = randomBytes3(8);
+      const bytes = randomBytes4(8);
       const code = Array.from(bytes, (b2) => CODE_ALPHABET[b2 % CODE_ALPHABET.length]).join("");
       try {
         const rows = await this.sql`
@@ -17516,12 +18679,16 @@ var BlatRepo = class {
     let reward = referralReward(ordinal);
     let balance = p?.blat ?? 0;
     if (!p || reward > BLAT_LIMITS.maxCredit || balance + reward > BLAT_LIMITS.maxBalance) reward = 0;
+    if (reward > 0 && !await takeFromPool(tx, "players", reward)) reward = 0;
     if (reward > 0) {
       const ins = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${referrerId}, 'blat', ${reward}, ${balance + reward}, 'referral', ${`referral:${refereeId}`}) ON CONFLICT DO NOTHING RETURNING id`;
       if (ins.length) {
         balance += reward;
         await tx`UPDATE profiles SET blat = ${balance}, blat_earned = ${(p?.blat_earned ?? 0) + reward}, updated_at = now() WHERE user_id = ${referrerId}`;
-      } else reward = 0;
+      } else {
+        await returnToPool(tx, "players", reward);
+        reward = 0;
+      }
     }
     await tx`UPDATE referrals SET status = 'confirmed', decided_at = now(), ordinal = ${ordinal}, reward = ${reward} WHERE referee_id = ${refereeId}`;
     const [u] = await tx`SELECT display_name FROM users WHERE id = ${refereeId}`;
@@ -17534,7 +18701,7 @@ var BlatRepo = class {
     const [p] = await this.sql`SELECT blat, blat_earned, level FROM profiles WHERE user_id = ${userId}`;
     const sums = await this.sql`
       SELECT reason, sum(delta)::int AS s FROM currency_ledger WHERE user_id = ${userId} AND currency = 'blat' GROUP BY reason`;
-    const bySource = { level: 0, referral: 0, grant: 0 };
+    const bySource = { level: 0, referral: 0, grant: 0, allocation: 0, stake: 0, stake_win: 0, stake_refund: 0 };
     for (const r of sums) if (r.reason in bySource) bySource[r.reason] = r.s;
     const counts = await this.sql`
       SELECT status, count(*)::int AS n, coalesce(sum(reward), 0)::int AS reward FROM referrals WHERE referrer_id = ${userId} GROUP BY status`;
@@ -17613,7 +18780,8 @@ function toPublicProfile(r) {
     email: r.email,
     rating: r.rating,
     club: r.club_id && r.club_tag && r.club_name && flag.success && emblem.success ? { id: r.club_id, tag: r.club_tag, name: r.club_name, flag: flag.data, emblem: emblem.data } : null,
-    identities: r.identities ?? []
+    identities: r.identities ?? [],
+    ...r.founder ? { founder: true } : {}
   };
 }
 var ProfileRepo = class {
@@ -17648,7 +18816,7 @@ var ProfileRepo = class {
              COALESCE(p.current_win_streak, 0) AS current_win_streak, COALESCE(p.best_win_streak, 0) AS best_win_streak,
              p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, COALESCE(p.blat, 0) AS blat, u.email,
              COALESCE(p.blat_level, 0) AS blat_level, p.user_id IS NOT NULL AS has_profile,
-             COALESCE(p.rating, 1000) AS rating,
+             COALESCE(p.rating, 1000) AS rating, u.founder,
              c.id AS club_id, c.tag AS club_tag, c.name AS club_name, c.flag AS club_flag, c.emblem AS club_emblem,
              (SELECT array_agg(i.provider ORDER BY i.provider) FROM user_identities i WHERE i.user_id = u.id) AS identities
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
@@ -18486,7 +19654,9 @@ var KonRepo = class {
   /** The player's last Kon matches with their team-mates and opponents. */
   async history(userId, limit = 20) {
     const rows = await this.sql`
-      SELECT m.id AS match_id, m.ended_at, m.started_at, m.kon_format, m.map_id, mp.team, mp.won, mp.completed, m.winner_team, mp.kills, mp.deaths, mp.kon_delta, mp.character
+      SELECT m.id AS match_id, m.ended_at, m.started_at, m.kon_format, m.map_id, mp.team, mp.won, mp.completed, m.winner_team, mp.kills, mp.deaths, mp.kon_delta, mp.character,
+             m.stake,
+             COALESCE((SELECT sum(l.delta) FROM currency_ledger l WHERE l.user_id = mp.user_id AND l.currency = 'blat' AND l.ref IN ('stake_win:' || m.id::text, 'stake_refund:' || m.id::text)), 0)::int AS payout
       FROM match_participants mp JOIN matches m ON m.id = mp.match_id
       WHERE mp.user_id = ${userId} AND m.kon_format IS NOT NULL AND m.status = 'completed'
       ORDER BY m.ended_at DESC NULLS LAST LIMIT ${limit}`;
@@ -18513,11 +19683,176 @@ var KonRepo = class {
         delta: r.kon_delta,
         character: r.character,
         mates: here.filter((o) => o.team === r.team).map((o) => o.name),
-        rivals: here.filter((o) => o.team !== r.team).map((o) => o.name)
+        rivals: here.filter((o) => o.team !== r.team).map((o) => o.name),
+        ...r.stake > 0 ? { stake: r.stake, payout: r.payout } : {}
       };
     });
   }
 };
+
+// apps/server/src/blat/stakes.ts
+var Refused = class extends Error {
+  constructor(userId, reason) {
+    super(reason);
+    this.userId = userId;
+    this.reason = reason;
+  }
+  userId;
+  reason;
+};
+async function stakedToday(q, userId) {
+  const [r] = await q`
+    SELECT COALESCE(sum(-l.delta), 0)::int AS s
+    FROM currency_ledger l LEFT JOIN matches m ON m.id = (CASE WHEN l.ref ~ '^stake:[0-9a-f-]{36}$' THEN split_part(l.ref, ':', 2)::uuid END)
+    WHERE l.user_id = ${userId} AND l.reason = 'stake' AND l.currency = 'blat' AND l.created_at > now() - interval '24 hours'
+      AND m.stakes_state IS DISTINCT FROM 'refunded'`;
+  return r?.s ?? 0;
+}
+async function pay(tx, matchId, reason, payouts) {
+  for (const userId of [...payouts.keys()].sort()) {
+    const amount = payouts.get(userId) ?? 0;
+    if (amount <= 0) continue;
+    const [p] = await tx`SELECT blat FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+    if (!p) continue;
+    const ins = await tx`
+      INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref)
+      VALUES (${userId}, 'blat', ${amount}, ${p.blat + amount}, ${reason}, ${`${reason}:${matchId}`})
+      ON CONFLICT DO NOTHING RETURNING id`;
+    if (ins.length) await tx`UPDATE profiles SET blat = blat + ${amount}, updated_at = now() WHERE user_id = ${userId}`;
+  }
+}
+async function reserved(tx, matchId) {
+  return tx`
+    SELECT user_id, -delta AS amount FROM currency_ledger WHERE currency = 'blat' AND reason = 'stake' AND ref = ${`stake:${matchId}`} ORDER BY user_id`;
+}
+async function refundStakes(sql2, matchId) {
+  return sql2.begin(async (tx) => {
+    const [m] = await tx`SELECT stakes_state FROM matches WHERE id = ${matchId} FOR UPDATE`;
+    if (!m || m.stakes_state !== "reserved") return 0;
+    const rows = await reserved(tx, matchId);
+    await pay(tx, matchId, "stake_refund", new Map(rows.map((r) => [r.user_id, r.amount])));
+    await tx`UPDATE matches SET stakes_state = 'refunded' WHERE id = ${matchId}`;
+    return rows.length;
+  });
+}
+async function settleMatchStakes(tx, matchId, winner, participants) {
+  const out = /* @__PURE__ */ new Map();
+  const [m] = await tx`SELECT stake, stakes_state FROM matches WHERE id = ${matchId}`;
+  if (!m || m.stakes_state !== "reserved" || m.stake <= 0) return out;
+  const rows = await reserved(tx, matchId);
+  const byId = new Map(participants.map((p) => [p.userId, p]));
+  const players = rows.map((r) => {
+    const p = byId.get(r.user_id);
+    return { id: r.user_id, team: p?.team ?? null, left: !p || !p.completed };
+  });
+  const s = settleStakes({ stake: m.stake, players, winner, failed: false });
+  await pay(tx, matchId, s.kind === "pool" ? "stake_win" : "stake_refund", s.payouts);
+  await tx`UPDATE matches SET stakes_state = ${s.kind === "refund" ? "refunded" : "settled"} WHERE id = ${matchId}`;
+  for (const p of players) {
+    const payout = s.payouts.get(p.id) ?? 0;
+    out.set(p.id, { stake: m.stake, payout, outcome: s.kind === "refund" ? "refund" : s.kind === "draw" ? payout > 0 ? "draw" : "loss" : payout > 0 ? "win" : "loss" });
+  }
+  return out;
+}
+async function refundStaleStakes(sql2, olderThanMs, log2) {
+  const rows = await sql2`
+    SELECT id FROM matches WHERE stakes_state = 'reserved' AND started_at < now() - ${Math.round(olderThanMs / 1e3)} * interval '1 second'
+    ORDER BY started_at LIMIT 200`;
+  let n = 0;
+  for (const r of rows) {
+    const back = await refundStakes(sql2, r.id);
+    await sql2`UPDATE matches SET status = 'abandoned', ended_at = COALESCE(ended_at, now()), end_reason = COALESCE(end_reason, 'stakes_refunded') WHERE id = ${r.id} AND status = 'active'`;
+    if (back) log2?.info("stale stakes refunded", { matchId: r.id, players: back });
+    n++;
+  }
+  return n;
+}
+var PgStakes = class {
+  constructor(sql2, enabled) {
+    this.sql = sql2;
+    this.enabled = enabled;
+  }
+  sql;
+  enabled;
+  async facts(q, userId, lock) {
+    const [u] = lock ? await q`
+          SELECT u.created_at, u.blat_flag, p.blat FROM users u JOIN profiles p ON p.user_id = u.id WHERE u.id = ${userId} AND u.deleted_at IS NULL FOR UPDATE OF p` : await q`
+          SELECT u.created_at, u.blat_flag, COALESCE(p.blat, 0) AS blat FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
+    return u ?? null;
+  }
+  async check(userId, stake) {
+    if (stake <= 0) return null;
+    if (!this.enabled) return "stakes_off";
+    const u = await this.facts(this.sql, userId, false);
+    if (!u) return "blat_low";
+    return stakeRefusal({ enabled: true, stake, balance: u.blat, accountAgeMs: Date.now() - u.created_at.getTime(), flagged: !!u.blat_flag, stakedToday: await stakedToday(this.sql, userId) });
+  }
+  /** The tournament screen: whether the player can stake now, and how much is left for today. */
+  async status(userId) {
+    const u = await this.facts(this.sql, userId, false);
+    const age = u ? Date.now() - u.created_at.getTime() : 0;
+    const today = await stakedToday(this.sql, userId);
+    const refusal = !this.enabled ? "stakes_off" : age < KON_STAKES.minAccountAgeMs ? "account_new" : u?.blat_flag ? "blat_flagged" : null;
+    return {
+      enabled: this.enabled,
+      balance: u?.blat ?? 0,
+      refusal,
+      dailyLeft: Math.max(0, KON_STAKES.dailyLimit - today),
+      from: refusal === "account_new" && u ? new Date(u.created_at.getTime() + KON_STAKES.minAccountAgeMs).toISOString() : null
+    };
+  }
+  async reserve(r) {
+    const ids = [...new Set(r.userIds)].sort();
+    try {
+      await this.sql.begin(async (tx) => {
+        await tx`
+          INSERT INTO matches (id, room_id, map_id, mode, is_private, status, started_at, player_count, bot_count, kon_format, stake, stakes_state)
+          VALUES (${r.matchId}, ${r.roomId}, ${r.mapId}, ${r.mode}, ${r.isPrivate}, 'active', now(), ${ids.length}, 0, ${r.kon}, ${r.stake}, 'reserved')`;
+        for (const userId of ids) {
+          const u = await this.facts(tx, userId, true);
+          if (!u) throw new Refused(userId, "blat_low");
+          const why = stakeRefusal({ enabled: this.enabled, stake: r.stake, balance: u.blat, accountAgeMs: Date.now() - u.created_at.getTime(), flagged: !!u.blat_flag, stakedToday: await stakedToday(tx, userId) });
+          if (why) throw new Refused(userId, why);
+          await tx`
+            INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref)
+            VALUES (${userId}, 'blat', ${-r.stake}, ${u.blat - r.stake}, 'stake', ${`stake:${r.matchId}`})`;
+          await tx`UPDATE profiles SET blat = blat - ${r.stake}, updated_at = now() WHERE user_id = ${userId}`;
+        }
+      });
+      return { ok: true };
+    } catch (e2) {
+      if (e2 instanceof Refused) return { ok: false, userId: e2.userId, reason: e2.reason };
+      throw e2;
+    }
+  }
+  async refund(matchId) {
+    const n = await refundStakes(this.sql, matchId);
+    await this.sql`UPDATE matches SET status = 'abandoned', ended_at = COALESCE(ended_at, now()), end_reason = COALESCE(end_reason, 'stakes_refunded') WHERE id = ${matchId} AND status = 'active' AND results_processed_at IS NULL`;
+    return n;
+  }
+};
+function scheduleStakeRefunds(sql2, log2, staleMs) {
+  let running = false;
+  const run = async () => {
+    if (running) return;
+    running = true;
+    try {
+      await refundStaleStakes(sql2, staleMs, log2);
+    } catch (e2) {
+      log2.warn("stale stakes refund failed", { err: e2.message });
+    } finally {
+      running = false;
+    }
+  };
+  const first = setTimeout(() => void run(), 2e4);
+  const every = setInterval(() => void run(), 5 * 6e4);
+  first.unref();
+  every.unref();
+  return () => {
+    clearTimeout(first);
+    clearInterval(every);
+  };
+}
 
 // apps/server/src/progression/recorder.ts
 var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -18647,6 +19982,15 @@ var PgMatchRecorder = class {
           if (r) out.set(userId, { ...r, kon: k });
         }
       }
+      if (m.kon && (m.stake ?? 0) > 0) {
+        const stakes = await settleMatchStakes(tx, m.matchId, m.winnerTeam, participants.map((p) => ({ userId: p.userId, team: p.team, completed: p.completed })));
+        for (const [userId, st] of stakes) {
+          const r = out.get(userId);
+          if (!r) continue;
+          const [b2] = await tx`SELECT blat FROM profiles WHERE user_id = ${userId}`;
+          out.set(userId, { ...r, stake: st, totalBlat: b2?.blat ?? r.totalBlat });
+        }
+      }
       await tx`
         UPDATE matches SET status = 'completed', ended_at = ${m.endedAt}, duration_ms = ${Math.max(0, Math.round(m.durationMs))},
           end_reason = ${m.endReason}, player_count = ${people}, bot_count = ${fill}, mode = ${m.mode}, winner_team = ${m.winnerTeam}, results_processed_at = now()
@@ -18686,11 +20030,13 @@ var PgMatchRecorder = class {
       UPDATE matches SET status = 'abandoned', ended_at = now(), end_reason = ${reason.slice(0, 40)}
       WHERE id = ${matchId} AND status = 'active'`;
     this.log.info("match abandoned", { matchId, reason });
+    const back = await refundStakes(this.sql, matchId);
+    if (back) this.log.info("stakes refunded", { matchId, players: back });
   }
 };
 
 // apps/server/src/analytics/writer.ts
-import { randomUUID } from "node:crypto";
+import { randomUUID as randomUUID2 } from "node:crypto";
 
 // apps/server/src/analytics/sanitize.ts
 import { createHash } from "node:crypto";
@@ -18781,7 +20127,7 @@ var PgAnalytics = class {
   server(name, props, ctx = {}) {
     try {
       this.events.push({
-        id: randomUUID(),
+        id: randomUUID2(),
         name,
         source: "server",
         user_id: uuidOrNull(ctx.userId),
@@ -18840,7 +20186,7 @@ var PgAnalytics = class {
 import { createHmac as createHmac4 } from "node:crypto";
 
 // apps/server/src/admin/password.ts
-import { randomBytes as randomBytes4, scrypt as scryptCb, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { randomBytes as randomBytes5, scrypt as scryptCb, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 var N = 16384;
 var R = 8;
 var P3 = 1;
@@ -18851,7 +20197,7 @@ function scrypt(password, salt, n, r, p) {
   );
 }
 async function hashPassword(password) {
-  const salt = randomBytes4(16);
+  const salt = randomBytes5(16);
   const key = await scrypt(password, salt, N, R, P3);
   return `scrypt$${N}$${R}$${P3}$${salt.toString("base64url")}$${key.toString("base64url")}`;
 }
@@ -19447,7 +20793,7 @@ var PgInvites = class {
   async create(roomId2, createdBy) {
     const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
     for (let attempt = 0; attempt < 5; attempt++) {
-      const bytes = randomBytes5(8);
+      const bytes = randomBytes6(8);
       let code = "";
       for (let i = 0; i < 8; i++) code += CODE_ALPHABET2[bytes[i] % CODE_ALPHABET2.length];
       const rows = await this.sql`
@@ -19486,6 +20832,7 @@ function pgContext(sql2, env2, log2) {
     analytics,
     adminAuth: new AdminAuth(sql2, env2.SESSION_SECRET, env2.ADMIN_SESSION_TTL_HOURS, env2.PUBLIC_URL.startsWith("https://"), origins),
     economy: new EconomyRepo(sql2, log2),
+    stakes: new PgStakes(sql2, env2.TOURNAMENT_STAKES),
     emailAuth: new EmailAuth(sql2, env2.SESSION_SECRET, log2),
     payments: new PaymentService(
       sql2,
@@ -19513,18 +20860,21 @@ async function createPersistence(deps) {
   await bootstrapAdmin(deps.sql, ctx.adminAuth, deps.log, deps.env.ADMIN_BOOTSTRAP_USERNAME, deps.env.ADMIN_BOOTSTRAP_PASSWORD);
   const stopRetention = deps.env.NODE_ENV === "test" ? () => {
   } : scheduleRetention(deps.sql, deps.log);
+  const stopStakes = deps.env.NODE_ENV === "test" ? () => {
+  } : scheduleStakeRefunds(deps.sql, deps.log, Math.max(10 * 6e4, deps.env.MATCH_DURATION_SEC * 1e3 * 2.5));
   return {
-    services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy },
+    services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy, stakes: ctx.stakes },
     recorder: ctx.recorder,
     close: async () => {
       stopRetention();
+      stopStakes();
       await ctx.analytics.close();
     }
   };
 }
 
 // apps/server/src/analytics/growth.ts
-import { randomBytes as randomBytes6 } from "node:crypto";
+import { randomBytes as randomBytes7 } from "node:crypto";
 var ratio = (a, b2) => b2 > 0 ? a / b2 : null;
 function partnerLinks(code, env2) {
   return {
@@ -19709,7 +21059,7 @@ var PartnerError = class extends Error {
 async function createPartner(sql2, adminId, o) {
   const base2 = o.code ?? (o.name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 16) || "partner");
   for (let attempt = 0; attempt < 5; attempt++) {
-    const code = attempt === 0 && base2.length >= 3 ? base2 : `${base2.slice(0, 16)}_${randomBytes6(3).toString("hex").slice(0, 5)}`.replace(/^_/, "");
+    const code = attempt === 0 && base2.length >= 3 ? base2 : `${base2.slice(0, 16)}_${randomBytes7(3).toString("hex").slice(0, 5)}`.replace(/^_/, "");
     const rows = await sql2`
       INSERT INTO partners (code, name, note, created_by) VALUES (${code}, ${o.name}, ${o.note || null}, ${adminId})
       ON CONFLICT (code) DO NOTHING RETURNING id`;
@@ -19843,7 +21193,7 @@ var registerAuthRoutes = (router, deps) => {
     if (!deps.sql) return unavailable();
     const body = await ctx.body(DevAuthRequest, 4 * 1024);
     const pg = pgContext(deps.sql, env2, deps.log);
-    const deviceId = body.deviceId ?? randomBytes7(12).toString("base64url");
+    const deviceId = body.deviceId ?? randomBytes8(12).toString("base64url");
     const platform2 = body.platform ?? null;
     const up = await pg.users.upsertDev(deviceId, latinName(body.name, `Comrade_${deviceId.slice(-4).replace(/[^A-Za-z0-9]/g, "X").toUpperCase()}`), platform2);
     const referred = await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
@@ -20099,14 +21449,14 @@ var StoryRepo = class {
       const out = { mission: m.id, first, talons: 0, xp: 0, blatGained: 0, achievement: null, characters: [], skins: [], compensated: [], tokens: prof.tokens, xpTotal: prof.xp, level: prof.level, done: [] };
       if (first) {
         let tokens = prof.tokens;
-        const pay = async (amount, ref) => {
+        const pay2 = async (amount, ref) => {
           if (amount <= 0) return;
           const paid = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${amount}, ${tokens + amount}, 'story', ${ref}) ON CONFLICT DO NOTHING RETURNING id`;
           if (paid.length === 0) return;
           tokens += amount;
           out.talons += amount;
         };
-        await pay(m.talons, `story:${m.id}`);
+        await pay2(m.talons, `story:${m.id}`);
         out.xp += m.xp;
         const ids = new Set((await tx`SELECT mission_id FROM story_progress WHERE user_id = ${userId}`).map((r) => r.mission_id));
         const ch = storyChapter(m.campaign, m.chapter);
@@ -20115,9 +21465,9 @@ var StoryRepo = class {
           if (got.length > 0) {
             out.achievement = ch.achievement;
             out.xp += ACHIEVEMENTS[ch.achievement].xpReward;
-            await pay(ch.talons, `story:${ch.achievement}`);
-            for (const c of ch.characters) await this.give(tx, userId, "character", c, out, (t, ref) => pay(t, ref));
-            for (const s of ch.skins) await this.give(tx, userId, "skin", s, out, (t, ref) => pay(t, ref));
+            await pay2(ch.talons, `story:${ch.achievement}`);
+            for (const c of ch.characters) await this.give(tx, userId, "character", c, out, (t, ref) => pay2(t, ref));
+            for (const s of ch.skins) await this.give(tx, userId, "skin", s, out, (t, ref) => pay2(t, ref));
           }
         }
         let xpTotal = prof.xp + out.xp;
@@ -20160,7 +21510,7 @@ var StoryRepo = class {
     });
   }
   /** A story character or skin: into the inventory, or its worth in talons when it is already there. */
-  async give(tx, userId, kind, id, out, pay) {
+  async give(tx, userId, kind, id, out, pay2) {
     const got = await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${id}, ${kind}, 'story') ON CONFLICT DO NOTHING RETURNING item_id`;
     if (got.length > 0) {
       if (kind === "character") out.characters.push(id);
@@ -20169,13 +21519,57 @@ var StoryRepo = class {
     }
     const worth = kind === "character" ? CHARACTER_PRICES[id]?.amount ?? 0 : STORY_OWNED_SKIN_TALONS;
     const before = out.talons;
-    await pay(worth, `story:own:${kind}:${id}`);
+    await pay2(worth, `story:own:${kind}:${id}`);
     if (out.talons > before) out.compensated.push({ kind, id, talons: out.talons - before });
   }
 };
 
+// apps/server/src/admin/founder.ts
+async function makeFounder(sql2, userId) {
+  return sql2.begin(async (tx) => {
+    const [u] = await tx`UPDATE users SET founder = true WHERE id = ${userId} AND deleted_at IS NULL RETURNING id`;
+    if (!u) return null;
+    await tx`INSERT INTO profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
+    const [p] = await tx`SELECT xp, level FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+    const xp = Math.max(p.xp, totalXpForLevel(FOUNDER_LEVEL));
+    const level = Math.max(p.level, levelForXp(xp).level);
+    await tx`UPDATE profiles SET xp = ${xp}, level = ${level}, updated_at = now() WHERE user_id = ${userId}`;
+    await creditLevels(tx, userId, level);
+    let items = 0;
+    const give = async (kind, id) => {
+      const r = await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${id}, ${kind}, 'grant') ON CONFLICT DO NOTHING RETURNING item_id`;
+      items += r.length;
+    };
+    for (const c of CHARACTER_IDS) await give("character", c);
+    for (const w of WEAPON_IDS) await give("weapon", w);
+    for (const g of GADGET_IDS) await give("gadget", g);
+    for (const s of allSkins()) await give("skin", s);
+    for (const w of WEAPON_IDS) {
+      for (const m of modsFor(WEAPONS[w])) {
+        const r = await tx`INSERT INTO weapon_mods (user_id, weapon_id, mod_id) VALUES (${userId}, ${w}, ${m}) ON CONFLICT DO NOTHING RETURNING mod_id`;
+        items += r.length;
+      }
+    }
+    const [b2] = await tx`SELECT blat FROM profiles WHERE user_id = ${userId}`;
+    let blat = b2?.blat ?? 0;
+    let allocated = 0;
+    const missing = BLAT_FOUNDER_HOLDING - blat;
+    if (missing > 0) {
+      const r = await allocateBlat(tx, userId, "founder", missing, "allocation:founder");
+      if (r.ok) {
+        allocated = missing;
+        blat = r.balance;
+      }
+    }
+    return { level, blat, allocated, items };
+  });
+}
+
+// apps/server/src/admin/routes.ts
+import { randomUUID as randomUUID4 } from "node:crypto";
+
 // apps/server/src/blat/drop.ts
-import { randomUUID as randomUUID2 } from "node:crypto";
+import { randomUUID as randomUUID3 } from "node:crypto";
 var DROP_KEY = "blat_drop.announce_at";
 var SNAPSHOT_RULES = Object.freeze({
   version: 2,
@@ -20203,7 +21597,8 @@ var BlatDropRepo = class {
       SELECT s.value, s.updated_at, a.username FROM app_settings s LEFT JOIN admin_users a ON a.id = s.updated_by WHERE s.key = ${DROP_KEY}`;
     if (row) return { announceAt: row.value?.announceAt ?? null, source: "admin", updatedAt: row.updated_at.toISOString(), updatedBy: row.username };
     const env2 = this.envDate ? new Date(this.envDate) : null;
-    return env2 && !Number.isNaN(env2.getTime()) ? { announceAt: env2.toISOString(), source: "env", updatedAt: null, updatedBy: null } : { announceAt: null, source: null, updatedAt: null, updatedBy: null };
+    if (env2 && !Number.isNaN(env2.getTime())) return { announceAt: env2.toISOString(), source: "env", updatedAt: null, updatedBy: null };
+    return { announceAt: BLAT_DROP_DEFAULT_ANNOUNCE_AT, source: "default", updatedAt: null, updatedBy: null };
   }
   /** An administrator sets the date (null: «not set yet», even when the server variable has one). */
   async setDate(at, adminId) {
@@ -20220,7 +21615,7 @@ var BlatDropRepo = class {
   }
   /** Freezes every $BLAT balance at this moment. */
   async takeSnapshot(adminId, note) {
-    const id = randomUUID2();
+    const id = randomUUID3();
     await this.sql.begin("isolation level repeatable read", async (tx) => {
       const [t] = await tx`SELECT now() AS at`;
       await tx`
@@ -20310,7 +21705,7 @@ var registerBlatRoutes = (router, deps) => {
   router.get("/api/blat/drop", rateLimit(dropLimiter), async (ctx) => {
     if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
     const d = await new BlatDropRepo(deps.sql, deps.env.BLAT_DROP_ANNOUNCE_AT).date();
-    const res = { announceAt: d.announceAt, serverNow: (/* @__PURE__ */ new Date()).toISOString() };
+    const res = { announceAt: d.announceAt, serverNow: (/* @__PURE__ */ new Date()).toISOString(), wallet: deps.env.PROJECT_SOL_WALLET ?? PROJECT_SOL_WALLET };
     ctx.json(200, res, { "cache-control": "no-store" });
   });
 };
@@ -20993,6 +22388,7 @@ var registerAdminRoutes = (router, deps) => {
         flag: b2?.blat_flag ?? null
       },
       story: await new StoryRepo(p.sql).done(id),
+      founder: (await p.sql`SELECT founder FROM users WHERE id = ${id}`)[0]?.founder ?? false,
       origin: await (async () => {
         const [o] = await p.sql`
           SELECT u.source_channel, u.source_detail, pa.code AS partner, u.merged_into, u.merged_at,
@@ -21025,6 +22421,7 @@ var registerAdminRoutes = (router, deps) => {
       out.issuedInRange[i.reason] = Number(i.range);
     }
     for (const x of refs) out.referrals[x.status] = x.n;
+    out.pools = (await sql2`SELECT pool, cap, issued FROM blat_pools ORDER BY cap DESC`).map((x) => ({ pool: x.pool, cap: Number(x.cap), issued: Number(x.issued) }));
     ctx.json(200, out);
   });
   router.get("/api/admin/referrals", viewer, async (ctx) => {
@@ -21162,6 +22559,35 @@ var registerAdminRoutes = (router, deps) => {
     }
     await audit(p.sql, deps.log, { adminId: a.id, action: "story_opened", target: id, details: { mission: m.id, opened: out.opened }, ip: ctx.ip });
     ctx.json(200, out);
+  });
+  router.post("/api/admin/players/:id/founder", admin, async (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID_RE3.test(id)) throw new HttpError(400, "bad_id", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440");
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
+    const p = pg();
+    const r = await makeFounder(p.sql, id);
+    if (!r) throw new HttpError(404, "not_found", "\u0418\u0433\u0440\u043E\u043A \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    await audit(p.sql, deps.log, { adminId: a.id, action: "founder_made", target: id, details: { ...r }, ip: ctx.ip });
+    ctx.json(200, r);
+  });
+  router.post("/api/admin/players/:id/blat-allocation", admin, async (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID_RE3.test(id)) throw new HttpError(400, "bad_id", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440");
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
+    const body = await ctx.body(AdminBlatAllocationRequest, 1024);
+    const p = pg();
+    const [u] = await p.sql`SELECT id FROM users WHERE id = ${id} AND deleted_at IS NULL`;
+    if (!u) throw new HttpError(404, "not_found", "\u0418\u0433\u0440\u043E\u043A \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    const ref = `allocation:${body.pool}:${randomUUID4()}`;
+    const r = await p.sql.begin(async (tx) => {
+      await tx`INSERT INTO profiles (user_id) VALUES (${id}) ON CONFLICT DO NOTHING`;
+      return allocateBlat(tx, id, body.pool, body.amount, ref);
+    });
+    if (!r.ok) throw new HttpError(409, r.reason === "pool" ? "pool_exhausted" : "not_allocated", r.reason === "pool" ? "\u0412 \u044D\u0442\u043E\u043C \u043F\u0443\u043B\u0435 \u043D\u0435 \u043E\u0441\u0442\u0430\u043B\u043E\u0441\u044C \u0441\u0442\u043E\u043B\u044C\u043A\u043E $BLAT" : "\u041D\u0430\u0447\u0438\u0441\u043B\u0438\u0442\u044C \u043D\u0435 \u043F\u043E\u043B\u0443\u0447\u0438\u043B\u043E\u0441\u044C");
+    await audit(p.sql, deps.log, { adminId: a.id, action: "blat_allocation", target: id, details: { pool: body.pool, amount: body.amount, note: body.note, balance: r.balance }, ip: ctx.ip });
+    ctx.json(200, { balance: r.balance });
   });
   router.post("/api/admin/players/:id/reset-link", admin, async (ctx) => {
     const id = ctx.params.id ?? "";
@@ -21422,7 +22848,8 @@ function toCard(r) {
     name: r.display_name,
     avatar: isAvatarId(r.avatar) ? r.avatar : null,
     character: r.preferred_character && isCharacterId(r.preferred_character) ? r.preferred_character : null,
-    level: r.level ?? 1
+    level: r.level ?? 1,
+    ...r.founder ? { founder: true } : {}
   };
 }
 function toMessage(r) {
@@ -21435,7 +22862,7 @@ var SocialRepo = class {
   sql;
   async card(userId) {
     const rows = await this.sql`
-      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
     return rows[0] ? toCard(rows[0]) : null;
   }
@@ -21450,18 +22877,18 @@ var SocialRepo = class {
   /** Friends (without presence — the hub adds it), incoming and outgoing requests. */
   async lists(userId) {
     const friends = await this.sql`
-      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.last_seen_at,
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder, u.last_seen_at,
              (SELECT count(*)::int FROM direct_messages d WHERE d.recipient_id = ${userId} AND d.sender_id = u.id AND d.read_at IS NULL) AS unread
       FROM friendships f JOIN users u ON u.id = f.friend_id LEFT JOIN profiles p ON p.user_id = u.id
       WHERE f.user_id = ${userId} AND f.status = 'accepted' AND u.deleted_at IS NULL
       ORDER BY u.name_key`;
     const incoming = await this.sql`
-      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, f.created_at
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder, f.created_at
       FROM friendships f JOIN users u ON u.id = f.user_id LEFT JOIN profiles p ON p.user_id = u.id
       WHERE f.friend_id = ${userId} AND f.status = 'pending' AND u.deleted_at IS NULL
       ORDER BY f.created_at DESC`;
     const outgoing = await this.sql`
-      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, f.created_at
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder, f.created_at
       FROM friendships f JOIN users u ON u.id = f.friend_id LEFT JOIN profiles p ON p.user_id = u.id
       WHERE f.user_id = ${userId} AND f.status = 'pending' AND u.deleted_at IS NULL
       ORDER BY f.created_at DESC`;
@@ -21475,7 +22902,7 @@ var SocialRepo = class {
   async request(userId, name) {
     return this.sql.begin(async (tx) => {
       const target = await tx`
-        SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level
+        SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder
         FROM users u LEFT JOIN profiles p ON p.user_id = u.id
         WHERE u.name_key = ${nameKey(name)} AND u.deleted_at IS NULL AND u.merged_at IS NULL`;
       const t = target[0];
@@ -21566,7 +22993,7 @@ var SocialRepo = class {
   async leaderboard(by, limit = LEADERBOARD_SIZE) {
     const order = this.order(by);
     const rows = await this.sql`
-      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, row_number() OVER (ORDER BY ${order}) AS rank,
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder, row_number() OVER (ORDER BY ${order}) AS rank,
              p.rating, p.kills, p.wins, p.matches_completed AS matches
       FROM profiles p JOIN users u ON u.id = p.user_id
       WHERE p.matches_completed > 0 AND u.deleted_at IS NULL
@@ -21577,7 +23004,7 @@ var SocialRepo = class {
   /** One player's line with their place (null without a finished match). */
   async standing(by, userId) {
     const rows = await this.sql`
-      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, p.rating, p.kills, p.wins, p.matches_completed AS matches, p.xp, u.created_at
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder, p.rating, p.kills, p.wins, p.matches_completed AS matches, p.xp, u.created_at
       FROM profiles p JOIN users u ON u.id = p.user_id
       WHERE p.user_id = ${userId} AND p.matches_completed > 0 AND u.deleted_at IS NULL`;
     const me = rows[0];
@@ -22185,10 +23612,10 @@ var registerClubRoutes = (router, deps) => {
 };
 
 // apps/server/src/api/oauth.ts
-import { randomBytes as randomBytes9 } from "node:crypto";
+import { randomBytes as randomBytes10 } from "node:crypto";
 
 // apps/server/src/auth/oauth.ts
-import { createHash as createHash2, randomBytes as randomBytes8 } from "node:crypto";
+import { createHash as createHash2, randomBytes as randomBytes9 } from "node:crypto";
 
 // apps/server/src/security/signed.ts
 import { createHmac as createHmac8, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
@@ -22283,11 +23710,11 @@ function callbackUrl(env2, p) {
 var b642 = (b2) => Buffer.from(b2).toString("base64url");
 var sign = signToken;
 var verify = readToken;
-var intentToken = (secret, userId, now = Date.now()) => sign(secret, "intent", { u: userId, t: now, r: b642(randomBytes8(6)) });
+var intentToken = (secret, userId, now = Date.now()) => sign(secret, "intent", { u: userId, t: now, r: b642(randomBytes9(6)) });
 var readIntent = (secret, token, now = Date.now()) => verify(secret, "intent", token, 5 * 6e4, now);
 var stateToken = (secret, s, now = Date.now()) => sign(secret, "state", { ...s, t: now });
 var readState = (secret, token, now = Date.now()) => verify(secret, "state", token, 10 * 6e4, now);
-var newNonce = () => b642(randomBytes8(18));
+var newNonce = () => b642(randomBytes9(18));
 var handoffHash = (code) => createHash2("sha256").update(code).digest("hex");
 function authorizeUrl(spec, clientId, redirectUri, state) {
   const u = new URL(spec.authorize);
@@ -22432,7 +23859,7 @@ var registerOAuthRoutes = (router, deps) => {
     const sql2 = db();
     const { userId, isNew, linked, refused } = await resolveAccount(sql2, provider, profile, state.u);
     if (refused) return fail(ctx, "already_linked");
-    const handoff = randomBytes9(24).toString("base64url");
+    const handoff = randomBytes10(24).toString("base64url");
     await sql2`DELETE FROM auth_handoffs WHERE created_at < now() - interval '10 minutes'`;
     await sql2`INSERT INTO auth_handoffs (code_hash, user_id, provider, is_new, linked) VALUES (${handoffHash(handoff)}, ${userId}, ${provider}, ${isNew}, ${linked})`;
     deps.log.info("oauth sign-in", { provider, isNew, linked });
@@ -22535,7 +23962,8 @@ var registerKonRoutes = (router, deps) => {
   router.get("/api/kon", auth, rateLimit(limiter, byUser), async (ctx) => {
     const me = currentUser(ctx);
     const r = repo();
-    const res = { me: await r.stats(me.userId), history: await r.history(me.userId, 20), waiting: deps.rooms.konWaiting() };
+    const stakes = await new PgStakes(deps.sql, deps.env.TOURNAMENT_STAKES).status(me.userId);
+    const res = { me: await r.stats(me.userId), history: await r.history(me.userId, 20), waiting: deps.rooms.konWaiting(), waitingByStake: deps.rooms.konWaitingByStake(), stakes };
     ctx.json(200, res, { "cache-control": "no-store" });
   });
   router.get("/api/kon/top", auth, rateLimit(limiter, byUser), async (ctx) => {
@@ -22545,7 +23973,7 @@ var registerKonRoutes = (router, deps) => {
 };
 
 // apps/server/src/api/story.ts
-import { randomBytes as randomBytes10 } from "node:crypto";
+import { randomBytes as randomBytes11 } from "node:crypto";
 var registerStoryRoutes = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
   const byUser = (ctx) => currentUser(ctx).userId;
@@ -22567,7 +23995,7 @@ var registerStoryRoutes = (router, deps) => {
     const m = storyMission(body.mission);
     if (!m) throw new HttpError(404, "not_found", "No such mission");
     if (!isMissionOpen(m.id, await repo().doneIds(me.userId))) throw new HttpError(403, "mission_locked", "Finish the mission before this one first");
-    const res = { ticket: signToken(secret, "story", { u: me.userId, m: m.id, t: Date.now(), r: randomBytes10(6).toString("base64url") }) };
+    const res = { ticket: signToken(secret, "story", { u: me.userId, m: m.id, t: Date.now(), r: randomBytes11(6).toString("base64url") }) };
     deps.services.analytics.server("story_started", { mission: m.id }, { userId: me.userId, sessionId: me.sessionId });
     ctx.json(200, res);
   });
@@ -22599,6 +24027,10 @@ function createApp(deps, modules = ROUTE_MODULES) {
   const router = new Router();
   const startedAt = Date.now();
   router.get("/api/health", (ctx) => ctx.json(200, { ok: true, version: deps.env.SERVER_VERSION, uptimeSec: Math.round((Date.now() - startedAt) / 1e3), rooms: deps.rooms.count() }));
+  router.get("/api/site", (ctx) => {
+    const res = { x: deps.env.SOCIAL_X_URL ?? null, telegram: deps.env.SOCIAL_TELEGRAM_URL ?? null, stakes: deps.env.TOURNAMENT_STAKES };
+    ctx.json(200, res, { "cache-control": "public, max-age=300" });
+  });
   router.get("/api/ready", async (ctx) => {
     if (deps.sql) {
       try {
@@ -22613,7 +24045,7 @@ function createApp(deps, modules = ROUTE_MODULES) {
   const statics = deps.env.STATIC_DIR ? serveStatic(deps.env.STATIC_DIR) : null;
   const allowed = new Set(deps.env.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean));
   return async function handle(req, res) {
-    const requestId = randomUUID3();
+    const requestId = randomUUID5();
     const ctx = createCtx(req, res, { trustProxy: deps.env.TRUST_PROXY, requestId, log: deps.log });
     const origin = req.headers.origin;
     if (origin && allowed.has(origin)) {
@@ -22655,961 +24087,6 @@ function createApp(deps, modules = ROUTE_MODULES) {
 
 // apps/server/src/rooms/RoomManager.ts
 import { randomBytes as randomBytes12 } from "node:crypto";
-
-// apps/server/src/rooms/MatchRoom.ts
-import { randomBytes as randomBytes11, randomUUID as randomUUID4 } from "node:crypto";
-var between = (a, b2) => a + Math.random() * Math.max(0, b2 - a);
-var NAV = /* @__PURE__ */ new Map();
-function navFor(mapId, world) {
-  let nav = NAV.get(mapId);
-  if (!nav) {
-    nav = new NavGrid(world.collision);
-    NAV.set(mapId, nav);
-  }
-  return nav;
-}
-var AUTO_START_DELAY_MS = 4e3;
-var FREE_GEAR = Object.freeze({ loadout: DEFAULT_LOADOUT, characters: new Set(FREE_CHARACTERS) });
-var SOLO_ABORT_MS = 2e4;
-var MAX_MSGS_PER_SEC = 150;
-var MatchRoom = class {
-  constructor(opts, services2, log2) {
-    this.services = services2;
-    this.id = opts.id;
-    this.mapId = opts.mapId;
-    this.isPrivate = opts.isPrivate;
-    this.hostId = opts.hostUserId;
-    this.inviteCode = opts.inviteCode ?? null;
-    this.autoStart = opts.autoStart ?? !opts.isPrivate;
-    this.kon = opts.kon ?? null;
-    this.fillBots = this.kon ? false : opts.fillBots ?? false;
-    this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
-    this.onPresence = opts.onPresence ?? (() => {
-    });
-    const base2 = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? "ffa" };
-    this.config = this.kon ? konConfig(base2, this.kon) : base2;
-    this.log = log2.child({ room: this.id });
-    this.world = this.createWorld();
-  }
-  services;
-  id;
-  isPrivate;
-  createdAt = Date.now();
-  /** V2.0 part D: the «Блатной кон» format (null: an ordinary room). */
-  kon;
-  /** Match rules; `mode` changes when the host switches between free-for-all and teams. */
-  config;
-  mapId;
-  hostId;
-  inviteCode;
-  world;
-  matchId = null;
-  matchStartedAtWall = 0;
-  closed = false;
-  clients = /* @__PURE__ */ new Map();
-  pendingShots = [];
-  pendingEvents = [];
-  emptySince = Date.now();
-  /** The time of the latest tick (the room's clock between ticks; the wall clock before the first). */
-  lastNow = 0;
-  autoStartAt = 0;
-  soloSince = 0;
-  /** Kon: since when one side has nobody left in the match (0: both sides are there). */
-  emptySideSince = 0;
-  /**
-   * Kon: who started the match (side, character, invitation) and what those who left had done — a
-   * player who leaves loses even after the reconnect window has removed them from the room.
-   */
-  konLineup = /* @__PURE__ */ new Map();
-  resultsSent = false;
-  autoStart;
-  fillBots;
-  /** Players the room runs itself, by id (they are in the World like everyone else). */
-  seats = /* @__PURE__ */ new Map();
-  fillTiming;
-  onPresence;
-  /** Quick Match lobby: players start arriving from this time on (0: nobody waiting yet). */
-  fillFrom = 0;
-  /** When the next change of the filled lineup happens (0: none scheduled). */
-  nextFillAt = 0;
-  log;
-  createWorld() {
-    return new World(getMap(this.mapId), getCollision(this.mapId), { config: this.config, lagCompensation: true, seed: Math.floor(Math.random() * 2 ** 31) });
-  }
-  get phase() {
-    return this.world.phase;
-  }
-  get mode() {
-    return this.config.mode;
-  }
-  /** Players occupying a slot (connected or within the reconnect grace window). */
-  get occupancy() {
-    return this.clients.size;
-  }
-  get connectedCount() {
-    let n = 0;
-    for (const c of this.clients.values()) if (c.connected) n++;
-    return n;
-  }
-  /** Everyone in the lineup as players see it: people plus the players the room filled in. */
-  get lineup() {
-    return Math.min(this.config.maxPlayers, this.clients.size + this.seats.size);
-  }
-  /** A person connected to this room right now. */
-  hasPerson(userId) {
-    return this.clients.get(userId)?.connected === true;
-  }
-  /** People the host needs to start: one when the room fills the lineup up itself. */
-  get minToStart() {
-    return this.fillBots ? 1 : this.config.minPlayers;
-  }
-  isJoinable(userId) {
-    if (this.closed || this.world.phase === "closed") return false;
-    if (userId && this.clients.has(userId)) return true;
-    if (this.clients.size >= this.config.maxPlayers) return false;
-    if (this.world.phase === "finished") return false;
-    if ((this.world.phase === "active" || this.world.phase === "countdown" || this.world.phase === "ready") && !this.config.allowJoinInProgress) return false;
-    return true;
-  }
-  hostName() {
-    return this.hostId ? this.clients.get(this.hostId)?.user.displayName ?? null : null;
-  }
-  // ── Connections ─────────────────────────────────────────────────────────
-  /** Adds or resumes a player. Returns an error code when the join is refused. */
-  join(user, ws, requested, viaInvite, gear = FREE_GEAR) {
-    if (this.closed) return "room_closed";
-    const character = gear.characters.has(requested) ? requested : "petya";
-    const existing = this.clients.get(user.userId);
-    if (existing) {
-      existing.gear = gear;
-      this.world.setLoadout(user.userId, gear.loadout);
-      if (existing.ws && existing.ws !== ws) {
-        try {
-          existing.ws.close(WS_CLOSE.REPLACED, "replaced");
-        } catch {
-        }
-      }
-      existing.ws = ws;
-      existing.connected = true;
-      existing.queue = [];
-      existing.lastQueuedSeq = 0;
-      existing.tokens = INPUT_BUCKET_MAX;
-      const p = this.world.players.get(user.userId);
-      if (p) {
-        p.connected = true;
-        if (p.spawned && !p.alive) p.respawnAt = this.world.time + this.config.respawnDelayMs;
-      }
-      this.send(existing, this.welcome(existing, true));
-      this.broadcastRoster();
-      this.services.analytics.server("lobby_joined", { roomId: this.id, viaInvite: existing.viaInvite, resumed: true }, user);
-      this.onPresence(user.userId);
-      return "resumed";
-    }
-    if (!this.isJoinable()) return this.world.phase === "finished" || this.world.phase === "closed" ? "room_closed" : "room_full";
-    if (this.world.players.size >= this.config.maxPlayers && this.seats.size > 0) {
-      const seats = [...this.seats.values()];
-      const crowded = isTeamMode(this.config.mode) ? this.world.teamSize(0) >= this.world.teamSize(1) ? 0 : 1 : null;
-      const pool = crowded === null ? seats : seats.filter((x) => this.world.players.get(x.id)?.team === crowded);
-      this.dropSeat(this.leaver(pool.length ? pool : seats));
-    }
-    const client = {
-      user,
-      ws,
-      character,
-      gear,
-      lastGearAt: 0,
-      ready: this.autoStart,
-      rematch: false,
-      viaInvite,
-      connected: true,
-      disconnectedAt: 0,
-      queue: [],
-      tokens: INPUT_BUCKET_MAX,
-      lastQueuedSeq: 0,
-      reconnectToken: randomBytes11(18).toString("base64url"),
-      joinedAt: Date.now(),
-      matchTimeMs: 0,
-      violations: 0,
-      msgWindowStart: Date.now(),
-      msgCount: 0,
-      chatTokens: CHAT_RULES.burst,
-      chatRefillAt: Date.now(),
-      lastChat: "",
-      lastChatAt: 0
-    };
-    this.clients.set(user.userId, client);
-    if (!this.hostId) this.hostId = user.userId;
-    this.world.addPlayer(user.userId, user.displayName, character, false, gear.loadout);
-    this.send(client, this.welcome(client, false));
-    this.broadcastRoster();
-    this.services.analytics.server("lobby_joined", { roomId: this.id, viaInvite }, user);
-    this.log.info("player joined", { user: user.userId, players: this.clients.size });
-    this.onPresence(user.userId);
-    return "ok";
-  }
-  welcome(c, resumed) {
-    const p = this.world.players.get(c.user.userId);
-    return {
-      type: "welcome",
-      playerId: c.user.userId,
-      slot: p?.slot ?? -1,
-      roomId: this.id,
-      reconnectToken: c.reconnectToken,
-      mode: this.config.mode,
-      serverTime: this.world.time,
-      tick: this.world.tick,
-      mapId: this.mapId,
-      config: this.config,
-      resumed
-    };
-  }
-  onSocketClose(ws) {
-    for (const c of this.clients.values()) {
-      if (c.ws !== ws) continue;
-      c.ws = null;
-      c.connected = false;
-      c.disconnectedAt = this.clock();
-      c.queue = [];
-      const p = this.world.players.get(c.user.userId);
-      if (p) {
-        p.connected = false;
-        if (p.alive && this.world.phase === "active") {
-          p.alive = false;
-          p.respawnAt = Number.MAX_SAFE_INTEGER;
-        }
-      }
-      if (this.world.phase === "waiting") this.removeClient(c, "left");
-      else this.broadcastRoster();
-      this.onPresence(c.user.userId);
-      return;
-    }
-  }
-  removeClient(c, reason) {
-    const kl = this.konLineup.get(c.user.userId);
-    const wp = this.world.players.get(c.user.userId);
-    if (kl && wp && this.matchId && !this.resultsSent) Object.assign(kl, { kills: wp.kills, assists: wp.assists, deaths: wp.deaths, score: wp.score, damageDealt: wp.damageDealt, playtimeMs: Math.round(c.matchTimeMs) });
-    this.clients.delete(c.user.userId);
-    this.world.removePlayer(c.user.userId);
-    this.services.analytics.server("lobby_left", { roomId: this.id, phase: this.world.phase, reason }, c.user);
-    if (this.hostId === c.user.userId) {
-      const next = [...this.clients.values()].find((x) => x.connected) ?? [...this.clients.values()][0];
-      this.hostId = next ? next.user.userId : null;
-    }
-    this.broadcastRoster();
-  }
-  // ── Messages ────────────────────────────────────────────────────────────
-  onMessage(ws, data, isBinary) {
-    const c = [...this.clients.values()].find((x) => x.ws === ws);
-    if (!c) return;
-    const now = Date.now();
-    if (now - c.msgWindowStart > 1e3) {
-      c.msgWindowStart = now;
-      c.msgCount = 0;
-    }
-    if (++c.msgCount > MAX_MSGS_PER_SEC) return this.violation(c, "rate");
-    const buf = Array.isArray(data) ? Buffer.concat(data) : Buffer.isBuffer(data) ? data : Buffer.from(data);
-    if (isBinary) {
-      let frames;
-      try {
-        frames = decodeInputs(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength));
-      } catch (e2) {
-        if (e2 instanceof ProtocolError) return this.violation(c, "bad_input");
-        throw e2;
-      }
-      for (const f2 of frames) {
-        if (f2.seq <= c.lastQueuedSeq) continue;
-        c.lastQueuedSeq = f2.seq;
-        c.queue.push(f2);
-      }
-      if (c.queue.length > INPUT_QUEUE_MAX) c.queue.splice(0, c.queue.length - INPUT_QUEUE_MAX);
-      return;
-    }
-    let msg;
-    try {
-      const parsed = ClientMessageSchema.safeParse(JSON.parse(buf.toString("utf8")));
-      if (!parsed.success) return this.violation(c, "bad_message");
-      msg = parsed.data;
-    } catch {
-      return this.violation(c, "bad_json");
-    }
-    this.handleControl(c, msg);
-  }
-  violation(c, kind) {
-    c.violations++;
-    if (c.violations === 1 || c.violations % 20 === 0) this.log.warn("protocol violation", { user: c.user.userId, kind, count: c.violations });
-    if (c.violations > 50 && c.ws) {
-      this.send(c, { type: "kicked", reason: "protocol" });
-      c.ws.close(WS_CLOSE.POLICY, "protocol violations");
-    }
-  }
-  handleControl(c, msg) {
-    switch (msg.type) {
-      case "ping":
-        this.send(c, { type: "pong", t: msg.t, serverTime: this.world.time });
-        return;
-      case "ready":
-        c.ready = msg.ready;
-        this.broadcastRoster();
-        return;
-      case "character": {
-        if (!c.gear.characters.has(msg.character)) return this.error(c, "character_locked", "This character isn\u2019t unlocked yet");
-        c.character = msg.character;
-        const p = this.world.players.get(c.user.userId);
-        if (p && (this.world.phase === "waiting" || !p.alive)) p.character = msg.character;
-        this.broadcastRoster();
-        return;
-      }
-      case "map":
-        if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host changes the map");
-        if (this.world.phase !== "waiting") return this.error(c, "match_running", "The match is already on");
-        if (!isMapId(msg.mapId)) return;
-        this.changeMap(msg.mapId);
-        return;
-      case "mode":
-        if (this.kon) return this.error(c, "kon_fixed", "A Kon room\u2019s format is fixed");
-        if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host changes the mode");
-        if (this.world.phase !== "waiting") return this.error(c, "match_running", "The match is already on");
-        this.changeMode(msg.mode);
-        return;
-      case "team": {
-        if (!isTeamMode(this.config.mode)) return;
-        if (this.world.phase !== "waiting") return this.error(c, "match_running", "Teams are fixed once the match is on");
-        const p = this.world.players.get(c.user.userId);
-        if (!p || p.team === msg.team) return;
-        if (this.kon) {
-          if (this.world.teamSize(msg.team) + 1 > KON_RULES[this.kon].size) return this.error(c, "team_full", "That side is full");
-          this.world.setTeam(c.user.userId, msg.team);
-          this.broadcastRoster();
-          return;
-        }
-        if (this.fillBots) {
-          let there = 0;
-          for (const x of this.clients.values()) if (x !== c && this.world.players.get(x.user.userId)?.team === msg.team) there++;
-          if (there + 1 > Math.floor(this.config.maxPlayers / 2)) return this.error(c, "team_full", "That team already has more players");
-          this.world.setTeam(c.user.userId, msg.team);
-          this.settleLobby();
-          this.broadcastRoster();
-          return;
-        }
-        const to = this.world.teamSize(msg.team) + 1;
-        const from = this.world.teamSize(msg.team === 0 ? 1 : 0) - (p.team === null ? 0 : 1);
-        if (to - from > 1) return this.error(c, "team_full", "That team already has more players");
-        this.world.setTeam(c.user.userId, msg.team);
-        this.broadcastRoster();
-        return;
-      }
-      case "start":
-        if (c.user.userId !== this.hostId) return this.error(c, "not_host", "Only the room\u2019s host starts the match");
-        if (this.world.phase !== "waiting") return this.error(c, "match_running", "The match is already on");
-        if (this.connectedCount < this.minToStart) return this.error(c, "not_enough_players", `At least ${this.config.minPlayers} players needed`);
-        this.startMatch();
-        return;
-      case "loadout": {
-        const now = Date.now();
-        if (now - c.lastGearAt < 1500) return;
-        c.lastGearAt = now;
-        const userId = c.user.userId;
-        void this.services.economy.gear(userId).then((g) => {
-          const cur = this.clients.get(userId);
-          if (!cur || this.closed) return;
-          cur.gear = g;
-          this.world.setLoadout(userId, g.loadout);
-          this.broadcastRoster();
-        }).catch((e2) => this.log.warn("loadout refresh failed", { user: userId, err: e2 }));
-        return;
-      }
-      case "rematch":
-        if (this.world.phase !== "finished") return;
-        c.rematch = true;
-        this.broadcastRoster();
-        if ([...this.clients.values()].filter((x) => x.connected).every((x) => x.rematch)) this.toLobby(true);
-        return;
-      case "leave":
-        if (c.ws) c.ws.close(WS_CLOSE.NORMAL, "leave");
-        this.removeClient(c, "leave");
-        return;
-      case "chat":
-        return this.chat(c, msg.text, msg.team === true);
-      case "hello":
-        return;
-    }
-  }
-  changeMap(mapId) {
-    this.mapId = mapId;
-    this.rebuildWorld(true);
-  }
-  /**
-   * A new game mode: the roster stays; teams carry over between team modes and are dealt anew
-   * (alternating by arrival) when coming from free-for-all.
-   */
-  changeMode(mode) {
-    if (mode === this.config.mode) return;
-    const keepTeams = isTeamMode(this.config.mode) && isTeamMode(mode);
-    this.config = { ...this.config, mode };
-    this.rebuildWorld(keepTeams);
-    this.services.analytics.server("lobby_created", { roomId: this.id, mapId: this.mapId, isPrivate: this.isPrivate, mode }, { userId: this.hostId });
-  }
-  rebuildWorld(keepTeams) {
-    const roster = [...this.world.players.values()].sort((a, b2) => a.joinedAt - b2.joinedAt || a.slot - b2.slot);
-    this.world = this.createWorld();
-    for (const p of roster) {
-      const team = keepTeams && isTeamMode(this.config.mode) && p.team !== null ? p.team : void 0;
-      this.world.addPlayer(p.id, p.name, p.character, p.isBot, { sidearm: p.sidearm, melee: p.melee, primary: p.primary, gadget: p.gadget, mods: p.mods }, team).connected = p.connected;
-    }
-    this.broadcastRoster();
-  }
-  // ── Filling the lineup ──────────────────────────────────────────────────
-  /**
-   * How many players the room should add: in total (free-for-all) or per side (teams), so that the
-   * people present get a full match (FILL_RULES). Null when the room does not fill or nobody is there.
-   */
-  fillWant() {
-    if (!this.fillBots) return null;
-    let total = 0;
-    let red = 0;
-    let blue = 0;
-    for (const c of this.clients.values()) {
-      if (!c.connected) continue;
-      total++;
-      const team = this.world.players.get(c.user.userId)?.team;
-      if (team === 0) red++;
-      else if (team === 1) blue++;
-    }
-    if (total === 0) return null;
-    const target = fillTarget(this.config.mode, { total, red, blue }, this.config.maxPlayers);
-    if ("side" in target) return { red: Math.max(0, target.side - red), blue: Math.max(0, target.side - blue) };
-    return { total: Math.max(0, target.total - total) };
-  }
-  hasFreeSlot() {
-    return this.world.players.size < this.config.maxPlayers;
-  }
-  /** Who leaves first: in a match the one doing worst (latest arrival on a tie), in the lobby the latest arrival. */
-  leaver(list) {
-    const inMatch = this.world.phase !== "waiting";
-    const score = (x) => this.world.players.get(x.id)?.score ?? 0;
-    return [...list].sort((a, b2) => (inMatch ? score(a) - score(b2) : 0) || b2.addedAt - a.addedAt)[0];
-  }
-  /** The next change towards the wanted lineup (null: it is right as it is). */
-  fillStep() {
-    const seats = [...this.seats.values()];
-    const want = this.fillWant();
-    if (!want) return null;
-    if ("total" in want) {
-      if (seats.length > want.total) return { kind: "remove", seat: this.leaver(seats) };
-      if (seats.length < want.total && this.hasFreeSlot()) return { kind: "add", team: null };
-      return null;
-    }
-    const red = seats.filter((x) => this.world.players.get(x.id)?.team === 0);
-    const blue = seats.filter((x) => this.world.players.get(x.id)?.team !== 0);
-    const extraRed = red.length - want.red;
-    const extraBlue = blue.length - want.blue;
-    if (this.world.phase === "waiting") {
-      if (extraRed > 0 && extraBlue < 0) return { kind: "move", seat: this.leaver(red), team: 1 };
-      if (extraBlue > 0 && extraRed < 0) return { kind: "move", seat: this.leaver(blue), team: 0 };
-    }
-    if (extraRed > 0 || extraBlue > 0) return { kind: "remove", seat: this.leaver(extraRed >= extraBlue ? red : blue) };
-    if ((extraRed < 0 || extraBlue < 0) && this.hasFreeSlot()) return { kind: "add", team: extraRed <= extraBlue ? 0 : 1 };
-    return null;
-  }
-  /** A new player for the lineup: a name, level, avatar, character and gear like everyone else's. */
-  addSeat(team) {
-    if (!this.hasFreeSlot()) return null;
-    let levels = 0;
-    let people = 0;
-    let cyrillic = false;
-    for (const c of this.clients.values()) {
-      if (!c.connected) continue;
-      people++;
-      levels += Math.max(1, c.user.level ?? 1);
-      if (/[а-яё]/i.test(c.user.displayName)) cyrillic = true;
-    }
-    const lang = Math.random() < (cyrillic ? 0.8 : 0.45) ? "ru" : "en";
-    const taken = /* @__PURE__ */ new Set();
-    for (const p of this.world.players.values()) taken.add(p.name.toLowerCase());
-    const persona = fillPersona(Math.random, { lang, aroundLevel: people ? levels / people : 1, taken });
-    const id = randomUUID4();
-    this.world.addPlayer(id, persona.name, persona.character, true, persona.loadout, team ?? void 0);
-    const seat = {
-      id,
-      name: persona.name,
-      character: persona.character,
-      level: persona.level,
-      avatar: persona.avatar,
-      skins: persona.loadout.skins ?? {},
-      difficulty: persona.difficulty,
-      addedAt: this.clock(),
-      brain: null,
-      brainWorld: null,
-      rematch: false,
-      rematchAt: 0
-    };
-    this.seats.set(id, seat);
-    return seat;
-  }
-  dropSeat(seat) {
-    this.seats.delete(seat.id);
-    this.world.removePlayer(seat.id);
-  }
-  applyStep(step) {
-    if (step.kind === "add") this.addSeat(step.team);
-    else if (step.kind === "remove") this.dropSeat(step.seat);
-    else this.world.setTeam(step.seat.id, step.team);
-  }
-  /** Brings the lineup to what it should be right away (the match is being started). */
-  fillNow() {
-    for (let guard = 0; guard < 2 * this.config.maxPlayers + 4; guard++) {
-      const step = this.fillStep();
-      if (!step) return;
-      this.applyStep(step);
-    }
-  }
-  /** Lobby: sides are evened out at once (moves only); arrivals and departures keep their pace. */
-  settleLobby() {
-    for (let guard = 0; guard < this.config.maxPlayers; guard++) {
-      const step = this.fillStep();
-      if (!step || step.kind !== "move") return;
-      this.applyStep(step);
-    }
-  }
-  /**
-   * Keeps the filled lineup right, at a human pace: Quick Match lobbies wait FILL_RULES.waitMs for
-   * people, then players arrive one by one; rooms with friends fill up when the match is started;
-   * during a match empty places are taken (and places a person takes are given up) after a while.
-   */
-  fillTick(now) {
-    const phase = this.world.phase;
-    if (this.clients.size === 0) {
-      if (this.seats.size > 0) {
-        for (const seat of [...this.seats.values()]) this.dropSeat(seat);
-        this.broadcastRoster();
-      }
-      this.fillFrom = 0;
-      this.nextFillAt = 0;
-      return;
-    }
-    if (phase === "finished") {
-      let voted = false;
-      for (const seat of this.seats.values()) {
-        if (!seat.rematch && seat.rematchAt && now >= seat.rematchAt) {
-          seat.rematch = true;
-          voted = true;
-        }
-      }
-      if (voted) this.broadcastRoster();
-      return;
-    }
-    if (phase === "closed") return;
-    const inLobby = phase === "waiting";
-    if (inLobby && this.connectedCount === 0) this.fillFrom = 0;
-    else if (inLobby && !this.fillFrom) this.fillFrom = now + this.fillTiming.waitMs;
-    const step = this.fillStep();
-    if (!step) {
-      this.nextFillAt = 0;
-      return;
-    }
-    if (step.kind === "move") {
-      this.applyStep(step);
-      this.broadcastRoster();
-      return;
-    }
-    if (step.kind === "add" && inLobby) {
-      if (!this.autoStart || now < this.fillFrom) {
-        this.nextFillAt = 0;
-        return;
-      }
-    }
-    if (!this.nextFillAt) {
-      const t = this.fillTiming;
-      this.nextFillAt = now + (step.kind === "remove" ? between(t.leaveMinMs, t.leaveMaxMs) : inLobby ? between(t.arriveMinMs, t.arriveMaxMs) : between(t.joinMinMs, t.joinMaxMs));
-      return;
-    }
-    if (now < this.nextFillAt) return;
-    this.nextFillAt = 0;
-    this.applyStep(step);
-    this.broadcastRoster();
-  }
-  // ── Match lifecycle ─────────────────────────────────────────────────────
-  startMatch() {
-    if (this.fillBots) this.fillNow();
-    for (const seat of this.seats.values()) {
-      seat.brain = null;
-      seat.rematch = false;
-    }
-    for (const c of this.clients.values()) {
-      const p = this.world.players.get(c.user.userId);
-      if (p) p.character = c.character;
-      c.matchTimeMs = 0;
-      c.rematch = false;
-      c.queue = [];
-      c.lastQueuedSeq = 0;
-    }
-    if (this.kon && !this.isPrivate) {
-      const people = [...this.clients.values()].filter((c) => c.connected).map((c) => ({ id: c.user.userId, rating: c.user.konRating ?? KON_RATING.start }));
-      for (const [id, team] of konDeal(people)) this.world.setTeam(id, team);
-    }
-    this.emptySideSince = 0;
-    this.world.beginMatch();
-    this.konLineup.clear();
-    if (this.kon) {
-      for (const c of this.clients.values()) {
-        const p = this.world.players.get(c.user.userId);
-        this.konLineup.set(c.user.userId, { team: p?.team ?? null, character: c.character, viaInvite: c.viaInvite, kills: 0, assists: 0, deaths: 0, score: 0, damageDealt: 0, playtimeMs: 0 });
-      }
-    }
-    this.matchId = randomUUID4();
-    this.matchStartedAtWall = Date.now();
-    this.resultsSent = false;
-    const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite, team: this.world.players.get(c.user.userId)?.team ?? null }));
-    const fill = this.seats.size;
-    this.services.recorder.matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, startedAt: /* @__PURE__ */ new Date(), players, fill }).catch((e2) => this.log.error("matchStarted failed", { err: e2 }));
-    this.services.analytics.server("match_started", { matchId: this.matchId, roomId: this.id, mapId: this.mapId, players: players.length, fill, mode: this.config.mode });
-    this.services.analytics.server("map_played", { matchId: this.matchId, mapId: this.mapId });
-    this.log.info("match started", { matchId: this.matchId, players: players.length, fill, map: this.mapId, mode: this.config.mode });
-    this.broadcastRoster();
-  }
-  toLobby(rematch) {
-    this.world.resetToLobby();
-    this.matchId = null;
-    for (const [id, c] of [...this.clients]) {
-      if (!c.connected) {
-        this.clients.delete(id);
-        this.world.removePlayer(id);
-      }
-      c.rematch = false;
-      c.ready = this.autoStart || rematch;
-    }
-    for (const seat of [...this.seats.values()]) {
-      seat.rematch = false;
-      if (!rematch && !this.isPrivate && Math.random() < 0.3) this.dropSeat(seat);
-    }
-    this.broadcastRoster();
-    if (rematch && this.connectedCount >= this.minToStart) this.startMatch();
-  }
-  finishResults(reason) {
-    if (this.resultsSent || !this.matchId) return;
-    this.resultsSent = true;
-    const standings = this.world.standings();
-    const durationMs = Math.max(0, this.world.time - this.world.matchStartedAt);
-    let teams = isTeamMode(this.config.mode) ? this.world.teamResult() : void 0;
-    if (this.kon && teams) {
-      const stayed = (t) => standings.some((st) => !st.isBot && st.team === t && this.clients.get(st.id)?.connected === true);
-      const winner = stayed(0) && !stayed(1) ? 0 : stayed(1) && !stayed(0) ? 1 : teams.winner;
-      if (winner !== teams.winner) teams = { ...teams, winner };
-    }
-    this.flush();
-    const shown = standings.map((s) => s.isBot ? { ...s, isBot: false } : s);
-    this.broadcast({ type: "results", matchId: this.matchId, reason, durationMs, standings: shown, mapId: this.mapId, mode: this.config.mode, ...teams ? { teams } : {} });
-    const matchId = this.matchId;
-    const presentAtEnd = standings.filter((s) => this.clients.get(s.id)?.connected || this.seats.has(s.id));
-    const presentPlaces = rankPlaces(presentAtEnd);
-    const peopleAtEnd = presentAtEnd.filter((s) => !s.isBot).length;
-    const fillAtEnd = presentAtEnd.length - peopleAtEnd;
-    const now = this.clock();
-    for (const seat of this.seats.values()) {
-      seat.rematch = false;
-      seat.rematchAt = now + between(1500, 6e3);
-    }
-    const participants = standings.filter((s) => !s.isBot && this.clients.has(s.id)).map((s) => {
-      const c = this.clients.get(s.id);
-      const presentIdx = presentAtEnd.findIndex((x) => x.id === s.id);
-      const team = s.team ?? null;
-      return {
-        userId: s.id,
-        character: c.character,
-        // team matches: 1 for the winning team (both on a draw), 2 for the other
-        place: teams ? s.place : presentIdx >= 0 ? presentPlaces[presentIdx] : standings.length,
-        team,
-        ...teams ? { teamOutcome: teams.winner === null ? "draw" : team === teams.winner ? "win" : "loss" } : {},
-        kills: s.kills,
-        assists: s.assists,
-        deaths: s.deaths,
-        score: s.score,
-        damageDealt: s.damageDealt,
-        objectives: s.objectives ?? 0,
-        completed: c.connected,
-        viaInvite: c.viaInvite,
-        playtimeMs: Math.round(c.matchTimeMs)
-      };
-    });
-    if (this.kon) {
-      for (const [userId, k] of this.konLineup) {
-        if (participants.some((p) => p.userId === userId)) continue;
-        participants.push({ userId, character: k.character, place: 2, team: k.team, teamOutcome: "loss", kills: k.kills, assists: k.assists, deaths: k.deaths, score: k.score, damageDealt: k.damageDealt, objectives: 0, completed: false, viaInvite: k.viaInvite, playtimeMs: k.playtimeMs });
-      }
-    }
-    this.services.analytics.server("match_completed", { matchId, mapId: this.mapId, durationMs, players: peopleAtEnd, fill: fillAtEnd, reason, mode: this.config.mode });
-    this.services.recorder.matchCompleted({
-      matchId,
-      roomId: this.id,
-      mapId: this.mapId,
-      mode: this.config.mode,
-      winnerTeam: teams ? teams.winner : null,
-      isPrivate: this.isPrivate,
-      startedAt: new Date(this.matchStartedAtWall),
-      endedAt: /* @__PURE__ */ new Date(),
-      durationMs,
-      endReason: reason,
-      playersAtEnd: presentAtEnd.length,
-      peopleAtEnd,
-      fillAtEnd,
-      participants,
-      kon: this.kon
-    }).then((personal) => {
-      let levelChanged = false;
-      for (const [userId, result] of personal) {
-        const c = this.clients.get(userId);
-        if (!c) continue;
-        if (c.user.level !== result.level) {
-          c.user = { ...c.user, level: result.level };
-          levelChanged = true;
-        }
-        this.send(c, { type: "progress", matchId, result });
-      }
-      if (levelChanged && !this.closed) this.broadcastRoster();
-    }).catch((e2) => {
-      this.log.error("matchCompleted failed", { err: e2, matchId });
-      this.services.analytics.error({ source: "server", component: "results", category: "persist", message: e2.message });
-    });
-  }
-  // ── Tick ────────────────────────────────────────────────────────────────
-  clock() {
-    return this.lastNow || Date.now();
-  }
-  tick(now) {
-    if (this.closed) return;
-    this.lastNow = now;
-    const w = this.world;
-    if (this.fillBots || this.seats.size > 0) this.fillTick(now);
-    if (w.phase === "waiting") {
-      const connected = [...this.clients.values()].filter((c) => c.connected);
-      const enough = connected.length > 0 && connected.length + this.seats.size >= this.config.minPlayers;
-      const allReady = enough && connected.every((c) => c.ready);
-      if (allReady) {
-        if (!this.autoStartAt) this.autoStartAt = now + (this.autoStart ? AUTO_START_DELAY_MS : 600);
-        if (now >= this.autoStartAt) {
-          this.autoStartAt = 0;
-          this.startMatch();
-        }
-      } else this.autoStartAt = 0;
-    }
-    if (this.seats.size > 0 && (w.phase === "countdown" || w.phase === "active")) {
-      const nav = navFor(this.mapId, w);
-      for (const seat of this.seats.values()) {
-        if (!seat.brain || seat.brainWorld !== w) {
-          seat.brain = new BotBrain(seat.id, w, nav, seat.difficulty, Math.floor(Math.random() * 2 ** 31));
-          seat.brainWorld = w;
-        }
-        w.applyInput(seat.id, seat.brain.nextInput());
-      }
-    }
-    for (const c of this.clients.values()) {
-      if (!c.connected) continue;
-      if (w.phase === "active") c.matchTimeMs += TICK_MS;
-      c.tokens = Math.min(INPUT_BUCKET_MAX, c.tokens + 1);
-      let n = 0;
-      while (c.queue.length > 0 && c.tokens >= 1 && n < MAX_INPUTS_PER_TICK) {
-        w.applyInput(c.user.userId, c.queue.shift());
-        c.tokens -= 1;
-        n++;
-      }
-    }
-    w.update();
-    for (const e2 of w.drainEvents()) {
-      if (e2.t === "shot" || e2.t === "melee") this.pendingShots.push(e2);
-      else {
-        this.pendingEvents.push(e2);
-        if (e2.t === "phase") {
-          this.broadcastRoster();
-          if (e2.phase === "ready" || e2.phase === "finished") {
-            for (const c of this.clients.values()) if (c.connected) this.onPresence(c.user.userId);
-          }
-        }
-        if (e2.t === "matchEnd") this.finishResults(e2.reason);
-      }
-    }
-    if (w.phase === "finished" && w.phaseEndsAt && w.time >= w.phaseEndsAt) this.toLobby(false);
-    if (this.kon && w.phase === "active") {
-      const there = (t) => [...this.clients.values()].some((c) => c.connected && w.players.get(c.user.userId)?.team === t);
-      if (there(0) !== there(1)) {
-        if (!this.emptySideSince) this.emptySideSince = now;
-        else if (now - this.emptySideSince > SOLO_ABORT_MS) {
-          this.emptySideSince = 0;
-          w.finish("aborted");
-        }
-      } else this.emptySideSince = 0;
-    }
-    if (w.phase === "active" && this.connectedCount + this.seats.size < 2) {
-      if (!this.soloSince) this.soloSince = now;
-      else if (now - this.soloSince > SOLO_ABORT_MS) {
-        this.soloSince = 0;
-        w.finish("aborted");
-      }
-    } else this.soloSince = 0;
-    for (const c of [...this.clients.values()]) {
-      if (!c.connected && now - c.disconnectedAt > this.config.reconnectGraceMs) this.removeClient(c, "timeout");
-    }
-    if (w.tick % SNAPSHOT_EVERY_TICKS === 0) this.flush();
-    if (this.connectedCount === 0) {
-      if (now - this.emptySince > this.config.emptyRoomTtlMs) this.close("empty");
-    } else this.emptySince = now;
-  }
-  flush() {
-    const w = this.world;
-    const snapshot = encodeSnapshot({
-      tick: w.tick,
-      time: w.time,
-      phase: w.phase,
-      phaseRemaining: w.phase === "active" ? w.matchTimeLeftMs : w.phaseEndsAt ? Math.max(0, w.phaseEndsAt - w.time) : 0,
-      teamScore: w.teamScore,
-      players: w.players.values(),
-      pickups: w.pickups,
-      gadgets: w.gadgets,
-      flags: w.flags,
-      bases: w.bases,
-      events: this.pendingShots,
-      now: w.time
-    });
-    this.pendingShots = [];
-    const evMsg = this.pendingEvents.length ? JSON.stringify({ type: "ev", tick: w.tick, events: this.pendingEvents }) : null;
-    this.pendingEvents = [];
-    for (const c of this.clients.values()) {
-      if (!c.connected || !c.ws || c.ws.readyState !== 1) continue;
-      if (c.ws.bufferedAmount > 256 * 1024) continue;
-      c.ws.send(snapshot, { binary: true });
-      if (evMsg) c.ws.send(evMsg);
-    }
-  }
-  close(reason) {
-    if (this.closed) return;
-    if (this.matchId && (this.world.phase === "active" || this.world.phase === "countdown" || this.world.phase === "ready") && !this.resultsSent) {
-      const id = this.matchId;
-      this.services.recorder.matchAbandoned(id, reason).catch((e2) => this.log.error("matchAbandoned failed", { err: e2 }));
-      this.services.analytics.server("match_abandoned", { matchId: id, mapId: this.mapId, phase: this.world.phase });
-    }
-    this.closed = true;
-    this.world.close();
-    for (const c of this.clients.values()) {
-      try {
-        c.ws?.close(WS_CLOSE.ROOM_CLOSED, "room closed");
-      } catch {
-      }
-    }
-    this.clients.clear();
-    this.seats.clear();
-    this.log.info("room closed", { reason });
-  }
-  // ── Output helpers ──────────────────────────────────────────────────────
-  roster() {
-    const finished = this.world.phase === "finished";
-    const order = (id) => {
-      const p = this.world.players.get(id);
-      return p ? p.joinedAt * 16 + p.slot : Number.MAX_SAFE_INTEGER;
-    };
-    const people = [...this.clients.values()].map((c) => {
-      const p = this.world.players.get(c.user.userId);
-      return {
-        id: c.user.userId,
-        slot: p?.slot ?? -1,
-        name: c.user.displayName,
-        character: c.character,
-        ready: finished ? c.rematch : c.ready,
-        connected: c.connected,
-        isHost: c.user.userId === this.hostId,
-        isBot: false,
-        level: c.user.level,
-        avatar: c.user.avatar ?? null,
-        team: p?.team ?? null,
-        mods: c.gear.loadout.mods,
-        skins: c.gear.loadout.skins ?? {},
-        ...this.kon ? { konRating: c.user.konRating ?? KON_RATING.start } : {}
-      };
-    });
-    const filled = [...this.seats.values()].map((seat) => {
-      const p = this.world.players.get(seat.id);
-      return {
-        id: seat.id,
-        slot: p?.slot ?? -1,
-        name: seat.name,
-        character: seat.character,
-        ready: finished ? seat.rematch : true,
-        connected: true,
-        isHost: false,
-        isBot: false,
-        level: seat.level,
-        avatar: seat.avatar,
-        team: p?.team ?? null,
-        mods: {},
-        skins: seat.skins
-      };
-    });
-    const players = [...people, ...filled].sort((a, b2) => order(a.id) - order(b2.id));
-    return {
-      type: "roster",
-      players,
-      hostId: this.hostId,
-      mapId: this.mapId,
-      phase: this.world.phase,
-      inviteCode: this.inviteCode,
-      isPrivate: this.isPrivate,
-      maxPlayers: this.config.maxPlayers,
-      mode: this.config.mode,
-      minToStart: this.minToStart,
-      kon: this.kon
-    };
-  }
-  broadcastRoster() {
-    this.broadcast(this.roster());
-  }
-  /**
-   * Room chat (lobby and match): people only, a few lines at once then one every 2.5 s, the same line
-   * twice in a row is dropped; team lines go to your own team in team modes. Lines are relayed, never
-   * stored.
-   */
-  chat(c, raw, team) {
-    if (!c.connected) return;
-    const text = cleanChat(raw);
-    if (!text) return;
-    const now = Date.now();
-    c.chatTokens = Math.min(CHAT_RULES.burst, c.chatTokens + Math.max(0, now - c.chatRefillAt) / CHAT_RULES.refillMs);
-    c.chatRefillAt = now;
-    if (c.chatTokens < 1) return this.error(c, "chat_rate", "Not so fast \u2014 wait a moment before the next line");
-    if (text === c.lastChat && now - c.lastChatAt < CHAT_RULES.repeatMs) return;
-    c.chatTokens -= 1;
-    c.lastChat = text;
-    c.lastChatAt = now;
-    const p = this.world.players.get(c.user.userId);
-    const myTeam = p?.team ?? null;
-    const toTeam = team && isTeamMode(this.config.mode) && myTeam !== null;
-    const line = { type: "chat", id: c.user.userId, name: c.user.displayName, slot: p?.slot ?? -1, team: myTeam, text, toTeam, at: now };
-    const data = JSON.stringify(line);
-    for (const other of this.clients.values()) {
-      if (!other.connected || !other.ws || other.ws.readyState !== 1) continue;
-      if (toTeam && this.world.players.get(other.user.userId)?.team !== myTeam) continue;
-      other.ws.send(data);
-    }
-  }
-  broadcast(msg) {
-    const s = JSON.stringify(msg);
-    for (const c of this.clients.values()) if (c.connected && c.ws && c.ws.readyState === 1) c.ws.send(s);
-  }
-  send(c, msg) {
-    if (c.ws && c.ws.readyState === 1) c.ws.send(JSON.stringify(msg));
-  }
-  error(c, code, message) {
-    this.send(c, { type: "error", code, message });
-  }
-  /** For the admin dashboard: people and filled players counted separately. */
-  info() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, fill: this.seats.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon };
-  }
-  /** For players: the lineup as they see it in the room. */
-  publicInfo() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon };
-  }
-  static protocolVersion = PROTOCOL_VERSION;
-};
-
-// apps/server/src/rooms/RoomManager.ts
 var ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 function newRoomId(len = 10) {
   const bytes = randomBytes12(len);
@@ -23649,7 +24126,7 @@ var RoomManager = class {
     this.presence = listener;
   }
   /** A room; with `kon` a «Блатной кон» room of that format (team deathmatch, fixed sides, people only). */
-  create(mapId, isPrivate, hostUserId, inviteCode = null, mode = "ffa", kon = null) {
+  create(mapId, isPrivate, hostUserId, inviteCode = null, mode = "ffa", kon = null, stake = 0) {
     if (this.rooms.size >= this.opts.maxRooms) throw new Error("room limit reached");
     let id = newRoomId();
     while (this.rooms.has(id)) id = newRoomId();
@@ -23662,6 +24139,7 @@ var RoomManager = class {
         inviteCode,
         mode: kon ? "teams" : mode,
         kon,
+        stake: kon ? stake : 0,
         config: this.opts.config,
         fillBots: this.opts.fillBots ?? false,
         ...this.opts.fillTiming ? { fillTiming: this.opts.fillTiming } : {},
@@ -23685,16 +24163,26 @@ var RoomManager = class {
    * V2.0 part D, «Блатной кон» search: a public Kon room of the format still gathering people (the
    * fullest first, on the chosen map if one was chosen) or a new one. It starts by itself once full.
    */
-  konQuick(userId, format, mapId) {
-    const candidates = this.list().filter((r) => !r.isPrivate && r.kon === format && r.phase === "waiting" && r.isJoinable(userId) && (!mapId || r.mapId === mapId)).sort((a, b2) => b2.occupancy - a.occupancy);
+  konQuick(userId, format, mapId, stake = 0) {
+    const candidates = this.list().filter((r) => !r.isPrivate && r.kon === format && r.stake === stake && r.phase === "waiting" && r.isJoinable(userId) && (!mapId || r.mapId === mapId)).sort((a, b2) => b2.occupancy - a.occupancy);
     if (candidates[0]) return candidates[0];
     const map = mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)];
-    return this.create(map, false, null, null, "teams", format);
+    return this.create(map, false, null, null, "teams", format, stake);
   }
   /** People waiting in public Kon rooms of each format (the Kon screen shows it). */
   konWaiting() {
     const out = { "1x1": 0, "2x2": 0, "3x3": 0, "5x5": 0 };
     for (const r of this.list()) if (r.kon && !r.isPrivate && r.phase === "waiting") out[r.kon] += r.connectedCount;
+    return out;
+  }
+  /** v0.2.17: the same by stake («0», «100», …): a search only finds rooms of its own stake. */
+  konWaitingByStake() {
+    const out = {};
+    for (const r of this.list()) {
+      if (!r.kon || r.isPrivate || r.phase !== "waiting") continue;
+      const row = out[String(r.stake)] ??= { "1x1": 0, "2x2": 0, "3x3": 0, "5x5": 0 };
+      row[r.kon] += r.connectedCount;
+    }
     return out;
   }
   start() {
@@ -23819,6 +24307,17 @@ function attachGateway(server2, rooms2, services2, log2, opts, social2) {
         return ws.close(WS_CLOSE.ROOM_NOT_FOUND, "room not found");
       }
       const viaInvite = room.isPrivate;
+      if (room.stake > 0 && !room.hasMember(user.userId)) {
+        if (hello.stake !== room.stake) {
+          ws.send(JSON.stringify({ type: "error", code: "stake_confirm", message: `This room\u2019s stake is ${room.stake} $BLAT \u2014 confirm it to come in` }));
+          return ws.close(WS_CLOSE.POLICY, "stake_confirm");
+        }
+        const why = services2.stakes ? await services2.stakes.check(user.userId, room.stake).catch(() => "stakes_off") : "stakes_off";
+        if (why) {
+          ws.send(JSON.stringify({ type: "error", code: why, message: STAKE_REFUSAL_TEXT[why] }));
+          return ws.close(WS_CLOSE.POLICY, why);
+        }
+      }
       const gear = await services2.economy.gear(user.userId).catch((e2) => {
         log2.warn("gear lookup failed", { user: user.userId, err: e2 });
         return void 0;

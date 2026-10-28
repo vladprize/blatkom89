@@ -13,6 +13,7 @@ import type { ArmsId, GadgetId } from '../game-rules/gadgets.js';
 import type { FlagAction, Standing } from '../sim/world.js';
 import type { AchievementId } from '../game-rules/progression.js';
 import type { KonFormat, KonOutcome } from '../game-rules/kon.js';
+import type { StakeRefusal } from '../game-rules/konStakes.js';
 
 /**
  * v2: match points with assists, «дефицит» supply drops. v3: loadouts, rockets, medkits.
@@ -49,6 +50,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
     character: z.enum(CHARACTER_IDS),
     reconnectToken: z.string().min(16).max(128).optional(),
     clientVersion: z.string().max(32).optional(),
+    /** v0.2.17: the $BLAT Tournament stake the player agreed to (must equal the room's to come in). */
+    stake: z.number().int().min(0).max(100_000).optional(),
   }),
   z.object({ type: z.literal('ready'), ready: z.boolean() }),
   z.object({ type: z.literal('character'), character: z.enum(CHARACTER_IDS) }),
@@ -88,6 +91,16 @@ export interface RosterEntry {
   skins?: Partial<Record<WeaponId, FinishId>>;
   /** V2.0 part D: the Kon rating (shown in «Блатной кон» rooms). */
   konRating?: number;
+  /** v0.2.17: the founder's account (a gold badge by the alias). */
+  founder?: boolean;
+}
+
+/** v0.2.17: one player's $BLAT Tournament stake in a match: what they staked and got back. */
+export interface StakeOutcome {
+  stake: number;
+  payout: number;
+  /** `win`: a share of the pool; `loss`: the stake stayed in the pool; `draw`/`refund`: the stake came back. */
+  outcome: 'win' | 'loss' | 'draw' | 'refund';
 }
 
 export type GameEvent =
@@ -130,6 +143,8 @@ export interface PersonalResult {
   totalBlat?: number;
   /** V2.0 part D: a «Блатной кон» match — the result and the Kon rating's change and value. */
   kon?: { outcome: KonOutcome; delta: number; rating: number };
+  /** v0.2.17: a staked $BLAT Tournament match — the stake and what came back. */
+  stake?: StakeOutcome;
 }
 
 export type ServerMessage =
@@ -160,6 +175,10 @@ export type ServerMessage =
       minToStart?: number;
       /** V2.0 part D: a «Блатной кон» room (fixed sides, people only), null otherwise. */
       kon?: KonFormat | null;
+      /** v0.2.17: the $BLAT Tournament's stake everyone puts in (0: none). */
+      stake?: number;
+      /** v0.2.17: the stakes are being reserved — the match starts in a moment. */
+      staking?: boolean;
     }
   | { type: 'ev'; tick: number; events: GameEvent[] }
   | { type: 'results'; matchId: string; reason: 'time' | 'score' | 'aborted'; durationMs: number; standings: Standing[]; mapId: MapId; mode: GameMode; teams?: TeamResultSummary }
@@ -186,6 +205,9 @@ export type ErrorCode =
   | 'team_full'
   | 'kon_fixed'
   | 'chat_rate'
+  // v0.2.17: the $BLAT Tournament's stakes
+  | 'stake_confirm'
+  | StakeRefusal
   | 'internal';
 
 export const WS_CLOSE = {

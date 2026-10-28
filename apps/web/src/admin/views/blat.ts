@@ -117,7 +117,7 @@ async function dropCard(host: HTMLElement, me: AdminMe): Promise<void> {
   host.append(h('h3', {}, 'BLAT DROP — дата объявления'), h('div', { class: 'loading' }, 'Загрузка…'));
   const d = await apiFetch<AdminBlatDrop>('/api/admin/blat/drop');
   host.lastChild?.remove();
-  const src = d.source === 'admin' ? `задана в панели${d.updatedBy ? ` (${d.updatedBy}` : ''}${d.updatedAt ? `, ${dateTime(d.updatedAt)})` : d.updatedBy ? ')' : ''}` : d.source === 'env' ? 'из настройки сервера BLAT_DROP_ANNOUNCE_AT' : '';
+  const src = d.source === 'admin' ? `задана в панели${d.updatedBy ? ` (${d.updatedBy}` : ''}${d.updatedAt ? `, ${dateTime(d.updatedAt)})` : d.updatedBy ? ')' : ''}` : d.source === 'env' ? 'из настройки сервера BLAT_DROP_ANNOUNCE_AT' : d.source === 'default' ? 'дата владельца, встроенная в версию (8 февраля 2027)' : '';
   host.append(
     h(
       'p',
@@ -263,6 +263,8 @@ async function snapshotsCard(host: HTMLElement, me: AdminMe): Promise<void> {
   );
 }
 
+const POOL_NAMES: Record<string, string> = { players: 'Игрокам', founder: 'Основателю', influencers: 'Блогерам', friends: 'Друзьям проекта', reserve: 'Резерв' };
+
 export async function renderBlat(root: HTMLElement, me: AdminMe): Promise<void> {
   clear(root);
   const body = h('div', { class: 'stack' }, h('div', { class: 'loading' }, 'Загрузка…'));
@@ -275,8 +277,27 @@ export async function renderBlat(root: HTMLElement, me: AdminMe): Promise<void> 
     h(
       'p',
       { class: 'note' },
-      `$BLAT — игровые баллы: только копятся, их нельзя купить, продать, вывести или передать. Начисляет только сервер: за уровни (каждый уровень один раз) и за приглашения (друг засчитывается после первого полного онлайн-матча). Больше ${REFERRAL_RULES.dailyCap} засчитанных приглашений за сутки у одного игрока или помеченный аккаунт — приглашение ждёт решения здесь.`,
+      `$BLAT — игровые баллы: их нельзя купить, продать или вывести; из рук в руки переходят только ставками в «$BLAT Турнире». Начисляет только сервер: за уровни (каждый уровень один раз), за приглашения (друг засчитывается после первого полного онлайн-матча) и доли из пулов (основатель, блогеры, друзья проекта, резерв) — по решению администратора. Больше ${REFERRAL_RULES.dailyCap} засчитанных приглашений за сутки у одного игрока или помеченный аккаунт — приглашение ждёт решения здесь.`,
     ),
+    // v0.2.17: the supply, capped at 2 000 000 000, by pools
+    s.pools?.length
+      ? h(
+          'section',
+          { class: 'card', 'data-testid': 'blat-pools' },
+          h('h3', {}, 'Запас $BLAT — 2 000 000 000'),
+          h(
+            'div',
+            { class: 'table-scroll' },
+            h(
+              'table',
+              { class: 'table' },
+              h('thead', {}, h('tr', {}, ...['Пул', 'Всего', 'Выдано', 'Осталось'].map((t) => h('th', {}, t)))),
+              h('tbody', {}, ...s.pools.map((x) => h('tr', {}, h('td', {}, POOL_NAMES[x.pool] ?? x.pool), h('td', { class: 'num' }, num(x.cap)), h('td', { class: 'num' }, num(x.issued)), h('td', { class: 'num' }, num(x.cap - x.issued))))),
+            ),
+          ),
+          h('p', { class: 'note' }, 'Игрокам — за уровни и приглашения; основателю — кнопкой «Сделать основателем» на карточке игрока; блогерам, друзьям проекта и резерв — формой «$BLAT из пула» там же. Ставки в турнире $BLAT не создают — только переходят.'),
+        )
+      : h('span'),
     h(
       'div',
       { class: 'tiles' },

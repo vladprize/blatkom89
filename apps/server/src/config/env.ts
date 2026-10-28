@@ -81,6 +81,13 @@ const EnvSchema = z.object({
    * used until an administrator sets one in /admin → $BLAT (docs/BLAT.md §6).
    */
   BLAT_DROP_ANNOUNCE_AT: z.string().datetime({ offset: true }).optional(),
+  /** v0.2.17: the project's Solana wallet shown in the $BLAT section (default: the owner's address). */
+  PROJECT_SOL_WALLET: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(),
+  /** v0.2.17: the main menu's X and Telegram buttons (left empty: «coming soon»). */
+  SOCIAL_X_URL: z.string().url().optional(),
+  SOCIAL_TELEGRAM_URL: z.string().url().optional(),
+  /** v0.2.17: stakes in the $BLAT Tournament (on by default; `false` switches them off — docs/KON.md §6). */
+  TOURNAMENT_STAKES: bool.default('true'),
   /** Password-reset emails through Resend (https://resend.com); without a key the admin issues reset links. */
   RESEND_API_KEY: z.string().optional(),
   MAIL_FROM: z.string().optional(),

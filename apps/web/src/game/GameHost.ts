@@ -51,6 +51,19 @@ export class GameHost {
     };
     window.addEventListener('resize', onResize);
     window.addEventListener('orientationchange', () => setTimeout(onResize, 250));
+    // v0.2.17: typing in the menus. A match's keys (W, A, S, D, the arrows, Space, R, Q, E, G, 1–3…) are
+    // captured by Phaser for the whole page, and the captures outlive the match — so after one match a
+    // club's name or a friend's alias lost those letters. While a text field has the focus the game's
+    // keyboard is off; a match also releases its captures when it ends (GameScene.cleanup).
+    const editable = (el: EventTarget | null) => el instanceof HTMLElement && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
+    document.addEventListener('focusin', (e) => {
+      const kb = this.game.input?.keyboard;
+      if (kb && editable(e.target)) kb.enabled = false;
+    });
+    document.addEventListener('focusout', (e) => {
+      const kb = this.game.input?.keyboard;
+      if (kb && editable(e.target)) kb.enabled = true;
+    });
   }
 
   ready(): Promise<void> {

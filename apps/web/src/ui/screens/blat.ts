@@ -1,7 +1,8 @@
 /**
  * $BLAT (V2.0): the balance, where it came from, the level rewards and the referral programme with the
- * player's own link. In-game points only — the screen says so plainly; nothing here can be bought, sold,
- * withdrawn or passed to anyone, and no price or market value is ever shown.
+ * player's own link. In-game points only — the screen says so plainly; nothing here can be bought, sold
+ * or withdrawn (since v0.2.17 they change hands only as $BLAT Tournament stakes), and no price or market
+ * value is ever shown.
  */
 import { REFERRAL_TIERS, blatForLevel } from '@blatkom/shared';
 import type { BlatEntry, BlatResponse } from '@blatkom/shared';
@@ -37,6 +38,11 @@ const when = (iso: string) => {
 function source(e: BlatEntry): string {
   if (e.source === 'level') return t('Level {n}', { n: Number((e.ref ?? '').replace('level:', '')) || '?' });
   if (e.source === 'referral') return e.who ? t('Invitation: {name}', { name: e.who }) : t('Invitation');
+  // v0.2.17: the $BLAT Tournament's stakes and the pools' allocations
+  if (e.source === 'stake') return t('Stake in the $BLAT Tournament');
+  if (e.source === 'stake_win') return t('Won in the $BLAT Tournament');
+  if (e.source === 'stake_refund') return t('Stake returned');
+  if (e.source === 'allocation') return t('Allocation');
   return t('From the administration');
 }
 
@@ -47,7 +53,8 @@ const STATUS: Record<BlatResponse['referral']['recent'][number]['status'], () =>
   rejected: () => t('not counted'),
 };
 
-export function renderBlat(d: BlatResponse): HTMLElement {
+/** `banner` (v0.2.17): the BLAT DROP banner with its live countdown, under «For levels». */
+export function renderBlat(d: BlatResponse, banner: HTMLElement | null = null): HTMLElement {
   const r = d.referral;
   const copy = async () => {
     try {
@@ -75,7 +82,7 @@ export function renderBlat(d: BlatResponse): HTMLElement {
       h('span', { class: 'tag' }, t('Balance')),
       h('div', { class: 'blat__big', 'data-testid': 'blat-balance' }, blatCoin(48, '$BLAT'), h('b', null, fmtBlat(d.balance))),
       h('div', { class: 'muted' }, t('Earned in total: {n} · for levels {l} · for invitations {r}', { n: fmtBlat(d.earned), l: fmtBlat(d.bySource.level), r: fmtBlat(d.bySource.referral) })),
-      h('div', { class: 'blat__note' }, t('In-game points. Not money and not a cryptocurrency: they can’t be bought, sold, withdrawn or passed to anyone.')),
+      h('div', { class: 'blat__note' }, t('In-game points, not money: they can’t be bought, sold or withdrawn and change hands only as stakes in the $BLAT Tournament. The $BLAT drop is planned in the Solana network.')),
     ),
     h(
       'div',
@@ -87,6 +94,7 @@ export function renderBlat(d: BlatResponse): HTMLElement {
         h('div', null, t('Every new level pays once. You are at level {l}.', { l: d.level })),
         d.nextLevel ? h('div', { class: 'blat__next' }, t('Next: level {l}', { l: d.nextLevel.level }), ' ', blatAmount(d.nextLevel.reward)) : null,
         h('div', { class: 'blatlevels' }, ...upcoming.map((l) => h('span', { class: 'blatlevels__step' }, h('small', null, t('lvl {l}', { l })), h('b', null, fmtBlat(blatForLevel(l)))))),
+        banner ? h('div', { class: 'blat__banner' }, banner) : null,
       ),
       h(
         'div',
@@ -129,7 +137,15 @@ export function renderBlat(d: BlatResponse): HTMLElement {
         ? h(
             'div',
             { class: 'blathist', 'data-testid': 'blat-history' },
-            ...d.history.map((e) => h('div', { class: 'blathist__row' }, h('span', { class: 'muted' }, when(e.at)), h('b', { class: 'blathist__delta' }, `+${fmtBlat(e.delta)}`), h('span', null, source(e)))),
+            ...d.history.map((e) =>
+              h(
+                'div',
+                { class: 'blathist__row', 'data-sign': e.delta < 0 ? 'minus' : 'plus' },
+                h('span', { class: 'muted' }, when(e.at)),
+                h('b', { class: 'blathist__delta' }, e.delta < 0 ? `−${fmtBlat(-e.delta)}` : `+${fmtBlat(e.delta)}`),
+                h('span', null, source(e)),
+              ),
+            ),
           )
         : h('div', { class: 'muted' }, t('Nothing yet.')),
     ),

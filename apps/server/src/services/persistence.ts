@@ -21,6 +21,7 @@ import { EmailAuth } from '../auth/email.js';
 import { PaymentService } from '../payments/service.js';
 import { NowPaymentsProvider, StripeProvider } from '../payments/providers.js';
 import { ClubRepo } from '../clubs/repo.js';
+import { PgStakes, scheduleStakeRefunds } from '../blat/stakes.js';
 
 export interface Persistence {
   services: Services;
@@ -74,6 +75,8 @@ export interface PgContext {
   economy: EconomyRepo;
   payments: PaymentService;
   emailAuth: EmailAuth;
+  /** v0.2.17: the $BLAT Tournament's stakes. */
+  stakes: PgStakes;
 }
 
 const contexts = new WeakMap<object, PgContext>();
@@ -98,6 +101,7 @@ export function pgContext(sql: Sql, env: Env, log: Logger): PgContext {
     analytics,
     adminAuth: new AdminAuth(sql, env.SESSION_SECRET, env.ADMIN_SESSION_TTL_HOURS, env.PUBLIC_URL.startsWith('https://'), origins),
     economy: new EconomyRepo(sql, log),
+    stakes: new PgStakes(sql, env.TOURNAMENT_STAKES),
     emailAuth: new EmailAuth(sql, env.SESSION_SECRET, log),
     payments: new PaymentService(
       sql,
@@ -128,11 +132,14 @@ export async function createPersistence(deps: { sql: Sql; env: Env; log: Logger 
   await bootstrapAdmin(deps.sql, ctx.adminAuth, deps.log, deps.env.ADMIN_BOOTSTRAP_USERNAME, deps.env.ADMIN_BOOTSTRAP_PASSWORD);
   // Retention purge (docs/PRIVACY.md): first run 5 min after start, then daily; unref'd timers.
   const stopRetention = deps.env.NODE_ENV === 'test' ? () => {} : scheduleRetention(deps.sql, deps.log);
+  // v0.2.17: stakes a stopped server left reserved come back (older than any match can last)
+  const stopStakes = deps.env.NODE_ENV === 'test' ? () => {} : scheduleStakeRefunds(deps.sql, deps.log, Math.max(10 * 60_000, deps.env.MATCH_DURATION_SEC * 1000 * 2.5));
   return {
-    services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy },
+    services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy, stakes: ctx.stakes },
     recorder: ctx.recorder,
     close: async () => {
       stopRetention();
+      stopStakes();
       await ctx.analytics.close();
     },
   };

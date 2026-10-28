@@ -130,8 +130,11 @@ export class KonRepo {
 
   /** The player's last Kon matches with their team-mates and opponents. */
   async history(userId: string, limit = 20): Promise<KonHistoryEntry[]> {
-    const rows = await this.sql<Array<{ match_id: string; ended_at: Date | null; started_at: Date; kon_format: KonFormat; map_id: MapId; team: 0 | 1 | null; won: boolean; completed: boolean; winner_team: 0 | 1 | null; kills: number; deaths: number; kon_delta: number; character: CharacterId }>>`
-      SELECT m.id AS match_id, m.ended_at, m.started_at, m.kon_format, m.map_id, mp.team, mp.won, mp.completed, m.winner_team, mp.kills, mp.deaths, mp.kon_delta, mp.character
+    // v0.2.17: a staked match — the stake and what came back (the ledger's rows of this match)
+    const rows = await this.sql<Array<{ match_id: string; ended_at: Date | null; started_at: Date; kon_format: KonFormat; map_id: MapId; team: 0 | 1 | null; won: boolean; completed: boolean; winner_team: 0 | 1 | null; kills: number; deaths: number; kon_delta: number; character: CharacterId; stake: number; payout: number }>>`
+      SELECT m.id AS match_id, m.ended_at, m.started_at, m.kon_format, m.map_id, mp.team, mp.won, mp.completed, m.winner_team, mp.kills, mp.deaths, mp.kon_delta, mp.character,
+             m.stake,
+             COALESCE((SELECT sum(l.delta) FROM currency_ledger l WHERE l.user_id = mp.user_id AND l.currency = 'blat' AND l.ref IN ('stake_win:' || m.id::text, 'stake_refund:' || m.id::text)), 0)::int AS payout
       FROM match_participants mp JOIN matches m ON m.id = mp.match_id
       WHERE mp.user_id = ${userId} AND m.kon_format IS NOT NULL AND m.status = 'completed'
       ORDER BY m.ended_at DESC NULLS LAST LIMIT ${limit}`;
@@ -159,6 +162,7 @@ export class KonRepo {
         character: r.character,
         mates: here.filter((o) => o.team === r.team).map((o) => o.name),
         rivals: here.filter((o) => o.team !== r.team).map((o) => o.name),
+        ...(r.stake > 0 ? { stake: r.stake, payout: r.payout } : {}),
       };
     });
   }

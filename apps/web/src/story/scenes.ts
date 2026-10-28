@@ -25,6 +25,27 @@ export const SCENE_FOCUS: Record<SceneId, readonly [number, number]> = {
   hospital: [52, 62],
 };
 
+/**
+ * v0.2.17 (the owner: «the portrait and the line in the middle, without covering the faces»): on a page
+ * over a big picture the speaker's card and the bubble stand together in the middle along the bottom,
+ * the card on the side of the bubble where the picture has no face low down (the people of each place
+ * sit and stand where they do — the bear's and the rooster's capsules in the hall, the rooster on the
+ * crates at the building site…).
+ */
+export const SCENE_ART_SIDE: Record<SceneId, 'left' | 'right'> = {
+  yard: 'right',
+  garages: 'right',
+  factory: 'left',
+  camp: 'right',
+  cemetery: 'right',
+  univermag: 'left',
+  square: 'left',
+  dk: 'left',
+  stroyka: 'right',
+  hospital: 'right',
+  hall2089: 'left',
+};
+
 /** A map's picture (the Gastronom gets the department store: the nearest shop in the set). */
 export const MAP_SCENE: Partial<Record<MapId, SceneId>> = {
   yard: 'yard',

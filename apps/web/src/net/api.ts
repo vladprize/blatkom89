@@ -8,6 +8,7 @@ import type {
   KonFormat,
   KonResponse,
   KonTopResponse,
+  QuickMatchResponse,
   StoryProgressResponse,
   StoryStartResponse,
   StoryReward,
@@ -22,6 +23,7 @@ import type {
   AchievementsResponse,
   Inventory,
   ShopConfig,
+  SiteConfig,
   CaseResult,
   SkinCaseResult,
   CheckoutResponse,
@@ -109,6 +111,10 @@ export class Api {
   blatDrop() {
     return this.req<BlatDropInfo>('GET', '/api/blat/drop');
   }
+  /** v0.2.17: the menu's X and Telegram links, stakes in the $BLAT Tournament. */
+  site() {
+    return this.req<SiteConfig>('GET', '/api/site');
+  }
   /** Anonymous «opened the site» ping for the admin funnel (random per-browser id only). */
   /** V2.0 part F: `source` — the first touch (a partner's link, a campaign), kept on the first visit only. */
   visit(visitorId: string, referrer?: string, source?: FirstTouch) {
@@ -182,11 +188,16 @@ export class Api {
   deleteAccount() {
     return this.req<void>('DELETE', '/api/me');
   }
-  createRoom(mapId: MapId, isPrivate: boolean, mode: GameMode = 'ffa', kon?: KonFormat) {
-    return this.req<CreateRoomResponse>('POST', '/api/rooms', { mapId, isPrivate, mode, ...(kon ? { kon } : {}) });
+  /** `stake` (v0.2.17): a $BLAT Tournament room's stake (0: none). */
+  createRoom(mapId: MapId, isPrivate: boolean, mode: GameMode = 'ffa', kon?: KonFormat, stake = 0) {
+    return this.req<CreateRoomResponse>('POST', '/api/rooms', { mapId, isPrivate, mode, ...(kon ? { kon } : {}), ...(kon && stake > 0 ? { stake } : {}) });
   }
-  quickMatch(mapId?: MapId, mode: GameMode = 'ffa', kon?: KonFormat) {
-    return this.req<{ roomId: string; mapId: MapId; mode: GameMode; kon?: KonFormat | null }>('POST', '/api/rooms/quick', { ...(mapId ? { mapId } : {}), mode, ...(kon ? { kon } : {}) });
+  quickMatch(mapId?: MapId, mode: GameMode = 'ffa', kon?: KonFormat, stake = 0) {
+    return this.req<QuickMatchResponse>('POST', '/api/rooms/quick', { ...(mapId ? { mapId } : {}), mode, ...(kon ? { kon } : {}), ...(kon && stake > 0 ? { stake } : {}) });
+  }
+  /** A room's public facts (v0.2.17: the client learns a room's stake before coming in). */
+  room(roomId: string) {
+    return this.req<{ id: string; kon: KonFormat | null; stake?: number; joinable: boolean }>('GET', `/api/rooms/${encodeURIComponent(roomId)}`);
   }
   /** V2.0 part D: «Блатной кон» — the player's numbers, history, people waiting; the tables. */
   kon() {

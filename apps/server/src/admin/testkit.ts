@@ -64,6 +64,7 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     TELEGRAM_AUTH_MAX_AGE_SEC: 86400,
     BOT_WARM_MINUTES: 20,
     KEEP_AWAKE: false,
+    TOURNAMENT_STAKES: true,
     TELEGRAM_WEB_LOGIN: false,
     FACEBOOK_GRAPH_VERSION: 'v23.0',
     DEV_AUTH_ENABLED: true,

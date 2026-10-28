@@ -23,6 +23,11 @@ export interface Beat {
   fx?: 'neon' | 'vhs';
   /** The picture behind this page, when not the mission's own place (null: none — e.g. 2089). */
   scene?: SceneId | null;
+  /**
+   * The speaker's card on this page when not their usual one (a file in assets/heroes/, without
+   * «.jpg»): v0.2.17 — Arkadich in the prologue in front of his building site.
+   */
+  art?: string;
 }
 
 /** Moments in a mission when somebody says something (each at most once). */
@@ -90,7 +95,8 @@ export const PROLOGUE: Beat[] = [
   { who: 'caption', fx: 'neon', say: ['Both sides lie down in capsules and wake up in 1989 — in a simulation where things are settled the old way.', 'Обе стороны ложатся в капсулы и просыпаются в 1989-м — в симуляции, где всё решают по-старому.'] },
   { who: 'caption', fx: 'neon', say: ['The simulation hands out bodies by temperament: half human, half beast. Hold the district in there and you are right out here. By law.', 'Тело симуляция выдаёт по характеру: наполовину человек, наполовину зверь. Кто удержит район там — тот прав здесь. По закону.'] },
   { who: 'petr', fx: 'neon', say: ['I’m not giving up the yard. There’s lilac there. A bench. Forty years I’ve kept order there.', 'Двор не отдам. Там сирень. Там лавочка. Там я сорок лет порядок держу.'] },
-  { who: 'caption', fx: 'neon', say: ['The developer Arkadia Development wants a parking tower where the yard is. Nine hundred spaces.', 'Застройщик «Аркадия Девелопмент» хочет поставить на месте двора паркинг-башню. На девятьсот мест.'] },
+  // v0.2.17 (the owner): Arkadia Development's plan in Arkadich's own words, his building site behind him
+  { who: 'arkady', fx: 'neon', art: 'arkady_stroyka', say: ['A parking tower where the yard is. Nine hundred spaces. Arkadia Development doesn’t lose cases.', 'На месте двора будет паркинг-башня. Девятьсот мест. «Аркадия Девелопмент» дел не проигрывает.'] },
   { who: 'volkov', fx: 'neon', say: ['Someone in BLATKOM wins every single dispute. That doesn’t happen. Find, file, report.', 'Кто-то в БЛАТКОМе выигрывает все споры подряд. Так не бывает. Найти, оформить, доложить.'] },
   { who: 'caption', fx: 'neon', say: ['Getting knocked out in there hurts no one: you just wake up in 2089 with a headache. And lose the case.', 'Если тебя там «устранили» — ничего страшного: просыпаешься в 2089-м с головной болью. И проигрываешь дело.'] },
   { who: 'caption', fx: 'vhs', scene: 'yard', say: ['Two cases. One district. Tape’s rolling.', 'Два дела. Один район. Плёнка пошла.'] },
