@@ -17183,7 +17183,6 @@ var MatchRoom = class {
     return this.hostId ? this.clients.get(this.hostId)?.user.displayName ?? null : null;
   }
   // ── Connections ─────────────────────────────────────────────────────────
-  /** Adds or resumes a player. Returns an error code when the join is refused. */
   /** The side a gang plays in this battle (null: not one of its gangs, or not a battle). */
   battleSide(gang) {
     if (!this.battle || !gang) return null;
