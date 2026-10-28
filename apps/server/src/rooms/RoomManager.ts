@@ -1,7 +1,7 @@
 /** Owns all rooms, the shared 60 Hz tick loop and room discovery (quick match, invites). */
 import { randomBytes } from 'node:crypto';
 import { MAP_ORDER, TICK_MS } from '@blatkom/shared';
-import type { FillTiming, GameMode, KonFormat, MapId, MatchConfig } from '@blatkom/shared';
+import type { FillTiming, GameMode, GangBattle, KonFormat, MapId, MatchConfig } from '@blatkom/shared';
 import { MatchRoom } from './MatchRoom.js';
 import type { Services } from '../services/contracts.js';
 import type { Logger } from '../logging/logger.js';
@@ -62,7 +62,7 @@ export class RoomManager {
   }
 
   /** A room; with `kon` a «Блатной кон» room of that format (team deathmatch, fixed sides, people only). */
-  create(mapId: MapId, isPrivate: boolean, hostUserId: string | null, inviteCode: string | null = null, mode: GameMode = 'ffa', kon: KonFormat | null = null, stake = 0): MatchRoom {
+  create(mapId: MapId, isPrivate: boolean, hostUserId: string | null, inviteCode: string | null = null, mode: GameMode = 'ffa', kon: KonFormat | null = null, stake = 0, battle: GangBattle | null = null): MatchRoom {
     if (this.rooms.size >= this.opts.maxRooms) throw new Error('room limit reached');
     let id = newRoomId();
     while (this.rooms.has(id)) id = newRoomId();
@@ -76,6 +76,7 @@ export class RoomManager {
         mode: kon ? 'teams' : mode,
         kon,
         stake: kon ? stake : 0,
+        battle: kon ? battle : null,
         config: this.opts.config,
         fillBots: this.opts.fillBots ?? false,
         ...(this.opts.fillTiming ? { fillTiming: this.opts.fillTiming } : {}),

@@ -46,6 +46,8 @@ import type {
   ClubsResponse,
   CreateClubBody,
   UpdateClubBody,
+  GangBattleFormat,
+  GangBattleResponse,
 } from '@blatkom/shared';
 import { platform } from '../telegram/tg.js';
 import { VERSION } from '../app/config.js';
@@ -194,6 +196,10 @@ export class Api {
   }
   quickMatch(mapId?: MapId, mode: GameMode = 'ffa', kon?: KonFormat, stake = 0) {
     return this.req<QuickMatchResponse>('POST', '/api/rooms/quick', { ...(mapId ? { mapId } : {}), mode, ...(kon ? { kon } : {}), ...(kon && stake > 0 ? { stake } : {}) });
+  }
+  /** v0.2.17: the caller's gang calls the gang `clubId` out to a tournament battle (a room of the two gangs). */
+  gangBattle(clubId: string, kon: GangBattleFormat, mapId?: MapId) {
+    return this.req<GangBattleResponse>('POST', `/api/clubs/${encodeURIComponent(clubId)}/battle`, { kon, ...(mapId ? { mapId } : {}) });
   }
   /** A room's public facts (v0.2.17: the client learns a room's stake before coming in). */
   room(roomId: string) {

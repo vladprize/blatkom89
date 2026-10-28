@@ -4,16 +4,18 @@
  * SocialClient store and redraws itself when it changes; the server decides every action.
  */
 import { displayNameSchema, DM_MAX_LENGTH, LEADERBOARD_BY } from '@blatkom/shared';
-import type { DirectMessage, FriendEntry, FriendRequestEntry, FriendStatus, LeaderboardBy, LeaderboardEntry, LeaderboardResponse, PlayerCard, RoomInviteEvent } from '@blatkom/shared';
+import type { DirectMessage, FriendEntry, FriendRequestEntry, FriendStatus, LeaderboardBy, LeaderboardEntry, LeaderboardResponse, PlayerCard, RoomInviteEvent, GameMode } from '@blatkom/shared';
 import { h, fill, toast, founderTag } from '../dom.js';
 import { avatarImg } from '../avatars.js';
 import type { OnlineClient } from '../../net/OnlineClient.js';
 import type { SocialClient } from '../../net/SocialClient.js';
 import { t } from '../../i18n/index.js';
 import { mapName } from '../../i18n/content.js';
-import { modeName } from '../modes.js';
+import { modeName, MODE_ORDER, modeIcon, modeSub } from '../modes.js';
 import { apiErrorText } from '../../net/errors.js';
 import { sfx } from '../../game/audio/Sfx.js';
+import { tourneyIcon } from './kon.js';
+import { openSheet } from '../sheet.js';
 
 const STATUS_ORDER: Record<FriendStatus, number> = { match: 0, lobby: 1, online: 2, offline: 3 };
 
@@ -114,7 +116,7 @@ export function renderFriends(o: { online: OnlineClient; root: HTMLElement; onPl
       h('div', { class: 'n col', style: 'gap:0;min-width:0' }, h('span', { class: 'friend__name' }, f.name, f.founder ? founderTag() : null), h('span', { class: 'muted friend__status' }, `${statusText(f)} · ${t('lvl')} ${f.level}`)),
       f.unread > 0 ? h('span', { class: 'nbadge', title: t('Unread messages') }, String(f.unread)) : null,
       h('button', { class: 'btn btn--small', 'data-testid': 'open-chat', onclick: () => openChat(o.root, online, f) }, t('Message')),
-      h('button', { class: 'btn btn--small btn--red', disabled: f.status === 'offline', title: f.status === 'offline' ? t('Offline — they won’t see the invitation') : t('Create a room and invite'), onclick: () => o.onPlayWith(f) }, t('Play')),
+      h('button', { class: 'btn btn--small btn--red', 'data-testid': 'friend-battle', disabled: f.status === 'offline', title: f.status === 'offline' ? t('Offline — they won’t see the invitation') : t('Create a room and invite'), onclick: () => o.onPlayWith(f) }, t('To battle')),
     );
   const draw = () => {
     const inc = social.incoming;
@@ -148,6 +150,44 @@ export function renderFriends(o: { online: OnlineClient; root: HTMLElement; onPl
   );
   void social.refresh().catch((e) => toast(apiErrorText(e)));
   return live(root, social, draw);
+}
+
+/** v0.2.17: what to fight a friend in — a mode of the room, or a duel of the $BLAT Tournament (1×1, the rating). */
+export type FriendBattle = { kind: 'mode'; mode: GameMode } | { kind: 'duel' };
+
+/**
+ * v0.2.17 (the owner: «позвать друга в бой»): the friend's «В бой» — the mode, or a tournament duel; the room
+ * is made and the friend is called at once (the map is the host's to pick in the room).
+ */
+export function openFriendBattleSheet(root: HTMLElement, o: { friend: FriendEntry; mode: GameMode; onGo: (b: FriendBattle) => void }): void {
+  let pick: FriendBattle = { kind: 'mode', mode: o.mode };
+  const box = h('div', { class: 'seg seg--modes friendbattle__modes', role: 'radiogroup', 'aria-label': t('Mode') });
+  const draw = () => {
+    const on = (b: FriendBattle) => (b.kind === 'duel' ? pick.kind === 'duel' : pick.kind === 'mode' && pick.mode === b.mode);
+    box.replaceChildren(
+      ...MODE_ORDER.map((m) =>
+        h(
+          'button',
+          { class: `modebtn modebtn--${m}`, role: 'radio', 'aria-pressed': String(on({ kind: 'mode', mode: m })), 'aria-checked': String(on({ kind: 'mode', mode: m })), 'data-mode': m, onclick: () => ((pick = { kind: 'mode', mode: m }), draw()) },
+          modeIcon(m),
+          h('span', { class: 'modebtn__txt' }, h('b', null, modeName(m)), h('small', null, modeSub(m))),
+        ),
+      ),
+      h(
+        'button',
+        { class: 'modebtn modebtn--duel', role: 'radio', 'aria-pressed': String(on({ kind: 'duel' })), 'aria-checked': String(on({ kind: 'duel' })), 'data-mode': 'duel', 'data-testid': 'friend-battle-duel', onclick: () => ((pick = { kind: 'duel' }), draw()) },
+        tourneyIcon(26),
+        h('span', { class: 'modebtn__txt' }, h('b', null, t('Duel 1×1')), h('small', null, t('the $BLAT Tournament, for the rating'))),
+      ),
+    );
+  };
+  draw();
+  const sheet = openSheet(root, {
+    title: t('Call {name} to battle', { name: o.friend.name }),
+    testid: 'friend-battle-sheet',
+    body: h('div', { class: 'col friendbattle' }, box, h('div', { class: 'muted friendbattle__note' }, t('The room is made at once and {name} gets the call; you pick the map in the room and can call more friends there.', { name: o.friend.name }))),
+    actions: h('button', { class: 'btn btn--red grow', 'data-testid': 'friend-battle-go', onclick: () => (sheet.close(), o.onGo(pick)) }, t('Call to battle')),
+  });
 }
 
 // ── private messages ───────────────────────────────────────────────────────
@@ -492,9 +532,17 @@ export function showInviteCard(o: { invite: RoomInviteEvent; inMatch: boolean; o
   };
   const card = h(
     'div',
-    { class: 'invitecard panel', role: 'alertdialog', 'aria-label': t('Invitation from {name}', { name: inv.from.name }), 'data-testid': 'invite-card' },
+    { class: `invitecard panel ${inv.battle ? 'invitecard--battle' : ''}`, role: 'alertdialog', 'aria-label': t('Invitation from {name}', { name: inv.from.name }), 'data-testid': 'invite-card', ...(inv.battle ? { 'data-battle': 'true' } : {}) },
     cardAva(inv.from),
-    h('div', { class: 'col', style: 'gap:0;min-width:0;flex:1' }, h('b', null, t('{name} calls you to play', { name: inv.from.name })), h('span', { class: 'muted' }, `${modeName(inv.mode)} · ${mapName(inv.mapId)}`)),
+    // v0.2.17: a gang battle — the two gangs and the format
+    inv.battle
+      ? h(
+          'div',
+          { class: 'col', style: 'gap:0;min-width:0;flex:1' },
+          h('b', null, t('Gang battle {f}: [{red}] against [{blue}]', { f: inv.battle.format.replace('x', '×'), red: inv.battle.red.tag, blue: inv.battle.blue.tag })),
+          h('span', { class: 'muted' }, `${t('{name} calls the gangs out', { name: inv.from.name })} · ${mapName(inv.mapId)}`),
+        )
+      : h('div', { class: 'col', style: 'gap:0;min-width:0;flex:1' }, h('b', null, t('{name} calls you to play', { name: inv.from.name })), h('span', { class: 'muted' }, `${modeName(inv.mode)} · ${mapName(inv.mapId)}`)),
     h(
       'button',
       {
@@ -505,7 +553,7 @@ export function showInviteCard(o: { invite: RoomInviteEvent; inMatch: boolean; o
           o.onJoin();
         },
       },
-      o.inMatch ? t('Leave and join') : t('Join'),
+      o.inMatch ? t('Leave and join') : inv.battle ? t('To battle') : t('Join'),
     ),
     h(
       'button',

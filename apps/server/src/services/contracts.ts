@@ -157,6 +157,11 @@ export interface Stakes {
   refund(matchId: string): Promise<number>;
 }
 
+/** v0.2.17: gang battles — which gang a person is in (rooms of a battle take only its two gangs' people). */
+export interface Gangs {
+  gangOf(userId: string): Promise<string | null>;
+}
+
 export interface Services {
   sessions: SessionVerifier;
   recorder: MatchRecorder;
@@ -164,4 +169,5 @@ export interface Services {
   analytics: Analytics;
   economy: Economy;
   stakes?: Stakes;
+  gangs?: Gangs;
 }

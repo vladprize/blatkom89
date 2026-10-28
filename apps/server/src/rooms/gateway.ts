@@ -111,16 +111,34 @@ export function attachGateway(server: Server, rooms: RoomManager, services: Serv
           return ws.close(WS_CLOSE.POLICY, why);
         }
       }
+      // v0.2.17: a gang battle takes only its two gangs' people (a player already in the room is coming back)
+      let gang: string | null = null;
+      if (room.battle && !room.hasMember(user.userId)) {
+        gang = services.gangs ? await services.gangs.gangOf(user.userId).catch(() => null) : null;
+        if (room.battleSide(gang) === null) {
+          const { red, blue } = room.battle;
+          ws.send(JSON.stringify({ type: 'error', code: 'battle_gang', message: `This is a battle of [${red.tag}] ${red.name} and [${blue.tag}] ${blue.name} — only their people come in` }));
+          return ws.close(WS_CLOSE.POLICY, 'battle_gang');
+        }
+      }
       // owned characters and the spawn loadout (free gear if the economy cannot be reached)
       const gear = await services.economy.gear(user.userId).catch((e: Error) => {
         log.warn('gear lookup failed', { user: user.userId, err: e });
         return undefined;
       });
       if (ws.readyState !== 1) return;
-      const result = room.join(user, ws, hello.character, viaInvite, gear);
+      const result = room.join(user, ws, hello.character, viaInvite, gear, gang);
       if (result === 'room_full' || result === 'room_closed') {
         ws.send(JSON.stringify({ type: 'error', code: result, message: result === 'room_full' ? 'The room is full' : 'The match is over' }));
         return ws.close(result === 'room_full' ? WS_CLOSE.ROOM_FULL : WS_CLOSE.ROOM_CLOSED, result);
+      }
+      if (result === 'side_full') {
+        ws.send(JSON.stringify({ type: 'error', code: 'room_full', message: 'Your gang’s side is full' }));
+        return ws.close(WS_CLOSE.ROOM_FULL, 'side_full');
+      }
+      if (result === 'battle_gang') {
+        ws.send(JSON.stringify({ type: 'error', code: 'battle_gang', message: 'Only the two gangs’ people come into a gang battle' }));
+        return ws.close(WS_CLOSE.POLICY, 'battle_gang');
       }
       joined = true;
       clearTimeout(helloTimer);

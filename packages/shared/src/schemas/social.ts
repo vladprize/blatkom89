@@ -10,6 +10,8 @@ import type { GameMode } from '../game-rules/match.js';
 import type { MapId } from '../maps/types.js';
 import type { ClubSummary } from '../game-rules/clubs.js';
 import { displayNameSchema } from './api.js';
+import type { GangBattle } from '../game-rules/gangBattle.js';
+import type { KonFormat } from '../game-rules/kon.js';
 
 /** Where a friend is right now: not connected, in the menus, in a room's lobby, in a match. */
 export type FriendStatus = 'offline' | 'online' | 'lobby' | 'match';
@@ -88,6 +90,8 @@ export interface RoomInviteEvent {
   mapId: MapId;
   isPrivate: boolean;
   at: string;
+  /** v0.2.17: a gang battle — the call goes to the people of both gangs. */
+  battle?: GangBattle & { format: KonFormat };
 }
 
 /** Events pushed over the social WebSocket. */

@@ -6,7 +6,7 @@
  * requests are answered by `answerHouseRequests`.
  */
 import { CLUB_RULES, ClubEmblemSchema, ClubFlagSchema, isAvatarId, isCharacterId, nameKey } from '@blatkom/shared';
-import type { AdminClubRow, ClubDetails, ClubEmblem, ClubFlag, ClubMember, ClubRequestEntry, ClubStanding, ClubSummary, CreateClubBody, NickLang, UpdateClubBody } from '@blatkom/shared';
+import type { AdminClubRow, ClubDetails, ClubEmblem, ClubFlag, ClubMember, ClubRequestEntry, ClubStanding, ClubSummary, CreateClubBody, GangCard, NickLang, UpdateClubBody } from '@blatkom/shared';
 import type postgres from 'postgres';
 import type { Sql } from '../database/db.js';
 import { HOUSE_CLUBS, acceptAfterMs, drift, housePeople, houseSeed, houseSize } from './house.js';
@@ -117,6 +117,27 @@ export class ClubRepo {
     const r = rows[0];
     if (!r) return null;
     return { summary: this.summary(r, await this.rankOf(r)), role: r.role };
+  }
+
+  /**
+   * v0.2.17, gang battles: the caller's gang and the gang called out — each as a battle shows it, with the
+   * number of its people (real players: a house gang's made-up members don't play).
+   */
+  async battleSides(userId: string, targetId: string): Promise<{ mine: { card: GangCard; people: number } | null; target: { card: GangCard; people: number } | null }> {
+    const side = (r: ClubRow & { people: number }) => ({ card: { id: r.id, name: r.name, tag: r.tag, flag: parseFlag(r.flag), emblem: parseEmblem(r.emblem) }, people: r.people });
+    const [mine] = await this.sql<Array<ClubRow & { people: number }>>`
+      SELECT c.*, (SELECT count(*)::int FROM club_members x WHERE x.club_id = c.id) AS people
+      FROM club_members m JOIN clubs c ON c.id = m.club_id WHERE m.user_id = ${userId}`;
+    const [target] = await this.sql<Array<ClubRow & { people: number }>>`
+      SELECT c.*, (SELECT count(*)::int FROM club_members x WHERE x.club_id = c.id) AS people FROM clubs c WHERE c.id = ${targetId}`;
+    return { mine: mine ? side(mine) : null, target: target ? side(target) : null };
+  }
+
+  /** The people (players, not the house's made-up members) of these gangs. */
+  async peopleOf(clubIds: string[]): Promise<string[]> {
+    if (!clubIds.length) return [];
+    const rows = await this.sql<Array<{ user_id: string }>>`SELECT user_id FROM club_members WHERE club_id IN ${this.sql(clubIds)}`;
+    return rows.map((r) => r.user_id);
   }
 
   async requestedBy(userId: string): Promise<string[]> {

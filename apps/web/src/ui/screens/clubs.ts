@@ -4,8 +4,10 @@
  * requests, shows people out, changes the flag, opens or closes recruiting, disbands), and the editor
  * that founds a club or changes its colours.
  */
-import { CLUB_PALETTE, CLUB_RULES, EMBLEM_ICONS, FLAG_PATTERNS, clubMottoSchema, clubNameSchema, clubTagSchema, toLatin, transliterate } from '@blatkom/shared';
-import type { ClubDetails, ClubEmblem, ClubFlag, ClubMember, ClubSummary, ClubsResponse, CreateClubBody, EmblemIcon, FlagPattern, UpdateClubBody } from '@blatkom/shared';
+import { CLUB_PALETTE, CLUB_RULES, EMBLEM_ICONS, FLAG_PATTERNS, GANG_BATTLE_FORMATS, KON_RULES, clubMottoSchema, clubNameSchema, clubTagSchema, toLatin, transliterate } from '@blatkom/shared';
+import type { ClubBadge, ClubDetails, ClubEmblem, ClubFlag, ClubMember, ClubSummary, ClubsResponse, CreateClubBody, EmblemIcon, FlagPattern, GangBattleFormat, UpdateClubBody } from '@blatkom/shared';
+import { openSheet } from '../sheet.js';
+import { konLabel } from './kon.js';
 import { fill, h, toast } from '../dom.js';
 import { avatarImg } from '../avatars.js';
 import { clubFlag } from '../clubFlag.js';
@@ -116,7 +118,41 @@ export function renderClubs(o: { api: ClubsApi; level: number; tokens: number; o
 
 // ── a club's page ───────────────────────────────────────────────────────────────────────────────────
 
-export function renderClub(o: { api: ClubsApi; id: string; myId: string | null; onEdit: (c: ClubDetails) => void; onGone: () => void; onChanged?: () => void }): HTMLElement {
+/**
+ * v0.2.17: «Вызвать на бой» — the battle's format (two people a side or more); the map is the host's to
+ * pick in the room. Both gangs' people who are in the game get the call at once.
+ */
+export function openBattleSheet(root: HTMLElement, o: { mine: ClubBadge; theirs: Pick<ClubDetails, 'id' | 'name' | 'tag' | 'flag' | 'emblem'>; onGo: (kon: GangBattleFormat) => void }): void {
+  let kon: GangBattleFormat = '2x2';
+  const side = (g: { name: string; tag: string; flag: ClubFlag; emblem: ClubEmblem }, team: 'red' | 'blue') =>
+    h('div', { class: `battlesheet__side battlesheet__side--${team}` }, clubFlag(g.flag, g.emblem, { size: 54 }), h('b', null, `[${g.tag}]`), h('span', null, g.name));
+  const formats = h('div', { class: 'seg battlesheet__formats', role: 'radiogroup', 'aria-label': t('Format') });
+  const note = h('div', { class: 'muted battlesheet__note' });
+  const draw = () => {
+    formats.replaceChildren(
+      ...GANG_BATTLE_FORMATS.map((f) =>
+        h('button', { role: 'radio', 'aria-pressed': String(f === kon), 'aria-checked': String(f === kon), 'data-testid': `battle-format-${f}`, onclick: () => ((kon = f), draw()) }, h('b', null, konLabel(f))),
+      ),
+    );
+    note.textContent = t('{n} against {n}: only the two gangs’ people, your gang plays red. The tournament rating moves for the players and for both gangs; no stake.', { n: KON_RULES[kon].size });
+  };
+  draw();
+  const sheet = openSheet(root, {
+    title: t('Gang battle'),
+    testid: 'battle-sheet',
+    body: h(
+      'div',
+      { class: 'col battlesheet' },
+      h('div', { class: 'battlesheet__vs' }, side(o.mine, 'red'), h('span', { class: 'battlesheet__x' }, t('vs')), side(o.theirs, 'blue')),
+      formats,
+      note,
+      h('div', { class: 'muted battlesheet__note' }, t('Everyone of the two gangs who is in the game gets the call at once; send the room’s link to the others. You pick the map in the room.')),
+    ),
+    actions: h('button', { class: 'btn btn--red grow', 'data-testid': 'battle-go', onclick: () => (sheet.close(), o.onGo(kon)) }, t('Call them out')),
+  });
+}
+
+export function renderClub(o: { api: ClubsApi; id: string; myId: string | null; myGang?: ClubBadge | null; onBattle?: (club: ClubDetails, kon: GangBattleFormat) => void; onEdit: (c: ClubDetails) => void; onGone: () => void; onChanged?: () => void }): HTMLElement {
   let c: ClubDetails | null = null;
   let error: string | null = null;
   let busy = false;
@@ -161,6 +197,23 @@ export function renderClub(o: { api: ClubsApi; id: string; myId: string | null; 
     );
   const actions = (club: ClubDetails): HTMLElement => {
     const box = h('div', { class: 'clubactions' });
+    // v0.2.17: a player of another gang calls this one out to a battle
+    const mine = o.myGang && o.myGang.id !== club.id ? o.myGang : null;
+    if (mine && o.onBattle && club.me === 'none') {
+      box.append(
+        h(
+          'button',
+          {
+            class: 'btn btn--red clubbattle',
+            'data-testid': 'club-battle',
+            onclick: () => openBattleSheet(document.getElementById('ui') ?? document.body, { mine, theirs: club, onGo: (kon) => o.onBattle!(club, kon) }),
+          },
+          t('Call out to battle'),
+          h('span', { class: 'sub' }, t('[{mine}] against [{theirs}]', { mine: mine.tag, theirs: club.tag })),
+        ),
+      );
+      return box;
+    }
     switch (club.me) {
       case 'none':
         box.append(

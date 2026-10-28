@@ -288,11 +288,58 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .pstrip .edit { flex: none; width: 38px; height: 38px; display: grid; place-items: center; background: var(--panel-2); border: 1px solid var(--line); color: var(--beige); font-size: 18px; cursor: pointer; }
 .pstrip .edit:hover { border-color: var(--tape); }
 .xpgain { display: flex; flex-direction: column; gap: 6px; }
-/* v0.2.17: the results fit the window — the table takes what is left and scrolls inside */
+.xpgain__body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.xpgain__body > * { flex: none; }
+/* v0.2.17: the results fit the window — the table takes what is left and scrolls inside; the player's part
+   (experience, the buttons, the chat) keeps the buttons in view and scrolls its own long part */
+.screen--results .results__body { display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-height: 0; }
+.screen--results .results__main, .screen--results .results__side { display: flex; flex-direction: column; gap: 14px; }
+.screen--results .results__main { flex: 1 1 auto; }
+.screen--results .results__side { flex: 0 1 auto; min-height: 0; }
 .screen--results .results__table { min-height: 110px; flex: 0 1 auto; padding-top: 4px; padding-bottom: 4px; }
+.screen--results .results__side > .xpgain { flex: 0 1 auto; min-height: 110px; }
+.screen--results .results__side > .xpgain > .xpgain__body { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #5a4c3e transparent; padding-right: 2px; }
+.screen--results .results__buttons, .screen--results .results__side > .rchat { flex: none; }
+.screen--results .results__side .rchat__log { max-height: 110px; min-height: 44px; }
+.screen--results .results__side .ach { padding: 6px 8px; }
+.screen--results .results__side .ach .ico { width: 30px; height: 30px; font-size: 16px; }
+.screen--results .results__side .ach .t { font-size: 16px; }
+/* a computer: the match on the left, the player's part on the right; the chat takes what is left there */
+@media (min-width: 761px) {
+  .screen--results2 .results__body { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(300px, 1fr); grid-template-rows: minmax(0, 1fr); gap: 14px 18px; }
+  .screen--results2 .results__main, .screen--results2 .results__side { min-height: 0; }
+  .screen--results2 .results__table { flex: 1 1 auto; }
+  .screen--results2 .results__side > .rchat { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .screen--results2 .results__side > .rchat .rchat__log { flex: 1 1 auto; max-height: none; min-height: 44px; }
+  .screen--results2 .results__side > .rchat > :not(.rchat__log) { flex: none; }
+}
+@media (min-width: 761px) and (max-height: 800px) {
+  .screen--results .rchat__note { display: none; }
+}
+/* a phone: one column — the banner, the table (what is left, scrolling inside), the experience (scrolling
+   inside when long), the buttons, the chat; the points rule stays in the lobby's rules */
 @media (max-width: 760px) {
-  .screen--results .wrap { gap: 8px; }
-  .screen--results .teamwin, .screen--results .wrap > .panel.col:not(.xpgain) { padding: 10px 10px 8px; }
+  .screen--results .results__main, .screen--results .results__side { display: contents; }
+  .screen--results .wrap, .screen--results .results__body { gap: 8px; }
+  .screen--results .results__top { flex-wrap: nowrap; min-width: 0; }
+  .screen--results .results__top > .tag { flex: none; white-space: nowrap; }
+  .screen--results .results__top > .muted { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+  .screen--results .results__table { flex: 1 1 0; min-height: 132px; }
+  /* the banner in one band: who won on the left, the score on the right */
+  .screen--results .teamwin:has(.teamwin__score) { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'sub score' 'title score'; align-items: center; justify-items: start; column-gap: 12px; row-gap: 0; text-align: left; }
+  .screen--results .teamwin > .muted { grid-area: sub; font-size: 13px; line-height: 1.2; }
+  .screen--results .teamwin > .h1 { grid-area: title; font-size: 23px; line-height: 1.1; }
+  .screen--results .teamwin__score { grid-area: score; font-size: 30px; line-height: 1; }
+  .screen--results .results__main > .panel.row > img { width: 56px; height: 56px; }
+  .screen--results .results__points, .screen--results .rchat__note { display: none; }
+  .screen--results .results__main > .panel:not(.results__table) { flex: none; padding: 10px 10px 8px; }
+  .screen--results .results__side > .xpgain { padding: 10px; }
+  .screen--results .results__side > .xpgain > .xpgain__body { gap: 4px; }
+  .screen--results .results__side .ach { padding: 4px 6px; }
+  .screen--results .results__side .rchat { gap: 5px; }
+  .screen--results .results__side .rchat__log { max-height: 56px; min-height: 36px; padding: 4px 8px; font-size: 14px; }
+  .screen--results .results__side .rchat__input, .screen--results .results__side .rchat__send { min-height: 38px; }
+  .screen--results .results__buttons .btn { min-height: 44px; }
   .screen--results .h1 { font-size: 26px; }
   .screen--results .hand { font-size: 17px; line-height: 1.25; }
   .screen--results .results__points { font-size: 12px !important; line-height: 1.25; }
@@ -435,7 +482,7 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .teamcol { display: flex; flex-direction: column; gap: 8px; padding: 8px; border: 1px solid var(--line); }
 .teamcol--red { background: linear-gradient(180deg, rgba(200,49,42,.18), transparent 60%); border-color: #6a2420; }
 .teamcol--blue { background: linear-gradient(180deg, rgba(74,155,224,.16), transparent 60%); border-color: #234a6e; }
-.teamcol__head { display: flex; justify-content: space-between; align-items: baseline; font-family: Oswald, sans-serif; letter-spacing: .06em; }
+.teamcol__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; font-family: Oswald, sans-serif; letter-spacing: .06em; }
 .teamcol--red .teamcol__head b { color: #ff8a7a; }
 .teamcol--blue .teamcol__head b { color: #8cc8f6; }
 .player--red { box-shadow: inset 3px 0 0 #d8392e; }
@@ -545,6 +592,10 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   /* a column too tall for a very short window scrolls by itself (the room above its first panel's label) */
   .screen--lobby .lobby__col { min-height: 0; gap: 12px; padding-top: 12px; margin-top: -12px; }
   .screen--lobby .lobby__col--right { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #5a4c3e transparent; }
+  /* two sides side by side share the panel; long names give way (a gang's tag and name, v0.2.17) */
+  .screen--lobby .teams { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .screen--lobby .teamcol { min-width: 0; container-type: inline-size; }
+  .screen--lobby .teamcol .player__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .screen--lobby .teamcol .player .n { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
   .screen--lobby .teamcol .player__meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px !important; }
   .screen--lobby .teamcol .player { gap: 8px; padding: 6px 8px; }
@@ -553,6 +604,15 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .screen--lobby .lobby__players > .list, .screen--lobby .lobby__players > .teams { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #5a4c3e transparent; align-content: start; }
   .screen--lobby .lobby__col--left > .rchat { flex: none; }
   .screen--lobby .lobby__col--right > .lobby__actions { margin-top: auto; }
+}
+/* v0.2.17: a side too narrow for the badges (the two sides of a gang battle on a smaller computer) shows the
+   phone's marks instead: a star for the host, a coloured dot for the state */
+@container (max-width: 320px) {
+  .screen--lobby .teamcol .player .badge { display: none; }
+  .screen--lobby .teamcol .pstar { display: inline; color: var(--gold); font-size: 13px; line-height: 1; }
+  .screen--lobby .teamcol .pdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none; background: #6b6256; }
+  .screen--lobby .teamcol .pdot--ok { background: #7cc36a; }
+  .screen--lobby .teamcol .pdot--off { background: #e0483c; }
 }
 /* tablets: the two sides one above the other (a column is too narrow for two) */
 @media (min-width: 761px) and (max-width: 999px) {
@@ -2075,3 +2135,39 @@ button.chatline__name:hover { text-decoration: underline; }
   .menu__drop .dropbanner--menu .dropbanner__canvas { object-fit: cover; object-position: 50% 22%; }
   .menu__char .charcard .hand { display: none; }
 }
+
+/* v0.2.17 part 3: «позвать друга в бой» and gang battles — the friend's sheet (four modes and a duel), the
+   gang's «Call out to battle» and its sheet, the room's two gangs, the call's card */
+.friendbattle { gap: 10px; }
+.friendbattle__modes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.friendbattle__modes .modebtn--duel { grid-column: 1 / -1; border-color: #c99a3a; background: linear-gradient(100deg, rgba(216, 166, 55, .2), transparent 70%), var(--panel-2); }
+.friendbattle__modes .modebtn--duel[aria-pressed='true'] { background: linear-gradient(100deg, rgba(216, 166, 55, .55), rgba(122, 15, 18, .45)); border-color: #f6d675; }
+.friendbattle__note, .battlesheet__note { font-size: 14px; line-height: 1.3; }
+.clubbattle { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.clubbattle .sub { font-family: 'PT Sans Narrow', sans-serif; font-size: 12.5px; text-transform: none; letter-spacing: 0; opacity: .85; }
+.battlesheet { gap: 12px; }
+.battlesheet__vs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: center; }
+.battlesheet__side { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px 8px; min-width: 0; text-align: center; border: 1px solid var(--line); background: var(--panel-2); }
+.battlesheet__side--red { border-color: #8a2a22; background: linear-gradient(180deg, rgba(200, 49, 42, .24), var(--panel-2) 70%); }
+.battlesheet__side--blue { border-color: #2a5a86; background: linear-gradient(180deg, rgba(74, 155, 224, .22), var(--panel-2) 70%); }
+.battlesheet__side b { font-family: Oswald, sans-serif; font-size: 18px; letter-spacing: .04em; }
+.battlesheet__side span { font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.battlesheet__x { font-family: Oswald, sans-serif; font-size: 18px; text-transform: uppercase; letter-spacing: .08em; color: var(--tape); }
+.battlesheet__formats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.battlesheet__formats button { min-height: 48px; }
+.battlesheet__formats b { font-size: 21px; }
+.lobby__battle { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; padding: 6px 8px; border: 1px solid var(--line); background: var(--panel-2); }
+.lobby__gang { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 46%; }
+.lobby__gang b { font-family: Oswald, sans-serif; letter-spacing: .04em; }
+.lobby__gang span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.lobby__gang--red b { color: #ff8a7a; }
+.lobby__gang--blue b { color: #8cc8f6; }
+.lobby__vs { font-family: Oswald, sans-serif; text-transform: uppercase; letter-spacing: .08em; color: var(--tape); font-size: 13px; }
+.teamcol__gang { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.invitecard--battle { border-color: #c99a3a; box-shadow: 0 0 0 1px rgba(246, 214, 117, .3), 0 0 22px rgba(216, 166, 55, .3); }
+@media (max-width: 560px) {
+  .friendbattle__modes .modebtn { min-height: 50px; padding: 8px 9px; }
+  .lobby__battle { gap: 6px; padding: 4px 6px; }
+  .lobby__gang span { display: none; }
+}
+

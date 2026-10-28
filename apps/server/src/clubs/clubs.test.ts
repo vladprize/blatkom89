@@ -2,14 +2,14 @@
  * Clubs (v0.3) against PostgreSQL and the real gateway: the table with the house clubs, founding (level,
  * talons, unique names and tags), requests the head answers with live notices, leaving, showing out,
  * handing over and disbanding, the house clubs answering by themselves and drifting, and the club rating
- * moving with its members' match results.
+ * moving with its members' match results; v0.2.17: gang battles — a gang calls another out.
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { WebSocket } from 'ws';
-import { CLUB_RULES, clubMottoSchema, clubNameSchema, clubTagSchema, nameKey } from '@blatkom/shared';
-import type { ClubDetails, ClubsResponse, SocialEvent } from '@blatkom/shared';
+import { CLUB_RULES, PROTOCOL_VERSION, clubMottoSchema, clubNameSchema, clubTagSchema, nameKey } from '@blatkom/shared';
+import type { ClubDetails, ClubsResponse, ServerMessage, SocialEvent } from '@blatkom/shared';
 import { startTestApp, api, devLogin, cookieFrom } from '../admin/testkit.js';
 import { ADMIN_COOKIE } from '../admin/auth.js';
 import type { TestApp } from '../admin/testkit.js';
@@ -409,4 +409,75 @@ test('clubs: the admin sees every club (the game’s own marked) and removes a p
   assert.deepEqual([a!.details.name, a!.details.members], ['Bad Name', 2]);
   const house = rows.find((r) => r.house)!;
   assert.equal((await api(app.base, `/api/admin/clubs/${house.id}`, { method: 'DELETE', cookie, csrf })).body.error.code, 'house_club');
+});
+
+test('gang battles (v0.2.17): a gang calls another out — refusals, the room of the two gangs, the call to both gangs’ people, the gateway lets only them in', async () => {
+  const join = async (clubId: string, head: { token: string }, who: { token: string; userId: string }) => {
+    await api(app.base, `/api/clubs/${clubId}/request`, { method: 'POST', token: who.token });
+    const r = await api(app.base, `/api/clubs/${clubId}/requests/${who.userId}`, { method: 'POST', token: head.token, body: { accept: true } });
+    assert.equal(r.status, 200, r.text);
+  };
+  const tag = () => `B${randomUUID().slice(0, 3).toUpperCase()}`.replace(/[^A-Z0-9]/g, 'X');
+  const ra = await player('Redhead');
+  const rb = await player('Redhand');
+  const ba = await player('Bluehead');
+  const bb = await player('Bluehand');
+  const loner = await player('Loner');
+  const red = (await found(ra.token, `Red Battle ${randomUUID().slice(0, 4)}`, tag())).body as ClubDetails;
+  const blue = (await found(ba.token, `Blue Battle ${randomUUID().slice(0, 4)}`, tag())).body as ClubDetails;
+  const battle = (token: string, id: string, kon = '2x2') => api(app.base, `/api/clubs/${id}/battle`, { method: 'POST', token, body: { kon } });
+  // refusals: no gang, own gang, too few people, an unknown gang, a 1×1 «battle»
+  assert.equal((await battle(loner.token, blue.id)).body.error.code, 'no_gang');
+  assert.equal((await battle(ra.token, red.id)).body.error.code, 'own_gang');
+  assert.equal((await battle(ra.token, blue.id)).body.error.code, 'too_few', 'one person a gang: no 2×2');
+  assert.equal((await battle(ra.token, randomUUID())).status, 404);
+  assert.equal((await battle(ra.token, blue.id, '1x1')).status, 400, '1×1 is not a gang battle');
+  await join(red.id, ra, rb);
+  await join(blue.id, ba, bb);
+  assert.equal((await battle(ra.token, blue.id, '3x3')).body.error.code, 'too_few', 'two people a gang: no 3×3');
+  // the call: the other three are online and hear it; the loner doesn't
+  const ears = [rb, ba, bb, loner].map((p) => new Social(p.token));
+  try {
+    await Promise.all(ears.map((e) => e.next('ready')));
+    const ok = await battle(ra.token, blue.id);
+    assert.equal(ok.status, 201, ok.text);
+    assert.deepEqual([ok.body.kon, ok.body.mode, ok.body.stake, ok.body.battle.red.id, ok.body.battle.blue.id, ok.body.battle.red.tag], ['2x2', 'teams', 0, red.id, blue.id, red.tag]);
+    assert.equal(ok.body.told, 3, 'the caller’s gang-mate and both people of the other gang');
+    assert.match(ok.body.inviteCode, /^[A-Za-z0-9]{6,16}$/);
+    for (const e of ears.slice(0, 3)) {
+      const ev = await e.next('invite');
+      assert.deepEqual([ev.invite.roomId, ev.invite.battle?.format, ev.invite.battle?.red.id, ev.invite.battle?.blue.id, ev.invite.from.name.startsWith('Redhead')], [ok.body.roomId, '2x2', red.id, blue.id, true]);
+    }
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(ears[3]!.events.filter((e) => e.type === 'invite').length, 0, 'nobody outside the two gangs is called');
+    // the room: GET says it's a battle; the gateway turns the loner away, takes a gang's person on its side
+    const info = await api(app.base, `/api/rooms/${ok.body.roomId}`, { token: loner.token });
+    assert.deepEqual([info.body.kon, info.body.battle?.blue.id], ['2x2', blue.id]);
+    // so does the invitation: a stranger's app can say who is fighting before connecting
+    const inv = await api(app.base, `/api/invites/${ok.body.inviteCode}`);
+    assert.deepEqual([inv.body.status, inv.body.battle?.red.id, inv.body.battle?.blue.tag], ['joinable', red.id, blue.tag]);
+    const hello = (token: string) =>
+      new Promise<ServerMessage>((resolve) => {
+        const ws = new WebSocket(`${app.wsBase}/ws`);
+        ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', protocol: PROTOCOL_VERSION, token, roomId: ok.body.roomId, character: 'petya', clientVersion: 'test' })));
+        ws.on('message', (d, binary) => {
+          if (binary) return;
+          const m = JSON.parse(String(d)) as ServerMessage;
+          if (m.type === 'error' || m.type === 'roster') {
+            resolve(m);
+            ws.close();
+          }
+        });
+      });
+    const out = await hello(loner.token);
+    assert.deepEqual([out.type, out.type === 'error' ? out.code : null], ['error', 'battle_gang']);
+    const inBlue = await hello(bb.token);
+    assert.equal(inBlue.type, 'roster');
+    if (inBlue.type === 'roster') {
+      assert.equal(inBlue.players.find((p) => p.id === bb.userId)?.team, 1, 'the other gang plays blue');
+      assert.equal(inBlue.battle?.red.id, red.id);
+    }
+  } finally {
+    for (const e of ears) e.close();
+  }
 });

@@ -147,9 +147,15 @@ try {
   await A.page.keyboard.press('Escape');
   await B.page.keyboard.press('Escape');
 
-  // ── «Play» with a friend: a room and a live invitation ──────────────────
-  await friendRow(A, 'friends-list', NB).locator('.btn--red').click();
+  // ── «To battle» with a friend (v0.2.17): the mode, then a room and a live invitation ──
+  await friendRow(A, 'friends-list', NB).getByTestId('friend-battle').click();
+  await A.page.getByTestId('friend-battle-sheet').waitFor({ timeout: 10000 });
+  const modes = await A.page.locator('[data-testid=friend-battle-sheet] .modebtn').count();
+  check(modes === 5, `«To battle» offers the four modes and a tournament duel (${modes})`);
+  await A.page.locator('[data-testid=friend-battle-sheet] .modebtn[data-mode="teams"]').click();
+  await A.page.getByTestId('friend-battle-go').click();
   await A.page.getByTestId('invite-friends').waitFor({ timeout: 30000 });
+  check((await A.page.locator('.modebtn[data-mode="teams"][aria-pressed="true"]').count()) === 1, 'the room plays the mode picked in the sheet (red against blue)');
   await B.page.getByTestId('invite-card').waitFor({ timeout: 15000 });
   const card = await B.page.getByTestId('invite-card').innerText();
   check(card.includes(NA), `B gets the invitation card («${card.replace(/\s+/g, ' ').slice(0, 70)}»)`);

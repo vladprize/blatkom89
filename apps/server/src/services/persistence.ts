@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 import type { Sql } from '../database/db.js';
 import type { Env } from '../config/env.js';
 import type { Logger } from '../logging/logger.js';
-import type { InviteRegistry, Services } from './contracts.js';
+import type { Gangs, InviteRegistry, Services } from './contracts.js';
 import { ActivityTracker } from '../auth/activity.js';
 import { UserRepo } from '../auth/users.js';
 import { SessionStore } from '../auth/sessions.js';
@@ -81,6 +81,16 @@ export interface PgContext {
 
 const contexts = new WeakMap<object, PgContext>();
 
+/** v0.2.17: the gang a person is in (gang battles). */
+export function pgGangs(sql: Sql): Gangs {
+  return {
+    async gangOf(userId) {
+      const [r] = await sql<Array<{ club_id: string }>>`SELECT club_id FROM club_members WHERE user_id = ${userId}`;
+      return r?.club_id ?? null;
+    },
+  };
+}
+
 /** One context per database handle so that route modules and services share the same instances. */
 export function pgContext(sql: Sql, env: Env, log: Logger): PgContext {
   const existing = contexts.get(sql as unknown as object);
@@ -135,7 +145,7 @@ export async function createPersistence(deps: { sql: Sql; env: Env; log: Logger 
   // v0.2.17: stakes a stopped server left reserved come back (older than any match can last)
   const stopStakes = deps.env.NODE_ENV === 'test' ? () => {} : scheduleStakeRefunds(deps.sql, deps.log, Math.max(10 * 60_000, deps.env.MATCH_DURATION_SEC * 1000 * 2.5));
   return {
-    services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy, stakes: ctx.stakes },
+    services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy, stakes: ctx.stakes, gangs: pgGangs(deps.sql) },
     recorder: ctx.recorder,
     close: async () => {
       stopRetention();

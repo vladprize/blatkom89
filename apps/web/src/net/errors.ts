@@ -31,6 +31,10 @@ const CODE_TEXT: Record<string, () => string> = {
   blat_low: () => t('Not enough $BLAT for this stake.'),
   daily_limit: () => t('The day’s stake limit is reached — come back tomorrow or play without a stake.'),
   internal: () => t('Something broke on the server. Try again.'),
+  // v0.2.17: gang battles
+  battle_gang: () => t('This battle is between two gangs — only their people come in.'),
+  no_gang: () => t('Join a gang first — a battle is gang against gang.'),
+  own_gang: () => t('That’s your own gang.'),
 };
 
 /** Localized message for an error code (+ the server's English message as a fallback). */
@@ -39,6 +43,10 @@ export function errorText(code: string, serverMessage?: string | null, status?: 
   if (code === 'not_enough_players') {
     const n = Number(/\d+/.exec(serverMessage ?? '')?.[0] ?? 2);
     return t('At least {n} players needed', { n });
+  }
+  if (code === 'too_few') {
+    const n = Number(/\d+/.exec(serverMessage ?? '')?.[0] ?? 2);
+    return t('Both gangs need at least {n} people of their own for that battle.', { n });
   }
   // the code is generic for several situations: keep the server's (more precise) message
   if (code === 'rate_limited' && serverMessage) return t(serverMessage);

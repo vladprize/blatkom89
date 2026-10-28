@@ -13,6 +13,7 @@ import type { ArmsId, GadgetId } from '../game-rules/gadgets.js';
 import type { FlagAction, Standing } from '../sim/world.js';
 import type { AchievementId } from '../game-rules/progression.js';
 import type { KonFormat, KonOutcome } from '../game-rules/kon.js';
+import type { GangBattle } from '../game-rules/gangBattle.js';
 import type { StakeRefusal } from '../game-rules/konStakes.js';
 
 /**
@@ -179,6 +180,8 @@ export type ServerMessage =
       stake?: number;
       /** v0.2.17: the stakes are being reserved — the match starts in a moment. */
       staking?: boolean;
+      /** v0.2.17: a gang battle — red is the challenger's gang, blue the gang called out. */
+      battle?: GangBattle;
     }
   | { type: 'ev'; tick: number; events: GameEvent[] }
   | { type: 'results'; matchId: string; reason: 'time' | 'score' | 'aborted'; durationMs: number; standings: Standing[]; mapId: MapId; mode: GameMode; teams?: TeamResultSummary }
@@ -190,6 +193,8 @@ export type ServerMessage =
   | { type: 'chat'; id: string; name: string; slot: number; team: Team | null; text: string; toTeam: boolean; at: number };
 
 export type ErrorCode =
+  /** v0.2.17: a gang battle takes only the people of its two gangs. */
+  | 'battle_gang'
   | 'bad_message'
   | 'unauthorized'
   | 'room_not_found'

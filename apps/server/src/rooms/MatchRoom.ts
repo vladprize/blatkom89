@@ -51,6 +51,7 @@ import type {
   ClientMessage,
   GameEvent,
   GameMode,
+  GangBattle,
   InputFrame,
   KonFormat,
   MapId,
@@ -93,6 +94,11 @@ export interface RoomOptions {
    * stakes are reserved before the match starts and settled with its results (blat/stakes.ts).
    */
   stake?: number;
+  /**
+   * v0.2.17: a gang battle (Kon rooms only): red is the challenger's gang, blue the gang called out; only
+   * their people come in, each on their gang's side (game-rules/gangBattle.ts).
+   */
+  battle?: GangBattle | null;
 }
 
 /** A player the room runs itself to fill the lineup (never labelled as such to clients). */
@@ -184,6 +190,8 @@ export class MatchRoom {
   readonly stake: number;
   /** v0.2.17: the stakes are being reserved (the match starts once they are). */
   private staking = false;
+  /** v0.2.17: a gang battle — the sides are the two gangs (null: an ordinary room). */
+  readonly battle: GangBattle | null;
   /** Match rules; `mode` changes when the host switches between free-for-all and teams. */
   config: MatchConfig;
   mapId: MapId;
@@ -234,6 +242,7 @@ export class MatchRoom {
     this.autoStart = opts.autoStart ?? !opts.isPrivate;
     this.kon = opts.kon ?? null;
     this.stake = this.kon ? Math.max(0, Math.floor(opts.stake ?? 0)) : 0;
+    this.battle = this.kon ? (opts.battle ?? null) : null;
     // a Kon room is people only, whatever the server's fill setting
     this.fillBots = this.kon ? false : (opts.fillBots ?? false);
     this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
@@ -301,8 +310,17 @@ export class MatchRoom {
   }
 
   // ── Connections ─────────────────────────────────────────────────────────
-  /** Adds or resumes a player. Returns an error code when the join is refused. */
-  join(user: AuthedUser, ws: WebSocket, requested: CharacterId, viaInvite: boolean, gear: PlayerGear = FREE_GEAR): 'ok' | 'resumed' | 'room_full' | 'room_closed' {
+  /** The side a gang plays in this battle (null: not one of its gangs, or not a battle). */
+  battleSide(gang: string | null | undefined): Team | null {
+    if (!this.battle || !gang) return null;
+    return gang === this.battle.red.id ? 0 : gang === this.battle.blue.id ? 1 : null;
+  }
+
+  /**
+   * Adds or resumes a player. Returns an error code when the join is refused. In a gang battle `gang` is the
+   * player's gang (the gateway looks it up): only the two gangs' people come in, each on their side.
+   */
+  join(user: AuthedUser, ws: WebSocket, requested: CharacterId, viaInvite: boolean, gear: PlayerGear = FREE_GEAR, gang: string | null = null): 'ok' | 'resumed' | 'room_full' | 'room_closed' | 'battle_gang' | 'side_full' {
     if (this.closed) return 'room_closed';
     // only owned characters can be played online
     const character: CharacterId = gear.characters.has(requested) ? requested : 'petya';
@@ -334,6 +352,14 @@ export class MatchRoom {
       return 'resumed';
     }
     if (!this.isJoinable()) return this.world.phase === 'finished' || this.world.phase === 'closed' ? 'room_closed' : 'room_full';
+    // a gang battle: the player's gang decides the side; a full side takes nobody else
+    let side: Team | undefined;
+    if (this.battle) {
+      const t = this.battleSide(gang);
+      if (t === null) return 'battle_gang';
+      if (this.kon && this.world.teamSize(t) >= KON_RULES[this.kon].size) return 'side_full';
+      side = t;
+    }
     // a person always gets a place: a filled player gives up theirs when the room is full
     if (this.world.players.size >= this.config.maxPlayers && this.seats.size > 0) {
       const seats = [...this.seats.values()];
@@ -368,7 +394,7 @@ export class MatchRoom {
     };
     this.clients.set(user.userId, client);
     if (!this.hostId) this.hostId = user.userId;
-    this.world.addPlayer(user.userId, user.displayName, character, false, gear.loadout);
+    this.world.addPlayer(user.userId, user.displayName, character, false, gear.loadout, side);
     this.send(client, this.welcome(client, false));
     this.broadcastRoster();
     this.services.analytics.server('lobby_joined', { roomId: this.id, viaInvite }, user);
@@ -513,6 +539,8 @@ export class MatchRoom {
         if (this.world.phase !== 'waiting') return this.error(c, 'match_running', 'Teams are fixed once the match is on');
         const p = this.world.players.get(c.user.userId);
         if (!p || p.team === msg.team) return;
+        // a gang battle: the sides are the gangs
+        if (this.battle) return this.error(c, 'kon_fixed', 'In a gang battle the sides are the gangs');
         // Kon: a side holds the format's number of people, no more
         if (this.kon) {
           if (this.world.teamSize(msg.team) + 1 > KON_RULES[this.kon].size) return this.error(c, 'team_full', 'That side is full');
@@ -1221,6 +1249,7 @@ export class MatchRoom {
       minToStart: this.minToStart,
       kon: this.kon,
       ...(this.stake > 0 ? { stake: this.stake, staking: this.staking } : {}),
+      ...(this.battle ? { battle: this.battle } : {}),
     };
   }
 
@@ -1277,7 +1306,7 @@ export class MatchRoom {
 
   /** For players: the lineup as they see it in the room. */
   publicInfo() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon, stake: this.stake };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon, stake: this.stake, ...(this.battle ? { battle: this.battle } : {}) };
   }
 
   static protocolVersion = PROTOCOL_VERSION;

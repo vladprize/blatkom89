@@ -2,8 +2,9 @@
 
 A separate competitive section: people against people with fixed sides, its own rating for players and
 for gangs (ОПГ), win/loss records, streaks, tables and a match history — and, since v0.2.17, **stakes in
-$BLAT**: everyone in a staked room stakes the same, the winning side takes the pool (§6). Without a stake
-the tournament plays for the rating only, as «Блатной кон» did. The owner renamed it in v0.2.17:
+$BLAT**: everyone in a staked room stakes the same, the winning side takes the pool (§6), and gang
+battles — a gang calls another out (§7). Without a stake the tournament plays for the rating only, as
+«Блатной кон» did. The owner renamed it in v0.2.17:
 «Блатной Кон надо переименовать на $BLAT Турнир / Tournament» — «$BLAT Турнир» in Russian, «$BLAT
 Tournament» in English; the code keeps its old name (`kon`).
 
@@ -139,3 +140,42 @@ returned»).
 **Known limits** (not solved by the rules above): two accounts of one person can still play each other —
 the day-old accounts, the daily limit and the hold on flagged accounts keep that small; the admin's
 player card shows every ledger row for a check.
+
+## 7. Gang battles (v0.2.17 part 3)
+
+The owner: «бои ОПГ против ОПГ». A gang calls another gang out to a tournament battle: a private
+tournament room — team deathmatch, fixed sides, people only, **no stake** — whose sides are the two gangs.
+Rules: `packages/shared/src/game-rules/gangBattle.ts`; the room: `MatchRoom` with `battle` set.
+
+- **Calling out**: on another gang's page (Gangs → a gang) a member of a gang sees «Call out to battle
+  [mine] against [theirs]» → the sheet: 2×2, 3×3 or 5×5 (1×1 is not a gang battle) → the room is made at
+  once and the caller is in it. The map is picked in the room.
+- **Who may call** (`gangBattleRefusal`, checked by the server): the caller is in a gang (`no_gang`, 403),
+  the other gang exists (`not_found`, 404) and is another gang (`own_gang`, 409), and both gangs have at
+  least the format's side of people of their own (`too_few`, 409 — the house gangs' made-up members don't
+  count). At most 6 calls per player in 2 minutes.
+- **The call**: everyone of the two gangs who is in the game now (the caller aside) gets the call live —
+  a card «Gang battle 2×2: [X] against [Y] · {caller} calls the gangs out · {map}» with «To battle»; the
+  others get the room's link from the caller (Share / Copy in the room).
+- **The room**: the caller's gang plays red, the other gang blue; each person comes in on their gang's
+  side and nobody changes sides (`kon_fixed`). Nobody else comes in: the gateway turns away anyone whose
+  gang is neither side (`battle_gang`), and a full side takes nobody more («Your gang's side is full»).
+  The invitation carries the battle (`GET /api/invites/:code` → `battle`), so a stranger's app says
+  «This is a battle of [X] … and [Y] … — only their people come in» without connecting. The lobby shows
+  «Gang battle 2×2», the two flags with «[X] … vs [Y] …», and the sides headed by the gangs.
+- **The result**: a battle is a tournament match of its format — the players' tournament ratings move as
+  in any tournament match, and since every side is one gang, both gangs' tournament ratings and records
+  move too (§3).
+
+API: `POST /api/clubs/:id/battle { kon: '2x2' | '3x3' | '5x5', mapId? }` → `201 { roomId, inviteCode,
+inviteUrl, webUrl, mapId, mode: 'teams', kon, stake: 0, battle: { red, blue }, told }` (`told`: how many
+of the two gangs' people got the call live). The room's roster carries `battle`; the invitation event on
+the social socket carries `battle: { red, blue, format }`.
+
+## 8. A friend called to battle (v0.2.17 part 3)
+
+The owner: «позвать друга в бой». In Friends, each friend's row has «To battle» → a sheet with the four
+modes (every man for himself, red vs blue, capture the flag, base capture) and «Duel 1×1» (the $BLAT
+Tournament 1×1 for the rating, no stake) → «Call to battle»: the room is made at once and the friend
+gets the invitation card live (or is told to be offline); the map is picked in the room, more friends
+can be called from there.

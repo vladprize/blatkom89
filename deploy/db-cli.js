@@ -7340,6 +7340,13 @@ function isKonStake(v) {
   return v === 0 || KON_STAKE_AMOUNTS.includes(v);
 }
 
+// packages/shared/src/maps/types.ts
+var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp"];
+
+// packages/shared/src/game-rules/gangBattle.ts
+var GANG_BATTLE_FORMATS = ["2x2", "3x3", "5x5"];
+var GangBattleBody = external_exports.object({ kon: external_exports.enum(GANG_BATTLE_FORMATS), mapId: external_exports.enum(MAP_IDS).optional() }).strict();
+
 // packages/shared/src/story/missions.ts
 var STORY_RULES = Object.freeze({ heroDamage: 0.5, lives: 3, surviveRespawnMs: 7e3 });
 var STORY_TICKET_TTL_MS = 3 * 36e5;
@@ -7956,9 +7963,6 @@ var PROP_DEFS = {
   rock: P(34, 26, "circle", "low", true, "Rock", { radius: 11 })
 };
 var PROP_TYPES = Object.keys(PROP_DEFS);
-
-// packages/shared/src/maps/types.ts
-var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp"];
 
 // packages/shared/src/sim/math.ts
 var TAU = Math.PI * 2;

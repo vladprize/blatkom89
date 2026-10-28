@@ -3,8 +3,9 @@
  * showing out, disbanding. Live notices go through the social hub (`/ws/social`): a head hears about a
  * request, a player about being taken in, turned down or shown out.
  */
-import { CreateClubBody, UpdateClubBody } from '@blatkom/shared';
-import type { ClubsResponse, SocialEvent } from '@blatkom/shared';
+import { CreateClubBody, GangBattleBody, KON_RULES, MAP_ORDER, UpdateClubBody, gangBattleRefusal } from '@blatkom/shared';
+import type { ClubsResponse, GangBattleRefusal, GangBattleResponse, SocialEvent } from '@blatkom/shared';
+import { inviteUrls } from './rooms.js';
 import { z } from 'zod';
 import type { RouteModule } from '../app.js';
 import { HttpError } from '../http/router.js';
@@ -93,6 +94,51 @@ export const registerClubRoutes: RouteModule = (router, deps) => {
     const [clubs, mine, requested, incoming] = await Promise.all([q.length >= 2 ? r.search(q) : r.table(), r.clubOf(me.userId), r.requestedBy(me.userId), r.incomingFor(me.userId)]);
     const res: ClubsResponse = { clubs, mine: mine?.summary ?? null, requested, incoming };
     ctx.json(200, res);
+  });
+
+  // ── v0.2.17: gang battles — a gang calls another out to a tournament battle ───────────────────────
+  const battleLimiter = new RateLimiter(6, 6 / 120);
+  const BATTLE_REFUSALS: Record<GangBattleRefusal, [number, (size: number) => string]> = {
+    no_gang: [403, () => 'Join a gang first — a battle is gang against gang'],
+    own_gang: [409, () => 'That’s your own gang'],
+    not_found: [404, () => 'No such gang'],
+    too_few: [409, (n) => `Both gangs need at least ${n} people of their own for that battle`],
+  };
+  router.post('/api/clubs/:id/battle', auth, rateLimit(battleLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const target = clubId(ctx);
+    const body = await ctx.body(GangBattleBody, 1024);
+    const r = repo();
+    const sides = await r.battleSides(me.userId, target);
+    const why = gangBattleRefusal({ mine: sides.mine?.card.id ?? null, target: sides.target?.card.id ?? null, targetExists: !!sides.target, mineMembers: sides.mine?.people ?? 0, targetMembers: sides.target?.people ?? 0, format: body.kon });
+    if (why || !sides.mine || !sides.target) {
+      const [status, text] = BATTLE_REFUSALS[why ?? 'not_found'];
+      throw new HttpError(status, why ?? 'not_found', text(KON_RULES[body.kon].size));
+    }
+    const battle = { red: sides.mine.card, blue: sides.target.card };
+    const mapId = body.mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)]!;
+    let room;
+    try {
+      room = deps.rooms.create(mapId, true, me.userId, null, 'teams', body.kon, 0, battle);
+    } catch {
+      throw new HttpError(503, 'capacity', 'The server is full, try again later');
+    }
+    const inv = await deps.services.invites.create(room.id, me.userId);
+    room.inviteCode = inv.code;
+    const urls = inviteUrls(deps.env, inv.code);
+    // the call goes to the people of both gangs who are online now (the link works for the others)
+    const from = await card(me.userId);
+    let told = 0;
+    if (from) {
+      const at = new Date().toISOString();
+      for (const id of await r.peopleOf([battle.red.id, battle.blue.id])) {
+        if (id === me.userId) continue;
+        if (push(id, { type: 'invite', invite: { from, roomId: room.id, mode: room.mode, mapId: room.mapId, isPrivate: true, at, battle: { ...battle, format: body.kon } } })) told++;
+      }
+    }
+    deps.services.analytics.server('invite_created', { code: inv.code, roomId: room.id, battle: true }, me);
+    const res: GangBattleResponse = { roomId: room.id, inviteCode: inv.code, inviteUrl: urls.tg ?? urls.web, webUrl: urls.web, mapId: room.mapId, mode: room.mode, kon: body.kon, stake: 0, battle, told };
+    ctx.json(201, res);
   });
 
   router.get('/api/clubs/:id', auth, rateLimit(readLimiter, byUser), async (ctx) => {

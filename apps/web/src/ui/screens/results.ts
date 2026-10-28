@@ -57,72 +57,77 @@ export function renderResults(o: {
     const lvl = levelForXp(personal.totalXp);
     const pct = lvl.nextLevelCost > 0 ? Math.round((lvl.intoLevel / lvl.nextLevelCost) * 100) : 100;
     const how = personal.tokensGained !== undefined ? talonBreakdown(me, personal.tokensGained) : null;
+    // v0.2.17: the panel's body scrolls by itself when it is long (new achievements); the label stays put
     return h(
       'div',
       { class: 'panel col xpgain' },
       h('span', { class: 'tag' }, t('Experience')),
-      h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, h('div', { class: 'lvlbadge' }, h('small', null, t('LVL')), String(personal.level)), h('div', { class: 'h1 grow' }, `+${personal.xpGained} XP`)),
-      h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
-      h('div', { class: 'muted' }, personal.leveledUp ? t('Promoted — level {n}!', { n: personal.level }) : lvl.nextLevelCost > 0 ? t('{a} / {b} to level {n}', { a: lvl.intoLevel, b: lvl.nextLevelCost, n: personal.level + 1 }) : t('Top level')),
-      // V2.0 part D: a Kon match moves the Kon rating instead of the general one
-      personal.kon
-        ? h(
-            'div',
-            { class: 'ratingline ratingline--kon', 'data-testid': 'kon-line' },
-            t('Tournament rating'),
-            ' ',
-            h('b', null, String(personal.kon.rating)),
-            ' ',
-            h('span', { class: personal.kon.delta > 0 ? 'up' : personal.kon.delta < 0 ? 'down' : 'muted' }, signed(personal.kon.delta)),
-            ' · ',
-            h('span', { class: 'muted' }, personal.kon.outcome === 'win' ? t('win') : personal.kon.outcome === 'draw' ? t('draw') : t('loss')),
-          )
-        : personal.rating !== undefined
-        ? h(
-            'div',
-            { class: 'ratingline', 'data-testid': 'rating-line' },
-            t('Rating'),
-            ' ',
-            h('b', null, String(personal.rating)),
-            ' ',
-            h('span', { class: (personal.ratingDelta ?? 0) > 0 ? 'up' : (personal.ratingDelta ?? 0) < 0 ? 'down' : 'muted' }, signed(personal.ratingDelta ?? 0)),
-          )
-        : null,
-      personal.tokensGained !== undefined
-        ? h(
-            'div',
-            { class: 'col tokens-gain', style: 'gap:2px' },
-            h('div', { class: 'row' }, h('b', null, '+', amount(personal.tokensGained, 'tokens')), h('span', { class: 'muted' }, t('{talons} · {total} in total — spend them in the Arsenal', { talons: plural(personal.tokensGained, 'talon'), total: personal.totalTokens ?? 0 }))),
-            how ? h('div', { class: 'muted', style: 'font-size:14px', 'data-testid': 'talon-breakdown' }, how) : null,
-          )
-        : null,
-      // v0.2.17: the $BLAT Tournament's stake — the pool won, the stake lost, or the stake back
-      personal.stake
-        ? h(
-            'div',
-            { class: 'row stakeline', 'data-testid': 'stake-line', 'data-outcome': personal.stake.outcome },
-            blatCoin(16, ''),
-            h('b', null, personal.stake.outcome === 'win' ? `+${fmtBlat(personal.stake.payout - personal.stake.stake)}` : personal.stake.outcome === 'loss' ? `−${fmtBlat(personal.stake.stake)}` : personal.stake.payout > personal.stake.stake ? `+${fmtBlat(personal.stake.payout - personal.stake.stake)}` : '±0'),
-            h(
-              'span',
-              { class: 'muted' },
-              personal.stake.outcome === 'win'
-                ? t('$BLAT: your share of the pool ({n})', { n: fmtBlat(personal.stake.payout) })
-                : personal.stake.outcome === 'loss'
-                  ? t('$BLAT: the stake stays in the pool')
-                  : personal.stake.outcome === 'draw'
-                    ? t('$BLAT: a draw — the stake is back')
-                    : t('$BLAT: the stake is back'),
-              ` · ${t('{total} in total', { total: fmtBlat(personal.totalBlat ?? 0) })}`,
-            ),
-          )
-        : null,
-      // V2.0: $BLAT for the levels reached in this match
-      personal.blatGained
-        ? h('div', { class: 'row blat-gain', 'data-testid': 'blat-gain' }, blatAmount(personal.blatGained), h('span', { class: 'muted' }, t('$BLAT for the new level · {total} in total', { total: fmtBlat(personal.totalBlat ?? 0) })))
-        : null,
-      ...personal.newAchievements.map((a) => h('div', { class: 'ach' }, h('div', { class: 'ico' }, '★'), h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 't' }, achievementText(a).title), h('div', { class: 'muted' }, achievementText(a).description)))),
-      o.localProfile ? h('div', { class: 'muted', style: 'font-size:14px' }, t('Local profile — kept in this browser.')) : null,
+      h(
+        'div',
+        { class: 'xpgain__body' },
+        h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, h('div', { class: 'lvlbadge' }, h('small', null, t('LVL')), String(personal.level)), h('div', { class: 'h1 grow' }, `+${personal.xpGained} XP`)),
+        h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
+        h('div', { class: 'muted' }, personal.leveledUp ? t('Promoted — level {n}!', { n: personal.level }) : lvl.nextLevelCost > 0 ? t('{a} / {b} to level {n}', { a: lvl.intoLevel, b: lvl.nextLevelCost, n: personal.level + 1 }) : t('Top level')),
+        // V2.0 part D: a Kon match moves the Kon rating instead of the general one
+        personal.kon
+          ? h(
+              'div',
+              { class: 'ratingline ratingline--kon', 'data-testid': 'kon-line' },
+              t('Tournament rating'),
+              ' ',
+              h('b', null, String(personal.kon.rating)),
+              ' ',
+              h('span', { class: personal.kon.delta > 0 ? 'up' : personal.kon.delta < 0 ? 'down' : 'muted' }, signed(personal.kon.delta)),
+              ' · ',
+              h('span', { class: 'muted' }, personal.kon.outcome === 'win' ? t('win') : personal.kon.outcome === 'draw' ? t('draw') : t('loss')),
+            )
+          : personal.rating !== undefined
+          ? h(
+              'div',
+              { class: 'ratingline', 'data-testid': 'rating-line' },
+              t('Rating'),
+              ' ',
+              h('b', null, String(personal.rating)),
+              ' ',
+              h('span', { class: (personal.ratingDelta ?? 0) > 0 ? 'up' : (personal.ratingDelta ?? 0) < 0 ? 'down' : 'muted' }, signed(personal.ratingDelta ?? 0)),
+            )
+          : null,
+        personal.tokensGained !== undefined
+          ? h(
+              'div',
+              { class: 'col tokens-gain', style: 'gap:2px' },
+              h('div', { class: 'row' }, h('b', null, '+', amount(personal.tokensGained, 'tokens')), h('span', { class: 'muted' }, t('{talons} · {total} in total — spend them in the Arsenal', { talons: plural(personal.tokensGained, 'talon'), total: personal.totalTokens ?? 0 }))),
+              how ? h('div', { class: 'muted', style: 'font-size:14px', 'data-testid': 'talon-breakdown' }, how) : null,
+            )
+          : null,
+        // v0.2.17: the $BLAT Tournament's stake — the pool won, the stake lost, or the stake back
+        personal.stake
+          ? h(
+              'div',
+              { class: 'row stakeline', 'data-testid': 'stake-line', 'data-outcome': personal.stake.outcome },
+              blatCoin(16, ''),
+              h('b', null, personal.stake.outcome === 'win' ? `+${fmtBlat(personal.stake.payout - personal.stake.stake)}` : personal.stake.outcome === 'loss' ? `−${fmtBlat(personal.stake.stake)}` : personal.stake.payout > personal.stake.stake ? `+${fmtBlat(personal.stake.payout - personal.stake.stake)}` : '±0'),
+              h(
+                'span',
+                { class: 'muted' },
+                personal.stake.outcome === 'win'
+                  ? t('$BLAT: your share of the pool ({n})', { n: fmtBlat(personal.stake.payout) })
+                  : personal.stake.outcome === 'loss'
+                    ? t('$BLAT: the stake stays in the pool')
+                    : personal.stake.outcome === 'draw'
+                      ? t('$BLAT: a draw — the stake is back')
+                      : t('$BLAT: the stake is back'),
+                ` · ${t('{total} in total', { total: fmtBlat(personal.totalBlat ?? 0) })}`,
+              ),
+            )
+          : null,
+        // V2.0: $BLAT for the levels reached in this match
+        personal.blatGained
+          ? h('div', { class: 'row blat-gain', 'data-testid': 'blat-gain' }, blatAmount(personal.blatGained), h('span', { class: 'muted' }, t('$BLAT for the new level · {total} in total', { total: fmtBlat(personal.totalBlat ?? 0) })))
+          : null,
+        ...personal.newAchievements.map((a) => h('div', { class: 'ach' }, h('div', { class: 'ico' }, '★'), h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 't' }, achievementText(a).title), h('div', { class: 'muted' }, achievementText(a).description)))),
+        o.localProfile ? h('div', { class: 'muted', style: 'font-size:14px' }, t('Local profile — kept in this browser.')) : null,
+      ),
     );
   };
   const row = (s: Standing, rank: number) =>
@@ -171,40 +176,55 @@ export function renderResults(o: {
       ),
     );
   } else if (draw) banner = h('div', { class: 'panel col' }, h('div', { class: 'h1' }, t('Draw')), h('div', { class: 'hand' }, t('The district is left without a boss — settle it in the rematch.')));
-  // v0.2.17: the results fit the window — the table scrolls in its panel when the lineup is long
+  // v0.2.17: the results fit the window — the table scrolls in its panel when the lineup is long; on a
+  // computer the match (the banner, the table) and the player's part (experience, the buttons, the chat) sit
+  // side by side, so neither squeezes the other
+  const side = !!personal || !!o.chat;
   return h(
     'div',
-    { class: 'screen screen--solid screen--fit screen--results' },
+    { class: `screen screen--solid screen--fit screen--results${side ? ' screen--results2' : ''}` },
     h(
       'div',
-      { class: 'wrap' },
-      h('div', { class: 'row' }, h('span', { class: 'tag' }, t('Match report')), h('span', { class: 'muted' }, `${mapName(r.mapId)} · ${o.kon ? t('$BLAT Tournament {f}', { f: konLabel(o.kon) }) : modeName(mode)} · ${fmtDuration(r.durationMs)} · ${reason}`)),
-      banner,
+      { class: `wrap${side ? ' wrap--wide' : ''}` },
+      h('div', { class: 'row results__top' }, h('span', { class: 'tag' }, t('Match report')), h('span', { class: 'muted' }, `${mapName(r.mapId)} · ${o.kon ? t('$BLAT Tournament {f}', { f: konLabel(o.kon) }) : modeName(mode)} · ${fmtDuration(r.durationMs)} · ${reason}`)),
       h(
         'div',
-        { class: 'panel table-scroll fitscroll results__table' },
+        { class: 'results__body' },
         h(
-          'table',
-          { class: 'table' },
-          h('thead', null, h('tr', null, h('th', null, '#'), h('th', null, t('Player')), objective ? h('th', { class: 'num' }, mode === 'ctf' ? t('Flags') : t('Bases')) : null, h('th', { class: 'num' }, t('Elim')), h('th', { class: 'num' }, t('Ast')), h('th', { class: 'num' }, t('Deaths')), h('th', { class: 'num' }, t('Points')))),
-          h('tbody', null, ...body),
+          'div',
+          { class: 'results__main' },
+          banner,
+          h(
+            'div',
+            { class: 'panel table-scroll fitscroll results__table' },
+            h(
+              'table',
+              { class: 'table' },
+              h('thead', null, h('tr', null, h('th', null, '#'), h('th', null, t('Player')), objective ? h('th', { class: 'num' }, mode === 'ctf' ? t('Flags') : t('Bases')) : null, h('th', { class: 'num' }, t('Elim')), h('th', { class: 'num' }, t('Ast')), h('th', { class: 'num' }, t('Deaths')), h('th', { class: 'num' }, t('Points')))),
+              h('tbody', null, ...body),
+            ),
+          ),
+          h(
+            'div',
+            { class: 'muted results__points', style: 'font-size:14px' },
+            t('Points: elimination +{k}, assist +{a} ({d}+ damage to the opponent within {s} s before they are eliminated).', { k: SCORING.killPoints, a: SCORING.assistPoints, d: SCORING.assistMinDamage, s: SCORING.assistWindowMs / 1000 }),
+            mode === 'teams'
+              ? ` ${t('A team scores one for every elimination.')}`
+              : mode === 'ctf'
+                ? ` ${t('A team scores one for every flag brought home. Player points: capture +{c}, return +{r}, steal +{s}.', { c: CTF_RULES.capturePoints, r: CTF_RULES.returnPoints, s: CTF_RULES.takePoints })}`
+                : mode === 'bases'
+                  ? ` ${t('Every base held brings its team a point a second; taking a base gives +{b} to everyone inside.', { b: BASE_RULES.capturePoints })}`
+                  : '',
+          ),
+        ),
+        h(
+          'div',
+          { class: 'results__side' },
+          personal ? xpPanel() : o.offline ? h('div', { class: 'muted' }, o.offlineNote ?? t('Practice doesn’t count towards the online profile, XP or talons.')) : h('div', { class: 'muted' }, me ? t('Filing the results…') : ''),
+          h('div', { class: 'row results__buttons' }, h('button', { class: 'btn btn--red grow', onclick: o.onRematch }, o.offline ? t('Again') : t('Rematch')), h('button', { class: 'btn grow', onclick: o.onMenu }, t('To menu'))),
+          o.chat ?? null,
         ),
       ),
-      h(
-        'div',
-        { class: 'muted results__points', style: 'font-size:14px' },
-        t('Points: elimination +{k}, assist +{a} ({d}+ damage to the opponent within {s} s before they are eliminated).', { k: SCORING.killPoints, a: SCORING.assistPoints, d: SCORING.assistMinDamage, s: SCORING.assistWindowMs / 1000 }),
-        mode === 'teams'
-          ? ` ${t('A team scores one for every elimination.')}`
-          : mode === 'ctf'
-            ? ` ${t('A team scores one for every flag brought home. Player points: capture +{c}, return +{r}, steal +{s}.', { c: CTF_RULES.capturePoints, r: CTF_RULES.returnPoints, s: CTF_RULES.takePoints })}`
-            : mode === 'bases'
-              ? ` ${t('Every base held brings its team a point a second; taking a base gives +{b} to everyone inside.', { b: BASE_RULES.capturePoints })}`
-              : '',
-      ),
-      personal ? xpPanel() : o.offline ? h('div', { class: 'muted' }, o.offlineNote ?? t('Practice doesn’t count towards the online profile, XP or talons.')) : h('div', { class: 'muted' }, me ? t('Filing the results…') : ''),
-      h('div', { class: 'row' }, h('button', { class: 'btn btn--red grow', onclick: o.onRematch }, o.offline ? t('Again') : t('Rematch')), h('button', { class: 'btn grow', onclick: o.onMenu }, t('To menu'))),
-      o.chat ?? null,
     ),
   );
 }

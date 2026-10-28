@@ -12,6 +12,7 @@ import { MODE_ORDER, modeIcon, modeName, modeRules, modeShort, modeSub } from '.
 import { konLabel, konRules, konPool, tourneyIcon } from './kon.js';
 import { blatCoin, fmtBlat } from './blat.js';
 import { KON_RULES } from '@blatkom/shared';
+import { clubFlag } from '../clubFlag.js';
 
 /** The game modes as a 2×2 switch (disabled for room guests). */
 export function modeSwitch(o: { mode: GameMode; onMode?: (m: GameMode) => void }): HTMLElement {
@@ -126,9 +127,15 @@ export function renderLobby(o: {
       return h(
         'div',
         { class: `teamcol teamcol--${team === 0 ? 'red' : 'blue'}` },
-        h('div', { class: 'teamcol__head' }, h('b', null, team === 0 ? t('RED TEAM') : t('BLUE TEAM')), h('span', null, `${list.length}`)),
+        h(
+          'div',
+          { class: 'teamcol__head' },
+          // a gang battle: the side is its gang
+          s.battle ? h('b', { class: 'teamcol__gang' }, `[${(team === 0 ? s.battle.red : s.battle.blue).tag}] ${(team === 0 ? s.battle.red : s.battle.blue).name}`) : h('b', null, team === 0 ? t('RED TEAM') : t('BLUE TEAM')),
+          h('span', null, `${list.length}`),
+        ),
         h('div', { class: 'list' }, ...list.map(playerRow), ...Array.from({ length: seats }, freeSeat)),
-        me && !mine && !closed ? h('button', { class: 'btn btn--small teamcol__join', 'data-team': String(team), onclick: () => o.onTeam(team) }, h('span', { class: 'long' }, team === 0 ? t('Join the red team') : t('Join the blue team')), h('span', { class: 'short' }, t('Join'))) : null,
+        me && !mine && !closed && !s.battle ? h('button', { class: 'btn btn--small teamcol__join', 'data-team': String(team), onclick: () => o.onTeam(team) }, h('span', { class: 'long' }, team === 0 ? t('Join the red team') : t('Join the blue team')), h('span', { class: 'short' }, t('Join'))) : null,
       );
     };
     players = h('div', { class: 'teams' }, col(0), col(1));
@@ -155,7 +162,7 @@ export function renderLobby(o: {
         'div',
         { class: 'topbar' },
         h('button', { class: 'back', onclick: o.onLeave }, t('← Leave')),
-        h('h1', { class: 'h1' }, kon ? t('$BLAT Tournament {f}', { f: konLabel(kon) }) : s.isPrivate ? t('Room') : t('Quick game')),
+        h('h1', { class: 'h1' }, s.battle && kon ? t('Gang battle {f}', { f: konLabel(kon) }) : kon ? t('$BLAT Tournament {f}', { f: konLabel(kon) }) : s.isPrivate ? t('Room') : t('Quick game')),
         // phones: the room code with Share and Copy right in the top bar
         s.isPrivate && invite
           ? h(
@@ -188,8 +195,18 @@ export function renderLobby(o: {
         ? h(
             'div',
             { class: 'panel col lobby__mode lobby__kon', 'data-testid': 'lobby-kon' },
-            h('span', { class: 'tag' }, t('$BLAT Tournament')),
-            h('div', { class: 'konbadge' }, tourneyIcon(28), h('b', null, konLabel(kon)), h('span', null, s.stake > 0 ? t('team deathmatch · people only') : t('team deathmatch · people only · no stake'))),
+            h('span', { class: 'tag' }, s.battle ? t('Gang battle') : t('$BLAT Tournament')),
+            h('div', { class: 'konbadge' }, tourneyIcon(28), h('b', null, konLabel(kon)), h('span', null, s.battle ? t('gang against gang · people only · no stake') : s.stake > 0 ? t('team deathmatch · people only') : t('team deathmatch · people only · no stake'))),
+            // v0.2.17: a gang battle — the two gangs, their flags; each side is its gang's people
+            s.battle
+              ? h(
+                  'div',
+                  { class: 'lobby__battle', 'data-testid': 'lobby-battle' },
+                  h('span', { class: 'lobby__gang lobby__gang--red' }, clubFlag(s.battle.red.flag, s.battle.red.emblem, { size: 30 }), h('b', null, `[${s.battle.red.tag}]`), h('span', null, s.battle.red.name)),
+                  h('span', { class: 'lobby__vs' }, t('vs')),
+                  h('span', { class: 'lobby__gang lobby__gang--blue' }, clubFlag(s.battle.blue.flag, s.battle.blue.emblem, { size: 30 }), h('b', null, `[${s.battle.blue.tag}]`), h('span', null, s.battle.blue.name)),
+                )
+              : null,
             // v0.2.17: the stake and the pool; while they are reserved, a word that the match is starting
             s.stake > 0
               ? h(

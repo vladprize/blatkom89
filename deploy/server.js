@@ -11703,6 +11703,21 @@ function settleStakes(o) {
   return { kind: stayed.length === o.players.length ? "refund" : "draw", payouts, pool };
 }
 
+// packages/shared/src/maps/types.ts
+var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp"];
+
+// packages/shared/src/game-rules/gangBattle.ts
+var GANG_BATTLE_FORMATS = ["2x2", "3x3", "5x5"];
+var GangBattleBody = external_exports.object({ kon: external_exports.enum(GANG_BATTLE_FORMATS), mapId: external_exports.enum(MAP_IDS).optional() }).strict();
+function gangBattleRefusal(o) {
+  if (!o.mine) return "no_gang";
+  if (!o.targetExists || !o.target) return "not_found";
+  if (o.mine === o.target) return "own_gang";
+  const size2 = KON_RULES[o.format].size;
+  if (o.mineMembers < size2 || o.targetMembers < size2) return "too_few";
+  return null;
+}
+
 // packages/shared/src/story/missions.ts
 var STORY_RULES = Object.freeze({ heroDamage: 0.5, lives: 3, surviveRespawnMs: 7e3 });
 var STORY_MIN_MS = 15e3;
@@ -13919,9 +13934,6 @@ function rayCircle(ox, oy, dx, dy, cx, cy, r) {
   const t = -b2 - Math.sqrt(disc);
   return t >= 0 ? t : null;
 }
-
-// packages/shared/src/maps/types.ts
-var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp"];
 
 // packages/shared/src/maps/index.ts
 var builders2 = {
@@ -17067,6 +17079,7 @@ var MatchRoom = class {
     this.autoStart = opts.autoStart ?? !opts.isPrivate;
     this.kon = opts.kon ?? null;
     this.stake = this.kon ? Math.max(0, Math.floor(opts.stake ?? 0)) : 0;
+    this.battle = this.kon ? opts.battle ?? null : null;
     this.fillBots = this.kon ? false : opts.fillBots ?? false;
     this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
     this.onPresence = opts.onPresence ?? (() => {
@@ -17086,6 +17099,8 @@ var MatchRoom = class {
   stake;
   /** v0.2.17: the stakes are being reserved (the match starts once they are). */
   staking = false;
+  /** v0.2.17: a gang battle — the sides are the two gangs (null: an ordinary room). */
+  battle;
   /** Match rules; `mode` changes when the host switches between free-for-all and teams. */
   config;
   mapId;
@@ -17169,7 +17184,16 @@ var MatchRoom = class {
   }
   // ── Connections ─────────────────────────────────────────────────────────
   /** Adds or resumes a player. Returns an error code when the join is refused. */
-  join(user, ws, requested, viaInvite, gear = FREE_GEAR) {
+  /** The side a gang plays in this battle (null: not one of its gangs, or not a battle). */
+  battleSide(gang) {
+    if (!this.battle || !gang) return null;
+    return gang === this.battle.red.id ? 0 : gang === this.battle.blue.id ? 1 : null;
+  }
+  /**
+   * Adds or resumes a player. Returns an error code when the join is refused. In a gang battle `gang` is the
+   * player's gang (the gateway looks it up): only the two gangs' people come in, each on their side.
+   */
+  join(user, ws, requested, viaInvite, gear = FREE_GEAR, gang = null) {
     if (this.closed) return "room_closed";
     const character = gear.characters.has(requested) ? requested : "petya";
     const existing = this.clients.get(user.userId);
@@ -17199,6 +17223,13 @@ var MatchRoom = class {
       return "resumed";
     }
     if (!this.isJoinable()) return this.world.phase === "finished" || this.world.phase === "closed" ? "room_closed" : "room_full";
+    let side;
+    if (this.battle) {
+      const t = this.battleSide(gang);
+      if (t === null) return "battle_gang";
+      if (this.kon && this.world.teamSize(t) >= KON_RULES[this.kon].size) return "side_full";
+      side = t;
+    }
     if (this.world.players.size >= this.config.maxPlayers && this.seats.size > 0) {
       const seats = [...this.seats.values()];
       const crowded = isTeamMode(this.config.mode) ? this.world.teamSize(0) >= this.world.teamSize(1) ? 0 : 1 : null;
@@ -17232,7 +17263,7 @@ var MatchRoom = class {
     };
     this.clients.set(user.userId, client);
     if (!this.hostId) this.hostId = user.userId;
-    this.world.addPlayer(user.userId, user.displayName, character, false, gear.loadout);
+    this.world.addPlayer(user.userId, user.displayName, character, false, gear.loadout, side);
     this.send(client, this.welcome(client, false));
     this.broadcastRoster();
     this.services.analytics.server("lobby_joined", { roomId: this.id, viaInvite }, user);
@@ -17369,6 +17400,7 @@ var MatchRoom = class {
         if (this.world.phase !== "waiting") return this.error(c, "match_running", "Teams are fixed once the match is on");
         const p = this.world.players.get(c.user.userId);
         if (!p || p.team === msg.team) return;
+        if (this.battle) return this.error(c, "kon_fixed", "In a gang battle the sides are the gangs");
         if (this.kon) {
           if (this.world.teamSize(msg.team) + 1 > KON_RULES[this.kon].size) return this.error(c, "team_full", "That side is full");
           this.world.setTeam(c.user.userId, msg.team);
@@ -18010,7 +18042,8 @@ var MatchRoom = class {
       mode: this.config.mode,
       minToStart: this.minToStart,
       kon: this.kon,
-      ...this.stake > 0 ? { stake: this.stake, staking: this.staking } : {}
+      ...this.stake > 0 ? { stake: this.stake, staking: this.staking } : {},
+      ...this.battle ? { battle: this.battle } : {}
     };
   }
   broadcastRoster() {
@@ -18060,7 +18093,7 @@ var MatchRoom = class {
   }
   /** For players: the lineup as they see it in the room. */
   publicInfo() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon, stake: this.stake };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon, stake: this.stake, ...this.battle ? { battle: this.battle } : {} };
   }
   static protocolVersion = PROTOCOL_VERSION;
 };
@@ -18189,7 +18222,7 @@ var registerRoomRoutes = (router, { env: env2, services: services2, rooms: rooms
       else {
         const phase = room.phase;
         const status = room.occupancy >= room.config.maxPlayers ? "full" : phase === "finished" ? "finished" : phase === "waiting" ? "joinable" : room.isJoinable() ? "in_progress" : "full";
-        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.lineup, maxPlayers: room.config.maxPlayers, hostName: room.hostName(), kon: room.kon, stake: room.stake };
+        info = { code, status, roomId: room.id, mapId: room.mapId, mode: room.mode, players: room.lineup, maxPlayers: room.config.maxPlayers, hostName: room.hostName(), kon: room.kon, stake: room.stake, battle: room.battle };
       }
     }
     ctx.json(200, info);
@@ -19262,6 +19295,25 @@ var ClubRepo = class {
     const r = rows[0];
     if (!r) return null;
     return { summary: this.summary(r, await this.rankOf(r)), role: r.role };
+  }
+  /**
+   * v0.2.17, gang battles: the caller's gang and the gang called out — each as a battle shows it, with the
+   * number of its people (real players: a house gang's made-up members don't play).
+   */
+  async battleSides(userId, targetId) {
+    const side = (r) => ({ card: { id: r.id, name: r.name, tag: r.tag, flag: parseFlag(r.flag), emblem: parseEmblem(r.emblem) }, people: r.people });
+    const [mine] = await this.sql`
+      SELECT c.*, (SELECT count(*)::int FROM club_members x WHERE x.club_id = c.id) AS people
+      FROM club_members m JOIN clubs c ON c.id = m.club_id WHERE m.user_id = ${userId}`;
+    const [target] = await this.sql`
+      SELECT c.*, (SELECT count(*)::int FROM club_members x WHERE x.club_id = c.id) AS people FROM clubs c WHERE c.id = ${targetId}`;
+    return { mine: mine ? side(mine) : null, target: target ? side(target) : null };
+  }
+  /** The people (players, not the house's made-up members) of these gangs. */
+  async peopleOf(clubIds) {
+    if (!clubIds.length) return [];
+    const rows = await this.sql`SELECT user_id FROM club_members WHERE club_id IN ${this.sql(clubIds)}`;
+    return rows.map((r) => r.user_id);
   }
   async requestedBy(userId) {
     const rows = await this.sql`SELECT club_id FROM club_requests WHERE user_id = ${userId} ORDER BY created_at`;
@@ -20817,6 +20869,14 @@ var PgInvites = class {
   }
 };
 var contexts = /* @__PURE__ */ new WeakMap();
+function pgGangs(sql2) {
+  return {
+    async gangOf(userId) {
+      const [r] = await sql2`SELECT club_id FROM club_members WHERE user_id = ${userId}`;
+      return r?.club_id ?? null;
+    }
+  };
+}
 function pgContext(sql2, env2, log2) {
   const existing = contexts.get(sql2);
   if (existing) return existing;
@@ -20867,7 +20927,7 @@ async function createPersistence(deps) {
   const stopStakes = deps.env.NODE_ENV === "test" ? () => {
   } : scheduleStakeRefunds(deps.sql, deps.log, Math.max(10 * 6e4, deps.env.MATCH_DURATION_SEC * 1e3 * 2.5));
   return {
-    services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy, stakes: ctx.stakes },
+    services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy, stakes: ctx.stakes, gangs: pgGangs(deps.sql) },
     recorder: ctx.recorder,
     close: async () => {
       stopRetention();
@@ -23539,6 +23599,48 @@ var registerClubRoutes = (router, deps) => {
     const res = { clubs, mine: mine?.summary ?? null, requested, incoming };
     ctx.json(200, res);
   });
+  const battleLimiter = new RateLimiter(6, 6 / 120);
+  const BATTLE_REFUSALS = {
+    no_gang: [403, () => "Join a gang first \u2014 a battle is gang against gang"],
+    own_gang: [409, () => "That\u2019s your own gang"],
+    not_found: [404, () => "No such gang"],
+    too_few: [409, (n) => `Both gangs need at least ${n} people of their own for that battle`]
+  };
+  router.post("/api/clubs/:id/battle", auth, rateLimit(battleLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const target = clubId(ctx);
+    const body = await ctx.body(GangBattleBody, 1024);
+    const r = repo();
+    const sides = await r.battleSides(me.userId, target);
+    const why = gangBattleRefusal({ mine: sides.mine?.card.id ?? null, target: sides.target?.card.id ?? null, targetExists: !!sides.target, mineMembers: sides.mine?.people ?? 0, targetMembers: sides.target?.people ?? 0, format: body.kon });
+    if (why || !sides.mine || !sides.target) {
+      const [status, text] = BATTLE_REFUSALS[why ?? "not_found"];
+      throw new HttpError(status, why ?? "not_found", text(KON_RULES[body.kon].size));
+    }
+    const battle = { red: sides.mine.card, blue: sides.target.card };
+    const mapId = body.mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)];
+    let room;
+    try {
+      room = deps.rooms.create(mapId, true, me.userId, null, "teams", body.kon, 0, battle);
+    } catch {
+      throw new HttpError(503, "capacity", "The server is full, try again later");
+    }
+    const inv = await deps.services.invites.create(room.id, me.userId);
+    room.inviteCode = inv.code;
+    const urls = inviteUrls(deps.env, inv.code);
+    const from = await card(me.userId);
+    let told = 0;
+    if (from) {
+      const at = (/* @__PURE__ */ new Date()).toISOString();
+      for (const id of await r.peopleOf([battle.red.id, battle.blue.id])) {
+        if (id === me.userId) continue;
+        if (push(id, { type: "invite", invite: { from, roomId: room.id, mode: room.mode, mapId: room.mapId, isPrivate: true, at, battle: { ...battle, format: body.kon } } })) told++;
+      }
+    }
+    deps.services.analytics.server("invite_created", { code: inv.code, roomId: room.id, battle: true }, me);
+    const res = { roomId: room.id, inviteCode: inv.code, inviteUrl: urls.tg ?? urls.web, webUrl: urls.web, mapId: room.mapId, mode: room.mode, kon: body.kon, stake: 0, battle, told };
+    ctx.json(201, res);
+  });
   router.get("/api/clubs/:id", auth, rateLimit(readLimiter, byUser), async (ctx) => {
     const me = currentUser(ctx);
     await house().catch(() => {
@@ -24146,7 +24248,7 @@ var RoomManager = class {
     this.presence = listener;
   }
   /** A room; with `kon` a «Блатной кон» room of that format (team deathmatch, fixed sides, people only). */
-  create(mapId, isPrivate, hostUserId, inviteCode = null, mode = "ffa", kon = null, stake = 0) {
+  create(mapId, isPrivate, hostUserId, inviteCode = null, mode = "ffa", kon = null, stake = 0, battle = null) {
     if (this.rooms.size >= this.opts.maxRooms) throw new Error("room limit reached");
     let id = newRoomId();
     while (this.rooms.has(id)) id = newRoomId();
@@ -24160,6 +24262,7 @@ var RoomManager = class {
         mode: kon ? "teams" : mode,
         kon,
         stake: kon ? stake : 0,
+        battle: kon ? battle : null,
         config: this.opts.config,
         fillBots: this.opts.fillBots ?? false,
         ...this.opts.fillTiming ? { fillTiming: this.opts.fillTiming } : {},
@@ -24347,15 +24450,32 @@ function attachGateway(server2, rooms2, services2, log2, opts, social2) {
           return ws.close(WS_CLOSE.POLICY, why);
         }
       }
+      let gang = null;
+      if (room.battle && !room.hasMember(user.userId)) {
+        gang = services2.gangs ? await services2.gangs.gangOf(user.userId).catch(() => null) : null;
+        if (room.battleSide(gang) === null) {
+          const { red, blue } = room.battle;
+          ws.send(JSON.stringify({ type: "error", code: "battle_gang", message: `This is a battle of [${red.tag}] ${red.name} and [${blue.tag}] ${blue.name} \u2014 only their people come in` }));
+          return ws.close(WS_CLOSE.POLICY, "battle_gang");
+        }
+      }
       const gear = await services2.economy.gear(user.userId).catch((e2) => {
         log2.warn("gear lookup failed", { user: user.userId, err: e2 });
         return void 0;
       });
       if (ws.readyState !== 1) return;
-      const result = room.join(user, ws, hello.character, viaInvite, gear);
+      const result = room.join(user, ws, hello.character, viaInvite, gear, gang);
       if (result === "room_full" || result === "room_closed") {
         ws.send(JSON.stringify({ type: "error", code: result, message: result === "room_full" ? "The room is full" : "The match is over" }));
         return ws.close(result === "room_full" ? WS_CLOSE.ROOM_FULL : WS_CLOSE.ROOM_CLOSED, result);
+      }
+      if (result === "side_full") {
+        ws.send(JSON.stringify({ type: "error", code: "room_full", message: "Your gang\u2019s side is full" }));
+        return ws.close(WS_CLOSE.ROOM_FULL, "side_full");
+      }
+      if (result === "battle_gang") {
+        ws.send(JSON.stringify({ type: "error", code: "battle_gang", message: "Only the two gangs\u2019 people come into a gang battle" }));
+        return ws.close(WS_CLOSE.POLICY, "battle_gang");
       }
       joined = true;
       clearTimeout(helloTimer);

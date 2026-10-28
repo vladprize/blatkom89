@@ -2,7 +2,7 @@
  * Online flow controller: authentication (Telegram initData or dev login), room creation/quick
  * match/invites over HTTP, the game WebSocket, lobby state and the OnlineSession lifecycle.
  */
-import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, KonFormat, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, TelegramLinkOutcome, WeaponId } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, KonFormat, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, TelegramLinkOutcome, WeaponId, GangBattle, GangBattleFormat, GangBattleResponse } from '@blatkom/shared';
 import { STAKE_REFUSALS, latinName } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { readLoginReturn } from './oauth.js';
@@ -44,6 +44,8 @@ export interface LobbyState {
   /** v0.2.17: the $BLAT Tournament's stake everyone puts in (0: none); `staking` — being reserved now. */
   stake: number;
   staking: boolean;
+  /** v0.2.17: a gang battle — the sides are the two gangs (red: the challenger). */
+  battle?: GangBattle;
   /** The match length in this room (ms, from the server's rules). */
   durationMs?: number;
 }
@@ -58,7 +60,11 @@ export interface OnlineCallbacks {
   onMatchStart(session: OnlineSession): void;
   onResults(r: ResultsData): void;
   onProgress(): void;
-  onError(message: string, fatal: boolean): void;
+  /**
+   * `retry` (v0.2.17): whether trying again could help (not after the server turned the player away for good);
+   * `label`: the error's tape when it isn't a malfunction (a door shut).
+   */
+  onError(message: string, fatal: boolean, retry?: boolean, label?: string): void;
   onLeft(): void;
 }
 
@@ -76,6 +82,8 @@ const KEEPALIVE_MS = 4 * 60_000;
 
 /** v0.2.17: the $BLAT Tournament's stake refusals — the player is out of the room. */
 const STAKE_CODES: ReadonlySet<string> = new Set(['stake_confirm', ...STAKE_REFUSALS]);
+/** v0.2.17: a gang battle refused the player (not one of its gangs). */
+const OUT_CODES: ReadonlySet<string> = new Set(['battle_gang']);
 
 export class OnlineClient {
   readonly api = new Api();
@@ -125,6 +133,8 @@ export class OnlineClient {
   private roster: RosterEntry[] = [];
   private lobby: LobbyState | null = null;
   private inviteUrl: string | null = null;
+  /** The room `inviteUrl` was made for (v0.2.17: a room joined later by a card doesn't show another room's link). */
+  private inviteRoom: string | null = null;
   private authPromise: Promise<PublicProfile> | null = null;
   private keepAlive: ReturnType<typeof setInterval> | null = null;
   lastResults: ResultsData | null = null;
@@ -425,7 +435,18 @@ export class OnlineClient {
     await this.ensureAuth();
     const r = await this.api.createRoom(mapId, true, mode, kon, stake);
     this.inviteUrl = r.inviteUrl ?? r.webUrl;
+    this.inviteRoom = r.roomId;
     await this.joinRoom(r.roomId, c, r.stake ?? 0);
+  }
+
+  /** v0.2.17: call the gang `clubId` out to a battle — the room of the two gangs, the caller in it. */
+  async challengeGang(clubId: string, c: CharacterId, kon: GangBattleFormat, mapId?: MapId): Promise<GangBattleResponse> {
+    await this.ensureAuth();
+    const r = await this.api.gangBattle(clubId, kon, mapId);
+    this.inviteUrl = r.inviteUrl ?? r.webUrl;
+    this.inviteRoom = r.roomId;
+    await this.joinRoom(r.roomId, c, 0);
+    return r;
   }
 
   async resolveInvite(code: string): Promise<InviteInfo> {
@@ -452,9 +473,22 @@ export class OnlineClient {
         onStatus: (st, reason) => {
           if (this.session) this.session.status = st === 'open' ? 'online' : st === 'reconnecting' || st === 'connecting' ? 'reconnecting' : 'lost';
           if (st === 'closed' && reason !== 'user' && this.conn === conn) {
+            // v0.2.17: the server said why it turned the player away (the stake, a gang battle) just before
+            // closing — that text stays on the screen
+            if (reason && (STAKE_CODES.has(reason) || OUT_CODES.has(reason))) return this.cleanup();
             // back after the reconnect grace (V2.0 part E): the room went on without the player
             const away = conn.everJoined && (reason === 'room_full' || reason === 'room_closed' || reason === 'room not found');
-            const msg = away ? t('You were away too long — the match went on without you.') : reason === 'room_full' ? t('The room is full.') : reason === 'room not found' ? t('Room not found.') : reason === 'replaced' ? t('You connected from another device.') : t('Lost the line to the server.');
+            const msg = away
+              ? t('You were away too long — the match went on without you.')
+              : reason === 'room_full'
+                ? t('The room is full.')
+                : reason === 'side_full'
+                  ? t('Your gang’s side is full.')
+                  : reason === 'room not found'
+                    ? t('Room not found.')
+                    : reason === 'replaced'
+                      ? t('You connected from another device.')
+                      : t('Lost the line to the server.');
             this.cleanup();
             this.cb.onError(msg, true);
           }
@@ -502,7 +536,7 @@ export class OnlineClient {
           myId: this.playerId,
           isHost: m.hostId === this.playerId,
           inviteCode: m.inviteCode,
-          inviteUrl: this.inviteUrl ?? (m.inviteCode ? `${location.origin}${location.pathname}?invite=${m.inviteCode}` : null),
+          inviteUrl: (this.inviteRoom === this.roomId ? this.inviteUrl : null) ?? (m.inviteCode ? `${location.origin}${location.pathname}?invite=${m.inviteCode}` : null),
           isPrivate: m.isPrivate,
           maxPlayers: m.maxPlayers,
           mode: m.mode,
@@ -510,6 +544,7 @@ export class OnlineClient {
           kon: m.kon ?? null,
           stake: m.stake ?? 0,
           staking: m.staking === true,
+          ...(m.battle ? { battle: m.battle } : {}),
           ...(this.config ? { durationMs: this.config.durationMs } : {}),
           ...(this.config ? { limits: { teamScoreLimit: this.config.teamScoreLimit, captureLimit: this.config.captureLimit, baseScoreLimit: this.config.baseScoreLimit } } : {}),
         };
@@ -550,7 +585,16 @@ export class OnlineClient {
           this.pushChat({ id: '', name: '', slot: -1, team: null, text: errorText(m.code, m.message), toTeam: false, at: Date.now(), mine: true, system: true });
           break;
         }
-        this.cb.onError(errorText(m.code, m.message), m.code === 'unauthorized' || m.code === 'room_not_found' || m.code === 'room_full' || m.code === 'version_mismatch' || STAKE_CODES.has(m.code));
+        {
+          // turned away for good (a gang battle of others, a stake the player can't make): no «Retry»
+          const shut = OUT_CODES.has(m.code) || (STAKE_CODES.has(m.code) && m.code !== 'stake_confirm');
+          this.cb.onError(
+            errorText(m.code, m.message),
+            m.code === 'unauthorized' || m.code === 'room_not_found' || m.code === 'room_full' || m.code === 'version_mismatch' || STAKE_CODES.has(m.code) || OUT_CODES.has(m.code),
+            !shut,
+            shut ? t('No entry') : undefined,
+          );
+        }
         break;
       case 'kicked':
         this.cb.onError(t('Disconnected by the server.'), true);

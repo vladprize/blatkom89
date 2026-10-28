@@ -1,5 +1,6 @@
 /** HTTP API request/response contracts shared by server and client. */
 import type { ClubBadge } from '../game-rules/clubs.js';
+import type { GangBattle } from '../game-rules/gangBattle.js';
 import { z } from 'zod';
 import { CHARACTER_IDS } from '../game-rules/characters.js';
 import type { CharacterId } from '../game-rules/characters.js';
@@ -304,6 +305,8 @@ export interface InviteInfo {
   kon?: KonFormat | null;
   /** v0.2.17: the $BLAT Tournament's stake everyone in the room puts in (0: none). */
   stake?: number;
+  /** v0.2.17: a gang battle — only these two gangs' people come in. */
+  battle?: GangBattle | null;
 }
 
 export interface MatchHistoryEntry {

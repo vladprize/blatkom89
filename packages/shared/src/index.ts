@@ -15,6 +15,7 @@ export * from './game-rules/blat.js';
 export * from './schemas/blat.js';
 export * from './game-rules/kon.js';
 export * from './game-rules/konStakes.js';
+export * from './game-rules/gangBattle.js';
 export * from './schemas/kon.js';
 export * from './story/missions.js';
 export * from './maps/index.js';

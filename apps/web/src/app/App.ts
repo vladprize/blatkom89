@@ -3,7 +3,7 @@
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
 import { CHARACTER_IDS, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, REAL_MONEY, isCharacterId, isGameMode, isKonFormat, isKonStake, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
-import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonStake, KonTopResponse, SiteConfig } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonStake, KonTopResponse, SiteConfig, GangBattle, GangBattleFormat } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
@@ -34,7 +34,8 @@ import { MODE_ORDER, modeIcon, modeName, modeRules, modeSub } from '../ui/modes.
 import { renderArsenal, characterPriceNote, amount, heroImg } from '../ui/screens/shop.js';
 import type { ArsenalTab, TryOn } from '../ui/screens/shop.js';
 import { renderAccountPanel, openEmailLogin, openPasswordReset, telegramLinkText } from '../ui/screens/account.js';
-import { renderFriends, renderTop, friendsInvitePanel, showInviteCard, friendsSub } from '../ui/screens/social.js';
+import { renderFriends, renderTop, friendsInvitePanel, showInviteCard, friendsSub, openFriendBattleSheet } from '../ui/screens/social.js';
+import type { FriendBattle } from '../ui/screens/social.js';
 import type { SocialSignal } from '../net/SocialClient.js';
 import { needsTelegramWelcome, needsWelcome, openTelegramWelcome, openWelcome } from '../ui/screens/welcome.js';
 import { sfx } from '../game/audio/Sfx.js';
@@ -353,7 +354,7 @@ export class App {
         onProgress: () => {
           if (this.screen === 'results' && this.online?.lastResults) this.showResults(this.online.lastResults);
         },
-        onError: (msg, fatal) => (fatal ? this.showError(msg) : toast(msg)),
+        onError: (msg, fatal, retry, label) => (fatal ? this.showError(msg, retry ?? true, label) : toast(msg)),
         onLeft: () => this.goMenu(),
         onChat: (line) => this.onChat(line),
       });
@@ -1006,6 +1007,8 @@ export class App {
             api: online.api,
             id,
             myId: online.profile?.id ?? null,
+            myGang: online.profile?.club ?? null,
+            onBattle: (club, kon) => void this.challengeGang(club, kon),
             onEdit: (c) => this.showClubEditor(c),
             onGone: () => this.showClubs(false),
             onChanged: changed,
@@ -1013,6 +1016,21 @@ export class App {
         ),
       ),
     );
+  }
+
+  /** v0.2.17: call a gang out to a battle — the room of the two gangs; their people in the game get the call. */
+  private async challengeGang(club: ClubDetails, kon: GangBattleFormat) {
+    const online = this.online;
+    if (!online) return;
+    this.go('loading');
+    this.render(this.loading(t('Calling [{tag}] out…', { tag: club.tag })));
+    try {
+      await this.ensureNicknameBeforeJoin();
+      const r = await online.challengeGang(club.id, this.onlineCharacter(), kon);
+      toast(r.told > 0 ? t('The call went to {n} people of the two gangs in the game', { n: r.told }) : t('Nobody of the two gangs is in the game now — send them the room’s link'));
+    } catch (e) {
+      this.showError(apiErrorText(e));
+    }
   }
 
   private showClubEditor(club?: ClubDetails) {
@@ -1679,14 +1697,28 @@ export class App {
     this.render(h('div', { class: 'screen screen--dim screen--fit' }, h('div', { class: 'wrap' }, this.topbar(t('Top-100')), renderTop({ online, by: this.topBy, onBy: (b) => (this.topBy = b) }))));
   }
 
-  /** «Play» with a friend: a private room in the last mode; they are invited once we are inside. */
-  private async playWith(f: FriendEntry) {
+  /**
+   * «В бой» with a friend (v0.2.17, the owner: «позвать друга в бой»): the mode — or a tournament duel 1×1 —
+   * then a private room at once; the friend is called once we are inside.
+   */
+  private playWith(f: FriendEntry) {
     if (!this.online) return;
+    openFriendBattleSheet(this.root, { friend: f, mode: this.savedMode(), onGo: (b) => void this.battleWith(f, b) });
+  }
+
+  private async battleWith(f: FriendEntry, b: FriendBattle) {
+    const online = this.online;
+    if (!online) return;
     this.pendingInvite = f;
     this.go('loading');
     this.render(this.loading(t('Creating the room…')));
     try {
-      await this.online.createRoom('factory', this.onlineCharacter(), this.savedMode());
+      await this.ensureNicknameBeforeJoin();
+      if (b.kind === 'duel') await online.createRoom('factory', this.onlineCharacter(), 'teams', '1x1', 0);
+      else {
+        storageSet(QUICK_MODE_KEY, b.mode);
+        await online.createRoom('factory', this.onlineCharacter(), b.mode);
+      }
     } catch (e) {
       this.pendingInvite = null;
       this.showError(apiErrorText(e));
@@ -1890,6 +1922,14 @@ export class App {
     return this.askStake(info?.kon, info?.stake);
   }
 
+  /** Whether the player's gang is one of a battle's sides (the profile is looked up again once if not). */
+  private async inBattle(b: GangBattle): Promise<boolean> {
+    const side = (club: { id: string } | null | undefined) => !!club && (club.id === b.red.id || club.id === b.blue.id);
+    if (side(this.online?.profile?.club)) return true;
+    const me = await this.online?.refreshProfile().catch(() => null);
+    return side(me?.club);
+  }
+
   private joinInvite(code: string) {
     if (!this.online) return;
     this.go('join');
@@ -1898,9 +1938,21 @@ export class App {
       .resolveInvite(code)
       .then(async (info) => {
         analytics.track('invite_opened', { code, result: info.status });
+        // v0.2.17: a gang battle — only its two gangs' people come in, full or not (the server decides; this
+        // saves the trip when the player is plainly not one of them)
+        if (info.battle && info.status !== 'finished' && !(await this.inBattle(info.battle))) {
+          const { red, blue } = info.battle;
+          return this.showError(t('This is a battle of [{a}] {an} and [{b}] {bn} — only their people come in.', { a: red.tag, an: red.name, b: blue.tag, bn: blue.name }), false, t('No entry'));
+        }
         if (info.status === 'joinable' || info.status === 'in_progress') {
           await this.ensureNicknameBeforeJoin();
-          const into = info.kon ? t('Entering the $BLAT Tournament {f} room ({host})…', { f: konLabel(info.kon), host: info.hostName ?? '—' }) : info.hostName ? t('Entering the room ({host})…', { host: info.hostName }) : t('Entering the room…');
+          const into = info.battle
+            ? t('Entering the gang battle: [{red}] against [{blue}]…', { red: info.battle.red.tag, blue: info.battle.blue.tag })
+            : info.kon
+              ? t('Entering the $BLAT Tournament {f} room ({host})…', { f: konLabel(info.kon), host: info.hostName ?? '—' })
+              : info.hostName
+                ? t('Entering the room ({host})…', { host: info.hostName })
+                : t('Entering the room…');
           this.render(this.loading(into));
           // v0.2.17: a staked room — the stake, the pool and the rules first
           const stake = await this.askStake(info.kon, info.stake);
@@ -1994,7 +2046,8 @@ export class App {
     this.goMenu();
   }
 
-  showError(message: string, retry = true): void {
+  /** `label` (v0.2.17): the panel's tape — «Malfunction» unless the screen says something else (a door shut). */
+  showError(message: string, retry = true, label = t('Malfunction')): void {
     this.endSession();
     this.go('error', false);
     this.render(
@@ -2004,7 +2057,7 @@ export class App {
         h(
           'div',
           { class: 'panel modal col' },
-          h('span', { class: 'tag' }, t('Malfunction')),
+          h('span', { class: 'tag' }, label),
           h('div', { style: 'font-size:18px;margin-top:8px' }, message),
           retry ? h('button', { class: 'btn', onclick: () => location.reload() }, t('Retry')) : null,
           h('button', { class: 'btn btn--red', onclick: () => this.goMenu() }, t('To menu')),

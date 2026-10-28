@@ -48,6 +48,10 @@
 //      wallet's «Copy», the founder (with E2E_ADMIN_USER), a staked 1×1 tournament match won by the
 //      pool, the story's centred captions and Arkadich's card, the game's keys typing after a match
 //      (tests/e2e/v0217.mjs)
+//  21. v0.2.17 part 3: a gang calls another out from its page — the battle room of the two gangs, the
+//      call's card live to both gangs' people, sides by gang, nobody else let in (a stranger's link is
+//      turned away), the battle played and counted for both gangs; a friend's «To battle» → a duel room
+//      by the card (tests/e2e/battle.mjs)
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
 // E2E_PROD=1 runs the prebuilt deploy/ bundle exactly as a host would (NODE_ENV=production, guest login,
 // RENDER_EXTERNAL_URL, TRUST_PROXY) instead of the development server.
@@ -207,6 +211,9 @@ try {
   if (process.env.E2E_ADMIN_USER) v0217Args.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
   const v0217 = spawnSync(process.execPath, v0217Args, { stdio: 'inherit' });
   if (v0217.status !== 0) failed = true;
+  console.log('\n[e2e] v0.2.17 part 3: gang against gang, a friend called to a duel (two browsers, two socket players)');
+  const battle = spawnSync(process.execPath, ['tests/e2e/battle.mjs', base, join(out, 'battle')], { stdio: 'inherit' });
+  if (battle.status !== 0) failed = true;
   console.log('\n[e2e] the story: the prologue, the hub, missions with comics and rewards paid by the server, three lives, a phone (two browsers)');
   const storyArgs = ['tests/e2e/story.mjs', base, join(out, 'story')];
   if (process.env.E2E_ADMIN_USER) storyArgs.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
