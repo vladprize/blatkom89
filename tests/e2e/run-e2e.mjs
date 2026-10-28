@@ -28,8 +28,9 @@
 //  15. $BLAT (V2.0): the welcome on the menu tile, the $BLAT screen and the personal link, a second
 //      browser through the link, the invitation counted after a whole match, the inviter told live;
 //      BLAT DROP; with E2E_ADMIN_USER the dashboard's $BLAT page and snapshots (tests/e2e/blat.mjs)
-//  16. «Блатной кон» (V2.0): the menu button, the Kon screen, a 1×1 room through an invitation, the
-//      leaver loses and the Kon rating moves, the history and the table, the search (tests/e2e/kon.mjs)
+//  16. the $BLAT Tournament (V2.0 «Блатной кон», renamed in v0.2.17): the menu button, the tournament
+//      screen, a 1×1 room through an invitation, the leaver loses and the rating moves, the history and
+//      the table, the search (tests/e2e/kon.mjs)
 //  17. sources (V2.0 part F, with E2E_ADMIN_USER): a partner link made on the dashboard's «Источники»,
 //      a phone through it with utm_*, the account and the first visit keep them, the counts, the CSV
 //      (tests/e2e/growth.mjs)
@@ -43,6 +44,10 @@
 //      «The Report» on a phone (tests/e2e/story.mjs); the same story in the single file opened from disk
 //      offline — progress in this browser, chapter 2, and a browser that refuses storage (Safari): the
 //      warning, the story still moves on within the session (tests/e2e/story-offline.mjs)
+//  20. v0.2.17: the BLAT DROP banners counting down to the owner's date, BLAT DROP's panes and the
+//      wallet's «Copy», the founder (with E2E_ADMIN_USER), a staked 1×1 tournament match won by the
+//      pool, the story's centred captions and Arkadich's card, the game's keys typing after a match
+//      (tests/e2e/v0217.mjs)
 // Needs DATABASE_URL (a disposable database — test players are created) and Playwright's Chromium.
 // E2E_PROD=1 runs the prebuilt deploy/ bundle exactly as a host would (NODE_ENV=production, guest login,
 // RENDER_EXTERNAL_URL, TRUST_PROXY) instead of the development server.
@@ -194,9 +199,14 @@ try {
   if (process.env.E2E_ADMIN_USER) blatArgs.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
   const blat = spawnSync(process.execPath, blatArgs, { stdio: 'inherit' });
   if (blat.status !== 0) failed = true;
-  console.log('\n[e2e] «Блатной кон»: a 1×1 room by invitation, the Kon rating, the history, the search (three browsers)');
+  console.log('\n[e2e] the $BLAT Tournament: a 1×1 room by invitation, the rating, the history, the search (three browsers)');
   const kon = spawnSync(process.execPath, ['tests/e2e/kon.mjs', base, join(out, 'kon')], { stdio: 'inherit' });
   if (kon.status !== 0) failed = true;
+  console.log('\n[e2e] v0.2.17: the BLAT DROP banners, the wallet, the founder, a staked tournament match, the comics, the keys after a match (two browsers)');
+  const v0217Args = ['tests/e2e/v0217.mjs', base, join(out, 'v0217')];
+  if (process.env.E2E_ADMIN_USER) v0217Args.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
+  const v0217 = spawnSync(process.execPath, v0217Args, { stdio: 'inherit' });
+  if (v0217.status !== 0) failed = true;
   console.log('\n[e2e] the story: the prologue, the hub, missions with comics and rewards paid by the server, three lives, a phone (two browsers)');
   const storyArgs = ['tests/e2e/story.mjs', base, join(out, 'story')];
   if (process.env.E2E_ADMIN_USER) storyArgs.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');

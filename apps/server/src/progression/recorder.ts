@@ -18,6 +18,7 @@ import { moveClubRatings } from '../clubs/repo.js';
 import { BlatRepo, creditLevels } from '../blat/repo.js';
 import type { ConfirmResult } from '../blat/repo.js';
 import { applyKonResults, konOutcome } from '../kon/repo.js';
+import { refundStakes, settleMatchStakes } from '../blat/stakes.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -161,6 +162,16 @@ export class PgMatchRecorder implements MatchRecorder {
           if (r) out.set(userId, { ...r, kon: k });
         }
       }
+      // v0.2.17: the $BLAT Tournament's stakes — settled here, once, from the server's own result
+      if (m.kon && (m.stake ?? 0) > 0) {
+        const stakes = await settleMatchStakes(tx, m.matchId, m.winnerTeam, participants.map((p) => ({ userId: p.userId, team: p.team, completed: p.completed })));
+        for (const [userId, st] of stakes) {
+          const r = out.get(userId);
+          if (!r) continue;
+          const [b] = await tx<Array<{ blat: number }>>`SELECT blat FROM profiles WHERE user_id = ${userId}`;
+          out.set(userId, { ...r, stake: st, totalBlat: b?.blat ?? r.totalBlat });
+        }
+      }
       await tx`
         UPDATE matches SET status = 'completed', ended_at = ${m.endedAt}, duration_ms = ${Math.max(0, Math.round(m.durationMs))},
           end_reason = ${m.endReason}, player_count = ${people}, bot_count = ${fill}, mode = ${m.mode}, winner_team = ${m.winnerTeam}, results_processed_at = now()
@@ -202,5 +213,8 @@ export class PgMatchRecorder implements MatchRecorder {
       UPDATE matches SET status = 'abandoned', ended_at = now(), end_reason = ${reason.slice(0, 40)}
       WHERE id = ${matchId} AND status = 'active'`;
     this.log.info('match abandoned', { matchId, reason });
+    // v0.2.17: a staked match that never finished — every stake goes back
+    const back = await refundStakes(this.sql, matchId);
+    if (back) this.log.info('stakes refunded', { matchId, players: back });
   }
 }

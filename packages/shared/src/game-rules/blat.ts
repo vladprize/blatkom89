@@ -1,6 +1,7 @@
 /**
- * $BLAT (V2.0): in-game points that only accumulate. Not money and not a cryptocurrency: they can't be
- * bought, sold, withdrawn, given to another player or exchanged for anything. Every credit is made by the
+ * $BLAT (V2.0): in-game points. Not money: they can't be bought, sold, withdrawn or exchanged for anything;
+ * since v0.2.17 they change hands only as stakes in the $BLAT Tournament (both sides stake the same, the
+ * winners take the pool). Every credit is made by the
  * server, has its own operation id (`ref`) and is written to the currency ledger, so the same reward can
  * never be paid twice (docs/BLAT.md).
  *
@@ -79,9 +80,37 @@ export const REFERRAL_RULES = Object.freeze({ minMatchSec: 60, dailyCap: 20 });
 export const REF_CODE_RE = /^[A-Za-z0-9_-]{4,32}$/;
 export const isRefCode = (v: unknown): v is string => typeof v === 'string' && REF_CODE_RE.test(v);
 
-/** Where a $BLAT credit came from (the ledger's reason). */
-export const BLAT_SOURCES = ['level', 'referral', 'grant'] as const;
+/**
+ * Where a $BLAT movement came from (the ledger's reason). v0.2.17: `allocation` — the founder's and the
+ * partners' shares (an administrator's action, from their pools); `stake` / `stake_win` / `stake_refund`
+ * — the $BLAT Tournament (a stake reserved at the start, the pool won, a stake returned).
+ */
+export const BLAT_SOURCES = ['level', 'referral', 'grant', 'allocation', 'stake', 'stake_win', 'stake_refund'] as const;
 export type BlatSource = (typeof BLAT_SOURCES)[number];
+
+/**
+ * v0.2.17 — the owner: «the whole supply is capped at 2 000 000 000 $BLAT: 320 000 000 mine (the biggest
+ * holding), 100 000 000 for my friends, 300 000 000 for influencers, 1 260 000 000 for the players» (the
+ * 20 000 000 left over is the reserve). Every credit comes out of a pool (`blat_pools` on the server): the
+ * players' pool pays levels and invitations, the others only an administrator's allocation. Stakes in the
+ * $BLAT Tournament move $BLAT between players and create none.
+ */
+export const BLAT_SUPPLY = 2_000_000_000;
+export const BLAT_POOLS = Object.freeze({ players: 1_260_000_000, founder: 320_000_000, influencers: 300_000_000, friends: 100_000_000, reserve: 20_000_000 });
+export type BlatPool = keyof typeof BLAT_POOLS;
+export const BLAT_POOL_IDS = Object.keys(BLAT_POOLS) as BlatPool[];
+/** What the founder's account holds after «Make founder» (the founder's pool, all of it). */
+export const BLAT_FOUNDER_HOLDING = BLAT_POOLS.founder;
+/** The founder's account: level and badge (v0.2.17). */
+export const FOUNDER_LEVEL = 87;
+
+/**
+ * v0.2.17: the project's wallet in the Solana network, shown in the $BLAT section (the owner's address;
+ * the server's PROJECT_SOL_WALLET overrides it). Nothing in the game sends to it or reads from it.
+ */
+export const PROJECT_SOL_WALLET = '7ktcRxxhp9gijH4Pbbr4HBckP8HocFN8YzngvTqBArJ1';
+/** A Solana address: 32–44 base58 characters. */
+export const SOL_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 /**
  * BLAT DROP (V2.0 part C): milliseconds left by the server's clock. `serverNow` came with the answer
@@ -97,3 +126,10 @@ export function dropCountdown(msLeft: number): { d: number; h: number; m: number
   const left = Math.max(0, Math.floor((Number.isFinite(msLeft) ? msLeft : 0) / 1000));
   return { d: Math.floor(left / 86400), h: Math.floor((left % 86400) / 3600), m: Math.floor((left % 3600) / 60), s: left % 60 };
 }
+
+/**
+ * v0.2.17: the BLAT DROP announcement date the owner gave («the timer starts now: 3 months and 15 days» —
+ * on 24 October 2026), 8 February 2027, 23:00 in Cyprus. Used when neither an administrator (/admin →
+ * $BLAT) nor the server's BLAT_DROP_ANNOUNCE_AT has set one; both still override it.
+ */
+export const BLAT_DROP_DEFAULT_ANNOUNCE_AT = '2027-02-08T21:00:00.000Z';

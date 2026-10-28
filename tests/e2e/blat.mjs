@@ -208,7 +208,9 @@ try {
   }
 
   // ── BLAT DROP (part C) ─────────────────────────────────────────────────────
-  await sql`DELETE FROM app_settings WHERE key = 'blat_drop.announce_at'`;
+  // v0.2.17: the release sets the owner's date; an administrator's «not set» takes it away
+  await sql`INSERT INTO app_settings (key, value) VALUES ('blat_drop.announce_at', ${sql.json({ announceAt: null })})
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`;
   await openDrop(A.page);
   const none = (await A.page.getByTestId('drop-date').innerText()).trim();
   check(/isn’t set yet/.test(none) && (await A.page.getByTestId('drop-count').count()) === 0, `A’s BLAT DROP tab before a date is set: «${none}», no countdown`);
@@ -266,6 +268,9 @@ try {
   await reopenDrop(A.page);
   const again = (await A.page.getByTestId('drop-date').innerText()).trim();
   check(/isn’t set yet/.test(again), `the date taken away: «${again}» again`);
+  // the owner's date back, as the release sets it (migration 022)
+  await sql`INSERT INTO app_settings (key, value) VALUES ('blat_drop.announce_at', ${sql.json({ announceAt: '2027-02-08T21:00:00.000Z' })})
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`;
   if (admin) await admin.ctx.close();
   check(problems.length === 0, `no page errors (${problems.join(' | ')})`);
   await A.ctx.close();

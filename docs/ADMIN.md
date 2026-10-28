@@ -65,6 +65,7 @@ Passwords: minimum 12 characters; stored as `scrypt$N$r$p$salt$hash` (N=16384, r
 | Balance grants / corrections, password-reset links | — | ✅ |
 | Open a player's story up to a mission (v0.2.16, for checking the story) | see only | ✅ |
 | $BLAT: count / turn down a held invitation, mark an account suspicious | — | ✅ |
+| v0.2.17: «Сделать основателем», «Доля из фонда» (a pool's $BLAT) | see only | ✅ |
 | BLAT DROP date, balance snapshots (take, download, delete) | see only | ✅ |
 | CSV exports | — | ✅ |
 | Audit log | — | ✅ |
@@ -95,7 +96,8 @@ Recorded actions: `login`, `login_failed`, `logout`, `admin_bootstrap`, `admin_c
 `balance_grant` (currency, amount, reason, balance after), `password_reset_link`, `story_opened` (v0.2.16: the mission, the missions marked done), `club_delete` (name, tag, members),
 `referral_confirm` (inviter, reward, number) / `referral_reject` (note), `blat_flag` / `blat_unflag` (reason),
 `blat_drop_date` (from → to), `blat_snapshot` (accounts, totals), `export_blat_snapshot` (format, rows),
-`blat_snapshot_delete`,
+`blat_snapshot_delete`, v0.2.17: `founder_made` (level, $BLAT, what the founder's pool gave, items added),
+`blat_allocation` (pool, amount, note, balance after),
 `export_players`, `export_matches`, `export_daily` (with row counts / date range); V2.0 part F:
 `partner_created` (code, name), `partner_updated` (what changed), `export_sources`, `export_partners`. Visible to `admin`
 in the «Аудит» tab (latest 200). Kept 365 days ([PRIVACY.md](PRIVACY.md) §4).
@@ -122,10 +124,12 @@ Range parameters (where noted): `range=24h|7d|30d|90d` (default `7d`) or
 | `GET /api/admin/players/:id` | viewer | profile, progression, sessions summary, sign-in methods, masked email, wallet, owned items and modifications, last 50 ledger rows (talons, diamonds, $BLAT), last 30 payments, achievements, last 50 matches, last 50 errors, `blat` (balance, total, code, invited by, invitations by status, flag), `story` (v0.2.16: the story missions done; a best time of 0 — opened by an admin) (audited) |
 | `POST /api/admin/players/:id/grant` | admin | `{currency: tokens\|diamonds, amount: ±1…1 000 000, note: 3–120 chars}` → `{balance}`; never below zero (`409 insufficient_balance`); ledger reason `grant` with the admin id; audited; 30 actions / 5 min per admin (CSRF) |
 | `POST /api/admin/players/:id/story-open` | admin | v0.2.16, for checking the story: `{mission}` (a written mission, e.g. `a12`) → `{opened, done}`; the campaign's missions before it count as done for the player — best time 0, **nothing paid** (no talons, experience, chapter achievements or items; a chapter's reward still comes when the player plays its last mission); missions already done stay as they were (repeating it changes nothing); `400 bad_mission`, `404`, `409 no_profile`; audited; 30 actions / 5 min per admin (CSRF). In the dashboard: the player card's «Сюжет» block |
+| `POST /api/admin/players/:id/founder` | admin | v0.2.17, «Сделать основателем»: the founder's account (docs/BLAT.md §1a) — the gold «Founder» badge and the ★ into /admin in the game's menu, level 87, every character, weapon, piece of equipment, skin and modification, $BLAT up to 320 000 000 out of the founder's pool (once per account) → `{level, blat, allocated, items}`; **one founder**: another account gets `409 founder_taken`; repeating it on the founder changes nothing; audited; 30 actions / 5 min per admin (CSRF). In the dashboard: the gold button on the player card (the confirmation names the player and the masked email) |
+| `POST /api/admin/players/:id/blat-allocation` | admin | v0.2.17, «Доля из фонда»: `{pool: influencers\|friends\|reserve, amount: 1…100 000 000, note: 3–120}` → `{balance}`; out of that pool only (`409 pool_exhausted` when it can't give that much); ledger reason `allocation`; audited; 30 actions / 5 min per admin (CSRF) |
 | `POST /api/admin/players/:id/reset-link` | admin | one-time password-reset link (valid 1 h) for a player with a registered email → `{link, expiresAt}`; `404 no_email` otherwise; audited; hand it over only to the account owner (CSRF) |
 | `GET /api/admin/clubs` | viewer | every club (`AdminClubRow`: rank, tag, name, motto, rating, people, real members, head, requests, recruiting, `house`, created) |
 | `DELETE /api/admin/clubs/:id` | admin | removes a player club; its people get `club_left` (disbanded); `409 house_club` for the game's own clubs; audited; 30 actions / 5 min per admin (CSRF) |
-| `GET /api/admin/blat?range…` | viewer | $BLAT: on hand, holders, issued all time / in range by source (`level`, `referral`, `grant`), invitations by status, flagged accounts, the 20 biggest balances (`AdminBlatSummary`) |
+| `GET /api/admin/blat?range…` | viewer | $BLAT: on hand, holders, issued all time / in range by source (`level`, `referral`, `grant`), invitations by status, flagged accounts, the 20 biggest balances, v0.2.17: `pools` — every pool's cap and what it has given (`AdminBlatSummary`) |
 | `GET /api/admin/referrals?status=pending\|held\|confirmed\|rejected` | viewer | the last 300 invitations (`AdminReferralRow`) |
 | `POST /api/admin/referrals/:refereeId` | admin | `{action: confirm\|reject, note?}` — a held or pending invitation; confirm pays the inviter at their current tier; `409 not_open` if already decided; the inviter hears it live; audited; 30 actions / 5 min per admin (CSRF) |
 | `POST /api/admin/players/:id/blat-flag` | admin | `{flag: reason (1–200) \| null}` — a suspicious account's invitations wait for a decision; audited (CSRF) |

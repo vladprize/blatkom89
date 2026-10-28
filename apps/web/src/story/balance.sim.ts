@@ -23,7 +23,8 @@ for (const m of STORY_MISSIONS) {
   for (let i = 0; i < runs; i++) {
     const s = new StorySession(m, { seed: 100 + i });
     s.world.players.get('local')!.gadget = null;
-    const brain = new BotBrain('local', s.world, new NavGrid(s.world.collision), difficulty, 500 + i * 13);
+    // the hero stands in for a person: not eased (the enemies are)
+    const brain = new BotBrain('local', s.world, new NavGrid(s.world.collision), difficulty, 500 + i * 13, false);
     for (let t = 0; !s.outcome() && t < m.timeLimitMs + 10_000; t += TICK_MS) s.step(s.phase() === 'active' ? brain.nextInput() : null);
     const o = s.outcome();
     if (o?.result === 'win') {

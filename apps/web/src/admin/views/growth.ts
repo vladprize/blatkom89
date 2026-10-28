@@ -243,7 +243,7 @@ export async function renderGrowth(root: HTMLElement, me: AdminMe): Promise<void
       h(
         'section',
         { class: 'card' },
-        h('h3', {}, 'Блатной кон'),
+        h('h3', {}, '$BLAT Турнир (бывш. «Блатной кон»)'),
         table(
           ['Формат', 'Матчи'],
           g.kon.byFormat.map((x) => [x.format.replace('x', '×'), num(x.matches)]),

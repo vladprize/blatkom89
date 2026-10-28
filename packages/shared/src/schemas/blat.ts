@@ -50,4 +50,6 @@ export interface BlatResponse {
 export interface BlatDropInfo {
   announceAt: string | null;
   serverNow: string;
+  /** v0.2.17: the project's wallet in the Solana network (shown with a «Copy» button). */
+  wallet?: string | null;
 }

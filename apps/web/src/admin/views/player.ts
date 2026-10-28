@@ -1,6 +1,6 @@
 /** Player detail: profile, progression, wallet and purchases, sessions, achievements, match history, errors. */
 import { STORY_CAMPAIGNS, STORY_OPENED_BEST_MS, campaignMissions } from '@blatkom/shared';
-import type { AdminMe, AdminPlayerDetail, AdminResetLink, AdminStoryOpenResponse, StoryCampaign } from '@blatkom/shared';
+import type { AdminFounderResult, AdminMe, AdminPlayerDetail, AdminResetLink, AdminStoryOpenResponse, StoryCampaign } from '@blatkom/shared';
 import { h, clear, toast } from '../dom.js';
 import { RU_ACHIEVEMENTS } from '../../i18n/ru-content.js';
 import { apiFetch } from '../api.js';
@@ -189,12 +189,53 @@ function actions(d: AdminPlayerDetail, onChanged: () => void): HTMLElement {
       .catch((err: Error) => toast(err.message))
       .finally(() => (resetBtn.disabled = !d.account.emailMasked));
   });
+  // v0.2.17: $BLAT out of a pool (influencers, friends of the project, the reserve)
+  const pool = h('select', { 'aria-label': 'Пул', 'data-testid': 'alloc-pool' }, h('option', { value: 'influencers' }, 'Блогеры'), h('option', { value: 'friends' }, 'Друзья проекта'), h('option', { value: 'reserve' }, 'Резерв')) as HTMLSelectElement;
+  const allocAmount = h('input', { type: 'number', step: 1, min: 1, max: 100000000, placeholder: 'Сколько $BLAT', 'aria-label': 'Сколько $BLAT', class: 'grow', 'data-testid': 'alloc-amount' }) as HTMLInputElement;
+  const allocNote = h('input', { type: 'text', maxlength: 120, placeholder: 'За что — попадёт в журнал', 'aria-label': 'За что', class: 'grow', 'data-testid': 'alloc-note' }) as HTMLInputElement;
+  const allocBtn = h('button', { class: 'btn', type: 'submit', 'data-testid': 'alloc-go' }, 'Выдать $BLAT') as HTMLButtonElement;
+  const alloc = h('form', { class: 'action-form' }, pool, allocAmount, allocNote, allocBtn);
+  alloc.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const n = Number(allocAmount.value);
+    if (!Number.isInteger(n) || n <= 0) return toast('Сумма — целое число больше нуля');
+    if (allocNote.value.trim().length < 3) return toast('Укажите, за что (от 3 символов)');
+    if (!confirm(`Выдать ${num(n)} $BLAT из пула «${pool.selectedOptions[0]?.textContent}» игроку «${p.displayName}»?`)) return;
+    allocBtn.disabled = true;
+    apiFetch<{ balance: number }>(`/api/admin/players/${encodeURIComponent(p.id)}/blat-allocation`, { method: 'POST', body: { pool: pool.value, amount: n, note: allocNote.value.trim() } })
+      .then((r) => {
+        toast(`Готово: у игрока ${num(r.balance)} $BLAT`, 'ok');
+        onChanged();
+      })
+      .catch((err: Error) => toast(err.message))
+      .finally(() => (allocBtn.disabled = false));
+  });
+  // v0.2.17: the founder's account
+  const founderBtn = h('button', { class: 'btn btn--gold', type: 'button', 'data-testid': 'make-founder' }, d.founder ? 'Основатель ✓ — повторить' : 'Сделать основателем') as HTMLButtonElement;
+  founderBtn.addEventListener('click', () => {
+    const mail = d.account.emailMasked ? `, почта ${d.account.emailMasked}` : ', почта не привязана';
+    if (!confirm(`Сделать «${p.displayName}»${mail} аккаунтом основателя?\n\nЗолотая плашка «Создатель», скрытый вход в админку из игры, 87 уровень, все персонажи, оружие, снаряжение, скины и модификации, $BLAT до 320 000 000 из пула основателя.\n\nОснователь в игре один, и пул основателя выдаётся один раз — проверьте, что это ваш аккаунт.`)) return;
+    founderBtn.disabled = true;
+    apiFetch<AdminFounderResult>(`/api/admin/players/${encodeURIComponent(p.id)}/founder`, { method: 'POST' })
+      .then((r) => {
+        toast(`Готово: ${r.level} уровень, ${num(r.blat)} $BLAT, добавлено предметов: ${num(r.items)}`, 'ok');
+        onChanged();
+      })
+      .catch((err: Error) => toast(err.message))
+      .finally(() => (founderBtn.disabled = false));
+  });
   return h(
     'section',
     { class: 'card' },
     h('h3', {}, 'Действия администратора'),
     h('p', { class: 'note' }, 'Начисление или списание талонов и алмазов (компенсации, исправления). Баланс не может уйти в минус; каждая операция пишется в журнал аудита и в историю игрока.'),
     form,
+    h('div', { style: 'height:12px' }),
+    h('p', { class: 'note' }, '$BLAT из пула: блогерам — 300 000 000, друзьям проекта — 100 000 000, резерв — 20 000 000 (весь запас — 2 000 000 000). Пул не выдаст больше, чем в нём осталось; запись — в журнале.'),
+    alloc,
+    h('div', { style: 'height:12px' }),
+    h('p', { class: 'note' }, 'Аккаунт основателя: золотая плашка «Создатель» рядом с ником, скрытый вход в админку из игры, 87 уровень, всё снаряжение и $BLAT до 320 000 000 (пул основателя).'),
+    founderBtn,
     h('div', { style: 'height:12px' }),
     resetBtn,
     d.account.emailMasked ? null : h('p', { class: 'note' }, 'У игрока нет привязанной почты — сбросить пароль нечем.'),
@@ -211,7 +252,7 @@ export async function renderPlayer(root: HTMLElement, id: string, me?: AdminMe |
   const kd = p.deaths ? (p.kills / p.deaths).toFixed(2) : p.kills ? '∞' : '—';
   const xpPct = p.xpForNextLevel ? Math.round((p.xpIntoLevel / p.xpForNextLevel) * 100) : 100;
   root.append(
-    h('div', { class: 'toolbar' }, h('a', { href: '#/players', class: 'chip' }, '← Все игроки'), h('h2', {}, p.displayName)),
+    h('div', { class: 'toolbar' }, h('a', { href: '#/players', class: 'chip' }, '← Все игроки'), h('h2', {}, p.displayName), d.founder ? h('span', { class: 'founder-tag', 'data-testid': 'admin-founder-tag' }, 'СОЗДАТЕЛЬ') : null),
     h(
       'div',
       { class: 'grid2' },

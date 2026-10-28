@@ -1,12 +1,15 @@
-# «Блатной кон» — ranked matches 1×1 … 5×5 (V2.0 part D)
+# The $BLAT Tournament — ranked matches 1×1 … 5×5 with stakes (V2.0 part D «Блатной кон», v0.2.17)
 
 A separate competitive section: people against people with fixed sides, its own rating for players and
-for gangs (ОПГ), win/loss records, streaks, tables and a match history. **No stakes:** nothing is paid,
-reserved or won in $BLAT or anything else; the Kon rating is not connected to $BLAT. The stakes module
-is designed (§6) and switched off.
+for gangs (ОПГ), win/loss records, streaks, tables and a match history — and, since v0.2.17, **stakes in
+$BLAT**: everyone in a staked room stakes the same, the winning side takes the pool (§6). Without a stake
+the tournament plays for the rating only, as «Блатной кон» did. The owner renamed it in v0.2.17:
+«Блатной Кон надо переименовать на $BLAT Турнир / Tournament» — «$BLAT Турнир» in Russian, «$BLAT
+Tournament» in English; the code keeps its old name (`kon`).
 
-Rules: `packages/shared/src/game-rules/kon.ts`; rooms: `apps/server/src/rooms/` (a Kon room is a
-`MatchRoom` with `kon` set); ratings and tables: `apps/server/src/kon/`; screen:
+Rules: `packages/shared/src/game-rules/kon.ts` (formats, rating) and `game-rules/konStakes.ts` (stakes);
+rooms: `apps/server/src/rooms/` (a tournament room is a `MatchRoom` with `kon` set, and `stake`); stakes
+on the server: `apps/server/src/blat/stakes.ts`; ratings and tables: `apps/server/src/kon/`; screen:
 `apps/web/src/ui/screens/kon.ts`.
 
 ## 1. Formats
@@ -18,35 +21,46 @@ Rules: `packages/shared/src/game-rules/kon.ts`; rooms: `apps/server/src/rooms/` 
 | 3×3 | 3 | 20 | 4 min |
 | 5×5 | 5 | 30 | 5 min (1.25 ×) |
 
-Team deathmatch (red against blue) on any of the ten maps. Only people: a Kon room never fills anybody in
-(also with `MATCH_FILL_BOTS=true`), nobody joins a match that is on, the mode cannot be switched.
+Team deathmatch (red against blue) on any of the ten maps. Only people: a tournament room never fills
+anybody in (also with `MATCH_FILL_BOTS=true`), nobody joins a match that is on, the mode cannot be switched.
 
 ## 2. Playing
 
-- **Find opponents** (the search): the server puts the player into a public Kon room of that format that
-  is still gathering (the fullest first) or opens one on a random map. When it is full — 2 × the side —
-  the match starts by itself after a short countdown; the sides are dealt by Kon rating (strongest first:
-  red, blue, blue, red…) so neither side gets all the best. The Kon screen shows how many people are
-  waiting in each format.
-- **Create a room**: a private Kon room with an invitation link (the same links as other rooms); the
-  host picks the map, players pick their side (never more than the format allows on a side); the host
-  starts when both sides are full.
-- **The lobby** shows the format, the rules line, both sides with their free seats and the players'
-  Kon ratings.
-- **After the match** the results screen shows the Kon rating change; a rematch keeps the lineup.
+- **The menu**: «$BLAT Tournament» stands out — gold, with the cup and the coin — between «Play with
+  friends» and «Practice».
+- **The stake** (§6): «No stake» or 100 / 500 / 1 000 / 5 000 $BLAT from each player. A stake the player
+  can't make now (a new account, not enough $BLAT, the day's limit) is greyed out with the reason; the
+  last choice is remembered on the device.
+- **Find opponents** (the search): the server puts the player into a public tournament room of that
+  format **and that stake** that is still gathering (the fullest first) or opens one on a random map.
+  When it is full — 2 × the side — the match starts by itself after a short countdown; the sides are
+  dealt by tournament rating (strongest first: red, blue, blue, red…) so neither side gets all the best.
+  The screen shows how many people are waiting in each format at the chosen stake.
+- **Create a room**: a private tournament room (with the chosen stake) and an invitation link; the host
+  picks the map, players pick their side (never more than the format allows on a side); the host starts
+  when both sides are full.
+- **Before a staked match** the player sees the stake, the pool and the rules and confirms — when they
+  search or create, and when they come in through an invitation, a room link or a friend's invitation.
+- **The lobby** shows the format, the stake and the pool («Stake 100 $BLAT each · pool 200 $BLAT — the
+  winners share it»), both sides with their free seats and the players' tournament ratings; while the
+  stakes are taken: «The stakes are being taken — the match starts in a moment…».
+- **After the match** the results screen shows the tournament rating change and the stake's outcome
+  («+100 $BLAT: your share of the pool (200)», «the stake stays in the pool», «a draw — the stake is
+  back»); a rematch keeps the lineup and the stake (each player's stake is taken again).
 
-## 3. The Kon rating
+## 3. The tournament rating
 
 Elo with a 400-point scale: everyone starts at **1000** (`KON_RATING`); for each player the side's
 average rating meets the other side's: expected = 1 / (1 + 10^((theirs − mine) / 400)), change =
-round(K × (result − expected)), result 1 / ½ / 0, K = 40 for the first 10 Kon matches, then 24; never
-below 100. A player who left the match before the end loses — also when the reconnect window has already
-taken them out of the room. When one side has nobody left, the match ends 20 seconds later and the side
-that stayed wins, whatever the score. The general rating (Top-100) does not move in Kon matches; XP, talons and levels
-(and so $BLAT for levels) are earned as in any online match.
+round(K × (result − expected)), result 1 / ½ / 0, K = 40 for the first 10 tournament matches, then 24;
+never below 100. A player who left the match before the end loses — also when the reconnect window has
+already taken them out of the room. When one side has nobody left, the match ends 20 seconds later and
+the side that stayed wins, whatever the score. The general rating (Top-100) does not move in tournament
+matches; XP, talons and levels (and so $BLAT for levels) are earned as in any online match. **The rating
+never depends on the stake**: the same match moves it the same with or without one.
 
 **Gangs:** a side of two or more players who are all in the same gang plays for that gang too — the
-gang's Kon rating moves by the same formula (the gang's rating against the other gang's, or against the
+gang's rating moves by the same formula (the gang's rating against the other gang's, or against the
 other side's average when that side is not one gang). 1×1 never moves a gang.
 
 Records per player: matches, wins, losses, draws, current and best win streak; per gang: matches,
@@ -56,35 +70,72 @@ written in the match-results transaction and once only (the same lock as XP).
 
 ## 4. Tables and history
 
-- `GET /api/kon` — the player's numbers, the last 20 Kon matches (format, map, side, result, Kon change,
-  team-mates and opponents), how many people are waiting in public rooms of each format;
-- `GET /api/kon/top?by=players|gangs` — the first 100 by Kon rating (players and gangs with at least one
-  Kon match), the player's own place.
+- `GET /api/kon` — the player's numbers, the last 20 tournament matches (format, map, side, result, rating
+  change, team-mates and opponents, **the stake and what came back**), how many people are waiting in
+  public rooms of each format (`waiting`, and `waitingByStake` per stake), and the player's stakes
+  (`stakes`: the switch, the balance, a reason that stops every stake, what may still be staked today);
+- `GET /api/kon/top?by=players|gangs` — the first 100 by tournament rating (players and gangs with at
+  least one tournament match), the player's own place.
 
 ## 5. API for rooms
 
-`POST /api/rooms { mapId, isPrivate: true, mode: 'teams', kon: '2x2' }` and
-`POST /api/rooms/quick { mode: 'teams', kon: '2x2', mapId? }`. The room's roster carries `kon`.
+`POST /api/rooms { mapId, isPrivate: true, mode: 'teams', kon: '2x2', stake: 500 }` and
+`POST /api/rooms/quick { mode: 'teams', kon: '2x2', stake: 500, mapId? }` — `stake` is 0 or one of the
+amounts and only for tournament rooms; a player who can't stake it gets `409` with the reason's code
+(below). The room's roster carries `kon`, `stake` and `staking`; `GET /api/rooms/:id` and
+`GET /api/invites/:code` carry `stake`. The WebSocket `hello` of a player coming into a staked room must
+carry `stake` equal to the room's (the player agreed to it; an old client gets `stake_confirm`), and the
+player must be able to stake it then.
 
-## 6. Stakes — designed, switched off
+## 6. Stakes
 
-The owner proposed stakes in $BLAT (for example 3×3, 5 000 each: a pool of 30 000, 10 000 to each
-winner). **Not active**, and not to be switched on without the owner's separate approval and a legal
-review — $BLAT may gain an economic value later, and stakes on a game's outcome are regulated in many
-countries. `KON_STAKES.enabled` is a constant `false` in `game-rules/konStakes.ts` (a code change, not a
-setting); there are no stake endpoints, no UI and no database tables.
+The owner: «игроки играют, ставя свои токены поровну» — everyone stakes the same, the winners take the
+pool. $BLAT are in-game points (BLAT.md); a stake moves them between players and creates none. The
+legal note given to the owner before this was switched on stands: $BLAT may gain an economic value
+later, and stakes on a game's outcome are regulated in many countries — `TOURNAMENT_STAKES=false` turns
+every stake off at once (the tournament then plays for the rating only).
 
-What a future implementation has to do (the settlement rule is written and tested as a pure function,
-`settleStakes`):
+**Who may stake** (`stakeRefusal`, checked by the server when a room is made or searched for, when a
+player comes into a staked room, and again inside the reservation):
 
-1. **Reservation on the server**: every participant confirms; the server moves the stake from the
-   balance into a reservation (ledger row `kon-stake:<match>:<player>` — the unique index makes a
-   second reservation of the same stake impossible) inside one transaction with the balance check.
-2. **All or nothing**: the match starts only when every stake is reserved; otherwise every reservation
-   is returned.
-3. **Result only from the server**: the server's own match result decides; clients can't report it.
-4. **Settlement**: winners share the whole pool equally (what doesn't divide goes one by one to the
-   winners in id order — nothing is created or lost); a draw, a technical failure or an aborted match
-   returns every stake; a leaver's stake stays in the pool. Idempotent: settling twice changes nothing.
-5. **Every movement is a ledger row**; reservations older than the longest match are returned by a
-   job; the admin sees pools, reservations and settlements.
+| Code | Rule |
+|---|---|
+| `stakes_off` | `TOURNAMENT_STAKES` is off |
+| `account_new` | the account is less than a day old (`KON_STAKES.minAccountAgeMs`) |
+| `blat_flagged` | the account's $BLAT are held for a check (`users.blat_flag`, BLAT.md) |
+| `blat_low` | the balance doesn't cover the stake |
+| `daily_limit` | more than 20 000 $BLAT staked in 24 hours (`KON_STAKES.dailyLimit`; stakes that came back don't count) |
+
+**The reservation — all or nothing.** When a staked match is about to start (the host's «Start», the
+search's countdown, a rematch), the room reserves every connected player's stake in **one transaction**
+(`PgStakes.reserve`): the match row is written with `stake` and `stakes_state = 'reserved'`, and each
+player's stake is a ledger row `stake` (negative, operation id `stake:<match>` — the unique index makes a
+second reservation of it impossible). If anyone can't stake, nothing is taken: that player leaves the
+room with the reason and the others wait for someone who can. If the lineup changed while the stakes
+were being taken, every stake goes back and nothing starts. The match runs under the id the stakes were
+reserved for.
+
+**Settlement — once, from the server's own result**, inside the match-results transaction that holds
+the match row (`settleMatchStakes`, the rule in `settleStakes`):
+
+- a win: the winners **who stayed to the end** share the whole pool equally (what doesn't divide goes one
+  by one to the winners in id order — nothing is created or lost) — ledger rows `stake_win`;
+- a draw: those who stayed get their stake back and share the stakes of those who left (`stake_refund`);
+- a player who leaves forfeits their stake to the pool (also a winner who left);
+- nobody stayed: every stake goes back.
+
+`stakes_state` becomes `settled` (or `refunded`); a retried result pays nothing more.
+
+**A match that never finishes** — the room broke, the server stopped — gets every stake back: at once
+when the room is closed (`matchAbandoned`), and otherwise by a job that runs 20 s after the server starts
+and every 5 minutes, for reservations older than any match can last (`refundStaleStakes`; at least 10
+minutes). Every movement is a ledger row with its operation id.
+
+**What a player sees**: the stake picker with the pools, the reason when a stake isn't available, the
+confirmation sheet, the lobby's stake line, the results' stake line, the history's ±$BLAT, and the
+$BLAT screen's history («Stake in the $BLAT Tournament», «Won in the $BLAT Tournament», «Stake
+returned»).
+
+**Known limits** (not solved by the rules above): two accounts of one person can still play each other —
+the day-old accounts, the daily limit and the hold on flagged accounts keep that small; the admin's
+player card shows every ledger row for a check.

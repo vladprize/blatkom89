@@ -21,6 +21,8 @@ export interface PlayerCard {
   avatar: AvatarId | null;
   character: CharacterId | null;
   level: number;
+  /** v0.2.17: the founder's account (a gold badge by the alias). */
+  founder?: boolean;
 }
 
 export interface FriendEntry extends PlayerCard {

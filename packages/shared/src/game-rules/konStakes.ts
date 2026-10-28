@@ -1,54 +1,92 @@
 /**
- * Stakes in «Блатной кон» — DESIGNED, SWITCHED OFF (V2.0 part D; docs/KON.md §6).
+ * Stakes in the $BLAT Tournament (v0.2.17; docs/KON.md §6). The owner: «players play staking their
+ * tokens equally — the winners take the pool».
  *
- * Nothing in the game reserves, moves or pays $BLAT for a Kon match. `KON_STAKES.enabled` is a constant,
- * not a setting: switching it on is a code change that needs the owner's approval and a legal review
- * first ($BLAT may gain an economic value later). Kon ratings never touch $BLAT either way.
+ * Everyone in a staked tournament room stakes the same amount. The server reserves every stake in one
+ * transaction before the match starts (all or nothing) and settles once, from its own result:
+ *   • a win — the winners who stayed to the end share the whole pool equally;
+ *   • a draw — everyone who stayed gets their stake back, and the stakes of those who left are shared
+ *     among them;
+ *   • a match that never finished (the server stopped, the room broke) — every stake goes back;
+ *   • a player who leaves forfeits their stake to the pool.
+ * Stakes move $BLAT between players and create none: what is paid out is exactly what was staked.
  *
- * What a future implementation must do (the pure rules below are tested so the design is concrete):
- *   1. reserve every participant's stake on the server (a ledger row per reservation, its own operation
- *      id — `kon-stake:<match>:<player>`), only after each of them confirmed;
- *   2. start the match only when every stake is reserved; never let a reservation be spent twice;
- *   3. settle on the server from the server's own result: winners share the pool equally, a draw or a
- *      technical failure returns every stake, a leaver's stake stays in the pool;
- *   4. every movement is a ledger row; settlement is idempotent (a second call changes nothing).
+ * Who may stake: the server's TOURNAMENT_STAKES switch is on, the account is at least a day old, it
+ * isn't held for a check, the balance covers the stake, and the day's stakes stay within the limit.
  */
 
-export const KON_STAKES = Object.freeze({ enabled: false as const, minStake: 100, maxStake: 10_000 });
+/** The stakes a room can have (0: no stake — the tournament rating only). */
+export const KON_STAKE_AMOUNTS = [100, 500, 1000, 5000] as const;
+export type KonStake = 0 | (typeof KON_STAKE_AMOUNTS)[number];
+
+export const KON_STAKES = Object.freeze({
+  amounts: KON_STAKE_AMOUNTS,
+  /** At most this much staked in 24 hours (stakes that came back don't count). */
+  dailyLimit: 20_000,
+  /** An account stakes from its second day on. */
+  minAccountAgeMs: 24 * 3600_000,
+});
+
+export function isKonStake(v: unknown): v is KonStake {
+  return v === 0 || (KON_STAKE_AMOUNTS as readonly unknown[]).includes(v);
+}
+
+/** Why a player may not stake (the API's error codes). */
+export type StakeRefusal = 'stakes_off' | 'account_new' | 'blat_flagged' | 'blat_low' | 'daily_limit';
+export const STAKE_REFUSALS: readonly StakeRefusal[] = ['stakes_off', 'account_new', 'blat_flagged', 'blat_low', 'daily_limit'];
+
+/** The rule for one player (the server reads the facts from the database; the client shows them). */
+export function stakeRefusal(o: { enabled: boolean; stake: number; balance: number; accountAgeMs: number; flagged: boolean; stakedToday: number }): StakeRefusal | null {
+  if (o.stake <= 0) return null;
+  if (!o.enabled) return 'stakes_off';
+  if (o.accountAgeMs < KON_STAKES.minAccountAgeMs) return 'account_new';
+  if (o.flagged) return 'blat_flagged';
+  if (o.balance < o.stake) return 'blat_low';
+  if (o.stakedToday + o.stake > KON_STAKES.dailyLimit) return 'daily_limit';
+  return null;
+}
 
 export interface StakeSettlement {
-  /** `pool`: the winners shared it; `refund`: every stake went back. */
-  kind: 'pool' | 'refund';
+  /** `pool`: the winners shared it; `draw`: the stakes went back (the leavers' shared); `refund`: every stake went back. */
+  kind: 'pool' | 'draw' | 'refund';
   /** What each participant receives (their stake was reserved before). */
   payouts: Map<string, number>;
   pool: number;
 }
 
+/** Shares `amount` equally among `ids` (sorted): what doesn't divide goes one by one in that order. */
+function share(amount: number, ids: readonly string[], into: Map<string, number>) {
+  if (ids.length === 0 || amount <= 0) return;
+  const each = Math.floor(amount / ids.length);
+  let rest = amount - each * ids.length;
+  for (const id of ids) {
+    into.set(id, (into.get(id) ?? 0) + each + (rest > 0 ? 1 : 0));
+    if (rest > 0) rest--;
+  }
+}
+
 /**
- * Settles a pool where everyone staked `stake`: the winners share the whole pool equally (what does not
- * divide evenly goes one by one to the winners in id order — nothing is created or lost); a draw, a
- * failed match or a side with nobody left returns every stake.
+ * Settles a pool where everyone staked `stake`. `left`: the player wasn't there at the end (their stake
+ * stays in the pool). Nothing is created or lost: the payouts always add up to the pool.
  */
-export function settleStakes(o: { stake: number; players: ReadonlyArray<{ id: string; team: 0 | 1 }>; winner: 0 | 1 | null; failed: boolean }): StakeSettlement {
+export function settleStakes(o: { stake: number; players: ReadonlyArray<{ id: string; team: 0 | 1 | null; left?: boolean }>; winner: 0 | 1 | null; failed: boolean }): StakeSettlement {
   const stake = Math.max(0, Math.floor(o.stake));
   const pool = stake * o.players.length;
-  const winners = o.winner === null ? [] : o.players.filter((p) => p.team === o.winner).map((p) => p.id).sort();
   const payouts = new Map<string, number>();
-  if (o.failed || winners.length === 0) {
+  for (const p of o.players) payouts.set(p.id, 0);
+  const stayed = o.players.filter((p) => !p.left);
+  if (o.failed || stayed.length === 0) {
     for (const p of o.players) payouts.set(p.id, stake);
     return { kind: 'refund', payouts, pool };
   }
-  for (const p of o.players) payouts.set(p.id, 0);
-  const share = Math.floor(pool / winners.length);
-  let rest = pool - share * winners.length;
-  for (const id of winners) {
-    payouts.set(id, share + (rest > 0 ? 1 : 0));
-    if (rest > 0) rest--;
+  const winners = o.winner === null ? [] : stayed.filter((p) => p.team === o.winner).map((p) => p.id).sort();
+  if (winners.length > 0) {
+    share(pool, winners, payouts);
+    return { kind: 'pool', payouts, pool };
   }
-  return { kind: 'pool', payouts, pool };
-}
-
-/** The switch every stake entry point must pass (there is none while it is off). */
-export function stakesAllowed(): boolean {
-  return KON_STAKES.enabled;
+  // a draw: those who stayed get their stake back and share the leavers' stakes
+  const ids = stayed.map((p) => p.id).sort();
+  for (const id of ids) payouts.set(id, stake);
+  share(stake * (o.players.length - stayed.length), ids, payouts);
+  return { kind: stayed.length === o.players.length ? 'refund' : 'draw', payouts, pool };
 }

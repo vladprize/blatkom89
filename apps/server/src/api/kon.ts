@@ -13,6 +13,7 @@ import { HttpError } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
 import { RateLimiter, rateLimit } from '../security/rateLimit.js';
 import { KonRepo } from '../kon/repo.js';
+import { PgStakes } from '../blat/stakes.js';
 
 export const registerKonRoutes: RouteModule = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
@@ -26,7 +27,8 @@ export const registerKonRoutes: RouteModule = (router, deps) => {
   router.get('/api/kon', auth, rateLimit(limiter, byUser), async (ctx) => {
     const me = currentUser(ctx);
     const r = repo();
-    const res: KonResponse = { me: await r.stats(me.userId), history: await r.history(me.userId, 20), waiting: deps.rooms.konWaiting() };
+    const stakes = await new PgStakes(deps.sql!, deps.env.TOURNAMENT_STAKES).status(me.userId);
+    const res: KonResponse = { me: await r.stats(me.userId), history: await r.history(me.userId, 20), waiting: deps.rooms.konWaiting(), waitingByStake: deps.rooms.konWaitingByStake(), stakes };
     ctx.json(200, res, { 'cache-control': 'no-store' });
   });
 

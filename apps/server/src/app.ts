@@ -9,6 +9,7 @@ import type { Logger } from './logging/logger.js';
 import type { Sql } from './database/db.js';
 import type { Services } from './services/contracts.js';
 import type { RoomManager } from './rooms/RoomManager.js';
+import type { SiteConfig } from '@blatkom/shared';
 import type { SocialHub } from './social/hub.js';
 import { registerRoomRoutes } from './api/rooms.js';
 import { registerAuthRoutes } from './api/auth.js';
@@ -47,6 +48,11 @@ export function createApp(deps: AppDeps, modules: RouteModule[] = ROUTE_MODULES)
   const router = new Router();
   const startedAt = Date.now();
   router.get('/api/health', (ctx) => ctx.json(200, { ok: true, version: deps.env.SERVER_VERSION, uptimeSec: Math.round((Date.now() - startedAt) / 1000), rooms: deps.rooms.count() }));
+  // v0.2.17: the menu's links and whether the $BLAT Tournament takes stakes
+  router.get('/api/site', (ctx) => {
+    const res: SiteConfig = { x: deps.env.SOCIAL_X_URL ?? null, telegram: deps.env.SOCIAL_TELEGRAM_URL ?? null, stakes: deps.env.TOURNAMENT_STAKES };
+    ctx.json(200, res, { 'cache-control': 'public, max-age=300' });
+  });
   router.get('/api/ready', async (ctx) => {
     if (deps.sql) {
       try {

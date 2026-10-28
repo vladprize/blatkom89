@@ -363,7 +363,7 @@ try {
   check(moving === 'online', `the match goes on online after the return (${moving})`);
   // the match ends by its timer: the orientation is let go when the player leaves for the menu
   await TA2.page.getByTestId('kon-line').waitFor({ timeout: 90000 });
-  check(/Kon rating/.test(await TA2.page.getByTestId('kon-line').innerText()), 'the Kon match finishes normally after the return');
+  check(/Tournament rating|Рейтинг турнира/.test(await TA2.page.getByTestId('kon-line').innerText()), 'the tournament match finishes normally after the return');
   await TA2.page.screenshot({ path: `${outDir}/tg_results.png` });
   await TA2.page.getByRole('button', { name: 'To menu' }).click();
   await TA2.page.getByTestId('menu-nick').waitFor({ timeout: 30000 });

@@ -5,7 +5,7 @@
  */
 import { displayNameSchema, DM_MAX_LENGTH, LEADERBOARD_BY } from '@blatkom/shared';
 import type { DirectMessage, FriendEntry, FriendRequestEntry, FriendStatus, LeaderboardBy, LeaderboardEntry, LeaderboardResponse, PlayerCard, RoomInviteEvent } from '@blatkom/shared';
-import { h, fill, toast } from '../dom.js';
+import { h, fill, toast, founderTag } from '../dom.js';
 import { avatarImg } from '../avatars.js';
 import type { OnlineClient } from '../../net/OnlineClient.js';
 import type { SocialClient } from '../../net/SocialClient.js';
@@ -100,7 +100,7 @@ export function renderFriends(o: { online: OnlineClient; root: HTMLElement; onPl
       'div',
       { class: 'player friend', 'data-friend': r.name },
       cardAva(r),
-      h('div', { class: 'n' }, r.name, ' ', h('span', { class: 'muted', style: 'font-size:14px' }, `${t('lvl')} ${r.level}`)),
+      h('div', { class: 'n' }, r.name, r.founder ? founderTag() : null, ' ', h('span', { class: 'muted', style: 'font-size:14px' }, `${t('lvl')} ${r.level}`)),
       mine
         ? h('span', { class: 'muted', style: 'font-size:14px' }, t('waiting for an answer'))
         : h('button', { class: 'btn btn--small btn--red', 'data-testid': 'accept-friend', onclick: act(() => online.api.acceptFriend(r.id)) }, t('Accept')),
@@ -111,7 +111,7 @@ export function renderFriends(o: { online: OnlineClient; root: HTMLElement; onPl
       'div',
       { class: `player friend friend--${f.status}`, 'data-friend': f.name },
       h('span', { class: 'friend__ava' }, cardAva(f), dot(f.status)),
-      h('div', { class: 'n col', style: 'gap:0;min-width:0' }, h('span', { class: 'friend__name' }, f.name), h('span', { class: 'muted friend__status' }, `${statusText(f)} · ${t('lvl')} ${f.level}`)),
+      h('div', { class: 'n col', style: 'gap:0;min-width:0' }, h('span', { class: 'friend__name' }, f.name, f.founder ? founderTag() : null), h('span', { class: 'muted friend__status' }, `${statusText(f)} · ${t('lvl')} ${f.level}`)),
       f.unread > 0 ? h('span', { class: 'nbadge', title: t('Unread messages') }, String(f.unread)) : null,
       h('button', { class: 'btn btn--small', 'data-testid': 'open-chat', onclick: () => openChat(o.root, online, f) }, t('Message')),
       h('button', { class: 'btn btn--small btn--red', disabled: f.status === 'offline', title: f.status === 'offline' ? t('Offline — they won’t see the invitation') : t('Create a room and invite'), onclick: () => o.onPlayWith(f) }, t('Play')),
@@ -393,7 +393,7 @@ export function renderTop(o: { online: OnlineClient; by?: LeaderboardBy; onBy?: 
               'tr',
               { class: `${rel === 'me' ? 'me' : ''} ${e.rank <= 3 ? `top${e.rank}` : ''}`, 'data-player': e.name },
               h('td', { class: 'toprank-cell' }, String(e.rank)),
-              h('td', null, h('span', { class: 'topname' }, cardAva(e), h('span', null, e.name))),
+              h('td', null, h('span', { class: 'topname' }, cardAva(e), h('span', null, e.name), e.founder ? founderTag() : null)),
               h('td', { class: col('level') }, String(e.level)),
               h('td', { class: col('rating') }, String(e.rating)),
               h('td', { class: col('kills') }, String(e.kills)),

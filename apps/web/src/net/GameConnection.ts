@@ -46,7 +46,8 @@ export class GameConnection {
 
   constructor(
     private readonly handlers: ConnHandlers,
-    private readonly hello: { token: string; roomId: string; character: CharacterId },
+    /** `stake` (v0.2.17): the $BLAT Tournament stake the player agreed to (a staked room needs it). */
+    private readonly hello: { token: string; roomId: string; character: CharacterId; stake?: number },
   ) {}
 
   get state(): ConnStatus {
@@ -67,7 +68,7 @@ export class GameConnection {
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
     ws.onopen = () => {
-      const msg: ClientMessage = { type: 'hello', protocol: PROTOCOL_VERSION, token: this.hello.token, roomId: this.hello.roomId, character: this.hello.character, clientVersion: VERSION, ...(this.reconnectToken ? { reconnectToken: this.reconnectToken } : {}) };
+      const msg: ClientMessage = { type: 'hello', protocol: PROTOCOL_VERSION, token: this.hello.token, roomId: this.hello.roomId, character: this.hello.character, clientVersion: VERSION, ...(this.reconnectToken ? { reconnectToken: this.reconnectToken } : {}), ...(this.hello.stake ? { stake: this.hello.stake } : {}) };
       ws.send(JSON.stringify(msg));
     };
     ws.onmessage = (ev) => {

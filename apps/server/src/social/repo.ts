@@ -14,6 +14,7 @@ interface CardRow {
   avatar: string | null;
   preferred_character: string | null;
   level: number | null;
+  founder?: boolean | null;
 }
 
 export function toCard(r: CardRow): PlayerCard {
@@ -23,6 +24,7 @@ export function toCard(r: CardRow): PlayerCard {
     avatar: isAvatarId(r.avatar) ? r.avatar : null,
     character: r.preferred_character && isCharacterId(r.preferred_character) ? r.preferred_character : null,
     level: r.level ?? 1,
+    ...(r.founder ? { founder: true } : {}),
   };
 }
 
@@ -46,7 +48,7 @@ export class SocialRepo {
 
   async card(userId: string): Promise<PlayerCard | null> {
     const rows = await this.sql<CardRow[]>`
-      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
     return rows[0] ? toCard(rows[0]) : null;
   }
@@ -64,18 +66,18 @@ export class SocialRepo {
   /** Friends (without presence — the hub adds it), incoming and outgoing requests. */
   async lists(userId: string): Promise<{ friends: Array<Omit<FriendEntry, 'status'>>; incoming: FriendRequestEntry[]; outgoing: FriendRequestEntry[] }> {
     const friends = await this.sql<Array<CardRow & { last_seen_at: Date; unread: number }>>`
-      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.last_seen_at,
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder, u.last_seen_at,
              (SELECT count(*)::int FROM direct_messages d WHERE d.recipient_id = ${userId} AND d.sender_id = u.id AND d.read_at IS NULL) AS unread
       FROM friendships f JOIN users u ON u.id = f.friend_id LEFT JOIN profiles p ON p.user_id = u.id
       WHERE f.user_id = ${userId} AND f.status = 'accepted' AND u.deleted_at IS NULL
       ORDER BY u.name_key`;
     const incoming = await this.sql<Array<CardRow & { created_at: Date }>>`
-      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, f.created_at
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder, f.created_at
       FROM friendships f JOIN users u ON u.id = f.user_id LEFT JOIN profiles p ON p.user_id = u.id
       WHERE f.friend_id = ${userId} AND f.status = 'pending' AND u.deleted_at IS NULL
       ORDER BY f.created_at DESC`;
     const outgoing = await this.sql<Array<CardRow & { created_at: Date }>>`
-      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, f.created_at
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder, f.created_at
       FROM friendships f JOIN users u ON u.id = f.friend_id LEFT JOIN profiles p ON p.user_id = u.id
       WHERE f.user_id = ${userId} AND f.status = 'pending' AND u.deleted_at IS NULL
       ORDER BY f.created_at DESC`;
@@ -90,7 +92,7 @@ export class SocialRepo {
   async request(userId: string, name: string): Promise<{ outcome: RequestOutcome; other: PlayerCard | null }> {
     return this.sql.begin(async (tx) => {
       const target = await tx<CardRow[]>`
-        SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level
+        SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder
         FROM users u LEFT JOIN profiles p ON p.user_id = u.id
         WHERE u.name_key = ${nameKey(name)} AND u.deleted_at IS NULL AND u.merged_at IS NULL`;
       const t = target[0];
@@ -195,7 +197,7 @@ export class SocialRepo {
   async leaderboard(by: LeaderboardBy, limit = LEADERBOARD_SIZE): Promise<LeaderboardEntry[]> {
     const order = this.order(by);
     const rows = await this.sql<Array<CardRow & { rank: string; rating: number; kills: number; wins: number; matches: number }>>`
-      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, row_number() OVER (ORDER BY ${order}) AS rank,
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder, row_number() OVER (ORDER BY ${order}) AS rank,
              p.rating, p.kills, p.wins, p.matches_completed AS matches
       FROM profiles p JOIN users u ON u.id = p.user_id
       WHERE p.matches_completed > 0 AND u.deleted_at IS NULL
@@ -207,7 +209,7 @@ export class SocialRepo {
   /** One player's line with their place (null without a finished match). */
   async standing(by: LeaderboardBy, userId: string): Promise<LeaderboardEntry | null> {
     const rows = await this.sql<Array<CardRow & { rating: number; kills: number; wins: number; matches: number; xp: number; created_at: Date }>>`
-      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, p.rating, p.kills, p.wins, p.matches_completed AS matches, p.xp, u.created_at
+      SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder, p.rating, p.kills, p.wins, p.matches_completed AS matches, p.xp, u.created_at
       FROM profiles p JOIN users u ON u.id = p.user_id
       WHERE p.user_id = ${userId} AND p.matches_completed > 0 AND u.deleted_at IS NULL`;
     const me = rows[0];

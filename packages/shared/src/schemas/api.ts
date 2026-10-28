@@ -10,6 +10,7 @@ import { GADGET_IDS } from '../game-rules/gadgets.js';
 import type { WeaponId } from '../game-rules/weapons.js';
 import { FINISH_IDS } from '../game-rules/skins.js';
 import { KON_FORMATS } from '../game-rules/kon.js';
+import { isKonStake } from '../game-rules/konStakes.js';
 import type { KonFormat } from '../game-rules/kon.js';
 import type { FinishId, SkinRarity } from '../game-rules/skins.js';
 import type { Currency, DiamondPack, Inventory, Rarity } from '../game-rules/economy.js';
@@ -19,6 +20,7 @@ import type { GameMode } from '../game-rules/match.js';
 import type { MapId } from '../maps/types.js';
 import type { AchievementId } from '../game-rules/progression.js';
 import type { StoryDone } from './story.js';
+import type { BlatPool } from '../game-rules/blat.js';
 import { MAX_NAME_LENGTH } from '../constants/game.js';
 import { LATIN_NAME_RE } from '../game-rules/aliases.js';
 import { PlatformSchema } from '../events/analytics.js';
@@ -150,6 +152,13 @@ export const LoadoutRequest = z
 export const CaseOpenRequest = z.object({ confirmAge: z.literal(true).optional() }).strict();
 export const CheckoutRequest = z.object({ packId: z.string().regex(/^[a-z0-9]{2,16}$/), method: z.enum(['card', 'crypto']) }).strict();
 
+/** v0.2.17: GET /api/site — the menu's X and Telegram links (null: «coming soon»), stakes in the $BLAT Tournament. */
+export interface SiteConfig {
+  x: string | null;
+  telegram: string | null;
+  stakes: boolean;
+}
+
 /** GET /api/shop/config — which payment methods are configured on this server. */
 export interface ShopConfig {
   card: boolean;
@@ -197,8 +206,10 @@ export const UpdateProfileRequest = z
   })
   .strict();
 /** V2.0 part D: `kon` makes it a «Блатной кон» room (team deathmatch, fixed sides, people only). */
-export const CreateRoomRequest = z.object({ mapId: z.enum(MAP_IDS), isPrivate: z.boolean().default(true), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional() }).strict();
-export const QuickMatchRequest = z.object({ mapId: z.enum(MAP_IDS).optional(), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional() }).strict();
+/** v0.2.17: the $BLAT Tournament's stake (0 or one of KON_STAKE_AMOUNTS; tournament rooms only). */
+const KonStakeField = z.number().int().refine((v) => isKonStake(v), { message: 'not one of the stakes' });
+export const CreateRoomRequest = z.object({ mapId: z.enum(MAP_IDS), isPrivate: z.boolean().default(true), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional(), stake: KonStakeField.optional() }).strict();
+export const QuickMatchRequest = z.object({ mapId: z.enum(MAP_IDS).optional(), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional(), stake: KonStakeField.optional() }).strict();
 
 export interface PublicProfile {
   id: string;
@@ -236,6 +247,8 @@ export interface PublicProfile {
   club?: ClubBadge | null;
   /** v0.3: the providers the account signs in with besides email and Telegram (google, facebook, discord, reddit). */
   identities?: string[];
+  /** v0.2.17: the founder's account — a gold «Founder» badge by the alias and the hidden way into /admin. */
+  founder?: boolean;
 }
 
 export interface AuthResponse {
@@ -262,6 +275,18 @@ export interface CreateRoomResponse {
   mode: GameMode;
   /** V2.0 part D: a «Блатной кон» room. */
   kon?: KonFormat | null;
+  /** v0.2.17: the $BLAT Tournament's stake (0: none). */
+  stake?: number;
+}
+
+/** POST /api/rooms/quick */
+export interface QuickMatchResponse {
+  roomId: string;
+  mapId: MapId;
+  mode: GameMode;
+  kon: KonFormat | null;
+  /** v0.2.17: the $BLAT Tournament's stake (0: none). */
+  stake?: number;
 }
 
 export type InviteStatus = 'joinable' | 'full' | 'in_progress' | 'finished' | 'expired' | 'not_found';
@@ -277,6 +302,8 @@ export interface InviteInfo {
   hostName: string | null;
   /** V2.0 part D: a «Блатной кон» room. */
   kon?: KonFormat | null;
+  /** v0.2.17: the $BLAT Tournament's stake everyone in the room puts in (0: none). */
+  stake?: number;
 }
 
 export interface MatchHistoryEntry {
@@ -501,6 +528,8 @@ export interface AdminPlayerDetail {
   origin?: { channel: SourceChannel | null; detail: string | null; partner: string | null; mergedInto: string | null; mergedAt: string | null; mergedFrom: number };
   /** v0.2.16: the story missions done (a best time of 0: opened by an administrator, never played). */
   story?: StoryDone[];
+  /** v0.2.17: the founder's account. */
+  founder?: boolean;
 }
 
 /** V2.0: an invitation as the admin sees it. */
@@ -529,14 +558,35 @@ export interface AdminBlatSummary {
   referrals: Record<AdminReferralRow['status'], number>;
   top: Array<{ id: string; name: string; balance: number; flagged: boolean }>;
   flagged: number;
+  /** v0.2.17: the supply's pools (the cap and what each has given). */
+  pools?: Array<{ pool: BlatPool; cap: number; issued: number }>;
+}
+
+/** v0.2.17: POST /api/admin/players/:id/blat-allocation — a share out of a pool (not the players'). */
+export const AdminBlatAllocationRequest = z
+  .object({
+    pool: z.enum(['influencers', 'friends', 'reserve']),
+    amount: z.number().int().min(1).max(100_000_000),
+    note: z.string().trim().min(3).max(120),
+  })
+  .strict();
+export type AdminBlatAllocationRequest = z.infer<typeof AdminBlatAllocationRequest>;
+
+/** v0.2.17: POST /api/admin/players/:id/founder — what «Make founder» did. */
+export interface AdminFounderResult {
+  level: number;
+  blat: number;
+  allocated: number;
+  items: number;
 }
 
 export const AdminReferralDecision = z.object({ action: z.enum(['confirm', 'reject']), note: z.string().trim().max(200).optional() }).strict();
 
-/** V2.0 part C: the BLAT DROP announcement date as the admin sees it (`source`: who set it). */
+/** V2.0 part C: the BLAT DROP announcement date as the admin sees it (`source`: who set it; v0.2.17:
+ * `default` — the owner's date built into this release, BLAT_DROP_DEFAULT_ANNOUNCE_AT). */
 export interface AdminBlatDrop {
   announceAt: string | null;
-  source: 'admin' | 'env' | null;
+  source: 'admin' | 'env' | 'default' | null;
   updatedAt: string | null;
   updatedBy: string | null;
 }

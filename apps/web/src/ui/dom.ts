@@ -1,5 +1,6 @@
 /** Tiny DOM helpers (no framework). All text goes through textContent — no innerHTML with data. */
 import { inlineAsset } from '../app/inline.js';
+import { t } from '../i18n/index.js';
 
 type Child = Node | string | number | null | undefined | false;
 type Attrs = Record<string, string | number | boolean | ((ev: Event) => void) | undefined | null>;
@@ -50,3 +51,8 @@ export function fmtDuration(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+
+/** v0.2.17: the founder's gold badge by the alias («СОЗДАТЕЛЬ» / «FOUNDER»). */
+export function founderTag(): HTMLElement {
+  return h('span', { class: 'founder-tag', 'data-testid': 'founder-tag', title: t('Founder of BLATKOM ’89') }, t('Founder'));
+}

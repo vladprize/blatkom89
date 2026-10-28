@@ -2,7 +2,8 @@
  * BLAT DROP (V2.0 part C): the announcement date and the balance snapshots.
  *
  *  • The date: an administrator's value (`app_settings`, key `blat_drop.announce_at`) or, before any
- *    administrator has set one, the BLAT_DROP_ANNOUNCE_AT variable. Every player gets it together with
+ *    administrator has set one, the BLAT_DROP_ANNOUNCE_AT variable, or (v0.2.17) the owner's date built
+ *    into the release (BLAT_DROP_DEFAULT_ANNOUNCE_AT). Every player gets it together with
  *    the server's clock, so the countdown is the same for everyone. It is an announcement date, not a
  *    promise of anything — the screen says so.
  *  • Snapshots: every account holding $BLAT at one moment, read in one REPEATABLE READ transaction (a
@@ -12,6 +13,7 @@
  *    transfer: a snapshot is a record (docs/BLAT.md §6).
  */
 import { randomUUID } from 'node:crypto';
+import { BLAT_DROP_DEFAULT_ANNOUNCE_AT } from '@blatkom/shared';
 import type { AdminBlatDrop, AdminBlatSnapshot, AdminBlatSnapshotRow } from '@blatkom/shared';
 import type { Sql } from '../database/db.js';
 
@@ -46,7 +48,9 @@ export class BlatDropRepo {
       SELECT s.value, s.updated_at, a.username FROM app_settings s LEFT JOIN admin_users a ON a.id = s.updated_by WHERE s.key = ${DROP_KEY}`;
     if (row) return { announceAt: row.value?.announceAt ?? null, source: 'admin', updatedAt: row.updated_at.toISOString(), updatedBy: row.username };
     const env = this.envDate ? new Date(this.envDate) : null;
-    return env && !Number.isNaN(env.getTime()) ? { announceAt: env.toISOString(), source: 'env', updatedAt: null, updatedBy: null } : { announceAt: null, source: null, updatedAt: null, updatedBy: null };
+    if (env && !Number.isNaN(env.getTime())) return { announceAt: env.toISOString(), source: 'env', updatedAt: null, updatedBy: null };
+    // v0.2.17: the owner's date, built in (an administrator's «not set» above still wins)
+    return { announceAt: BLAT_DROP_DEFAULT_ANNOUNCE_AT, source: 'default', updatedAt: null, updatedBy: null };
   }
 
   /** An administrator sets the date (null: «not set yet», even when the server variable has one). */

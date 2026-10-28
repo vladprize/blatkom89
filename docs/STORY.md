@@ -107,6 +107,17 @@ Behind the pages the soundtrack plays very quietly (22 % of the menu level, `mus
 mission, after it and in the prologue; it fades out with the mission and comes back to the menu level
 on the mission's end and in the hub.
 
+**v0.2.17 (the owner's edits):** a page with no speaker (a caption) stands **big in the middle of the
+screen**; a speaker's page puts a **bigger card** (about a third of the screen's height) and the bubble
+**together in the middle along the bottom**, the card on the side of the bubble where the place's picture
+has no face low down (`SCENE_ART_SIDE` in `scenes.ts`: the bear's and the rooster's capsules in the
+hall, the rooster on the crates at the building site…). In the prologue, Arkadia Development's plan is
+said by **Arkadich himself** («A parking tower where the yard is. Nine hundred spaces. Arkadia
+Development doesn't lose cases.») on **his own card with his building site behind him**
+(`assets/heroes/arkady_stroyka.jpg`, made by `tools/make-arkady-card.py`: the lion cut out of his
+card's source with a background-removal model and set over the cranes and the sunset of the «Стройка»
+picture; a beat can name its own card — `Beat.art`).
+
 The same pictures: a mission's row in the hub is a little banner of its place (`scenes/thumbs/<id>.jpg`,
 640×360), a mission's end (done or failed) sits over the place's picture, and a map's **loading screen**
 (`ui/loadscreen.ts`) covers the countdown of a practice or online match on that map — the picture, the
@@ -165,6 +176,13 @@ the hero, three lives, smaller waves, easier enemies in the first chapter, 75-se
 with a 7-second enemy return. A bot hero is a weak player — the real numbers come from players.
 Chapter 3 (v0.2.15) was tuned into chapter 2's range: with an easy bot as the hero a11 10/12, a12 6/8,
 b11 10/12, b12 6/10 (chapter 2: a9 4/10, a10 5/8, b7 5/10, b9 6/10); a normal bot wins nearly all of them.
+
+**v0.2.17 — about 30 % easier** (the owner: «the bots are far too strong»): every bot playing **against**
+the player — the story's enemies, practice's opponents, the server's filled-in players — reacts 1.35×
+slower, aims 1.45× wider, turns 0.78× as fast, sees 0.9× as far and fires in bursts with pauses (a 75 %
+duty: `BOT_EASE` in `sim/bots.ts`); the player's own team-mates keep their full strength. With an easy
+bot as the hero: a9 8/10 (was 4/10), a10 10/10 (5/8), a11 10/10, a12 10/10 (6/8), b7 10/10 (5/10), b9 9/10
+(6/10), b11 10/10, b12 9/10 (6/10).
 
 ## 6. Tests
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_MATCH_CONFIG, KON_FORMATS, KON_RATING, KON_RULES, KON_STAKES, isKonFormat, konConfig, konDeal, konDelta, konExpected, settleStakes, stakesAllowed } from '../index.js';
+import { DEFAULT_MATCH_CONFIG, KON_FORMATS, KON_RATING, KON_RULES, KON_STAKES, isKonFormat, isKonStake, konConfig, konDeal, konDelta, konExpected, settleStakes, stakeRefusal } from '../index.js';
 
 test('Блатной кон: four formats with fixed sides, team deathmatch, nobody joins a match that is on', () => {
   assert.deepEqual([...KON_FORMATS], ['1x1', '2x2', '3x3', '5x5']);
@@ -43,9 +43,7 @@ test('Kon search deals even sides: the strongest first — red, blue, blue, red�
   assert.notEqual(two.get('a'), two.get('b'));
 });
 
-test('Kon stakes are designed and OFF: the settlement rule shares the pool exactly, refunds draws and failures', () => {
-  assert.equal(KON_STAKES.enabled, false);
-  assert.equal(stakesAllowed(), false);
+test('$BLAT Tournament stakes: the winners share the pool exactly, draws and failures return the stakes, a leaver forfeits', () => {
   // the owner's example: 3×3, 5 000 each → a pool of 30 000, 10 000 to each winner
   const players = ['a', 'b', 'c', 'd', 'e', 'f'].map((id, i) => ({ id, team: (i < 3 ? 0 : 1) as 0 | 1 }));
   const win = settleStakes({ stake: 5000, players, winner: 0, failed: false });
@@ -56,8 +54,33 @@ test('Kon stakes are designed and OFF: the settlement rule shares the pool exact
   assert.deepEqual([draw.kind, [...draw.payouts.values()]], ['refund', [5000, 5000, 5000, 5000, 5000, 5000]]);
   const failed = settleStakes({ stake: 5000, players, winner: 1, failed: true });
   assert.equal(failed.kind, 'refund');
+  assert.deepEqual([...failed.payouts.values()], [5000, 5000, 5000, 5000, 5000, 5000]);
   // what doesn't divide goes one by one to the winners in id order — nothing is created or lost
   const odd = settleStakes({ stake: 101, players: [{ id: 'z', team: 0 }, { id: 'y', team: 0 }, { id: 'x', team: 0 }, { id: 'w', team: 1 }], winner: 0, failed: false });
   assert.equal([...odd.payouts.values()].reduce((a, b) => a + b, 0), odd.pool);
   assert.deepEqual([odd.payouts.get('x'), odd.payouts.get('y'), odd.payouts.get('z'), odd.payouts.get('w')], [135, 135, 134, 0]);
+  // a winner who left gets nothing: the winners who stayed share the whole pool
+  const gone = settleStakes({ stake: 500, players: [{ id: 'a', team: 0 }, { id: 'b', team: 0, left: true }, { id: 'c', team: 1 }, { id: 'd', team: 1 }], winner: 0, failed: false });
+  assert.deepEqual([gone.kind, gone.payouts.get('a'), gone.payouts.get('b'), gone.payouts.get('c'), gone.payouts.get('d')], ['pool', 2000, 0, 0, 0]);
+  // a draw with a leaver: those who stayed get their stake back and share the leaver's
+  const drawLeft = settleStakes({ stake: 500, players: [{ id: 'a', team: 0 }, { id: 'b', team: 0, left: true }, { id: 'c', team: 1 }, { id: 'd', team: 1 }], winner: null, failed: false });
+  assert.deepEqual([drawLeft.kind, drawLeft.payouts.get('a'), drawLeft.payouts.get('b'), drawLeft.payouts.get('c'), drawLeft.payouts.get('d')], ['draw', 667, 0, 667, 666]);
+  assert.equal([...drawLeft.payouts.values()].reduce((x, y) => x + y, 0), drawLeft.pool);
+  // nobody stayed: every stake goes back
+  const empty = settleStakes({ stake: 100, players: [{ id: 'a', team: 0, left: true }, { id: 'b', team: 1, left: true }], winner: 0, failed: false });
+  assert.deepEqual([empty.kind, [...empty.payouts.values()]], ['refund', [100, 100]]);
+});
+
+test('$BLAT Tournament stakes: who may stake', () => {
+  assert.ok(isKonStake(0) && isKonStake(100) && isKonStake(5000));
+  assert.ok(!isKonStake(250) && !isKonStake('100') && !isKonStake(-100));
+  const ok = { enabled: true, stake: 500, balance: 1000, accountAgeMs: 2 * 86_400_000, flagged: false, stakedToday: 0 };
+  assert.equal(stakeRefusal(ok), null);
+  assert.equal(stakeRefusal({ ...ok, stake: 0, enabled: false }), null);
+  assert.equal(stakeRefusal({ ...ok, enabled: false }), 'stakes_off');
+  assert.equal(stakeRefusal({ ...ok, accountAgeMs: 3_600_000 }), 'account_new');
+  assert.equal(stakeRefusal({ ...ok, flagged: true }), 'blat_flagged');
+  assert.equal(stakeRefusal({ ...ok, balance: 499 }), 'blat_low');
+  assert.equal(stakeRefusal({ ...ok, stakedToday: KON_STAKES.dailyLimit - 499 }), 'daily_limit');
+  assert.equal(stakeRefusal({ ...ok, stakedToday: KON_STAKES.dailyLimit - 500 }), null);
 });

@@ -8,6 +8,7 @@
  *
  * Nothing here can change a balance on the client's word: credits happen in blat/repo.ts.
  */
+import { PROJECT_SOL_WALLET } from '@blatkom/shared';
 import type { BlatDropInfo, BlatResponse } from '@blatkom/shared';
 import type { RouteModule } from '../app.js';
 import { HttpError } from '../http/router.js';
@@ -45,7 +46,7 @@ export const registerBlatRoutes: RouteModule = (router, deps) => {
   router.get('/api/blat/drop', rateLimit(dropLimiter), async (ctx) => {
     if (!deps.sql) throw new HttpError(503, 'persistence_unavailable', 'The service is temporarily unavailable');
     const d = await new BlatDropRepo(deps.sql, deps.env.BLAT_DROP_ANNOUNCE_AT).date();
-    const res: BlatDropInfo = { announceAt: d.announceAt, serverNow: new Date().toISOString() };
+    const res: BlatDropInfo = { announceAt: d.announceAt, serverNow: new Date().toISOString(), wallet: deps.env.PROJECT_SOL_WALLET ?? PROJECT_SOL_WALLET };
     ctx.json(200, res, { 'cache-control': 'no-store' });
   });
 };

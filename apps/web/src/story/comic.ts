@@ -15,7 +15,7 @@ import { music } from '../game/audio/Music.js';
 import { line } from './script.js';
 import type { Beat } from './script.js';
 import { speakerArt, speakerName } from './overlay.js';
-import { SCENE_FOCUS, beatScene, sceneUrl } from './scenes.js';
+import { SCENE_ART_SIDE, SCENE_FOCUS, beatScene, sceneUrl } from './scenes.js';
 import type { SceneId } from './scenes.js';
 
 export interface ComicOptions {
@@ -33,7 +33,7 @@ export function playComic(root: HTMLElement, beats: readonly Beat[], o: ComicOpt
   // the pictures load while the first page is read
   const scenes = new Set<SceneId>();
   for (const b of beats) {
-    const art = speakerArt(b.who);
+    const art = b.art ?? speakerArt(b.who);
     if (art) new Image().src = asset(`assets/heroes/${art}.jpg`);
     const sc = beatScene(b, o.scene);
     if (sc) scenes.add(sc);
@@ -95,16 +95,20 @@ export function playComic(root: HTMLElement, beats: readonly Beat[], o: ComicOpt
     el.classList.toggle('comic--vhs', fx === 'vhs');
     showScene(sc);
     [...dots.children].forEach((d, k) => d.classList.toggle('on', k <= i));
-    const art = speakerArt(b.who);
+    const art = b.who === 'caption' ? null : (b.art ?? speakerArt(b.who));
+    // v0.2.17: a caption page sits in the middle of the screen, big; a speaker's page along the bottom
+    el.classList.toggle('comic--captionpage', !art);
     let panel: HTMLElement;
     if (!art) {
       panel = h('figure', { class: 'comic__panel comic__panel--caption', 'data-testid': 'comic-panel' }, h('div', { class: 'comic__caption' }, line(b.say)));
     } else {
       if (lastWho !== null && lastWho !== b.who) side = side === 'left' ? 'right' : 'left';
       lastWho = b.who;
+      // over a big picture: the side where the place has no face low down (scenes.ts)
+      const at = sc ? SCENE_ART_SIDE[sc] : side;
       panel = h(
         'figure',
-        { class: `comic__panel comic__panel--${side}`, 'data-testid': 'comic-panel', 'data-who': b.who },
+        { class: `comic__panel comic__panel--${at}`, 'data-testid': 'comic-panel', 'data-who': b.who },
         h('img', { class: 'comic__art', src: asset(`assets/heroes/${art}.jpg`), alt: '', draggable: 'false' }),
         h('figcaption', { class: 'comic__bubble' }, h('b', { class: 'comic__who' }, speakerName(b.who)), h('span', null, line(b.say))),
       );
