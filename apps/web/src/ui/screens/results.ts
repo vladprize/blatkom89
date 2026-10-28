@@ -171,9 +171,10 @@ export function renderResults(o: {
       ),
     );
   } else if (draw) banner = h('div', { class: 'panel col' }, h('div', { class: 'h1' }, t('Draw')), h('div', { class: 'hand' }, t('The district is left without a boss — settle it in the rematch.')));
+  // v0.2.17: the results fit the window — the table scrolls in its panel when the lineup is long
   return h(
     'div',
-    { class: 'screen screen--solid' },
+    { class: 'screen screen--solid screen--fit screen--results' },
     h(
       'div',
       { class: 'wrap' },
@@ -181,7 +182,7 @@ export function renderResults(o: {
       banner,
       h(
         'div',
-        { class: 'panel table-scroll' },
+        { class: 'panel table-scroll fitscroll results__table' },
         h(
           'table',
           { class: 'table' },
@@ -191,7 +192,7 @@ export function renderResults(o: {
       ),
       h(
         'div',
-        { class: 'muted', style: 'font-size:14px' },
+        { class: 'muted results__points', style: 'font-size:14px' },
         t('Points: elimination +{k}, assist +{a} ({d}+ damage to the opponent within {s} s before they are eliminated).', { k: SCORING.killPoints, a: SCORING.assistPoints, d: SCORING.assistMinDamage, s: SCORING.assistWindowMs / 1000 }),
         mode === 'teams'
           ? ` ${t('A team scores one for every elimination.')}`

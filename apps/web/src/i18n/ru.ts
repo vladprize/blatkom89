@@ -1084,6 +1084,10 @@ export const RU: Record<string, string> = {
   '$BLAT: a draw — the stake is back': '$BLAT: ничья — ставка вернулась',
   '$BLAT: the stake is back': '$BLAT: ставка вернулась',
   '{total} in total': 'всего {total}',
+  'My matches': 'Мои матчи',
+  'Achievements': 'Достижения',
+  'Matches': 'Матчи',
+  'Picture and sound': 'Картинка и звук',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)

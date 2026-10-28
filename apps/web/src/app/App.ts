@@ -824,8 +824,8 @@ export class App {
       h('button', { type: 'button', role: 'tab', 'aria-pressed': String(tab === id), 'aria-selected': String(tab === id), 'data-testid': `blat-tab-${id}`, onclick: () => tab !== id && this.showBlat(false, id) }, label);
     const tabs = h('div', { class: 'seg blat__tabs', role: 'tablist' }, tabBtn('balance', '$BLAT'), tabBtn('drop', 'BLAT DROP'));
     const body = h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
-    const wrap = h('div', { class: tab === 'drop' ? 'wrap wrap--wide' : 'wrap' }, this.topbar('$BLAT'), tabs, body);
-    this.render(h('div', { class: 'screen screen--dim' }, wrap));
+    const wrap = h('div', { class: 'wrap wrap--wide' }, this.topbar('$BLAT'), tabs, body);
+    this.render(h('div', { class: `screen screen--dim screen--fit screen--blat screen--blat-${tab}` }, wrap));
     const fail = (e: unknown) => {
       if (this.screen === 'blat' && this.blatTab === tab) body.replaceWith(h('div', { class: 'panel' }, apiErrorText(e)));
     };
@@ -875,7 +875,7 @@ export class App {
     this.go('kon', push);
     const body = h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
     const wrap = h('div', { class: 'wrap' }, this.topbar(t('$BLAT Tournament')), body);
-    this.render(h('div', { class: 'screen screen--dim' }, wrap));
+    this.render(h('div', { class: 'screen screen--dim screen--fit screen--kon' }, wrap));
     let top: KonTopResponse | null = null;
     let busy = false;
     let data: Awaited<ReturnType<typeof online.api.kon>> | null = null;
@@ -970,7 +970,7 @@ export class App {
     this.render(
       h(
         'div',
-        { class: 'screen screen--dim' },
+        { class: 'screen screen--dim screen--fit' },
         h(
           'div',
           { class: 'wrap' },
@@ -997,7 +997,7 @@ export class App {
     this.render(
       h(
         'div',
-        { class: 'screen screen--dim' },
+        { class: 'screen screen--dim screen--fit screen--club' },
         h(
           'div',
           { class: 'wrap' },
@@ -1343,12 +1343,12 @@ export class App {
     note();
     const content = h(
       'div',
-      { class: 'wrap wrap--vcenter' },
+      { class: 'wrap wrap--vcenter practice' },
       this.topbar(t('Practice')),
-      h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('Map')), mapField({ selected: mapId, onPick: (m) => (mapId = m) })),
+      h('div', { class: 'panel col practice__map' }, h('span', { class: 'tag' }, t('Map')), mapField({ selected: mapId, onPick: (m) => (mapId = m) })),
       h(
         'div',
-        { class: 'panel col' },
+        { class: 'panel col practice__mode' },
         h('span', { class: 'tag' }, t('Mode')),
         modeSwitch({ mode: gameMode, onMode: (m) => ((gameMode = m), note()) }),
         teamNote,
@@ -1356,7 +1356,7 @@ export class App {
       ),
       h(
         'div',
-        { class: 'panel col' },
+        { class: 'panel col practice__bots' },
         h('span', { class: 'tag' }, t('Opponents')),
         h('div', { class: 'muted' }, t('Number of bots')),
         seg(Array.from({ length: MAX_PRACTICE_BOTS }, (_, i) => i + 1), () => bots, (v) => (bots = v), String),
@@ -1366,7 +1366,7 @@ export class App {
       h(
         'button',
         {
-          class: 'btn btn--red',
+          class: 'btn btn--red practice__start',
           'data-testid': 'practice-start',
           onclick: () => {
             updateSettings({ bots, botDifficulty: diff });
@@ -1376,7 +1376,7 @@ export class App {
         t('Start'),
       ),
     );
-    this.render(h('div', { class: 'screen screen--dim' }, content));
+    this.render(h('div', { class: 'screen screen--dim screen--practice' }, content));
   }
 
   /** Practice loadout: the player's own (online), the free default (demo), or a weapon to try on. */
@@ -1609,7 +1609,7 @@ export class App {
     const code = h('input', { class: 'input', placeholder: t('Invite code'), maxlength: '16', autocapitalize: 'off', autocomplete: 'off', inputmode: 'text', 'aria-label': t('Invite code') });
     const content = h(
       'div',
-      { class: 'wrap wrap--vcenter' },
+      { class: 'wrap wrap--vcenter friendsroom' },
       this.topbar(t('Play with Friends')),
       h(
         'div',
@@ -1638,7 +1638,7 @@ export class App {
       ),
       h(
         'div',
-        { class: 'panel col' },
+        { class: 'panel col friendsroom__code' },
         h('span', { class: 'tag' }, t('By Code')),
         code,
         h(
@@ -1655,7 +1655,7 @@ export class App {
         ),
       ),
     );
-    this.render(h('div', { class: 'screen screen--dim' }, content));
+    this.render(h('div', { class: 'screen screen--dim screen--friendsroom' }, content));
   }
 
   // ── friends and the Top-100 ─────────────────────────────────────────────
@@ -1676,7 +1676,7 @@ export class App {
     const online = this.online;
     if (!online) return;
     this.go('top', push);
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar(t('Top-100')), renderTop({ online, by: this.topBy, onBy: (b) => (this.topBy = b) }))));
+    this.render(h('div', { class: 'screen screen--dim screen--fit' }, h('div', { class: 'wrap' }, this.topbar(t('Top-100')), renderTop({ online, by: this.topBy, onBy: (b) => (this.topBy = b) }))));
   }
 
   /** «Play» with a friend: a private room in the last mode; they are invited once we are inside. */
@@ -1741,12 +1741,19 @@ export class App {
   /** Draws a lobby/results screen again without losing the chat input's focus or the page's scroll. */
   private redraw(same: boolean, chat: ChatPanel | null, el: () => HTMLElement) {
     const top = same ? (this.root.querySelector<HTMLElement>(':scope > .screen')?.scrollTop ?? 0) : 0;
+    // v0.2.17: the lists that scroll inside a screen keep their place too
+    const inner = new Map<string, number>();
+    if (same) for (const e of this.root.querySelectorAll<HTMLElement>('[data-scroll-key]')) if (e.scrollTop) inner.set(e.dataset.scrollKey!, e.scrollTop);
     const draw = () => this.render(el());
     if (chat) chat.keep(draw);
     else draw();
     if (same && top) {
       const sc = this.root.querySelector<HTMLElement>(':scope > .screen');
       if (sc) sc.scrollTop = top;
+    }
+    for (const e of this.root.querySelectorAll<HTMLElement>('[data-scroll-key]')) {
+      const v = inner.get(e.dataset.scrollKey!);
+      if (v) e.scrollTop = v;
     }
   }
 
@@ -1959,15 +1966,15 @@ export class App {
     if (!this.online && !this.localProfile) return this.editNickname(() => this.showProfile());
     this.go('profile', push);
     const box = h('div', { class: 'wrap' }, this.topbar(t('Profile')), this.loading(t('Loading the profile…')));
-    this.render(h('div', { class: 'screen screen--dim' }, box));
+    this.render(h('div', { class: 'screen screen--dim screen--fit screen--profile' }, box));
     const load: Promise<ProfileData> = this.online ? loadOnlineProfile(this.online) : Promise.resolve(localProfileView(this.localProfile!, this.character));
     void load
       .then((d) => {
         if (this.screen !== 'profile') return;
         box.replaceChildren(this.topbar(t('Profile')));
-        if (this.online) box.append(renderAccountPanel(this.online, { root: this.root, onChanged: () => (this.refreshStrip(), this.screen === 'profile' && this.showProfile(false)) }));
+        const account = this.online ? renderAccountPanel(this.online, { root: this.root, onChanged: () => (this.refreshStrip(), this.screen === 'profile' && this.showProfile(false)) }) : null;
         const reopen = () => this.screen === 'profile' && this.showProfile(false);
-        box.append(renderProfileView(d, { local: !this.online, onRename: () => this.editNickname(reopen), onAvatar: () => this.editAvatar(reopen) }));
+        box.append(renderProfileView(d, { local: !this.online, onRename: () => this.editNickname(reopen), onAvatar: () => this.editAvatar(reopen), account }));
       })
       .catch((e: Error) => box.replaceChildren(this.topbar(t('Profile')), h('div', { class: 'panel' }, t('Could not load the profile: {error}', { error: apiErrorText(e) }))));
   }
@@ -1975,7 +1982,7 @@ export class App {
   private showSettings(push = true) {
     this.go('settings', push);
     const onResetLocal = !this.online && this.localProfile ? () => this.resetLocalProfile() : undefined;
-    this.render(h('div', { class: 'screen screen--dim' }, h('div', { class: 'wrap' }, this.topbar(t('Settings')), renderSettings({ inGame: false, online: this.online, ...(onResetLocal ? { onResetLocal } : {}) }))));
+    this.render(h('div', { class: 'screen screen--dim screen--fit screen--settings' }, h('div', { class: 'wrap' }, this.topbar(t('Settings')), renderSettings({ inGame: false, online: this.online, ...(onResetLocal ? { onResetLocal } : {}) }))));
   }
 
   /** Demo build: forget the browser-only profile (the nickname dialog opens again in the menu). */

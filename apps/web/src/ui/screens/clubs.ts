@@ -44,7 +44,7 @@ export function renderClubs(o: { api: ClubsApi; level: number; tokens: number; o
   let query = '';
   let timer: ReturnType<typeof setTimeout> | null = null;
   const mine = h('div', { class: 'panel col clubmine', 'data-testid': 'club-mine' });
-  const list = h('div', { class: 'panel col clublist', 'data-testid': 'club-table' });
+  const list = h('div', { class: 'panel col clublist fitcol', 'data-testid': 'club-table' });
   const search = h('input', {
     class: 'input',
     type: 'search',
@@ -91,7 +91,7 @@ export function renderClubs(o: { api: ClubsApi; level: number; tokens: number; o
     list.replaceChildren(
       h('span', { class: 'tag' }, query.length >= 2 ? t('Search') : t('Gang table')),
       search,
-      data.clubs.length ? h('div', { class: 'clubrows' }, ...data.clubs.map((c) => row(c, c.id === my?.id))) : h('div', { class: 'muted' }, t('No gangs found.')),
+      data.clubs.length ? h('div', { class: 'clubrows fitscroll' }, ...data.clubs.map((c) => row(c, c.id === my?.id))) : h('div', { class: 'muted' }, t('No gangs found.')),
       h('div', { class: 'muted', style: 'font-size:13px' }, t('A gang’s rating rises and falls with its people’s results: every rating point a member wins or loses in a match counts for the gang too.')),
     );
     if (query && document.activeElement !== search) search.focus();
@@ -111,7 +111,7 @@ export function renderClubs(o: { api: ClubsApi; level: number; tokens: number; o
   };
   draw();
   void load();
-  return h('div', { class: 'col clubs' }, mine, list);
+  return h('div', { class: 'col clubs fitcol' }, mine, list);
 }
 
 // ── a club's page ───────────────────────────────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ export function renderClub(o: { api: ClubsApi; id: string; myId: string | null; 
   let c: ClubDetails | null = null;
   let error: string | null = null;
   let busy = false;
-  const root = h('div', { class: 'col club', 'data-testid': 'club-page' });
+  const root = h('div', { class: 'col club fitcol', 'data-testid': 'club-page' });
   const act = async (f: () => Promise<ClubDetails | null>, done?: string) => {
     if (busy) return;
     busy = true;
@@ -235,7 +235,7 @@ export function renderClub(o: { api: ClubsApi; id: string; myId: string | null; 
       club.me === 'head' && club.requests.length
         ? h(
             'div',
-            { class: 'panel col', 'data-testid': 'club-requests' },
+            { class: 'panel col club__requests', 'data-testid': 'club-requests' },
             h('span', { class: 'tag' }, t('Requests · {n}', { n: club.requests.length })),
             ...club.requests.map((r) =>
               h(
@@ -249,7 +249,7 @@ export function renderClub(o: { api: ClubsApi; id: string; myId: string | null; 
             ),
           )
         : null,
-      h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('People · {n}', { n: club.memberList.length })), h('div', { class: 'clubmembers' }, ...club.memberList.map((m) => member(m, club)))),
+      h('div', { class: 'panel col club__people' }, h('span', { class: 'tag' }, t('People · {n}', { n: club.memberList.length })), h('div', { class: 'clubmembers fitscroll' }, ...club.memberList.map((m) => member(m, club)))),
     );
   };
   void o.api

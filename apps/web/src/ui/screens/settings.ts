@@ -8,6 +8,7 @@ import { music } from '../../game/audio/Music.js';
 import { confirmAsync } from '../../telegram/tg.js';
 import { t, getLang, setLang, LANGS } from '../../i18n/index.js';
 import { apiErrorText } from '../../net/errors.js';
+import { inPane, paneTabs } from '../panes.js';
 
 export function renderSettings(opts: { inGame: boolean; online: OnlineClient | null; onResetLocal?: () => void }): HTMLElement {
   const s = getSettings();
@@ -31,7 +32,7 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
         ),
       );
     draw();
-    return h('div', { class: 'col', style: 'gap:6px' }, h('div', { class: 'muted' }, label), box);
+    return h('div', { class: 'col setrow', style: 'gap:6px' }, h('div', { class: 'muted' }, label), box);
   };
   const pct = (v: number) => `${Math.round(v * 100)}%`;
   const slider = (label: string, key: 'sfxVolume' | 'musicVolume' | 'stickScale', min: number, max: number, step: number) => {
@@ -46,11 +47,11 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
       if (key === 'sfxVolume') sfx.setVolume(v);
     });
     input.addEventListener('change', () => key === 'sfxVolume' && sfx.play('pistol', { volume: 0.6 }));
-    return h('div', { class: 'col', style: 'gap:4px' }, h('div', { class: 'row muted' }, h('span', { class: 'grow' }, label), out), input);
+    return h('div', { class: 'col setslider', style: 'gap:4px' }, h('div', { class: 'row muted' }, h('span', { class: 'grow' }, label), out), input);
   };
   const language = h(
     'div',
-    { class: 'panel col' },
+    { class: 'panel col settings__lang' },
     h('span', { class: 'tag' }, t('Language')),
     h(
       'div',
@@ -60,7 +61,7 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
   );
   const graphics = h(
     'div',
-    { class: 'panel col' },
+    { class: 'panel col settings__picture' },
     h('span', { class: 'tag' }, t('Picture')),
     seg(t('VHS effect (grain, tracking lines, vignette)'), [
       [0, t('Off')],
@@ -78,14 +79,14 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
   );
   const sound = h(
     'div',
-    { class: 'panel col' },
+    { class: 'panel col settings__sound' },
     h('span', { class: 'tag' }, t('Sound')),
     slider(t('Effects volume'), 'sfxVolume', 0, 1, 0.05),
     music.available() ? slider(t('Music volume (menus)'), 'musicVolume', 0, 1, 0.05) : null,
   );
   const controls = h(
     'div',
-    { class: 'panel col' },
+    { class: 'panel col settings__controls' },
     h('span', { class: 'tag' }, t('Controls')),
     seg(t('Right stick fires when pushed all the way'), [
       [true, t('On')],
@@ -101,7 +102,7 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
   const chat = opts.online
     ? h(
         'div',
-        { class: 'panel col' },
+        { class: 'panel col settings__chat' },
         h('span', { class: 'tag' }, t('Chat')),
         seg(t('Room chat (lobby, match, results)'), [
           [true, t('Shown')],
@@ -117,7 +118,7 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
     items.push(
       h(
         'div',
-        { class: 'panel col' },
+        { class: 'panel col settings__profile' },
         h('span', { class: 'tag' }, t('Profile')),
         h('div', { class: 'muted' }, t('In-game name')),
         input,
@@ -164,7 +165,7 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
     items.push(
       h(
         'div',
-        { class: 'panel col' },
+        { class: 'panel col settings__profile' },
         h('span', { class: 'tag' }, t('Profile')),
         h('div', { class: 'muted' }, t('The demo’s alias, experience and statistics are kept only in this browser.')),
         h(
@@ -180,5 +181,23 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
       ),
     );
   }
-  return h('div', { class: 'col' }, ...items);
+  if (opts.inGame) return h('div', { class: 'col' }, ...items);
+  // v0.2.17: the settings screen fits the window — two columns on a computer, one part at a time on a
+  // phone (the picture and the sound · the controls and the chat · the profile)
+  const root = h('div', { class: 'col settings fitcol', 'data-testid': 'settings' });
+  const profile = items.find((el) => el.classList.contains('settings__profile')) ?? null;
+  const tabs = paneTabs(root, 'settings', [
+    { id: 'a', label: t('Picture and sound'), testid: 'settings-pane-picture' },
+    { id: 'b', label: t('Controls'), testid: 'settings-pane-controls' },
+    ...(profile ? [{ id: 'c' as const, label: t('Profile'), testid: 'settings-pane-profile' }] : []),
+  ]);
+  for (const el of [language, graphics, sound]) inPane(el, 'a');
+  for (const el of [controls, chat]) if (el) inPane(el, 'b');
+  if (profile) inPane(profile, 'c');
+  root.append(
+    tabs,
+    h('div', { class: 'col settings__col' }, language, graphics, sound),
+    h('div', { class: 'col settings__col' }, controls, chat, profile),
+  );
+  return root;
 }

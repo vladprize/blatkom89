@@ -7,11 +7,12 @@ import { STORY_CARD_INDEX, STORY_CAST, STORY_CHAPTERS, STORY_OPENED_BEST_MS, cam
 import type { CharacterId, StoryCampaign, StoryDone, StoryMission, StoryReward } from '@blatkom/shared';
 import { count, plural, t } from '../../i18n/index.js';
 import { achievementText, charName, finishName, mapName, weaponName } from '../../i18n/content.js';
-import { asset, fmtDuration, h, portrait } from '../dom.js';
+import { asset, fmtDuration, h, portrait, fill } from '../dom.js';
 import { CAMPAIGNS, CHAPTER_TITLES, FAIL_LINES, MISSION_SCRIPTS, line } from '../../story/script.js';
 import { sceneForMap, sceneThumbUrl } from '../../story/scenes.js';
 import type { StoryFail } from '../../story/StorySession.js';
 import { fmtBlat } from './blat.js';
+import { inPane, paneTabs } from '../panes.js';
 
 const CAMPAIGN_ORDER: readonly StoryCampaign[] = ['petya', 'uchastkovy'];
 
@@ -88,7 +89,7 @@ function campaignPanel(c: StoryCampaign, done: Map<string, StoryDone>, ids: Read
   const chapters = STORY_CHAPTERS.filter((x) => x.campaign === c);
   const ch = chapters.find((x) => x.chapter === chapter) ?? chapters[0]!;
   const ms = chapterMissions(c, ch.chapter);
-  return h(
+  return inPane(h(
     'div',
     { class: `panel col scamp scamp--${c}`, 'data-testid': `story-campaign-${c}` },
     h('span', { class: 'tag' }, t('Campaign')),
@@ -115,7 +116,7 @@ function campaignPanel(c: StoryCampaign, done: Map<string, StoryDone>, ids: Read
       ? h('div', { class: 'col smissions' }, ...ms.map((m) => missionRow(m, done, ids, onPlay, offline)))
       : h('div', { class: 'scamp__soon' }, h('b', null, t('Chapter {n} is being written', { n: ch.chapter })), h('span', { class: 'muted' }, t('It comes in one of the next updates — the missions you finish now stay yours.'))),
     h('div', { class: 'muted scamp__reward' }, t('For the chapter: {rewards}', { rewards: chapterRewards(c, ch.chapter, offline) })),
-  );
+  ), c === 'petya' ? 'a' : 'b');
 }
 
 export function renderStory(o: {
@@ -133,9 +134,17 @@ export function renderStory(o: {
   const done = new Map(o.done.map((d) => [d.id, d]));
   const ids = new Set(done.keys());
   const met = charactersMet(ids);
-  return h(
-    'div',
-    { class: 'col story', 'data-testid': 'story' },
+  // v0.2.17: the hub fits the window — both campaigns side by side on a computer (the missions scroll in
+  // their panel when the window is short), one campaign at a time on a phone
+  const root = h('div', { class: 'col story fitcol', 'data-testid': 'story' });
+  const tabs = paneTabs(
+    root,
+    'story',
+    CAMPAIGN_ORDER.map((c, i) => ({ id: i === 0 ? ('a' as const) : ('b' as const), label: `«${line(CAMPAIGNS[c].title)}»`, testid: `story-pane-${c}` })),
+  );
+  fill(
+    root,
+    tabs,
     h(
       'div',
       { class: 'panel story__intro' },
@@ -151,6 +160,7 @@ export function renderStory(o: {
       : null,
     h('div', { class: 'panel story__finale' }, h('span', { class: 'tag' }, t('Finale')), h('b', null, t('«The Building Site» — the two of them against Arkadich')), h('span', { class: 'muted' }, t('Opens after both campaigns. The reward: «Neon-2089», a legendary skin for every weapon — only from the story.'))),
   );
+  return root;
 }
 
 /** The card index: the district's people, met ones in colour, the others waiting in their chapter. */

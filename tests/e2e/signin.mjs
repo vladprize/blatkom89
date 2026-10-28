@@ -158,6 +158,8 @@ try {
   await A.page.getByRole('button', { name: 'Done' }).click();
   await A.page.getByTestId('menu-nick').waitFor({ timeout: 20000 });
   await A.page.getByTestId('menu-nick').click();
+  // v0.2.17: a phone shows the profile one part at a time — the account is its own part
+  await A.page.getByTestId('profile-pane-account').click();
   await A.page.getByTestId('account-providers').waitFor({ state: 'visible', timeout: 20000 });
   const panelA = await A.page.evaluate(() => ({
     text: document.querySelector('[data-testid=account-providers] .muted')?.textContent ?? '',

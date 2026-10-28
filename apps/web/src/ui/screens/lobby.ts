@@ -151,13 +151,7 @@ export function renderLobby(o: {
         `＋ ${t('Invite')}`,
       )
     : null;
-  return h(
-    'div',
-    { class: 'screen screen--dim' },
-    h(
-      'div',
-      { class: `wrap lobby ${s.isPrivate ? 'lobby--private' : ''} ${teams ? 'lobby--teams' : ''}` },
-      h(
+  const topbar = h(
         'div',
         { class: 'topbar' },
         h('button', { class: 'back', onclick: o.onLeave }, t('← Leave')),
@@ -172,8 +166,8 @@ export function renderLobby(o: {
               h('button', { class: 'btn btn--small topbar__copy', onclick: () => void copy() }, t('Copy')),
             )
           : null,
-      ),
-      s.isPrivate && invite
+      );
+  const invitePanel = s.isPrivate && invite
         ? h(
             'div',
             { class: 'panel col lobby__invite' },
@@ -187,10 +181,10 @@ export function renderLobby(o: {
               h('button', { class: 'btn grow', onclick: () => void copy() }, t('Copy')),
             ),
           )
-        : null,
-      // a private room: inviting friends comes right after the link; a public one: under the players
-      s.isPrivate && extra ? h('div', { class: 'lobby__extra' }, extra) : null,
-      kon
+        : null;
+  // a private room: inviting friends comes right after the link; a public one: under the players
+  const extraEl = extra ? h('div', { class: 'lobby__extra' }, extra) : null;
+  const konPanel = kon
         ? h(
             'div',
             { class: 'panel col lobby__mode lobby__kon', 'data-testid': 'lobby-kon' },
@@ -210,8 +204,8 @@ export function renderLobby(o: {
             h('div', { class: 'muted lobby__rules', 'data-testid': 'mode-rules' }, konRules(kon, s.durationMs)),
             h('div', { class: 'lobby__mapline' }, mapField({ selected: s.mapId, variant: 'line', ...(s.isHost ? { onPick: o.onMap } : {}) })),
           )
-        : null,
-      kon
+        : null;
+  const modePanel = kon
         ? null
         : h(
         'div',
@@ -230,18 +224,18 @@ export function renderLobby(o: {
         h('div', { class: 'muted lobby__rules', 'data-testid': 'mode-rules' }, modeRules(s.mode, s.limits)),
         // phones: the map as one line under the modes (the grid opens in a sheet)
         h('div', { class: 'lobby__mapline' }, mapField({ selected: s.mapId, variant: 'line', ...(s.isHost ? { onPick: o.onMap } : {}) })),
-      ),
-      h('div', { class: 'panel col lobby__players' }, h('span', { class: 'tag' }, t('Players {n}/{max}', { n: connected, max: s.maxPlayers })), inviteBtn, players),
-      o.chat ?? null,
-      !s.isPrivate && extra ? h('div', { class: 'lobby__extra' }, extra) : null,
-      h(
+      );
+  // the list keeps its scroll when the room redraws (App.redraw)
+  players.dataset.scrollKey = 'lobby-players';
+  const playersPanel = h('div', { class: 'panel col lobby__players' }, h('span', { class: 'tag' }, t('Players {n}/{max}', { n: connected, max: s.maxPlayers })), inviteBtn, players);
+  const mapPanel = h(
         'div',
         { class: 'panel col lobby__map' },
         h('span', { class: 'tag' }, t('Map')),
         mapPicker({ selected: s.mapId, ...(s.isHost ? { onPick: o.onMap } : {}) }),
         h('div', { class: 'muted lobby__maphint' }, kon ? (s.isHost ? t('You host the room: you pick the map and start the match.') : t('The host picks the map.')) : s.isHost ? t('You host the room: you pick the map and the mode and start the match.') : t('The host picks the map and the mode.')),
-      ),
-      h(
+      );
+  const actions = h(
         'div',
         { class: 'row lobby__actions' },
         h('button', { class: 'btn grow', onclick: o.onCharacter }, t('Character: {name}', { name: charName(o.character) })),
@@ -249,8 +243,28 @@ export function renderLobby(o: {
         s.isHost
           ? h('button', { class: 'btn btn--red grow', 'data-testid': 'lobby-start', disabled: !canStart, onclick: o.onStart }, !canStart ? t('Waiting for players…') : allReady || connected < 2 ? t('Start') : t('Start without waiting'))
           : null,
+      );
+  // v0.2.17: the room fits the window — on a computer the players and the chat on the left, the invitation,
+  // the mode, the map and the buttons on the right; on a phone the columns dissolve (the order is the CSS's)
+  return h(
+    'div',
+    { class: 'screen screen--dim screen--fit screen--lobby' },
+    h(
+      'div',
+      { class: `wrap lobby ${s.isPrivate ? 'lobby--private' : ''} ${teams ? 'lobby--teams' : ''}` },
+      topbar,
+      h('div', { class: 'col lobby__col lobby__col--left' }, playersPanel, o.chat ?? null, !s.isPrivate ? extraEl : null),
+      h(
+        'div',
+        { class: 'col lobby__col lobby__col--right' },
+        invitePanel,
+        s.isPrivate ? extraEl : null,
+        konPanel,
+        modePanel,
+        mapPanel,
+        actions,
+        h('div', { class: 'muted center lobby__note', 'data-testid': 'lobby-note' }, note),
       ),
-      h('div', { class: 'muted center lobby__note', 'data-testid': 'lobby-note' }, note),
     ),
   );
 }

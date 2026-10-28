@@ -315,7 +315,7 @@ export function renderTop(o: { online: OnlineClient; by?: LeaderboardBy; onBy?: 
   const sent = new Set<string>();
   const tabs = h('div', { class: 'seg', role: 'tablist', 'aria-label': t('Sort by') });
   const mine = h('div', { class: 'panel col topme', 'data-testid': 'top-me' });
-  const table = h('div', { class: 'panel table-scroll', 'data-testid': 'top-table' });
+  const table = h('div', { class: 'panel table-scroll fitscroll', 'data-testid': 'top-table' });
   const addFriend = async (e: LeaderboardEntry) => {
     try {
       const r = await online.api.friendRequest(e.name);
@@ -428,7 +428,7 @@ export function renderTop(o: { online: OnlineClient; by?: LeaderboardBy; onBy?: 
     draw();
   };
   const note = h('div', { class: 'muted', style: 'font-size:14px' }, t('Players with at least one finished online match. Rating starts at 1000: a free-for-all brings up to +16 for first place and −16 for last, a team win +16, a loss −16, leaving early −16. The table refreshes every 30 seconds.'));
-  const root = h('div', { class: 'col' }, tabs, mine, table, note);
+  const root = h('div', { class: 'col fitcol' }, tabs, mine, table, note);
   void load();
   return live(root, social, draw);
 }

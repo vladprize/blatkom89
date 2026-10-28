@@ -1,7 +1,8 @@
 // Phones end-to-end (v0.24, the owner's mobile pass): on an emulated phone every screen fits without
 // scrolling — the menu (v0.3: the panels low, the logo in the middle of the room above them), the
 // character screen and its personal file, the practice screen and its map sheet (v0.3: every picture
-// loaded, the captions the same on both sides), the profile's twenty achievements, and the Arsenal: «Экипировка» (the dressing room and the four slots) and every shop tab
+// loaded, the captions the same on both sides), the profile one part at a time (v0.2.17: the dossier, the
+// achievements in two columns, the account), and the Arsenal: «Экипировка» (the dressing room and the four slots) and every shop tab
 // (weapons, equipment, characters, cases) — with no diamonds, no «Top up» and no diamonds tab (the game
 // is free); the Arsenal's sheets (a slot's own items, an item's card) open and fit. Two sizes and both
 // languages: 393×680 in Russian, 360×640 in English.
@@ -160,9 +161,14 @@ for (const [w, hgt, lang] of [
   await page.locator('.back').click();
   await page.getByTestId('menu-nick').waitFor({ timeout: 10000 });
 
-  // the profile: twenty achievements in two readable columns
+  // the profile (v0.2.17: one part at a time, each fits): the dossier, then the achievements in two
+  // readable columns, the matches, the account
   await page.getByTestId('menu-nick').click();
+  await page.getByTestId('profile-pane-dossier').waitFor({ timeout: 15000 });
+  await screen('the profile (dossier)');
+  await page.getByTestId('profile-pane-achievements').click();
   await page.locator('.ach').first().waitFor({ timeout: 15000 });
+  await screen('the profile (achievements)');
   const achs = await page.evaluate(() => {
     const cards = [...document.querySelectorAll('.ach')];
     const xs = new Set(cards.map((c) => Math.round(c.getBoundingClientRect().left)));
@@ -172,6 +178,10 @@ for (const [w, hgt, lang] of [
   check(achs.n === 26 && achs.columns === 2 && achs.narrow === 0, `${size}: the profile lists 26 achievements (20 and the story's 6, v0.2.15) in 2 columns, conditions across the card (${JSON.stringify(achs)})`);
   await page.locator('.achs').scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${outDir}/phone_${w}x${hgt}_${lang}_achievements.png` });
+  await page.getByTestId('profile-pane-account').click();
+  await page.locator('.profile__account').waitFor({ timeout: 15000 });
+  await screen('the profile (account)');
+  await page.getByTestId('profile-pane-dossier').click();
   await page.locator('.back').click();
   await page.getByTestId('menu-nick').waitFor({ timeout: 10000 });
   check(errors.length === 0, `${size}: no page errors (${errors.join(' | ')})`);

@@ -66,7 +66,7 @@ export class StoryController {
     music.setWanted(true);
     const body = h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
     const wrap = h('div', { class: 'wrap' }, this.host.topbar(t('Story')), body);
-    this.host.render(h('div', { class: 'screen screen--dim' }, wrap));
+    this.host.render(h('div', { class: 'screen screen--dim screen--fit screen--story' }, wrap));
     const draw = () => {
       if (this.host.screen() !== 'story') return;
       wrap.lastElementChild!.replaceWith(

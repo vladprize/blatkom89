@@ -6,9 +6,10 @@
  */
 import { REFERRAL_TIERS, blatForLevel } from '@blatkom/shared';
 import type { BlatEntry, BlatResponse } from '@blatkom/shared';
-import { asset, h, toast } from '../dom.js';
+import { asset, h, toast, fill } from '../dom.js';
 import { getLang, t } from '../../i18n/index.js';
 import { shareInvite } from '../../telegram/tg.js';
+import { inPane, paneTabs } from '../panes.js';
 
 /**
  * The pixel coin: 16 px art (the bigger files are exact 2×/4×/8× copies). The largest file whose size
@@ -73,32 +74,26 @@ export function renderBlat(d: BlatResponse, banner: HTMLElement | null = null): 
     const label = next ? `${tier.from}–${next.from - 1}` : `${tier.from}+`;
     return h('span', { class: 'blatscale__step', 'data-active': String(r.confirmed + 1 >= tier.from && (!next || r.confirmed + 1 < next.from)) }, h('small', null, label), h('b', null, fmtBlat(tier.reward)));
   });
-  return h(
-    'div',
-    { class: 'col blat', 'data-testid': 'blat' },
-    h(
+  const balance = inPane(h(
       'div',
       { class: 'panel col blat__balance' },
       h('span', { class: 'tag' }, t('Balance')),
       h('div', { class: 'blat__big', 'data-testid': 'blat-balance' }, blatCoin(48, '$BLAT'), h('b', null, fmtBlat(d.balance))),
       h('div', { class: 'muted' }, t('Earned in total: {n} · for levels {l} · for invitations {r}', { n: fmtBlat(d.earned), l: fmtBlat(d.bySource.level), r: fmtBlat(d.bySource.referral) })),
       h('div', { class: 'blat__note' }, t('In-game points, not money: they can’t be bought, sold or withdrawn and change hands only as stakes in the $BLAT Tournament. The $BLAT drop is planned in the Solana network.')),
-    ),
-    h(
-      'div',
-      { class: 'blat__cols' },
-      h(
+    ), 'a');
+  const levels = inPane(h(
         'div',
-        { class: 'panel col' },
+        { class: 'panel col blat__levels' },
         h('span', { class: 'tag' }, t('For levels')),
         h('div', null, t('Every new level pays once. You are at level {l}.', { l: d.level })),
         d.nextLevel ? h('div', { class: 'blat__next' }, t('Next: level {l}', { l: d.nextLevel.level }), ' ', blatAmount(d.nextLevel.reward)) : null,
         h('div', { class: 'blatlevels' }, ...upcoming.map((l) => h('span', { class: 'blatlevels__step' }, h('small', null, t('lvl {l}', { l })), h('b', null, fmtBlat(blatForLevel(l)))))),
         banner ? h('div', { class: 'blat__banner' }, banner) : null,
-      ),
-      h(
+      ), 'a');
+  const invite = inPane(h(
         'div',
-        { class: 'panel col', 'data-testid': 'blat-referral' },
+        { class: 'panel col blat__invite', 'data-testid': 'blat-referral' },
         h('span', { class: 'tag' }, t('Invite friends')),
         h('div', { class: 'blat__link' }, h('input', { class: 'input', readonly: true, value: r.link, 'aria-label': t('Your link'), 'data-testid': 'blat-link', onfocus: (e: Event) => (e.target as HTMLInputElement).select() })),
         h(
@@ -127,11 +122,10 @@ export function renderBlat(d: BlatResponse, banner: HTMLElement | null = null): 
               ...r.recent.map((x) => h('div', { class: 'blatrecent__row', 'data-status': x.status }, h('b', null, x.name), h('span', { class: 'muted' }, STATUS[x.status]()), x.reward > 0 ? blatAmount(x.reward) : null)),
             )
           : null,
-      ),
-    ),
-    h(
+      ), 'b');
+  const history = inPane(h(
       'div',
-      { class: 'panel col' },
+      { class: 'panel col blat__history' },
       h('span', { class: 'tag' }, t('History')),
       d.history.length
         ? h(
@@ -148,6 +142,15 @@ export function renderBlat(d: BlatResponse, banner: HTMLElement | null = null): 
             ),
           )
         : h('div', { class: 'muted' }, t('Nothing yet.')),
-    ),
-  );
+    ), 'c');
+  // v0.2.17: the balance fits the window — the balance and the levels on the left, the invitations and the
+  // history on the right (the history scrolls in its panel); phones: one part at a time
+  const root = h('div', { class: 'col blat fitcol', 'data-testid': 'blat' });
+  const tabs = paneTabs(root, 'blat', [
+    { id: 'a', label: t('Balance'), testid: 'blat-pane-balance' },
+    { id: 'b', label: t('Friends'), testid: 'blat-pane-friends' },
+    { id: 'c', label: t('History'), testid: 'blat-pane-history' },
+  ]);
+  fill(root, tabs, h('div', { class: 'col blat__col' }, balance, levels), h('div', { class: 'col blat__col' }, invite, history));
+  return root;
 }

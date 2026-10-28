@@ -249,7 +249,9 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   const roomEl = h('div', { class: 'panel dressing', 'data-testid': 'dressing-room' });
   const walletEl = h('div', { class: 'wallet' });
   const tabsEl = h('div', { class: 'seg tabs', role: 'tablist' });
-  const body = h('div', { class: 'col' });
+  // v0.2.17: the tab's list scrolls inside its own column — the Arsenal is one screen (the owner)
+  const body = h('div', { class: 'col arsenal__body', 'data-testid': 'arsenal-body' });
+  const sideEl = h('div', { class: 'col arsenal__side' });
   // phones: «Экипировка | Магазин» and the shop's departments instead of the six tabs
   const modeEl = h('div', { class: 'seg arsmodes', role: 'tablist' });
   const chipsEl = h('div', { class: 'seg arschips', role: 'tablist' });
@@ -258,7 +260,11 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   const layout = () => {
     root.classList.toggle('arsenal--phone', phone);
     if (phone) root.replaceChildren(walletEl, modeEl, chipsEl, body);
-    else root.replaceChildren(roomEl, walletEl, tabsEl, body);
+    else {
+      // wide screens: the dressing room on the left, the wallet, the tabs and the tab's list on the right
+      sideEl.replaceChildren(walletEl, tabsEl, body);
+      root.replaceChildren(roomEl, sideEl);
+    }
   };
   layout();
 
@@ -1124,9 +1130,12 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   function toTab(next: ArsenalTab, scroll = false) {
     if (next === 'diamonds' && !REAL_MONEY) next = 'loadout';
     closeSheet();
+    const changed = tab !== next;
     tab = next;
     if (next !== 'loadout') lastShop = next;
     draw();
+    // a new tab's list starts from its top
+    if (changed) body.scrollTop = 0;
     if (scroll && !phone) body.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   /** The skin picker's preview: the dressing room on wide screens, the kit (and its sheet) on phones. */

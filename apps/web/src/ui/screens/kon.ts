@@ -116,6 +116,10 @@ export function playableStake(data: KonResponse, stake: KonStake): KonStake {
   return stake === 0 || (!!st && st.enabled && st.refusal === null && st.balance >= stake && st.dailyLeft >= stake) ? stake : 0;
 }
 
+/** v0.2.17: phones show one part of the tournament at a time (the window never scrolls): play, the rating, the matches. */
+type KonPane = 'play' | 'top' | 'mine';
+let konPane: KonPane = 'play';
+
 export function renderKon(o: {
   data: KonResponse;
   format: KonFormat;
@@ -191,9 +195,35 @@ export function renderKon(o: {
         )
       : h('div', { class: 'muted' }, o.topBy === 'gangs' ? t('No gang has played a tournament match yet.') : t('Nobody has played a tournament match yet — be the first.'))
     : h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
-  return h(
+  const root = h('div', { class: 'col kon fitcol', 'data-testid': 'kon', 'data-pane': konPane });
+  const panes: Array<{ id: KonPane; label: string }> = [
+    { id: 'play', label: t('Play') },
+    { id: 'top', label: t('Rating') },
+    { id: 'mine', label: t('My matches') },
+  ];
+  const paneTabs = h(
     'div',
-    { class: 'col kon', 'data-testid': 'kon' },
+    { class: 'seg kon__panes', role: 'tablist' },
+    ...panes.map((p) =>
+      h(
+        'button',
+        {
+          type: 'button',
+          role: 'tab',
+          'aria-pressed': String(p.id === konPane),
+          'data-testid': `kon-pane-${p.id}`,
+          onclick: (e: Event) => {
+            konPane = p.id;
+            root.dataset.pane = p.id;
+            for (const b of paneTabs.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b === e.currentTarget));
+          },
+        },
+        p.label,
+      ),
+    ),
+  );
+  root.append(
+    paneTabs,
     h(
       'div',
       { class: 'panel col kon__me' },
@@ -241,7 +271,7 @@ export function renderKon(o: {
       { class: 'kon__cols' },
       h(
         'div',
-        { class: 'panel col' },
+        { class: 'panel col kon__toppanel' },
         h('span', { class: 'tag' }, t('Tournament rating')),
         h(
           'div',
@@ -253,7 +283,7 @@ export function renderKon(o: {
       ),
       h(
         'div',
-        { class: 'panel col' },
+        { class: 'panel col kon__histpanel' },
         h('span', { class: 'tag' }, t('Your tournament matches')),
         o.data.history.length
           ? h(
@@ -281,4 +311,5 @@ export function renderKon(o: {
       ),
     ),
   );
+  return root;
 }

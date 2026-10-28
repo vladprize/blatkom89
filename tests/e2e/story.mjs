@@ -292,11 +292,15 @@ try {
   await B.page.screenshot({ path: `${outDir}/story_comic_phone.png` });
   await B.page.getByTestId('comic-skip').click();
   await B.page.getByTestId('story').waitFor({ timeout: 15000 });
+  // v0.2.17: the phone shows one campaign at a time — B picks «Протокол»
+  await B.page.getByTestId('story-pane-uchastkovy').click();
+  await B.page.getByTestId('story-play-b1').waitFor({ timeout: 10000 });
   const phoneHub = await B.page.evaluate(() => {
     const scr = document.querySelector('.screen');
-    return { side: scr.scrollWidth - scr.clientWidth, title: document.querySelector('.topbar .h1')?.textContent, play: document.querySelector('[data-testid=story-play-b1]')?.textContent };
+    const shown = (id) => !!document.querySelector(`[data-testid=story-campaign-${id}]`)?.getClientRects().length;
+    return { side: scr.scrollWidth - scr.clientWidth, down: scr.scrollHeight - scr.clientHeight, title: document.querySelector('.topbar .h1')?.textContent, play: document.querySelector('[data-testid=story-play-b1]')?.textContent, petya: shown('petya'), protocol: shown('uchastkovy') };
   });
-  check(phoneHub.side <= 0 && phoneHub.title === 'Сюжет' && phoneHub.play === 'Играть', `B’s hub on the phone, in Russian, no sideways scroll (${JSON.stringify(phoneHub)})`);
+  check(phoneHub.side <= 0 && phoneHub.down <= 0 && phoneHub.title === 'Сюжет' && phoneHub.play === 'Играть' && !phoneHub.petya && phoneHub.protocol, `B’s hub on the phone, in Russian, «Протокол» alone on the screen, nothing to scroll (${JSON.stringify(phoneHub)})`);
   await B.page.screenshot({ path: `${outDir}/story_hub_phone.png`, fullPage: true });
   await B.page.getByTestId('story-play-b1').click();
   await B.page.getByTestId('comic-scene').waitFor({ timeout: 15000 });
