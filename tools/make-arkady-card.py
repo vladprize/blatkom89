@@ -2,8 +2,8 @@
 """Arkadich's card for the prologue (v0.2.17): the owner — «Arkadia Development's line is Lev Arkadich's,
 with a pixel construction site behind him, the way Petya's card has its own background».
 
-The lion is cut out of his card's source (references/31-lev-arkadich.png, the same crop as
-tools/extract-heroes.py) with a background-removal model (ISNet «general use», ONNX, run with
+The lion is cut out of his card's source (references/31-lev-arkadich.png, the crop his card had before
+v0.2.17 — the scene behind him fills the whole card, so the sheet's text never shows) with a background-removal model (ISNet «general use», ONNX, run with
 onnxruntime — https://github.com/danielgatis/rembg/releases, isnet-general-use.onnx) and set over the
 construction site of the owner's «Стройка» scene (assets/scenes/stroyka.jpg: the cranes, the frame of
 the tower, the sunset). Writes apps/web/public/assets/heroes/arkady_stroyka.jpg (360×480, like every card).
@@ -18,7 +18,7 @@ from PIL import Image, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
 SHEET = ROOT / 'references/31-lev-arkadich.png'
-CROP = (8, 136, 338, 576)  # tools/extract-heroes.py
+CROP = (8, 136, 338, 576)  # the lion's card before v0.2.17's centred crops (tools/extract-heroes.py)
 SCENE = ROOT / 'apps/web/public/assets/scenes/stroyka.jpg'
 SCENE_CROP = (612, 0, 1152, 720)  # the crane over his left shoulder, the hanging crate over his right — no people
 OUT = ROOT / 'apps/web/public/assets/heroes/arkady_stroyka.jpg'

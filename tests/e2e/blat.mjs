@@ -254,8 +254,14 @@ try {
   await B.page.screenshot({ path: `${outDir}/blat_drop_B_phone.png` });
   if (admin) {
     const snaps = admin.page.getByTestId('snapshots-card');
+    // the newest snapshot is the first row: wait for this one to replace the one before it (earlier runs' snapshots stay listed)
+    const firstHref = () => admin.page.evaluate(() => document.querySelector('[data-testid=snapshots-card] tbody tr a')?.getAttribute('href') ?? '');
+    const hrefBefore = await firstHref();
     await snaps.getByTestId('snapshot-take').click();
-    await snaps.locator('tbody tr').first().waitFor({ timeout: 15000 });
+    await admin.page.waitForFunction((prev) => {
+      const a = document.querySelector('[data-testid=snapshots-card] tbody tr a');
+      return !!a && a.getAttribute('href') !== prev;
+    }, hrefBefore, { timeout: 15000 });
     const [dl] = await Promise.all([admin.page.waitForEvent('download'), snaps.locator('tbody tr').first().locator('a', { hasText: 'CSV' }).click()]);
     const csvText = readFileSync(await dl.path(), 'utf8');
     check(csvText.includes(`${A.id},Inviter ${RUN},1800,`) && csvText.includes(`${B.id},Recruit ${RUN},300,`), `the dashboard’s balance snapshot downloads as CSV with A’s 1 800 and B’s 300 (${csvText.split('\r\n').length - 2} rows)`);

@@ -17929,11 +17929,14 @@ var MatchRoom = class {
       if (evMsg) c.ws.send(evMsg);
     }
   }
+  /** Closes the room; the promise settles once a match that was on is written down as abandoned (its stakes
+   *  back) — the server's shutdown waits for it before it closes the database. */
   close(reason) {
-    if (this.closed) return;
+    if (this.closed) return Promise.resolve();
+    let abandoned = Promise.resolve();
     if (this.matchId && (this.world.phase === "active" || this.world.phase === "countdown" || this.world.phase === "ready") && !this.resultsSent) {
       const id = this.matchId;
-      this.services.recorder.matchAbandoned(id, reason).catch((e2) => this.log.error("matchAbandoned failed", { err: e2 }));
+      abandoned = this.services.recorder.matchAbandoned(id, reason).catch((e2) => this.log.error("matchAbandoned failed", { err: e2 }));
       this.services.analytics.server("match_abandoned", { matchId: id, mapId: this.mapId, phase: this.world.phase });
     }
     this.closed = true;
@@ -17947,6 +17950,7 @@ var MatchRoom = class {
     this.clients.clear();
     this.seats.clear();
     this.log.info("room closed", { reason });
+    return abandoned;
   }
   // ── Output helpers ──────────────────────────────────────────────────────
   roster() {
@@ -24229,11 +24233,20 @@ var RoomManager = class {
       if (room.closed) this.rooms.delete(id);
     }
   }
-  stop() {
+  /** Closes every room; settles when the matches that were on are written down (at most `waitMs`). */
+  stop(waitMs = 4e3) {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    for (const r of this.rooms.values()) r.close("shutdown");
+    const closing = [...this.rooms.values()].map((r) => r.close("shutdown"));
     this.rooms.clear();
+    let timer2;
+    return Promise.race([
+      Promise.allSettled(closing).then(() => void 0),
+      new Promise((resolve2) => {
+        timer2 = setTimeout(resolve2, waitMs);
+        timer2.unref?.();
+      })
+    ]).finally(() => clearTimeout(timer2));
   }
 };
 
@@ -24466,9 +24479,9 @@ async function shutdown(signal) {
   if (stopping) return;
   stopping = true;
   log.info("shutting down", { signal });
-  rooms.stop();
   keepAwake.stop();
   server.close();
+  await rooms.stop();
   await persistence.close?.();
   await sql.end({ timeout: 5 });
   process.exit(0);

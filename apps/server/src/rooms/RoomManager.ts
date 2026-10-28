@@ -160,10 +160,19 @@ export class RoomManager {
     }
   }
 
-  stop(): void {
+  /** Closes every room; settles when the matches that were on are written down (at most `waitMs`). */
+  stop(waitMs = 4000): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    for (const r of this.rooms.values()) r.close('shutdown');
+    const closing = [...this.rooms.values()].map((r) => r.close('shutdown'));
     this.rooms.clear();
+    let timer: NodeJS.Timeout | undefined;
+    return Promise.race([
+      Promise.allSettled(closing).then(() => undefined),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, waitMs);
+        timer.unref?.();
+      }),
+    ]).finally(() => clearTimeout(timer));
   }
 }

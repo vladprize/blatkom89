@@ -1136,11 +1136,14 @@ export class MatchRoom {
     }
   }
 
-  close(reason: string): void {
-    if (this.closed) return;
+  /** Closes the room; the promise settles once a match that was on is written down as abandoned (its stakes
+   *  back) — the server's shutdown waits for it before it closes the database. */
+  close(reason: string): Promise<void> {
+    if (this.closed) return Promise.resolve();
+    let abandoned: Promise<void> = Promise.resolve();
     if (this.matchId && (this.world.phase === 'active' || this.world.phase === 'countdown' || this.world.phase === 'ready') && !this.resultsSent) {
       const id = this.matchId;
-      this.services.recorder.matchAbandoned(id, reason).catch((e: Error) => this.log.error('matchAbandoned failed', { err: e }));
+      abandoned = this.services.recorder.matchAbandoned(id, reason).catch((e: Error) => this.log.error('matchAbandoned failed', { err: e }));
       this.services.analytics.server('match_abandoned', { matchId: id, mapId: this.mapId, phase: this.world.phase });
     }
     this.closed = true;
@@ -1155,6 +1158,7 @@ export class MatchRoom {
     this.clients.clear();
     this.seats.clear();
     this.log.info('room closed', { reason });
+    return abandoned;
   }
 
   // ── Output helpers ──────────────────────────────────────────────────────
