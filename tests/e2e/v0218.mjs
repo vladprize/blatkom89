@@ -230,9 +230,9 @@ try {
   await toMenu(A.page);
   await A.page.getByTestId('arsenal-tile').click();
   await A.page.getByTestId('skin-pick').waitFor({ timeout: 20000 });
-  const free = await A.page.locator('[data-testid=skin-pick] .skinchip[data-finish=berezka]').innerText();
-  check(/✓/.test(free), `a free finish is the player’s without buying («${free.trim()}»)`);
-  await A.page.locator('[data-testid=skin-pick] .skinchip[data-finish=zima]').click();
+  const free = await A.page.locator('[data-testid=skin-pick] .skinchip[data-finish=akulka]').innerText();
+  check(/✓/.test(free) && /🎁/.test(free), `the welcome gift is the player’s without buying («${free.trim()}»)`);
+  await A.page.locator('[data-testid=skin-pick] .skinchip[data-finish=haki]').click();
   await A.page.getByTestId('skin-buy-row').waitFor({ timeout: 10000 });
   const buyRow = (await A.page.getByTestId('skin-buy-row').innerText()).replace(/\s+/g, ' ');
   check(/Regular/i.test(buyRow) && /99/.test(buyRow) && /\$0\.99/.test(buyRow), `the dressing room offers the regular skin for 99 BLATS ($0.99) («${buyRow}»)`);
@@ -242,8 +242,8 @@ try {
   await A.page.waitForFunction(() => !document.querySelector('[data-testid=skin-buy-row]'), null, { timeout: 10000 });
   const after = await blats(A.id);
   const owned = await sql`SELECT item_id FROM user_items WHERE user_id = ${A.id} AND kind = 'skin'`;
-  check(before - after === 99 && owned.length === 1 && /zima/.test(owned[0].item_id), `bought: −99 BLATS (${before} → ${after}), the skin is A’s (${owned.map((r) => r.item_id).join(', ')})`);
-  check(/✓/.test(await A.page.locator('[data-testid=skin-pick] .skinchip[data-finish=zima]').innerText()), 'the chip is ticked');
+  check(before - after === 99 && owned.length === 1 && /haki/.test(owned[0].item_id), `bought: −99 BLATS (${before} → ${after}), the skin is A’s (${owned.map((r) => r.item_id).join(', ')})`);
+  check(/✓/.test(await A.page.locator('[data-testid=skin-pick] .skinchip[data-finish=haki]').innerText()), 'the chip is ticked');
   await A.page.screenshot({ path: `${outDir}/skin_bought_A.png` });
 
   // ── the Arsenal's practice comes back to the Arsenal ─────────────────────

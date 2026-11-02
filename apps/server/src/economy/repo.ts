@@ -8,6 +8,7 @@
 import { randomInt } from 'node:crypto';
 import {
   CASE_PRICE,
+  CHARACTER_CASE_PRICE,
   CHARACTER_IDS,
   DEFAULT_LOADOUT,
   FREE_CHARACTERS,
@@ -18,6 +19,7 @@ import {
   REFUSAL_TEXT,
   buyRefusal,
   drawCase,
+  drawCharacter,
   isCharacterId,
   isGadgetId,
   isModId,
@@ -34,8 +36,9 @@ import {
   skinBuyRefusal,
   skinId,
   skinPrice,
+  welcomeSkins,
 } from '@blatkom/shared';
-import type { BuyRefusal, CaseEntry, CharacterId, Currency, FinishId, GadgetId, Inventory, LedgerEntry, Loadout, ModId, ShopKind, SkinDrop, WeaponId } from '@blatkom/shared';
+import type { BuyRefusal, CaseEntry, CharacterId, Currency, FinishId, GadgetId, Grade, Inventory, LedgerEntry, Loadout, ModId, ShopKind, SkinDrop, WeaponId } from '@blatkom/shared';
 import type postgres from 'postgres';
 import type { Sql } from '../database/db.js';
 import type { Logger } from '../logging/logger.js';
@@ -54,6 +57,16 @@ interface WalletRow {
   diamonds: number;
   level: number;
   loadout: unknown;
+  /** v0.2.18 part 2: when the welcome gift was given (null: never). */
+  welcome_gift_at: Date | null;
+}
+
+/**
+ * v0.2.18 part 2: is the welcome gift («Акула» and «Блатком ’89» on every weapon) still given? `until` comes
+ * from WELCOME_GIFT_UNTIL; null — no end set yet (the owner sets the date; it is never invented here).
+ */
+export function welcomeGiftOpen(until: Date | null, now = new Date()): boolean {
+  return until === null || now.getTime() < until.getTime();
 }
 
 /** Uniform float in [0, 1) from the OS CSPRNG (case draws). */
@@ -65,6 +78,8 @@ export class EconomyRepo implements Economy {
   constructor(
     private readonly sql: Sql,
     private readonly log: Logger,
+    /** WELCOME_GIFT_UNTIL: the welcome gift is given to players signing in before it (null: no end yet). */
+    private readonly welcomeUntil: Date | null = null,
   ) {}
 
   /** Builds the inventory from the wallet row, owned items and modifications. */
@@ -74,7 +89,8 @@ export class EconomyRepo implements Economy {
     const weapons = new Set<WeaponId>(FREE_WEAPONS);
     const characters = new Set<CharacterId>(FREE_CHARACTERS);
     const gadgets = new Set<GadgetId>(FREE_GADGETS);
-    const skins = new Set<string>();
+    // the welcome gift: both finishes on every weapon, for good (one mark on the profile, not item rows)
+    const skins = new Set<string>(wallet.welcome_gift_at ? welcomeSkins() : []);
     for (const it of items) {
       if (it.kind === 'weapon' && isWeaponId(it.item_id)) weapons.add(it.item_id);
       if (it.kind === 'character' && isCharacterId(it.item_id)) characters.add(it.item_id);
@@ -107,7 +123,8 @@ export class EconomyRepo implements Economy {
 
   private async lockWallet(tx: Tx, userId: string): Promise<WalletRow> {
     await tx`INSERT INTO profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
-    const rows = await tx<WalletRow[]>`SELECT tokens, diamonds, level, loadout FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+    if (welcomeGiftOpen(this.welcomeUntil)) await tx`UPDATE profiles SET welcome_gift_at = now() WHERE user_id = ${userId} AND welcome_gift_at IS NULL`;
+    const rows = await tx<WalletRow[]>`SELECT tokens, diamonds, level, loadout, welcome_gift_at FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
     return rows[0]!;
   }
 
@@ -121,8 +138,19 @@ export class EconomyRepo implements Economy {
 
   async inventory(userId: string): Promise<Inventory> {
     await this.sql`INSERT INTO profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
-    const rows = await this.sql<WalletRow[]>`SELECT tokens, diamonds, level, loadout FROM profiles WHERE user_id = ${userId}`;
+    // the welcome gift: given once, at the first inventory read while it lasts (sign-in, the menu, a room)
+    if (welcomeGiftOpen(this.welcomeUntil)) await this.sql`UPDATE profiles SET welcome_gift_at = now() WHERE user_id = ${userId} AND welcome_gift_at IS NULL`;
+    const rows = await this.sql<WalletRow[]>`SELECT tokens, diamonds, level, loadout, welcome_gift_at FROM profiles WHERE user_id = ${userId}`;
     return this.load(this.sql, userId, rows[0]!);
+  }
+
+  /**
+   * v0.2.18 part 2 — what a player owns, read only (a friend's collection): nothing is given or changed
+   * (the welcome gift counts only when the player already has it).
+   */
+  async collection(userId: string): Promise<Inventory> {
+    const rows = await this.sql<WalletRow[]>`SELECT tokens, diamonds, level, loadout, welcome_gift_at FROM profiles WHERE user_id = ${userId}`;
+    return this.load(this.sql, userId, rows[0] ?? { tokens: 0, diamonds: 0, level: 1, loadout: null, welcome_gift_at: null });
   }
 
   /** Loadout and owned characters of a player joining a room. */
@@ -205,6 +233,30 @@ export class EconomyRepo implements Economy {
       await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${entry.weapon}, 'weapon', 'case') ON CONFLICT DO NOTHING`;
       this.log.info('case opened', { userId, weapon: entry.weapon, rarity: entry.rarity });
       return { entry, inventory: await this.load(tx, userId, { ...wallet, [price.currency]: balance - price.amount }) };
+    });
+  }
+
+  /**
+   * v0.2.18 part 2 — opens the character case: a character sold for BLATS that the player does not own yet
+   * (never a duplicate, never a free one or one of the three for talons).
+   */
+  async openCharacterCase(userId: string, rand: () => number = secureRandom): Promise<{ character: CharacterId; grade: Grade; inventory: Inventory }> {
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      const drop = drawCharacter(new Set(inv.characters), rand);
+      if (!drop) throw new EconomyError('collection_complete');
+      const price = CHARACTER_CASE_PRICE;
+      const balance = price.currency === 'tokens' ? wallet.tokens : wallet.diamonds;
+      if (inv.level < price.level) throw new EconomyError('level');
+      if (balance < price.amount) throw new EconomyError('funds');
+      const [opening] = await tx<Array<{ id: string }>>`
+        INSERT INTO case_openings (user_id, kind, character_id, rarity, price, currency)
+        VALUES (${userId}, 'character', ${drop.character}, ${drop.grade}, ${price.amount}, ${price.currency}) RETURNING id`;
+      await this.debit(tx, userId, price.currency, price.amount, balance, 'case', `charcase:${opening!.id}`);
+      await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${drop.character}, 'character', 'case') ON CONFLICT DO NOTHING`;
+      this.log.info('character case opened', { userId, character: drop.character, grade: drop.grade });
+      return { ...drop, inventory: await this.load(tx, userId, { ...wallet, [price.currency]: balance - price.amount }) };
     });
   }
 

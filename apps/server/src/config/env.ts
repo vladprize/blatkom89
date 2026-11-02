@@ -69,6 +69,12 @@ const EnvSchema = z.object({
   MATCH_FILL_BOTS: bool.default('true'),
   /** Paid cases can be switched off where randomised paid items are restricted (docs/ECONOMY.md). */
   CASES_ENABLED: bool.default('true'),
+  /**
+   * v0.2.18 part 2: the welcome gift for early players («Акула» and «Блатком ’89» on every weapon) is given
+   * to whoever signs in before this moment (ISO 8601, e.g. 2027-01-31T23:59:59Z). Unset: no end yet — the
+   * owner sets the date when the window should close; players who got the gift keep it.
+   */
+  WELCOME_GIFT_UNTIL: z.coerce.date().optional(),
   /** Card payments for BLATS (Stripe Checkout). Both keys are required to enable them. */
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),

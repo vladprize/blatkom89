@@ -84,7 +84,8 @@ and fix bugs and protect against abuse; and for aggregated statistics to make th
 
 ### 4. Who sees the data
 Other players see your in-game name, avatar, character and results. Anyone who knows your in-game name
-can send you a friend request; friends see whether you are online, in a lobby or in a match; only you and
+can send you a friend request; friends see whether you are online, in a lobby or in a match, and (v0.2.18
+part 2) your collection — which characters you have and how many weapon skins of each grade; only you and
 the friend you write to see your private messages. Players with at least one finished online match are
 listed in the public Top-100 (name, avatar, level, rating, eliminations, wins). A gang's name, tag, motto,
 flag, rating and people (name, avatar, level, role) are public; join requests are seen by the gang's boss

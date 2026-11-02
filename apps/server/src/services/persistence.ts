@@ -107,7 +107,7 @@ export function pgContext(sql: Sql, env: Env, log: Logger): PgContext {
     invites: new PgInvites(sql),
     analytics,
     adminAuth: new AdminAuth(sql, env.SESSION_SECRET, env.ADMIN_SESSION_TTL_HOURS, env.PUBLIC_URL.startsWith('https://'), origins),
-    economy: new EconomyRepo(sql, log),
+    economy: new EconomyRepo(sql, log, env.WELCOME_GIFT_UNTIL ?? null),
     emailAuth: new EmailAuth(sql, env.SESSION_SECRET, log),
     payments: new PaymentService(
       sql,

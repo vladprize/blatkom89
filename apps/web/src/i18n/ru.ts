@@ -997,7 +997,6 @@ export const RU: Record<string, string> = {
   'Rare weapons come from the case →': 'Редкое оружие — в кейсе →',
   'one kind at a time': 'с собой — один вид',
   'All characters have the same stats — they differ in looks and backstory. Two are free, three are unlocked with experience and talons, the rest are sold for BLATS by grade.': 'Характеристики у всех одинаковые — отличаются внешность и история. Двое бесплатно, трое открываются опытом и талонами, остальные — за БЛАТ по классу.',
-  'The skin case is for BLATS: adults only, and paid cases are banned in some countries — don’t buy them there. The weapon case is for talons. The odds are honest and enforced by the server.': 'Кейс скинов — за БЛАТ: только для взрослых, а в некоторых странах платные кейсы запрещены — там их не покупайте. Кейс оружия — за талоны. Шансы честные, их держит сервер.',
   'First the grade is drawn, then any skin of that grade you don’t have yet, all equally likely. Every weapon can wear every finish; the two free finishes never drop.': 'Сначала разыгрывается класс, потом любой скин этого класса, которого у вас нет, — все равновероятно. Любое оружие носит любую раскраску; две бесплатные раскраски не выпадают.',
   'Weapon case odds': 'Шансы кейса оружия',
   'Skin case odds': 'Шансы кейса скинов',
@@ -1048,6 +1047,25 @@ export const RU: Record<string, string> = {
   'YOU': 'ВЫ',
   'LEADER': 'ЛИДЕР',
   '2ND': '2-Й',
+  // ── v0.2.18 part 2: the new characters, the skin line, the character case, a friend’s collection
+  'A welcome gift for the early players — tap to wear it': 'Велком-подарок ранним игрокам — нажмите, чтобы надеть',
+  'From the first line — yours to keep; tap to wear it': 'Из первой линейки — остаётся вашим; нажмите, чтобы надеть',
+  'A welcome gift for the early players: the «Shark» and «Blatkom ’89» skins on every weapon — in the Arsenal': 'Велком-подарок ранним игрокам: скины «Акула» и «Блатком ’89» на всё оружие — в Арсенале',
+  'The Crew Case': 'Кейс братвы',
+  'Inside is a random character sold for BLATS that you don’t have yet. The odds are listed below. The purchase is final.': 'Внутри — случайный персонаж за БЛАТ, которого у вас ещё нет. Шансы — ниже. Покупка окончательная.',
+  'One of the {n} characters sold for BLATS. Everyone has the same stats. No duplicates: a character you have never drops again.': 'Один из {n} персонажей за БЛАТ. Характеристики у всех одинаковые. Без повторов: персонаж, который у вас есть, больше не выпадет.',
+  'A character for BLATS you don’t have. Same stats for all. No repeats.': 'Персонаж за БЛАТ, которого у вас нет. Характеристики у всех одинаковые. Без повторов.',
+  'Your characters: {n} of {total}': 'Ваших персонажей: {n} из {total}',
+  'Character odds': 'Шансы персонажей',
+  'Character case odds': 'Шансы кейса братвы',
+  'First the grade is drawn, then any character of that grade you don’t have yet, all equally likely. The two free characters and the three for talons never drop.': 'Сначала разыгрывается класс, затем — любой персонаж этого класса, которого у вас ещё нет, с равным шансом. Два бесплатных персонажа и три за талоны не выпадают.',
+  'From the character case': 'Из кейса братвы',
+  'The skin case and the crew case are for BLATS: adults only, and paid cases are banned in some countries — don’t buy them there. The weapon case is for talons. The odds are honest and enforced by the server.': 'Кейс скинов и кейс братвы — за БЛАТ: только для взрослых, а в некоторых странах платные кейсы запрещены — там их не покупайте. Кейс оружия — за талоны. Шансы честные, их держит сервер.',
+  'joined your crew': 'уже в вашей братве',
+  'Collection': 'Коллекция',
+  '{name}’s collection': 'Коллекция: {name}',
+  'Characters: {n} of {total}': 'Персонажи: {n} из {total}',
+  'Weapon skins: {n}': 'Скины на оружие: {n}',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)
@@ -1134,6 +1152,8 @@ export const RU: Record<string, string> = {
   'A tournament room’s format is fixed': 'Формат комнаты турнира не меняется',
   'Inside Telegram, BLATS will be sold for Telegram Stars — coming soon': 'Внутри Telegram БЛАТ будут продаваться за Telegram Stars — скоро',
   'No such BLATS pack': 'Такого набора БЛАТ нет',
+  'Only friends see each other’s collection': 'Коллекцию видят только друзья',
+  'No such player': 'Такого игрока нет',
 };
 
 /** Russian plural forms [one, few, many] keyed by the English singular passed to plural() / count(). */

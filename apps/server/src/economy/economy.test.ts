@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
-import { CASE_PRICE, CASE_TABLE, CHARACTER_IDS, CHARACTER_PRICES, DEFAULT_LOADOUT, DIAMOND_PACKS, FINISHES, FREE_CHARACTERS, FREE_FINISHES, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, PROTOCOL_VERSION, REAL_MONEY, SKIN_CASE_PRICE, SKIN_PRICES, WEAPON_PRICES, parseSkin, skinId, tokensForMatch } from '@blatkom/shared';
+import { CASE_CHARACTERS, CASE_PRICE, CASE_TABLE, CHARACTERS, CHARACTER_CASE_PRICE, CHARACTER_IDS, CHARACTER_PRICES, DEFAULT_LOADOUT, DIAMOND_PACKS, FINISHES, FREE_CHARACTERS, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, PROTOCOL_VERSION, REAL_MONEY, SHOP_FINISHES, SKINNABLE_WEAPONS, SKIN_CASE_PRICE, SKIN_PRICES, WEAPON_PRICES, parseSkin, skinId, tokensForMatch, welcomeSkins } from '@blatkom/shared';
 import { WebSocket } from 'ws';
 import { startTestApp, api, devLogin, TEST_BOT_TOKEN } from '../admin/testkit.js';
 import { signInitData } from '../auth/telegram.js';
@@ -250,7 +250,7 @@ test('economy v0.2.18: the skin case — 299 BLATS with the adult confirmation, 
     assert.ok(parseSkin(id), id);
     assert.equal(FINISHES[r.body.finish as keyof typeof FINISHES].rarity, r.body.rarity);
     assert.ok(!got.has(id), `no duplicate (${id})`);
-    assert.ok(!FREE_FINISHES.includes(r.body.finish), 'never a free skin');
+    assert.ok(SHOP_FINISHES.includes(r.body.finish), 'only a finish on sale: never a free, gifted or retired one');
     got.add(id);
     assert.ok(r.body.inventory.skins.includes(id));
     const prev = before[r.body.weapon as keyof typeof before];
@@ -261,7 +261,7 @@ test('economy v0.2.18: the skin case — 299 BLATS with the adult confirmation, 
   }
   const inv = await ctx().economy.inventory(a.userId);
   assert.equal(inv.diamonds, 10);
-  assert.equal(inv.skins.length, 6);
+  assert.equal(inv.skins.filter((x) => !FINISHES[parseSkin(x)!.finish].gift).length, 6, 'six from the case (and the welcome gift)');
   const rows = await app.db.sql<Array<{ kind: string; finish_id: string; price: number; currency: string }>>`SELECT kind, finish_id, price, currency FROM case_openings WHERE user_id = ${a.userId}`;
   assert.equal(rows.length, 6);
   assert.ok(rows.every((x) => x.kind === 'skin' && x.finish_id && x.price === SKIN_CASE_PRICE.amount && x.currency === 'diamonds'));
@@ -277,12 +277,59 @@ test('economy v0.2.18: the skin case — 299 BLATS with the adult confirmation, 
   }
 });
 
+test('economy v0.2.18 part 2: the character case — 299 BLATS with the adult confirmation, only characters sold for BLATS, never a duplicate; the collection completes', async () => {
+  const a = await quickUser('Коллекционер');
+  const open = () => api(app.base, '/api/shop/character-case', { method: 'POST', token: a.token, body: { confirmAge: true } });
+  assert.equal((await api(app.base, '/api/shop/character-case', { method: 'POST', token: a.token, body: {} })).body.error.code, 'confirm_age', 'a case for money asks for 18+');
+  assert.equal((await open()).body.error.code, 'funds');
+  await ctx().economy.grant(a.userId, 'tokens', 10_000, null, 'test');
+  assert.equal((await open()).body.error.code, 'funds', 'talons don’t open it');
+  const n = CASE_CHARACTERS.length;
+  await ctx().economy.grant(a.userId, 'diamonds', CHARACTER_CASE_PRICE.amount * (n + 1), null, 'test');
+  const got = new Set<string>();
+  const take = (character: string, grade: string, characters: string[]) => {
+    assert.ok(CASE_CHARACTERS.includes(character as (typeof CASE_CHARACTERS)[number]), `${character}: one sold for BLATS`);
+    assert.equal(CHARACTERS[character as keyof typeof CHARACTERS].grade, grade);
+    assert.ok(!got.has(character), `no duplicate (${character})`);
+    got.add(character);
+    assert.ok(characters.includes(character));
+  };
+  // three through the API, the rest straight from the repository (the shop's rate limit)
+  for (let i = 0; i < 3; i++) {
+    const r = await open();
+    assert.equal(r.status, 200, r.text);
+    take(r.body.character, r.body.grade, r.body.inventory.characters);
+  }
+  for (let i = 3; i < n; i++) {
+    const r = await ctx().economy.openCharacterCase(a.userId);
+    take(r.character, r.grade, r.inventory.characters);
+  }
+  // every character for BLATS is in; the next opening is refused
+  assert.equal(got.size, n);
+  await assert.rejects(ctx().economy.openCharacterCase(a.userId), (e: Error & { refusal?: string }) => e.refusal === 'collection_complete');
+  const inv = await ctx().economy.inventory(a.userId);
+  assert.equal(inv.diamonds, CHARACTER_CASE_PRICE.amount, 'only the openings were paid');
+  assert.ok(!inv.characters.includes('uchastkovy') && !inv.characters.includes('vorona'), 'the talon characters never drop');
+  const rows = await app.db.sql<Array<{ kind: string; character_id: string; weapon_id: string | null; rarity: string }>>`SELECT kind, character_id, weapon_id, rarity FROM case_openings WHERE user_id = ${a.userId}`;
+  assert.equal(rows.length, n);
+  assert.ok(rows.every((x) => x.kind === 'character' && x.character_id && x.weapon_id === null && CHARACTERS[x.character_id as keyof typeof CHARACTERS].grade === x.rarity));
+  const [ledger] = await app.db.sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM currency_ledger WHERE user_id = ${a.userId} AND reason = 'case' AND ref LIKE 'charcase:%'`;
+  assert.equal(ledger!.n, n);
+  const off = await startTestApp({ CASES_ENABLED: false });
+  try {
+    const b = await devLogin(off.base, 'Коллекционер Б');
+    assert.equal((await api(off.base, '/api/shop/character-case', { method: 'POST', token: b.token, body: { confirmAge: true } })).status, 403);
+  } finally {
+    await off.close();
+  }
+});
+
 test('economy: skins are worn only when owned (any weapon, owned or not), and the room shows them to everybody', async () => {
   const a = await quickUser('Щёголь');
   const b = await quickUser('Зритель');
   await ctx().economy.grantItem(a.userId, 'skin', 'avtomat.zoloto');
   await ctx().economy.grantItem(a.userId, 'skin', 'svd.gzhel');
-  assert.equal((await ctx().economy.inventory(a.userId)).skins.length, 2);
+  assert.equal((await ctx().economy.inventory(a.userId)).skins.filter((x) => !FINISHES[parseSkin(x)!.finish].gift).length, 2, 'two of the retired line kept (and the welcome gift)');
   const body = { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', skins: { avtomat: 'zoloto', pistol: 'hohloma', svd: 'gzhel' } };
   const r = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body });
   assert.equal(r.status, 200, r.text);
@@ -511,24 +558,52 @@ test('economy v0.2.18: a skin bought for BLATS goes on its weapon; the free fini
   const a = await quickUser('Покупатель скинов');
   const buy = (weapon: string, finish: string) => api(app.base, '/api/shop/skin', { method: 'POST', token: a.token, body: { weapon, finish } });
   assert.equal((await buy('avtomat', 'berezka')).body.error.code, 'owned', 'a free finish is owned already');
-  assert.equal((await buy('avtomat', 'zoloto')).body.error.code, 'funds');
+  assert.equal((await buy('avtomat', 'yadernaya')).body.error.code, 'funds');
   assert.equal((await buy('avtomat', 'nope')).status, 400);
+  // v0.2.18 part 2: the first line is retired (not sold), the welcome gift is not sold either
+  assert.equal((await buy('avtomat', 'zoloto')).body.error.code, 'not_for_sale', 'a retired finish');
+  assert.equal((await buy('avtomat', 'akulka')).body.error.code, 'owned', 'the welcome gift is everyone’s while it lasts');
   await ctx().economy.grant(a.userId, 'diamonds', SKIN_PRICES.legendary + SKIN_PRICES.common, null, 'test');
-  let r = await buy('avtomat', 'zoloto');
+  let r = await buy('avtomat', 'yadernaya');
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.diamonds, SKIN_PRICES.common);
-  assert.ok(r.body.skins.includes('avtomat.zoloto'));
-  assert.equal(r.body.loadout.skins.avtomat, 'zoloto', 'worn at once');
-  assert.equal((await buy('avtomat', 'zoloto')).body.error.code, 'owned');
-  r = await buy('pistol', 'zima');
+  assert.ok(r.body.skins.includes('avtomat.yadernaya'));
+  assert.equal(r.body.loadout.skins.avtomat, 'yadernaya', 'worn at once');
+  assert.equal((await buy('avtomat', 'yadernaya')).body.error.code, 'owned');
+  r = await buy('pistol', 'haki');
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.diamonds, 0);
   const ledger = await app.db.sql<Array<{ delta: number; ref: string }>>`SELECT delta, ref FROM currency_ledger WHERE user_id = ${a.userId} AND reason = 'purchase' ORDER BY id`;
-  assert.deepEqual(ledger.map((l) => [l.delta, l.ref]), [[-SKIN_PRICES.legendary, 'skin:avtomat.zoloto'], [-SKIN_PRICES.common, 'skin:pistol.zima']]);
-  // a free finish is worn without buying it; an unbought paid one is dropped
-  const l = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', skins: { montirovka: 'rzhavchina', obrez: 'gzhel' } } });
+  assert.deepEqual(ledger.map((l) => [l.delta, l.ref]), [[-SKIN_PRICES.legendary, 'skin:avtomat.yadernaya'], [-SKIN_PRICES.common, 'skin:pistol.haki']]);
+  // a free finish and the gift are worn without buying them; an unbought paid one is dropped
+  const l = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', skins: { montirovka: 'rzhavchina', obrez: 'gzhel', tt: 'blatkom' } } });
   assert.equal(l.status, 200, l.text);
-  assert.deepEqual(l.body.loadout.skins, { montirovka: 'rzhavchina' });
+  assert.deepEqual(l.body.loadout.skins, { montirovka: 'rzhavchina', tt: 'blatkom' });
+});
+
+test('economy v0.2.18 part 2: the welcome gift — both finishes on every weapon from the first sign-in while it lasts, kept for good; none after WELCOME_GIFT_UNTIL', async () => {
+  const a = await quickUser('Ранний');
+  const inv = await ctx().economy.inventory(a.userId);
+  for (const id of welcomeSkins()) assert.ok(inv.skins.includes(id), id);
+  assert.equal(welcomeSkins().length, SKINNABLE_WEAPONS.length * 2);
+  // no item rows: one mark on the profile
+  const [row] = await app.db.sql<Array<{ n: number; at: Date | null }>>`SELECT (SELECT count(*)::int FROM user_items WHERE user_id = ${a.userId} AND kind = 'skin') AS n, (SELECT welcome_gift_at FROM profiles WHERE user_id = ${a.userId}) AS at`;
+  assert.equal(row!.n, 0);
+  assert.ok(row!.at instanceof Date);
+  // a server whose gift is over: a new player gets nothing, an early one keeps it
+  const late = await startTestApp({ WELCOME_GIFT_UNTIL: new Date(Date.now() - 60_000) });
+  try {
+    const b = await devLogin(late.base, 'Поздний');
+    const rb = await api(late.base, '/api/me/inventory', { token: b.token });
+    assert.equal(rb.status, 200);
+    assert.ok(!rb.body.skins.some((x: string) => FINISHES[parseSkin(x)!.finish].gift), 'after the date: no gift');
+    const c = await devLogin(late.base, 'Ранний Б');
+    await late.db.sql`UPDATE profiles SET welcome_gift_at = now() - interval '1 day' WHERE user_id = ${c.userId}`;
+    const rc = await api(late.base, '/api/me/inventory', { token: c.token });
+    assert.ok(rc.body.skins.includes('avtomat.akulka') && rc.body.skins.includes('avtomat.blatkom'), 'given before the date: kept');
+  } finally {
+    await late.close();
+  }
 });
 
 test('economy v0.23: accounts made before the change keep the wolf, the bear and the sawn-off (migration 009)', async () => {

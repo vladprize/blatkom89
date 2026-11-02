@@ -26,6 +26,8 @@ import type {
   SiteConfig,
   CaseResult,
   SkinCaseResult,
+  FriendCollection,
+  CharacterCaseResult,
   CheckoutResponse,
   PaymentStatusResponse,
   LedgerEntry,
@@ -159,6 +161,10 @@ export class Api {
   buySkin(weapon: WeaponId, finish: FinishId) {
     return this.req<Inventory>('POST', '/api/shop/skin', { weapon, finish });
   }
+  /** v0.2.18 part 2: the character case (299 BLATS): a character sold for BLATS, not owned yet. */
+  openCharacterCase() {
+    return this.req<CharacterCaseResult>('POST', '/api/shop/character-case', { confirmAge: true });
+  }
   /** The skin case (v0.23; v0.2.18: for BLATS): a weapon skin not owned yet. */
   openSkinCase() {
     return this.req<SkinCaseResult>('POST', '/api/shop/skin-case', { confirmAge: true });
@@ -238,6 +244,10 @@ export class Api {
   }
   acceptFriend(id: string) {
     return this.req<{ friend: FriendEntry | null }>('POST', `/api/friends/${encodeURIComponent(id)}/accept`, {});
+  }
+  /** v0.2.18 part 2: a friend's characters and skins by grade (friends only). */
+  friendCollection(id: string) {
+    return this.req<FriendCollection>('GET', `/api/friends/${encodeURIComponent(id)}/collection`);
   }
   /** Declines or cancels a request, or ends a friendship. */
   removeFriend(id: string) {

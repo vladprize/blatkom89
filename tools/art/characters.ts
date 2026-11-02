@@ -11,6 +11,7 @@ export { MAT };
 import type { PoseClass } from './weapons.js';
 import { EXTRA_RIGS } from './characters2.js';
 import { V023_RIGS } from './characters3.js';
+import { V0218_RIGS } from './characters4.js';
 import type { CharacterId } from '../../packages/shared/src/game-rules/characters.js';
 
 export type CharId = CharacterId;
@@ -341,7 +342,7 @@ const mihalych: Rig = {
 
 petya.toes = true;
 
-export const RIGS: Record<CharId, Rig> = { petya, valuta, uchastkovy, mihalych, ...EXTRA_RIGS, ...V023_RIGS };
+export const RIGS: Record<CharId, Rig> = { petya, valuta, uchastkovy, mihalych, ...EXTRA_RIGS, ...V023_RIGS, ...V0218_RIGS };
 
 // ── Pose construction ────────────────────────────────────────────────────────
 

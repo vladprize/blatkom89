@@ -4,7 +4,8 @@
 human, half beast — and whoever holds the district there is right out here. Two campaigns at war with
 each other: **«Мой двор»** (Петя «Комендант», the streets) and **«Протокол»** (Участковый, the police).
 Each mission is told as a comic before and after it; the characters pop up with their lines during the
-fight. Along the way the hero meets the district's people (the card index).
+fight. Along the way the hero meets the district's people (the card index — the 22 the story meets; the
+twelve characters of v0.2.18 part 2 are not in the story yet, so they are not in the index either).
 
 Rules and missions: `packages/shared/src/story/missions.ts`; the words (EN/RU): `apps/web/src/story/script.ts`;
 the mission in the browser: `apps/web/src/story/StorySession.ts`; the flow (hub, comics, rewards):

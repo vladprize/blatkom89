@@ -65,7 +65,8 @@ const SIDEARMS: WeaponId[] = ['pistol', 'pistol', 'pistol', 'tt', 'p92', 'deagle
 const MELEE: WeaponId[] = ['montirovka', 'montirovka', 'bita', 'nozh', 'topor'];
 const GADGETS: GadgetId[] = ['f1', 'f1', 'f1', 'molotov', 'flash', 'smoke'];
 /** Finishes weighted like case drops: common often, legendary rarely. */
-const FILL_FINISHES: FinishId[] = ['berezka', 'berezka', 'berezka', 'rzhavchina', 'rzhavchina', 'zima', 'zima', 'flora', 'flora', 'gzhel', 'pioner', 'malahit', 'hohloma', 'zoloto'];
+// v0.2.18 part 2: the owner's line — the welcome gift and the regular ones most often, a few rarer ones
+const FILL_FINISHES: FinishId[] = ['akulka', 'akulka', 'blatkom', 'blatkom', 'haki', 'haki', 'iznos', 'sport', 'devyanostye', 'cherkizon', 'afgan', 'video', 'kosmos', 'hohloma', 'carsky'];
 
 const pick = <T>(rnd: () => number, a: readonly T[]): T => a[Math.floor(rnd() * a.length) % a.length]!;
 

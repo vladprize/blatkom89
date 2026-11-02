@@ -41,7 +41,7 @@ test('every finish repaints the weapon, keeps transparency and the dark outline,
     assert.ok(changed > 300, `${f} repaints the body (${changed})`);
     looks.add(Buffer.from(a).toString('base64'));
   }
-  assert.equal(looks.size, FINISH_IDS.length, 'ten different looks');
+  assert.equal(looks.size, FINISH_IDS.length, 'every finish looks different');
 });
 
 test('the finishes have their colours: gold is yellow, gzhel is white and blue, malachite green, pioneer red', () => {
@@ -70,6 +70,17 @@ test('the finishes have their colours: gold is yellow, gzhel is white and blue, 
   assert.ok(mg > mr + 40 && mg > mb, 'malachite');
   const [pr, pg, pb] = avg('pioner');
   assert.ok(pr > pg + 60 && pr > pb + 60, 'pioneer red');
+  // v0.2.18 part 2: the owner's line
+  const [cr, cg, cb] = avg('carsky');
+  assert.ok(cr > cb + 60 && cg > cb + 20, 'tsar’s gold');
+  const [kr, kg, kb] = avg('kontora');
+  assert.ok(kr > kg + 50 && kr > kb + 50, 'the office: crimson');
+  const [lr, , lb] = avg('led');
+  assert.ok(lb >= lr && lb > 150, 'ice camo: white and blue');
+  const [hr, hg, hb] = avg('haki');
+  assert.ok(hg > hb + 15 && hr > hb, 'khaki: olive');
+  const [sr, , sb] = avg('sport');
+  assert.ok(sb > sr + 40, 'tracksuit blue');
 });
 
 test('the pattern follows the weapon, not the padding around it', () => {

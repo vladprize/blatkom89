@@ -19,7 +19,7 @@
 //      (tests/e2e/social.mjs)
 //  11. weapon skins (v0.23): the skin case opened in the Arsenal, the reveal, the dressing room's
 //      picker, the skin on the weapon in hand and on the HUD icon in practice (tests/e2e/skins.mjs)
-//  12. the roster (v0.23): 24 characters with portraits, the ten new ones' personal files and prices,
+//  12. the roster: 36 characters with portraits (v0.2.18 part 2: +12), the new ones' personal files and prices,
 //      practice as a new character, all ten sprite atlases loaded (tests/e2e/roster.mjs)
 //  13. phones (v0.24): the menu, the characters and the Arsenal (kit, every shop tab — v0.2.18 BLATS too —
 //      its sheets) fit one phone screen at 393×680 RU and 360×640 EN (tests/e2e/phone.mjs)
@@ -50,6 +50,8 @@
 //      room and a character on the character screen, practice coming back to where it was started, the
 //      score by mode, a phone held sideways filling the window, the story's speaker in the middle, the
 //      founder (with E2E_ADMIN_USER), the game's keys typing after a match (tests/e2e/v0218.mjs)
+//  v0.2.18 part 2: the welcome gift, 36 characters, the character case (18+, odds, reveal), a friend's
+//      collection, grades in the lobby, practice as each of the twelve new characters (tests/e2e/v0218b.mjs)
 //  21. v0.2.17 part 3: a gang calls another out from its page — the battle room of the two gangs, the
 //      call's card live to both gangs' people, sides by gang, nobody else let in (a stranger's link is
 //      turned away), the battle played and counted for both gangs; a friend's «To battle» → a duel room
@@ -191,7 +193,7 @@ try {
   console.log('\n[e2e] weapon skins: the skin case, the dressing room, a skin in practice');
   const skins = spawnSync(process.execPath, ['tests/e2e/skins.mjs', base, join(out, 'skins')], { stdio: 'inherit' });
   if (skins.status !== 0) failed = true;
-  console.log('\n[e2e] the roster: 24 characters, the ten new ones in the files and in practice');
+  console.log('\n[e2e] the roster: 36 characters, the 22 of v0.23 and v0.2.18 part 2 in the files and in practice');
   const roster = spawnSync(process.execPath, ['tests/e2e/roster.mjs', base, join(out, 'roster')], { stdio: 'inherit' });
   if (roster.status !== 0) failed = true;
   console.log('\n[e2e] phones: every screen and the Arsenal (BLATS too) on one phone screen');
@@ -213,6 +215,9 @@ try {
   if (process.env.E2E_ADMIN_USER) v0218Args.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
   const v0218 = spawnSync(process.execPath, v0218Args, { stdio: 'inherit' });
   if (v0218.status !== 0) failed = true;
+  console.log('\n[e2e] v0.2.18 part 2: the welcome gift, 36 characters, the character case, a friend\'s collection, grades in the lobby, the twelve in practice');
+  const v0218b = spawnSync(process.execPath, ['tests/e2e/v0218b.mjs', base, join(out, 'v0218b')], { stdio: 'inherit' });
+  if (v0218b.status !== 0) failed = true;
   console.log('\n[e2e] v0.2.17 part 3: gang against gang, a friend called to a duel (two browsers, two socket players)');
   const battle = spawnSync(process.execPath, ['tests/e2e/battle.mjs', base, join(out, 'battle')], { stdio: 'inherit' });
   if (battle.status !== 0) failed = true;

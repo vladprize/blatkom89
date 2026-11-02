@@ -4,8 +4,8 @@
  * All prices and rules come from packages/shared/src/game-rules/economy.ts; the server never trusts
  * client-side ownership, balances or prices.
  */
-import { BuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, REAL_MONEY, SKIN_CASE_PRICE, SkinBuyRequest, priceOf, skinPrice } from '@blatkom/shared';
-import type { CaseResult, Loadout, ShopConfig, ShopPrice, SkinCaseResult } from '@blatkom/shared';
+import { BuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, CHARACTER_CASE_PRICE, REAL_MONEY, SKIN_CASE_PRICE, SkinBuyRequest, priceOf, skinPrice } from '@blatkom/shared';
+import type { CaseResult, CharacterCaseResult, Loadout, ShopConfig, ShopPrice, SkinCaseResult } from '@blatkom/shared';
 import type { RouteModule } from '../app.js';
 import { HttpError, readBody } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
@@ -78,6 +78,17 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
     const { entry, inventory } = await guard(() => pg().economy.openCase(user.userId));
     deps.services.analytics.server('case_opened', { weapon: entry.weapon, rarity: entry.rarity, price: CASE_PRICE.amount, currency: CASE_PRICE.currency, kind: 'weapon' }, user);
     const res: CaseResult = { weapon: entry.weapon, rarity: entry.rarity, inventory };
+    ctx.json(200, res);
+  });
+
+  /** v0.2.18 part 2 — the character case: a character sold for BLATS, not owned yet (299 BLATS, 18+). */
+  router.post('/api/shop/character-case', auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    if (!deps.env.CASES_ENABLED) throw new HttpError(403, 'cases_disabled', 'Cases are switched off on this server');
+    const user = currentUser(ctx);
+    adultCheck(await ctx.body(CaseOpenRequest, 1024), CHARACTER_CASE_PRICE);
+    const { character, grade, inventory } = await guard(() => pg().economy.openCharacterCase(user.userId));
+    deps.services.analytics.server('case_opened', { rarity: grade, price: CHARACTER_CASE_PRICE.amount, currency: CHARACTER_CASE_PRICE.currency, kind: 'character', character }, user);
+    const res: CharacterCaseResult = { character, grade, inventory };
     ctx.json(200, res);
   });
 

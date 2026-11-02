@@ -68,7 +68,8 @@ Copy `.env.example` to `.env` and set at least:
 | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`, `DISCORD_CLIENT_ID` + `DISCORD_CLIENT_SECRET`, `FACEBOOK_APP_ID` + `FACEBOOK_APP_SECRET`, `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` | optional: «sign in with …» for that provider; redirect URI `https://$DOMAIN/api/auth/oauth/<provider>/callback` ([SIGN_IN.md](SIGN_IN.md)). `FACEBOOK_GRAPH_VERSION` (default `v23.0`) |
 | `TELEGRAM_WEB_LOGIN` | `true`: «sign in with Telegram» on the website (needs the bot token and the bot's `/setdomain`); the Mini App signs in by itself either way |
 | `RESEND_API_KEY` + `MAIL_FROM` | optional: password-reset letters (Resend; the sender domain must be verified there). Without them admins issue one-time reset links in `/admin` |
-| `CASES_ENABLED` | `true` (default) / `false` — both cases: the rare-weapon case (talons) and the skin case (BLATS, 18+); off for markets where paid random items are restricted |
+| `CASES_ENABLED` | `true` (default) / `false` — every case: the rare-weapon case (talons), the skin case and the character case (BLATS, 18+); off for markets where paid random items are restricted |
+| `WELCOME_GIFT_UNTIL` | v0.2.18 part 2 — optional ISO date (e.g. `2027-01-31T23:59:59Z`): players who sign in before it get the welcome gift («Shark», «Blatkom ’89» on every weapon) and keep it; **unset: the gift has no end yet** (the owner sets the date) |
 | `SOCIAL_X_URL`, `SOCIAL_TELEGRAM_URL` | optional (v0.2.17): where the menu's X and Telegram buttons lead; without them the buttons say «coming soon» |
 | `MATCH_FILL_BOTS` | complete small lineups with players the server runs itself (default `true`: 4 in free-for-all, 3 a side in team modes; Quick Match after a 5 s head start, rooms with friends at kick-off; see docs/NETCODE.md §2a) |
 | `GUEST_SIGNUPS_PER_IP_HOUR` | new guest accounts per address per hour (default 10; raise it for events where many new players share one Wi-Fi) |

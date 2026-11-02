@@ -72,10 +72,11 @@ test('story: chapters — 1 and 2 have five missions, 3 has two (v0.2.15, the op
   assert.ok(STORY_CHAPTERS.filter((x) => x.ready).length >= 2, 'chapter 1 of both campaigns');
 });
 
-test('story: the cast — all 24 placed, 11 met in each campaign, the card index holds the 22 others', () => {
-  assert.deepEqual(Object.keys(STORY_CAST).sort(), [...CHARACTER_IDS].sort());
+test('story: the cast — the first 24 placed, 11 met in each campaign, the card index holds the 22 others', () => {
+  // v0.2.18 part 2: the twelve characters of the owner's later sheets aren't in the story yet
+  assert.deepEqual(Object.keys(STORY_CAST).sort(), CHARACTER_IDS.slice(0, CHARACTER_IDS.indexOf('lev') + 1).sort());
   for (const c of STORY_CAMPAIGNS) {
-    const people = CHARACTER_IDS.filter((x) => STORY_CAST[x].campaign === c && x !== 'petya' && x !== 'uchastkovy');
+    const people = CHARACTER_IDS.filter((x) => STORY_CAST[x]?.campaign === c && x !== 'petya' && x !== 'uchastkovy');
     assert.equal(people.length, 11, `${c}: eleven of the district's people`);
   }
   assert.equal(STORY_CARD_INDEX.length, 22);

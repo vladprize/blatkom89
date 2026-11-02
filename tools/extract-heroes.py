@@ -34,7 +34,8 @@ OUT = ROOT / 'apps/web/public/assets/heroes'
 SIZE = (360, 480)
 
 # sheet; crop box (x0, y0, x1, y1) in the 1536×1024 sheet, 3:4; where the sheet's text starts:
-# the title with its subtitle (left x, last row), the label boxes (left x), the КАРТОЧКА paper (left x, first row)
+# the title with its subtitle (left x, last row), the label boxes (left x), the КАРТОЧКА paper (left x, first row);
+# optionally the tagline's last row, when the crop starts above it (it is painted over around the character)
 SHEETS = {
     'petya': ('03-petya-komendant.png', (95, 142, 365, 502), (361, 278), 379, (358, 535)),
     'valuta': ('04-valuta-farcovshik.png', (69, 143, 339, 503), (324, 278), 381, (386, 508)),
@@ -61,9 +62,24 @@ SHEETS = {
     'gorilla': ('34-gorilla-samson.png', (119, 131, 389, 491), (365, 235), 373, (346, 485)),
     'svinya': ('35-svinya-borka.png', (126, 134, 396, 494), (376, 235), 379, (349, 481)),
     'lisa': ('36-lisa-alisa.png', (129, 132, 399, 492), (376, 235), 376, (339, 488)),
+    # v0.2.18 part 2 — on these sheets the heads sit higher: the crop takes in the tagline's rows and paints the
+    # tagline over around the character
+    'zaychiha': ('67-zaychiha-cherri.png', (90, 120, 360, 480), (372, 232), 389, (356, 472), 136),
+    'zayac': ('69-zayac-dlinny.png', (130, 120, 400, 480), (368, 247), 393, (364, 494), 136),
+    'vasilisk': ('66-vasilisk.png', (115, 120, 385, 480), (356, 237), 388, (344, 475), 136),
+    'lenivec': ('70-lenivec-tuz.png', (123, 120, 393, 480), (398, 218), 422, (346, 471), 136),
+    'kozel': ('76-kozel-rycar.png', (110, 120, 380, 480), (400, 222), 411, (356, 472), 136),
+    'pingvin': ('73-pingvin-brodyaga.png', (123, 120, 393, 480), (353, 237), 387, (360, 497), 136),
+    'tigr': ('71-tigr-zver.png', (123, 120, 393, 480), (438, 218), 425, (356, 471), 136),
+    'pauk': ('75-pauk-arah.png', (135, 120, 405, 480), (423, 232), 410, (352, 478), 136),
+    'bogomol': ('68-bogomol-zhnec.png', (165, 120, 435, 480), (398, 232), 428, (347, 474), 136),
+    'ezh': ('72-ezh-igla.png', (135, 120, 405, 480), (363, 228), 431, (352, 474), 136),
+    'kasatka': ('74-kasatka-kasatik.png', (80, 120, 350, 480), (363, 237), 415, (375, 490), 136),
+    'zvezda': ('65-zvezda-pyatak.png', (115, 120, 385, 480), (375, 232), 413, (350, 474), 136),
 }
 
 ART = (0, 100, 560, 700)  # the part of the sheet the model looks at: the art and the text next to it
+TAGLINE_X = (40, 470)  # «РАЙОННЫЕ ДЕЛА — СЕРЬЁЗНЫЕ ДЕЛА» under the logo, and the logo’s last rows
 MARGIN = 10  # rows above and below a line of text that are cleared with it
 DARK = (15, 8, 8)  # the sheet's panel
 
@@ -91,7 +107,7 @@ def text_edge(title: tuple, boxes: int, card: tuple, y: int) -> int:
     return edge
 
 
-def card_of(sheet: Image.Image, box: tuple, title: tuple, boxes: int, card: tuple, sess) -> Image.Image:
+def card_of(sheet: Image.Image, box: tuple, title: tuple, boxes: int, card: tuple, sess, tagline: int | None = None) -> Image.Image:
     a = np.asarray(sheet).astype(np.float32)
     h, w = a.shape[:2]
     fig = np.clip((figure_mask(sheet, sess) - 0.3) / 0.4, 0, 1)
@@ -103,6 +119,8 @@ def card_of(sheet: Image.Image, box: tuple, title: tuple, boxes: int, card: tupl
         e = text_edge(title, boxes, card, y)
         soft[y] = np.clip((xs - (e - 22)) / 16, 0, 1)
         hard[y] = (xs >= e - 4).astype(np.float32)
+    if tagline is not None:  # the tagline over the art (down to this row): only the character stays
+        soft[: tagline + 1, TAGLINE_X[0] : TAGLINE_X[1]] = 1
     soft = np.asarray(Image.fromarray((soft * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(2))).astype(np.float32) / 255
     hard = np.asarray(Image.fromarray((hard * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1))).astype(np.float32) / 255
     k = np.maximum(soft * (1 - fig), hard)[..., None]
@@ -123,14 +141,15 @@ def main() -> None:
     sess = ort.InferenceSession(a.model, providers=['CPUExecutionProvider'])
     OUT.mkdir(parents=True, exist_ok=True)
     only = set(a.only.split(',')) if a.only else None
-    for cid, (name, box, title, boxes, card) in SHEETS.items():
+    for cid, (name, box, title, boxes, card, *rest) in SHEETS.items():
         if only and cid not in only:
             continue
+        tagline = rest[0] if rest else None
         sheet = Image.open(ROOT / 'references' / name).convert('RGB')
         assert sheet.size == (1536, 1024), f'unexpected sheet size {sheet.size} for {name}'
         x0, y0, x1, y1 = box
         assert abs((x1 - x0) * 4 - (y1 - y0) * 3) <= 4, f'{cid}: crop is not 3:4'
-        card_of(sheet, box, title, boxes, card, sess).save(OUT / f'{cid}.jpg', quality=86, optimize=True, progressive=True)
+        card_of(sheet, box, title, boxes, card, sess, tagline).save(OUT / f'{cid}.jpg', quality=86, optimize=True, progressive=True)
         print('hero', cid, box)
 
 

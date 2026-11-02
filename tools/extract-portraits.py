@@ -8,6 +8,8 @@ as UI portraits (character select, HUD, scoreboard). Requires Pillow + numpy.
 The first four sheets share one fixed 120×120 panel. On the later sheets the panel is larger and
 moves by a few pixels, so its frame (thin light line) is located per sheet and the largest centred
 square inside it is scaled to 120×120.
+
+  python3 tools/extract-portraits.py [--only id,id]
 """
 from pathlib import Path
 
@@ -43,10 +45,24 @@ DETECT = {
     'gorilla': '34-gorilla-samson.png',
     'svinya': '35-svinya-borka.png',
     'lisa': '36-lisa-alisa.png',
+    # v0.2.18 part 2
+    'zaychiha': '67-zaychiha-cherri.png',
+    'zayac': '69-zayac-dlinny.png',
+    'vasilisk': '66-vasilisk.png',
+    'kozel': '76-kozel-rycar.png',
+    'pingvin': '73-pingvin-brodyaga.png',
+    'tigr': '71-tigr-zver.png',
+    'pauk': '75-pauk-arah.png',
+    'bogomol': '68-bogomol-zhnec.png',
+    'kasatka': '74-kasatka-kasatik.png',
+    'zvezda': '65-zvezda-pyatak.png',
 }
 # Sheets whose portrait panel has a different layout: explicit square inside the frame.
 MANUAL = {
     'oryol': ('18-oryol-pendos.png', (1306, 78, 1505, 277)),
+    # v0.2.18 part 2: these two panels have no inner frame for the detector to find (it took the head alone)
+    'lenivec': ('70-lenivec-tuz.png', (1334, 71, 1476, 213)),
+    'ezh': ('72-ezh-igla.png', (1336, 71, 1478, 213)),
 }
 # Inner area of the portrait panel on the first four 1536x1024 sheets (inside the dashed frame).
 BOX = (1340, 74, 1460, 194)
@@ -81,16 +97,24 @@ def save(cid: str, crop: Image.Image) -> None:
 
 
 def main() -> None:
+    import sys
+    only = set(sys.argv[sys.argv.index('--only') + 1].split(',')) if '--only' in sys.argv else None
     OUT.mkdir(parents=True, exist_ok=True)
     for cid, name in FIXED.items():
+        if only and cid not in only:
+            continue
         sheet = Image.open(ROOT / 'references' / name).convert('RGB')
         assert sheet.size == (1536, 1024), f'unexpected sheet size {sheet.size} for {name}'
         save(cid, sheet.crop(BOX))
     for cid, name in DETECT.items():
+        if only and cid not in only:
+            continue
         sheet = Image.open(ROOT / 'references' / name).convert('RGB')
         assert sheet.size == (1536, 1024), f'unexpected sheet size {sheet.size} for {name}'
         save(cid, sheet.crop(frame_box(sheet)))
     for cid, (name, box) in MANUAL.items():
+        if only and cid not in only:
+            continue
         sheet = Image.open(ROOT / 'references' / name).convert('RGB')
         assert sheet.size == (1536, 1024), f'unexpected sheet size {sheet.size} for {name}'
         save(cid, sheet.crop(box))

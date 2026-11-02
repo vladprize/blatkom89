@@ -10,7 +10,7 @@
  *   • every character, weapon, piece of equipment, skin and weapon modification, as a grant.
  * Repeating it changes nothing that was already done. There is one founder: another account is refused.
  */
-import { CHARACTER_IDS, FOUNDER_LEVEL, GADGET_IDS, WEAPONS, WEAPON_IDS, allSkins, isFreeFinish, levelForXp, modsFor, parseSkin, totalXpForLevel } from '@blatkom/shared';
+import { CHARACTER_IDS, FINISHES, FOUNDER_LEVEL, GADGET_IDS, WEAPONS, WEAPON_IDS, levelForXp, lineSkins, modsFor, parseSkin, totalXpForLevel } from '@blatkom/shared';
 import type { Sql } from '../database/db.js';
 import { creditLevelBlats } from '../progression/levelRewards.js';
 
@@ -49,7 +49,9 @@ export async function makeFounder(sql: Sql, userId: string): Promise<FounderResu
     for (const c of CHARACTER_IDS) await give('character', c);
     for (const w of WEAPON_IDS) await give('weapon', w);
     for (const g of GADGET_IDS) await give('gadget', g);
-    for (const s of allSkins()) if (!isFreeFinish(parseSkin(s)!.finish)) await give('skin', s);
+    // the current line's skins on every weapon; the welcome gift's two come with the mark (not as items)
+    for (const s of lineSkins()) if (!FINISHES[parseSkin(s)!.finish].gift) await give('skin', s);
+    await tx`UPDATE profiles SET welcome_gift_at = COALESCE(welcome_gift_at, now()) WHERE user_id = ${userId}`;
     for (const w of WEAPON_IDS) {
       for (const m of modsFor(WEAPONS[w])) {
         const r = await tx`INSERT INTO weapon_mods (user_id, weapon_id, mod_id) VALUES (${userId}, ${w}, ${m}) ON CONFLICT DO NOTHING RETURNING mod_id`;

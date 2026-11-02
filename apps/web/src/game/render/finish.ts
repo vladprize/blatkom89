@@ -54,8 +54,13 @@ const shade = (c: RGB | [number, number, number], l: number, lo = 0.55, span = 0
 };
 const mix = (a: RGB | [number, number, number], b: RGB | [number, number, number], t: number): [number, number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
-/** The colour of one pixel: u, v in the weapon's units (u 0…64 along it), l the original lightness, hv the height in units. */
-type Painter = (u: number, v: number, l: number, hv: number) => [number, number, number];
+/**
+ * The colour of one pixel: u, v in the weapon's units (u 0…64 along it), l the original lightness, hv the
+ * height in units; ly where the pixel is in its own column of the weapon (0 top … 1 bottom) and th that
+ * column's thickness in units — for designs that follow the body (a mouth on the handguard, flames along
+ * the bottom edge).
+ */
+type Painter = (u: number, v: number, l: number, hv: number, ly: number, th: number) => [number, number, number];
 
 const C = {
   olive: hex('#8f9d5c'),
@@ -76,7 +81,195 @@ const C = {
   black: hex('#17110e'),
 };
 
+/** A 3×5 bitmap font for the digits a finish writes on the weapon. */
+const DIGITS: Record<string, readonly number[]> = { '8': [7, 5, 7, 5, 7], '9': [7, 5, 7, 1, 7] };
+function glyph(ch: string, u: number, v: number, u0: number, v0: number, cell: number): boolean {
+  const cx = Math.floor((u - u0) / cell);
+  const cy = Math.floor((v - v0) / cell);
+  if (cx < 0 || cx > 2 || cy < 0 || cy > 4) return false;
+  return ((DIGITS[ch]![cy]! >> (2 - cx)) & 1) === 1;
+}
+
+/** A five-pointed star (one point up) of outer radius R round (cx, cy). */
+function star(u: number, v: number, cx: number, cy: number, R: number): boolean {
+  const dx = u - cx;
+  const dy = v - cy;
+  const r = Math.hypot(dx, dy);
+  if (r > R) return false;
+  const sector = (Math.PI * 2) / 5;
+  const a = Math.abs(((((Math.atan2(dy, dx) + Math.PI / 2) % sector) + sector) % sector) - sector / 2);
+  const inner = R * 0.4;
+  return r <= inner + (R - inner) * (1 - a / (sector / 2));
+}
+
+/** The radiation sign: a dot and three blades, radius R round (cx, cy). */
+function trefoil(u: number, v: number, cx: number, cy: number, R: number): boolean {
+  const dx = u - cx;
+  const dy = v - cy;
+  const r = Math.hypot(dx, dy);
+  if (r < R * 0.2) return true;
+  if (r < R * 0.32 || r > R) return false;
+  const third = (Math.PI * 2) / 3;
+  const a = ((((Math.atan2(dy, dx) + Math.PI / 2 + Math.PI / 6) % third) + third) % third);
+  return a < Math.PI / 3;
+}
+
 const PAINTERS: Record<FinishId, Painter> = {
+  // ── v0.2.18 part 2: the owner's line (references/64-skins-lineup.png) ──
+  // «Хаки»: olive drab with darker and sandy patches
+  haki: (u, v, l) => {
+    const n = noise(u / 4.2, v / 4.2, 201);
+    if (n > 0.62) return shade(hex('#4b4a26'), l, 0.65, 0.5);
+    if (n < 0.3) return shade(hex('#9a8f5e'), l, 0.65, 0.5);
+    return shade(mix(hex('#6b6a3a'), hex('#8c8a52'), l), l, 0.7, 0.45);
+  },
+  // «Изношенный»: dull gunmetal, scratched to bright steel, chipped to the brown primer
+  iznos: (u, v, l) => {
+    if (Math.abs(Math.sin(u * 0.9 + v * 2.3 + noise(u / 3, v / 3, 211) * 4)) > 0.992 || noise(u / 0.9, v / 0.9, 212) > 0.93) return shade(hex('#c8c2b8'), l, 0.75, 0.35);
+    if (noise(u / 2.2, v / 2.2, 213) > 0.78) return shade(hex('#7a4a2a'), l, 0.6, 0.5);
+    return ramp([[0, hex('#1e1c1a')], [0.5, hex('#4a4440')], [1, hex('#8a817a')]], l);
+  },
+  // «Акула» (the welcome gift): shark-grey with a red mouth full of teeth on the front of the body, an eye above it
+  akulka: (u, _v, l, hv, ly, th) => {
+    if (u > 38 && u < 60 && th > hv * 0.16) {
+      const d = Math.abs(ly - 0.56) * 2;
+      const tri = 1 - Math.abs(2 * (((u - 38) / 2.6) % 1) - 1);
+      if (d < 0.16) return shade(hex('#5a0808'), l, 0.9, 0.4);
+      if (d < 0.5 && tri > (0.5 - d) / 0.34) return shade(hex('#ffffff'), l, 0.85, 0.2);
+      if (d < 0.62) return shade(hex('#c42b22'), l, 0.7, 0.5);
+      if (u < 44 && ly < 0.3 && Math.abs(u - 41) < 1.3) return [16, 14, 14];
+    }
+    return ramp([[0, hex('#5a6470')], [0.5, hex('#b8c2cc')], [1, hex('#f4f6f8')]], l * 0.6 + 0.4);
+  },
+  // «Блатком ’89» (the welcome gift): deep blue, a white «89» on the stock, a red stripe below
+  blatkom: (u, v, l, hv) => {
+    const y = v / Math.max(1, hv);
+    const cell = Math.max(1.2, hv * 0.13);
+    const v0 = hv * 0.45 - 2.5 * cell;
+    if (glyph('8', u, v, 9, v0, cell) || glyph('9', u, v, 9 + 4 * cell, v0, cell)) return shade(hex('#f4f2ec'), l, 0.8, 0.3);
+    if (Math.abs(y - 0.86) < 0.06) return shade(C.red, l, 0.75, 0.4);
+    return shade(mix(hex('#1c3a8a'), hex('#3a64c8'), l), l, 0.6, 0.55);
+  },
+  // «Спартакиада ’80»: red and white diagonal stripes of the sports parade
+  sparta: (u, v, l) => (((u + v * 0.9) / 3.4) % 2 < 1 ? shade(mix(C.red, C.redLight, l), l, 0.65, 0.5) : shade(hex('#f2ede2'), l, 0.75, 0.3)),
+  // «Спортивный»: royal-blue tracksuit with two white stripes along the body
+  sport: (_u, v, l, hv) => {
+    const y = v / Math.max(1, hv);
+    if (Math.abs(y - 0.23) < 0.025 || Math.abs(y - 0.31) < 0.025) return shade(hex('#f4f4f2'), l, 0.8, 0.25);
+    return shade(mix(hex('#1a3fa0'), hex('#3a66d8'), l), l, 0.6, 0.55);
+  },
+  // «Лихие 90-е»: black with flames licking up from below, growing towards the muzzle
+  devyanostye: (u, _v, l, _hv, ly) => {
+    const y = 1 - ly;
+    const reach = Math.min(0.9, Math.max(0, (u - 12) / 40)) * (0.72 + 0.28 * Math.sin(u * 0.9 + noise(u / 3, 0, 301) * 3));
+    if (y < reach) return shade(ramp([[0, hex('#ffe27a')], [0.45, hex('#ff8a1e')], [0.8, hex('#d02a10')], [1, hex('#6a0a04')]], y / Math.max(0.01, reach)), l, 0.75, 0.4);
+    return shade(hex('#141216'), l, 0.9, 0.9);
+  },
+  // «Малиновый пиджак»: raspberry velvet with a gold chain draped along it
+  malina: (u, v, l, hv) => {
+    const y = v / Math.max(1, hv);
+    const cy = 0.3 + 0.38 * Math.sin((u / 64) * Math.PI);
+    if (Math.abs(y - cy) < 0.07 && Math.floor(u / 1.6) % 2 === 0) return shade(C.gold, l, 0.75, 0.5);
+    return shade(mix(hex('#7a0a2a'), hex('#c41e5a'), l + noise(u / 0.8, v / 0.8, 311) * 0.12), l, 0.62, 0.5);
+  },
+  // «Видеосалон»: black tape plastic, the colour bars of a test card and a white label
+  video: (u, v, l, hv) => {
+    const y = v / Math.max(1, hv);
+    if (u > 18 && u < 46 && y > 0.22 && y < 0.72) return shade(hex(['#e8e8e8', '#e8e020', '#20d8e0', '#20c820', '#e020c8', '#e02020', '#2020e0'][Math.min(6, Math.floor((u - 18) / 4))]!), l, 0.7, 0.4);
+    if (y > 0.78 && u > 18 && u < 46) return shade(hex('#f0ece0'), l, 0.75, 0.3);
+    return shade(hex('#16161a'), l, 0.9, 0.9);
+  },
+  // «Черкизон»: the market's checked bag — blue and red bands on white
+  cherkizon: (u, v, l) => {
+    const su = u % 8;
+    const sv = v % 8;
+    const bu = su < 2;
+    const bv = sv < 2;
+    const c = bu && bv ? hex('#14205a') : bu || bv ? hex('#2a3c8a') : (su > 4.4 && su < 5.4) || (sv > 4.4 && sv < 5.4) ? hex('#c42b22') : hex('#ece8e0');
+    return shade(c, l, 0.7, 0.4);
+  },
+  // «Радиоактивный»: acid yellow-green with black radiation signs
+  radiaciya: (u, v, l, hv) => {
+    const R = Math.max(2.5, hv * 0.42);
+    for (const cx of [17, 43]) if (trefoil(u, v, cx, hv * 0.5, R)) return shade(hex('#141414'), l, 1, 0.6);
+    return shade(mix(hex('#a8d010'), hex('#e8f040'), noise(u / 3, v / 3, 401)), l, 0.6, 0.55);
+  },
+  // «Афган»: sand and dust camo with a red star on the stock
+  afgan: (u, v, l, hv) => {
+    if (star(u, v, 12, hv * 0.5, Math.max(2, hv * 0.34))) return shade(C.red, l, 0.8, 0.4);
+    const n = noise(u / 3.8, v / 3.8, 411);
+    return shade(n > 0.6 ? hex('#8a6a3e') : n < 0.32 ? hex('#d8c08a') : hex('#b89a64'), l, 0.65, 0.45);
+  },
+  // «Тату»: cream with black ink swirls and touches of red and blue (ornament, not prison marks)
+  tatu: (u, v, l) => {
+    const s = Math.sin(u * 0.32 + Math.sin(v * 0.55 + u * 0.08) * 2.0);
+    if (Math.abs(s) < 0.1) return shade(hex('#141210'), l, 1, 0.5);
+    if (s > 0.86) return shade(hex('#b8281e'), l, 0.75, 0.4);
+    if (s < -0.9) return shade(hex('#1e4a8a'), l, 0.75, 0.4);
+    return shade(hex('#e8dcc8'), l, 0.72, 0.32);
+  },
+  // «Плёнка»: a film strip — sprocket holes along the edges, frames with a black-and-white town
+  plenka: (u, v, l, hv) => {
+    const y = v / Math.max(1, hv);
+    if (y < 0.2 || y > 0.8) {
+      const hole = u % 4 > 1.2 && u % 4 < 2.8 && ((y > 0.06 && y < 0.14) || (y > 0.86 && y < 0.94));
+      return hole ? shade(hex('#e8e4dc'), l, 0.8, 0.25) : shade(hex('#121214'), l, 0.9, 0.9);
+    }
+    if (u % 12 < 0.9) return shade(hex('#121214'), l, 0.9, 0.9);
+    const roof = 0.8 - (0.18 + 0.32 * hash(Math.floor(u / 1.7), 0, 421)) * 0.6;
+    return y > roof ? shade(hex('#1c1c1e'), l, 0.9, 0.6) : shade(mix(hex('#8a8a8c'), hex('#e6e6e8'), 1 - (y - 0.2) / 0.6), l, 0.75, 0.3);
+  },
+  // «Космос ’88»: night-blue with stars and a red band edged in white
+  kosmos: (u, v, l, hv) => {
+    const y = v / Math.max(1, hv);
+    const d = Math.abs(y - 0.62);
+    if (d < 0.08) return shade(C.red, l, 0.7, 0.5);
+    if (Math.abs(d - 0.1) < 0.02) return shade(hex('#f2f2f4'), l, 0.8, 0.25);
+    if (hash(Math.floor(u * 0.9), Math.floor(v * 0.9), 501) > 0.9) return shade(hex('#fffbe8'), l, 0.85, 0.2);
+    return shade(mix(hex('#0a1440'), hex('#22389a'), l), l, 0.6, 0.55);
+  },
+  // «Золотой закат»: sunset gold running to red, with an engraved scroll
+  zakat: (u, v, l, hv) => {
+    const base = ramp([[0, hex('#ffd860')], [0.5, hex('#f08a24')], [1, hex('#a8321a')]], (v / Math.max(1, hv)) * 0.8 + (1 - l) * 0.3);
+    return Math.abs(Math.sin(u * 0.7 + Math.cos(v * 0.9) * 2)) < 0.12 ? shade(base, 0.35, 0.6, 0.4) : shade(base, l, 0.7, 0.45);
+  },
+  // «Электроника»: a pale handheld game's casing — a green screen with segments, red and yellow buttons
+  elektronika: (u, v, l, hv) => {
+    const y = v / Math.max(1, hv);
+    if (u > 22 && u < 40 && y > 0.25 && y < 0.7) return Math.floor(u) % 3 === 0 && Math.abs(y - 0.48) < 0.12 ? shade(hex('#1a1e14'), l, 0.9, 0.3) : shade(hex('#8a9a6a'), l, 0.75, 0.35);
+    if (Math.hypot(u - 46, (y - 0.45) * hv) < 1.5) return shade(C.red, l, 0.8, 0.4);
+    if (Math.hypot(u - 50, (y - 0.6) * hv) < 1.5) return shade(hex('#e0b020'), l, 0.8, 0.4);
+    if (Math.abs(y - 0.86) < 0.05) return shade(C.red, l, 0.7, 0.4);
+    return shade(hex('#d8d6d0'), l, 0.7, 0.35);
+  },
+  // «Ледяной камуфляж»: blocky ice camo — white, pale blue, steel blue
+  led: (u, v, l) => {
+    const n = noise(Math.floor(u / 1.6) * 0.5, Math.floor(v / 1.6) * 0.5, 511);
+    return shade(n > 0.66 ? hex('#5a8ab8') : n > 0.45 ? hex('#a8cce8') : hex('#eef6fc'), l, 0.7, 0.4);
+  },
+  // «Царский»: rich gold with engraved filigree and dark-red enamel insets
+  carsky: (u, v, l, hv) => {
+    const c = ramp([[0, hex('#3a2406')], [0.45, hex('#b88218')], [0.75, hex('#f0c040')], [1, hex('#fff2b0')]], l);
+    if (Math.abs(v / Math.max(1, hv) - 0.5) < 0.1 && Math.floor(u / 5) % 2 === 0) return shade(hex('#7a0a14'), l, 0.75, 0.5);
+    return Math.abs(Math.sin(u * 1.1 + Math.sin(v * 1.3) * 2.5) * Math.cos(v * 0.8 - u * 0.3)) < 0.08 ? shade(c, 0.3, 0.6, 0.4) : c;
+  },
+  // «Контора»: dark crimson lacquer with gold lines and gold stars
+  kontora: (u, v, l, hv) => {
+    const y = v / Math.max(1, hv);
+    if (Math.abs(y - 0.2) < 0.03 || Math.abs(y - 0.8) < 0.03) return shade(C.gold, l, 0.75, 0.5);
+    if (star(u, v, 31, hv * 0.5, Math.max(2, hv * 0.26)) || star(u, v, 15, hv * 0.5, Math.max(1.6, hv * 0.2))) return shade(C.gold, l, 0.8, 0.5);
+    return shade(mix(hex('#4a0606'), hex('#8e1414'), l), l, 0.65, 0.55);
+  },
+  // «Ядерная зима»: frost white with ice-blue cracks and a yellow radiation sign
+  yadernaya: (u, v, l, hv) => {
+    const R = Math.max(2, hv * 0.32);
+    const cx = 40;
+    const cy = hv * 0.46;
+    if (Math.hypot(u - cx, v - cy) < R * 1.15) return trefoil(u, v, cx, cy, R) ? shade(hex('#141414'), l, 1, 0.5) : shade(hex('#f0d020'), l, 0.8, 0.4);
+    if (Math.abs(noise(u / 2.5, v / 2.5, 521) - 0.5) < 0.03) return shade(hex('#4a7ab0'), l, 0.75, 0.4);
+    return shade(mix(hex('#cfe2f2'), hex('#ffffff'), noise(u / 1.2, v / 1.2, 522)), l, 0.72, 0.35);
+  },
+  // ── the first line (v0.23), retired: drawn for those who own them ──
   // «Берёзка»: the light Soviet summer camo — pale olive with dark leaf blotches
   berezka: (u, v, l) => {
     const n = noise(u / 3.2, v / 3.2, 11) * 0.7 + noise(u / 1.3, v / 1.3, 12) * 0.3;
@@ -173,6 +366,16 @@ export function paintFinish(px: Uint8ClampedArray, w: number, h: number, finish:
   if (maxX < 0) return;
   const scale = 64 / Math.max(1, maxX - minX + 1);
   const hv = (maxY - minY + 1) * scale;
+  // each column's own top and bottom (where the weapon's body is in it)
+  const top = new Int32Array(w).fill(-1);
+  const bot = new Int32Array(w).fill(-1);
+  for (let x = minX; x <= maxX; x++) {
+    for (let y = minY; y <= maxY; y++) {
+      if (px[(y * w + x) * 4 + 3]! === 0) continue;
+      if (top[x]! < 0) top[x] = y;
+      bot[x] = y;
+    }
+  }
   for (let y = minY; y <= maxY; y++) {
     for (let x = minX; x <= maxX; x++) {
       const i = (y * w + x) * 4;
@@ -184,14 +387,17 @@ export function paintFinish(px: Uint8ClampedArray, w: number, h: number, finish:
       const l = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
       const u = (x - minX + 0.5) * scale;
       const v = (y - minY + 0.5) * scale;
+      const span = Math.max(1, bot[x]! - top[x]! + 1);
+      const ly = (y - top[x]! + 0.5) / span;
+      const th = span * scale;
       let c: [number, number, number];
       if (l < 0.11) {
         // the outline stays an outline: the finish's own tone, darkened to the outline's depth
-        const tone = paint(u, v, 0.1, hv);
+        const tone = paint(u, v, 0.1, hv, ly, th);
         const tl = (0.299 * tone[0] + 0.587 * tone[1] + 0.114 * tone[2]) / 255;
         c = shade(tone, 0, Math.min(0.35, 0.1 / Math.max(0.01, tl)), 0);
       } else {
-        c = paint(u, v, l, hv);
+        c = paint(u, v, l, hv, ly, th);
         if (l > 0.86) c = mix(c, [255, 255, 255], (l - 0.86) * 2.5);
       }
       px[i] = Math.max(0, Math.min(255, Math.round(c[0])));

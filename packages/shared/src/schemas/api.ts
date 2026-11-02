@@ -19,6 +19,7 @@ import { GAME_MODES } from '../game-rules/match.js';
 import type { GameMode } from '../game-rules/match.js';
 import type { MapId } from '../maps/types.js';
 import type { AchievementId } from '../game-rules/progression.js';
+import type { Grade } from '../game-rules/grades.js';
 import type { StoryDone } from './story.js';
 import { MAX_NAME_LENGTH } from '../constants/game.js';
 import { LATIN_NAME_RE } from '../game-rules/aliases.js';
@@ -168,6 +169,12 @@ export interface ShopConfig {
 export interface CaseResult {
   weapon: WeaponId;
   rarity: Rarity;
+  inventory: Inventory;
+}
+/** v0.2.18 part 2 — POST /api/shop/character-case: a character sold for BLATS the player did not own. */
+export interface CharacterCaseResult {
+  character: CharacterId;
+  grade: Grade;
   inventory: Inventory;
 }
 /** POST /api/shop/skin-case — a skin the player did not own; equipped at once when its weapon wore none. */

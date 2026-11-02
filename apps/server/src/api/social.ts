@@ -3,8 +3,9 @@
  * the social hub (`/ws/social`); these routes are the source of truth. Only friends can write to each
  * other or send invitations; every action is rate-limited per player.
  */
-import { DirectMessageBody, FriendRequestBody, InviteFriendBody, LEADERBOARD_BY } from '@blatkom/shared';
-import type { FriendEntry, FriendsResponse, LeaderboardBy, LeaderboardEntry, LeaderboardResponse, MessagesResponse } from '@blatkom/shared';
+import { DirectMessageBody, FINISHES, FriendRequestBody, GRADES, InviteFriendBody, LEADERBOARD_BY, parseSkin } from '@blatkom/shared';
+import type { FriendCollection, FriendEntry, FriendsResponse, Grade, LeaderboardBy, LeaderboardEntry, LeaderboardResponse, MessagesResponse } from '@blatkom/shared';
+import { pgContext } from '../services/persistence.js';
 import type { RouteModule } from '../app.js';
 import { HttpError } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
@@ -44,6 +45,25 @@ export const registerSocialRoutes: RouteModule = (router, deps) => {
     const me = currentUser(ctx);
     const l = await repo().lists(me.userId);
     const res: FriendsResponse = { friends: l.friends.map(withPresence), incoming: l.incoming, outgoing: l.outgoing };
+    ctx.json(200, res);
+  });
+
+  /** v0.2.18 part 2: a friend's collection — characters and skins by grade (friends only). */
+  router.get('/api/friends/:id/collection', auth, rateLimit(readLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const id = param(ctx);
+    const r = repo();
+    if (id !== me.userId && !(await r.areFriends(me.userId, id))) throw new HttpError(403, 'not_friends', 'Only friends see each other’s collection');
+    const player = await r.card(id);
+    if (!player) throw new HttpError(404, 'player_not_found', 'No such player');
+    const inv = await pgContext(deps.sql!, deps.env, deps.log).economy.collection(id);
+    const skins = Object.fromEntries(GRADES.map((g) => [g, 0])) as Record<Grade, number>;
+    // the welcome gift is everyone's (early players): not counted
+    for (const s of inv.skins) {
+      const p = parseSkin(s);
+      if (p && !FINISHES[p.finish].gift) skins[FINISHES[p.finish].rarity]++;
+    }
+    const res: FriendCollection = { player, characters: inv.characters, skins };
     ctx.json(200, res);
   });
 

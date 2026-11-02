@@ -3,9 +3,11 @@
  * the lobby's «invite friends» panel and the card of an incoming invitation. Everything reads the
  * SocialClient store and redraws itself when it changes; the server decides every action.
  */
-import { displayNameSchema, DM_MAX_LENGTH, LEADERBOARD_BY, REFERRAL_TALONS } from '@blatkom/shared';
+import { CHARACTERS, CHARACTER_IDS, GRADES, GRADE_RANK, displayNameSchema, DM_MAX_LENGTH, LEADERBOARD_BY, REFERRAL_TALONS } from '@blatkom/shared';
 import type { DirectMessage, FriendEntry, FriendRequestEntry, FriendStatus, LeaderboardBy, LeaderboardEntry, LeaderboardResponse, PlayerCard, RoomInviteEvent, GameMode } from '@blatkom/shared';
-import { h, fill, toast, founderTag } from '../dom.js';
+import { h, fill, toast, founderTag, portrait } from '../dom.js';
+import { gradeTag } from './shop.js';
+import { charText, rarityLabel } from '../../i18n/content.js';
 import { avatarImg } from '../avatars.js';
 import type { OnlineClient } from '../../net/OnlineClient.js';
 import type { SocialClient } from '../../net/SocialClient.js';
@@ -20,6 +22,39 @@ import { openSheet } from '../sheet.js';
 const STATUS_ORDER: Record<FriendStatus, number> = { match: 0, lobby: 1, online: 2, offline: 3 };
 
 const cardAva = (c: PlayerCard, cls = '') => avatarImg(c.avatar, c.character ?? 'petya', cls);
+
+/**
+ * v0.2.18 part 2 — a friend's collection in a sheet: every character (theirs in colour with the grade's
+ * mark, the rest dimmed), the best grades first, and how many skins of each grade they have.
+ */
+export function openCollection(root: HTMLElement, online: OnlineClient, f: PlayerCard): void {
+  const body = h('div', { class: 'col fcoll', 'data-testid': 'friend-collection' }, h('div', { class: 'muted' }, t('Loading…')));
+  openSheet(root, { title: t('{name}’s collection', { name: f.name }), testid: 'collection-sheet', cls: 'sheet--collection', body });
+  online.api
+    .friendCollection(f.id)
+    .then((c) => {
+      const mine = new Set(c.characters);
+      const order = [...CHARACTER_IDS].sort((a, b) => Number(mine.has(b)) - Number(mine.has(a)) || GRADE_RANK[CHARACTERS[b].grade] - GRADE_RANK[CHARACTERS[a].grade]);
+      const skinsTotal = GRADES.reduce((n, g) => n + c.skins[g], 0);
+      body.replaceChildren(
+        h('div', { class: 'fcoll__head' }, h('b', null, t('Characters: {n} of {total}', { n: c.characters.length, total: CHARACTER_IDS.length })), h('span', { class: 'muted' }, `${t('lvl')} ${c.player.level}`)),
+        h(
+          'div',
+          { class: 'fcoll__chars' },
+          ...order.map((id) =>
+            h(
+              'span',
+              { class: `fcoll__char chargrade--${CHARACTERS[id].grade} ${mine.has(id) ? '' : 'fcoll__char--no'}`, title: `${charText(id).name} · ${rarityLabel(CHARACTERS[id].grade)}`, 'data-owned': String(mine.has(id)) },
+              portrait(id, true),
+            ),
+          ),
+        ),
+        h('b', { class: 'fcoll__skinshead' }, t('Weapon skins: {n}', { n: skinsTotal })),
+        h('div', { class: 'fcoll__skins' }, ...[...GRADES].reverse().map((g) => h('span', { class: 'fcoll__skin', 'data-grade': g }, gradeTag(g), h('b', null, String(c.skins[g]))))),
+      );
+    })
+    .catch((e) => body.replaceChildren(h('div', { class: 'muted' }, apiErrorText(e))));
+}
 
 /** «5 min ago», «3 h ago», «2 d ago». */
 export function ago(iso: string | null): string {
@@ -112,7 +147,7 @@ export function renderFriends(o: { online: OnlineClient; root: HTMLElement; onPl
     h(
       'div',
       { class: `player friend friend--${f.status}`, 'data-friend': f.name },
-      h('span', { class: 'friend__ava' }, cardAva(f), dot(f.status)),
+      h('button', { class: 'friend__ava friend__ava--btn', type: 'button', 'data-testid': 'friend-collection-open', title: t('Collection'), 'aria-label': t('{name}’s collection', { name: f.name }), onclick: () => openCollection(o.root, online, f) }, cardAva(f), dot(f.status)),
       h('div', { class: 'n col', style: 'gap:0;min-width:0' }, h('span', { class: 'friend__name' }, f.name, f.founder ? founderTag() : null), h('span', { class: 'muted friend__status' }, `${statusText(f)} · ${t('lvl')} ${f.level}`)),
       f.unread > 0 ? h('span', { class: 'nbadge', title: t('Unread messages') }, String(f.unread)) : null,
       h('button', { class: 'btn btn--small', 'data-testid': 'open-chat', onclick: () => openChat(o.root, online, f) }, t('Message')),

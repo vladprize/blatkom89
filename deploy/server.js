@@ -7820,6 +7820,12 @@ var EnvSchema = external_exports.object({
   MATCH_FILL_BOTS: bool.default("true"),
   /** Paid cases can be switched off where randomised paid items are restricted (docs/ECONOMY.md). */
   CASES_ENABLED: bool.default("true"),
+  /**
+   * v0.2.18 part 2: the welcome gift for early players («Акула» and «Блатком ’89» on every weapon) is given
+   * to whoever signs in before this moment (ISO 8601, e.g. 2027-01-31T23:59:59Z). Unset: no end yet — the
+   * owner sets the date when the window should close; players who got the gift keep it.
+   */
+  WELCOME_GIFT_UNTIL: external_exports.coerce.date().optional(),
   /** Card payments for BLATS (Stripe Checkout). Both keys are required to enable them. */
   STRIPE_SECRET_KEY: external_exports.string().optional(),
   STRIPE_WEBHOOK_SECRET: external_exports.string().optional(),
@@ -10081,7 +10087,20 @@ var CHARACTER_IDS = [
   "lisa",
   "nosorog",
   "gorilla",
-  "lev"
+  "lev",
+  // v0.2.18 part 2: the owner's twelve new sheets (cheapest first)
+  "zaychiha",
+  "zayac",
+  "vasilisk",
+  "lenivec",
+  "kozel",
+  "pingvin",
+  "tigr",
+  "pauk",
+  "bogomol",
+  "ezh",
+  "kasatka",
+  "zvezda"
 ];
 var CHARACTER_BASE_STATS = Object.freeze({ maxHp: 100, speed: 1, radius: 10 });
 var CHARACTERS = {
@@ -10498,6 +10517,210 @@ var CHARACTERS = {
     grade: "legendary",
     accent: "#d4a237",
     tag: "Arkadich"
+  },
+  zaychiha: {
+    id: "zaychiha",
+    name: "Cherry",
+    nickname: "The Bunny",
+    species: "Rabbit",
+    role: "Scouting, sabotage and special operations.",
+    personality: "Bold, cunning, charming. Always gets her way.",
+    quote: "First a smile, then a shootout.",
+    district: "Centre",
+    business: "Scouting, contacts, special errands",
+    weaponsNote: "SMGs, pistols, knife",
+    lore: "On Fridays and Saturdays Cherry dances at the restaurant; on the other days she finds things out: who came to town with a full suitcase, who meets whom at the station, which warehouse has a new lock. A red jacket on her shoulders, gold hoops in her ears and a smile for everyone. The ones she smiles at twice should already be running.",
+    tier: "premium",
+    grade: "common",
+    accent: "#e0a070",
+    tag: "Cherry"
+  },
+  zayac: {
+    id: "zayac",
+    name: "Dlinny",
+    nickname: "The Hare",
+    species: "Hare",
+    role: "A fast striker: scouting and sabotage.",
+    personality: "Cool-headed, bold, sharp-tongued. Acts fast and hard.",
+    quote: "Fast, quiet and without a trace.",
+    district: "East District",
+    business: "Scouting, raids, eliminations",
+    weaponsNote: "SMGs, rifles, knife",
+    lore: "Dlinny \u2014 \xABLanky\xBB \u2014 got his name at school, for the ears and the legs: nobody in the East District has ever caught him, neither the sports school\u2019s coach nor the police. The scar across his face is from the only time he stood still. A black tracksuit, gold on his neck and fingers, a cigarette in his teeth: in, out and gone before the dog starts barking.",
+    tier: "premium",
+    grade: "common",
+    accent: "#9a9aa4",
+    tag: "Dlinny"
+  },
+  vasilisk: {
+    id: "vasilisk",
+    name: "Vasilisk",
+    nickname: "Leather Crest",
+    species: "Basilisk lizard",
+    role: "A sly operator: contacts, schemes and special orders.",
+    personality: "Cold, calculating, ironic. Always a step ahead.",
+    quote: "The main thing is to change your colours in time.",
+    district: "Centre",
+    business: "Schemes, brokering, special cargo",
+    weaponsNote: "SMGs, rifles, pistols",
+    lore: "Vasilisk has been a Komsomol activist, a co-op chairman, a guide for foreign tourists and a supplier of \xABimported\xBB sunglasses \u2014 sometimes all in one week. He changes sides the way he changes shirts, and he has a paper for everything. A leather jacket, a loud shirt, a gold chain and a crest he combs for twenty minutes every morning: they say it is the only thing about him that has never changed.",
+    tier: "premium",
+    grade: "rare",
+    accent: "#a8b43a",
+    tag: "Vasilisk"
+  },
+  lenivec: {
+    id: "lenivec",
+    name: "Tuz",
+    nickname: "The Sloth",
+    species: "Sloth",
+    role: "Tank, zone control, survival.",
+    personality: "Calm, unhurried, impenetrable.",
+    quote: "No need to hurry\u2026",
+    district: "Chemical Plant",
+    business: "Protection, security, haulage",
+    weaponsNote: "Claws, knuckle-duster, sawn-off",
+    lore: "Tuz \u2014 \xABthe Ace\xBB \u2014 runs the plant\u2019s night haulage and everything that rides along with it. Nobody has ever seen him in a hurry: he gets up at noon, drinks his tea from a mug with the ace of spades and has listened to the same cassette for ten years. Those who tried to hurry him are in no hurry now either. A maroon tracksuit, a gold chain with the ace and claws like a rake.",
+    tier: "premium",
+    grade: "rare",
+    accent: "#8a2a34",
+    tag: "Tuz"
+  },
+  kozel: {
+    id: "kozel",
+    name: "Rytsar",
+    nickname: "The Goat",
+    species: "Goat",
+    role: "Tank, close combat, pressure.",
+    personality: "Aggressive, stubborn, reckless.",
+    quote: "Come closer \u2014 I\u2019ll butt you!",
+    district: "Chemical Plant",
+    business: "Showdowns, security, collecting debts",
+    weaponsNote: "Horns, chain, cleaver",
+    lore: "They called him Rytsar \u2014 \xABthe Knight\xBB \u2014 as a joke, after he rammed the gates of the plant\u2019s depot to collect his bonus; the name stuck, and so did the dent in the gates. Horns curled like wheels, a tag with \xAB89\xBB in his ear and a chain across his chest instead of a sword belt. He can\u2019t retreat and doesn\u2019t want to learn: it\u2019s easier to go straight through.",
+    tier: "premium",
+    grade: "rare",
+    accent: "#cfc6b4",
+    tag: "Rytsar"
+  },
+  pingvin: {
+    id: "pingvin",
+    name: "Pingvin",
+    nickname: "The Drifter",
+    species: "Penguin",
+    role: "Runs the shadow supplies, settles conflicts, keeps the district in fear.",
+    personality: "Cold-blooded, tough, loyal to his own. Has no faith in the weak.",
+    quote: "In this world there are no friends \u2014 only your own and your interests.",
+    district: "Port",
+    business: "Supplies, smuggling, settling questions",
+    weaponsNote: "SMGs, shotguns, knife",
+    lore: "Pingvin spent twenty years at sea on whalers and freighters and came ashore with a chain heavier than an anchor and a sailor\u2019s rule: your own are your own, the rest is cargo. Nothing is unloaded at the port without his nod, and whatever falls off a crane falls straight to him. He doesn\u2019t feel the cold, never raises his voice and never forgets a debt.",
+    tier: "premium",
+    grade: "rare",
+    accent: "#e89a24",
+    tag: "Pingvin"
+  },
+  tigr: {
+    id: "tigr",
+    name: "Zver",
+    nickname: "The Tiger",
+    species: "Tiger",
+    role: "Stormtrooper, close combat, suppression.",
+    personality: "Wild, proud, territorial, merciless.",
+    quote: "In this district, I am the law!",
+    district: "Chemical Plant",
+    business: "Showdowns, collecting debts, muscle jobs",
+    weaponsNote: "Claws, fists, knife",
+    lore: "Zver \u2014 \xABthe Beast\xBB \u2014 came to the Chemical Plant district from the circus, when the circus left without him, and has been settling scores here ever since. A sheepskin vest over a tank top, a chain as thick as a finger and a roar that empties the bus stop on the next street. He doesn\u2019t negotiate: he decides whose territory it is, and usually it is his.",
+    tier: "premium",
+    grade: "epic",
+    accent: "#e07a1c",
+    tag: "Zver"
+  },
+  pauk: {
+    id: "pauk",
+    name: "Arakh",
+    nickname: "The Spider",
+    species: "Spider",
+    role: "Territory control, ambushes and traps.",
+    personality: "Cunning, patient, cruel. Always holds the web.",
+    quote: "Sooner or later everyone ends up in my web.",
+    district: "Industrial Zone",
+    business: "Controlling the spots, collecting shares, eliminations",
+    weaponsNote: "SMGs, shotguns, grenades",
+    lore: "Arakh owns no kiosk, no garage and no stall \u2014 yet every one of them in the Industrial Zone pays him a share. He knows who drinks where, who owes whom and which way everyone walks home. He sits for days in the back room of the canteen, a cigar in his fangs and eight eyes on the door, and waits: sooner or later everyone comes in.",
+    tier: "premium",
+    grade: "epic",
+    accent: "#c02020",
+    tag: "Arakh"
+  },
+  bogomol: {
+    id: "bogomol",
+    name: "Zhnets",
+    nickname: "The Mantis",
+    species: "Mantis",
+    role: "Assassin, flanks, quick strikes.",
+    personality: "Cold, calculating, predatory.",
+    quote: "You\u2019re already in my claws.",
+    district: "Chemical Plant",
+    business: "Eliminations, clean-ups, special orders",
+    weaponsNote: "Blade-claws; pistols, SMGs, rifles",
+    lore: "Zhnets \u2014 \xABthe Reaper\xBB \u2014 came out of the chemical plant\u2019s closed laboratory, the one behind the door with the yellow sign, and the plant pretends he never did. He takes the orders everyone else turns down and never haggles. He stands still for hours, moves without a sound and strikes in one movement; the district says his name in a low voice.",
+    tier: "premium",
+    grade: "epic",
+    accent: "#6f9a2e",
+    tag: "Zhnets"
+  },
+  ezh: {
+    id: "ezh",
+    name: "Igla",
+    nickname: "The Mutant Hedgehog",
+    species: "Mutant hedgehog",
+    role: "Assault, close combat, pressure.",
+    personality: "Mutated, aggressive, uncontrollable.",
+    quote: "I prick big-time.",
+    district: "Chemical Plant",
+    business: "Experimental developments, escape from the laboratory",
+    weaponsNote: "Blade-claws; pistols, SMGs, rifles",
+    lore: "Igla \u2014 \xABthe Needle\xBB \u2014 was an ordinary hedgehog from the plant\u2019s nature corner until the laboratory picked him for \xABExperiment No. 7\xBB. Now his quills are as long as knitting needles, his claws as long as knives, and the laboratory has one window fewer: that is how he left. He hasn\u2019t learned to talk calmly yet \u2014 the district hears him before it sees him.",
+    tier: "premium",
+    grade: "epic",
+    accent: "#c8b48a",
+    tag: "Igla"
+  },
+  kasatka: {
+    id: "kasatka",
+    name: "Kasatik",
+    nickname: "The Soviet Gangster",
+    species: "Orca",
+    role: "The district\u2019s criminal authority.",
+    personality: "Tough, a little taciturn, plans his moves ahead. Respects strength and agreements.",
+    quote: "I gave my word \u2014 it will happen. And if you didn\u2019t understand, we\u2019ll explain.",
+    district: "Port",
+    business: "Controlling supplies, protection, showdowns",
+    weaponsNote: "SMGs, rifles, shotguns",
+    lore: "At the port they say the sea belongs to the state and the harbour to Kasatik. He came from the north on a fishing trawler with one suitcase; ten years later every freight forwarder brings him a share. A flat cap, a sheepskin coat with a fur collar and a scar across his face \u2014 where it came from, he doesn\u2019t say. He keeps his word, and he explains only once.",
+    tier: "premium",
+    grade: "legendary",
+    accent: "#8a6a44",
+    tag: "Kasatik"
+  },
+  zvezda: {
+    id: "zvezda",
+    name: "Pyatak",
+    nickname: "The Starfish",
+    species: "Starfish",
+    role: "Anomaly, close combat, crowd control.",
+    personality: "Strange, hard to kill, reckless.",
+    quote: "Spread out!",
+    district: "Chemical Plant",
+    business: "Experiments, smuggling, survival",
+    weaponsNote: "Pistols, SMGs, rifles \u2014 and five arms to hold them",
+    lore: "Nobody knows where Pyatak came from: the night watchman swears he crawled out of the chemical plant\u2019s settling tank in the spring of \u201986, the laboratory says it lost a jar. Since then he has been selling whatever lies badly at the plant, sleeping in the cold store and living on sprats in tomato sauce. Five arms, a mouthful of teeth, a tank top, the cheapest cigarettes \u2014 and before a fight, one word.",
+    tier: "premium",
+    grade: "legendary",
+    accent: "#d8584a",
+    tag: "Pyatak"
   }
 };
 function isCharacterId(v) {
@@ -11021,27 +11244,85 @@ var GRADE_COLORS = Object.freeze({
 var GRADE_RANK = Object.freeze({ common: 0, rare: 1, epic: 2, legendary: 3 });
 
 // packages/shared/src/game-rules/skins.ts
-var FINISH_IDS = ["berezka", "rzhavchina", "zima", "flora", "gzhel", "pioner", "malahit", "hohloma", "zoloto", "yantar"];
+var FINISH_IDS = [
+  // the owner's line, in its order
+  "haki",
+  "iznos",
+  "akulka",
+  "blatkom",
+  "sparta",
+  "sport",
+  "devyanostye",
+  "malina",
+  "video",
+  "cherkizon",
+  "radiaciya",
+  "afgan",
+  "tatu",
+  "plenka",
+  "kosmos",
+  "zakat",
+  "hohloma",
+  "elektronika",
+  "led",
+  "carsky",
+  "kontora",
+  "yadernaya",
+  // the first line (v0.23), retired: kept by those who own them, no longer sold or dropped
+  "berezka",
+  "rzhavchina",
+  "zima",
+  "flora",
+  "gzhel",
+  "pioner",
+  "malahit",
+  "zoloto",
+  "yantar"
+];
 var SKIN_RARITIES = GRADES;
 var FINISHES = Object.freeze({
-  berezka: { id: "berezka", name: "Birch Camo", rarity: "common" },
-  rzhavchina: { id: "rzhavchina", name: "Rust", rarity: "common" },
-  zima: { id: "zima", name: "Winter", rarity: "common" },
-  flora: { id: "flora", name: "Flora", rarity: "rare" },
-  gzhel: { id: "gzhel", name: "Gzhel", rarity: "rare" },
-  pioner: { id: "pioner", name: "Pioneer", rarity: "rare" },
-  malahit: { id: "malahit", name: "Malachite", rarity: "epic" },
+  haki: { id: "haki", name: "Khaki", rarity: "common" },
+  iznos: { id: "iznos", name: "Worn", rarity: "common" },
+  akulka: { id: "akulka", name: "Shark", rarity: "common", gift: true },
+  blatkom: { id: "blatkom", name: "Blatkom \u201989", rarity: "common", gift: true },
+  sparta: { id: "sparta", name: "Spartakiad \u201980", rarity: "rare" },
+  sport: { id: "sport", name: "Tracksuit", rarity: "rare" },
+  devyanostye: { id: "devyanostye", name: "Wild Nineties", rarity: "rare" },
+  malina: { id: "malina", name: "Raspberry Jacket", rarity: "rare" },
+  video: { id: "video", name: "Video Parlour", rarity: "rare" },
+  cherkizon: { id: "cherkizon", name: "Cherkizon", rarity: "rare" },
+  radiaciya: { id: "radiaciya", name: "Radioactive", rarity: "rare" },
+  afgan: { id: "afgan", name: "Afghan", rarity: "rare" },
+  tatu: { id: "tatu", name: "Tattoo", rarity: "rare" },
+  plenka: { id: "plenka", name: "Film", rarity: "rare" },
+  kosmos: { id: "kosmos", name: "Cosmos \u201988", rarity: "epic" },
+  zakat: { id: "zakat", name: "Golden Sunset", rarity: "epic" },
   hohloma: { id: "hohloma", name: "Khokhloma", rarity: "epic" },
-  zoloto: { id: "zoloto", name: "Party Gold", rarity: "legendary" },
-  yantar: { id: "yantar", name: "Amber", rarity: "legendary" }
+  elektronika: { id: "elektronika", name: "Elektronika", rarity: "epic" },
+  led: { id: "led", name: "Ice Camo", rarity: "epic" },
+  carsky: { id: "carsky", name: "Tsar\u2019s", rarity: "legendary" },
+  kontora: { id: "kontora", name: "The Office", rarity: "legendary" },
+  yadernaya: { id: "yadernaya", name: "Nuclear Winter", rarity: "legendary" },
+  berezka: { id: "berezka", name: "Birch Camo", rarity: "common", retired: true },
+  rzhavchina: { id: "rzhavchina", name: "Rust", rarity: "common", retired: true },
+  zima: { id: "zima", name: "Winter", rarity: "common", retired: true },
+  flora: { id: "flora", name: "Flora", rarity: "rare", retired: true },
+  gzhel: { id: "gzhel", name: "Gzhel", rarity: "rare", retired: true },
+  pioner: { id: "pioner", name: "Pioneer", rarity: "rare", retired: true },
+  malahit: { id: "malahit", name: "Malachite", rarity: "epic", retired: true },
+  zoloto: { id: "zoloto", name: "Party Gold", rarity: "legendary", retired: true },
+  yantar: { id: "yantar", name: "Amber", rarity: "legendary", retired: true }
 });
 var FREE_FINISHES = ["berezka", "rzhavchina"];
+var WELCOME_FINISHES = FINISH_IDS.filter((f2) => FINISHES[f2].gift);
+var SHOP_FINISHES = FINISH_IDS.filter((f2) => !FINISHES[f2].gift && !FINISHES[f2].retired);
+var LINE_FINISHES = FINISH_IDS.filter((f2) => !FINISHES[f2].retired);
 function isFreeFinish(f2) {
   return FREE_FINISHES.includes(f2);
 }
 var SKIN_PRICES = Object.freeze({ common: 99, rare: 199, epic: 299, legendary: 499 });
 function skinPrice(finish) {
-  return isFreeFinish(finish) ? null : { currency: "diamonds", amount: SKIN_PRICES[FINISHES[finish].rarity], level: 1 };
+  return SHOP_FINISHES.includes(finish) ? { currency: "diamonds", amount: SKIN_PRICES[FINISHES[finish].rarity], level: 1 } : null;
 }
 function ownsSkin(owned, weapon, finish) {
   if (isFreeFinish(finish)) return true;
@@ -11065,12 +11346,17 @@ function parseSkin(id) {
   const finish = id.slice(dot + 1);
   return isWeaponId(weapon) && isFinishId(finish) && SKINNABLE_WEAPONS.includes(weapon) ? { weapon, finish } : null;
 }
-function allSkins() {
+function lineSkins() {
   const out = [];
-  for (const w of SKINNABLE_WEAPONS) for (const f2 of FINISH_IDS) out.push(skinId(w, f2));
+  for (const w of SKINNABLE_WEAPONS) for (const f2 of LINE_FINISHES) out.push(skinId(w, f2));
   return out;
 }
-var CASE_FINISHES = FINISH_IDS.filter((f2) => !isFreeFinish(f2));
+function welcomeSkins() {
+  const out = [];
+  for (const w of SKINNABLE_WEAPONS) for (const f2 of WELCOME_FINISHES) out.push(skinId(w, f2));
+  return out;
+}
+var CASE_FINISHES = SHOP_FINISHES;
 function skinCaseOdds(owned) {
   const left = new Map(SKIN_RARITIES.map((r) => [r, 0]));
   for (const w of SKINNABLE_WEAPONS) for (const f2 of CASE_FINISHES) if (!owned.has(skinId(w, f2))) left.set(FINISHES[f2].rarity, left.get(FINISHES[f2].rarity) + 1);
@@ -11205,6 +11491,31 @@ function drawCase(owned, r) {
     if (x < 0) return e2;
   }
   return left[left.length - 1];
+}
+var CHARACTER_CASE_PRICE = { currency: "diamonds", amount: 299, level: 1 };
+var CHARACTER_CASE_CHANCE = Object.freeze({ common: 40, rare: 30, epic: 20, legendary: 10 });
+var CASE_CHARACTERS = CHARACTER_IDS.filter((c) => CHARACTER_PRICES[c]?.currency === "diamonds");
+function characterCaseOdds(owned) {
+  const left = (g) => CASE_CHARACTERS.some((c) => CHARACTERS[c].grade === g && !owned.has(c));
+  const total = GRADES.reduce((s, g) => s + (left(g) ? CHARACTER_CASE_CHANCE[g] : 0), 0);
+  const out = {};
+  for (const g of GRADES) out[g] = total === 0 || !left(g) ? 0 : CHARACTER_CASE_CHANCE[g] / total * 100;
+  return out;
+}
+function drawCharacter(owned, rand) {
+  const odds = characterCaseOdds(owned);
+  let x = Math.min(Math.max(rand(), 0), 0.999999999) * 100;
+  let grade = null;
+  for (const g of GRADES) {
+    if (odds[g] <= 0) continue;
+    grade = g;
+    x -= odds[g];
+    if (x < 0) break;
+  }
+  if (!grade) return null;
+  const pool = CASE_CHARACTERS.filter((c) => CHARACTERS[c].grade === grade && !owned.has(c));
+  if (pool.length === 0) return null;
+  return { character: pool[Math.min(pool.length - 1, Math.floor(Math.min(Math.max(rand(), 0), 0.999999999) * pool.length))], grade };
 }
 var DIAMOND_PACKS = [
   { id: "b99", diamonds: 99, usdCents: 99 },
@@ -12156,7 +12467,33 @@ var STORY_CHAPTERS = [
   { campaign: "uchastkovy", chapter: 3, ready: true, achievement: "story_uchastkovy_3", talons: 700, characters: [], skins: [] },
   { campaign: "uchastkovy", chapter: 4, ready: false, achievement: null, talons: 1e3, characters: [], skins: [] }
 ];
-var STORY_CARD_INDEX = CHARACTER_IDS.filter((c) => c !== "petya" && c !== "uchastkovy");
+var STORY_CAST = {
+  vorona: { campaign: "petya", chapter: 1 },
+  mihalych: { campaign: "petya", chapter: 1 },
+  valuta: { campaign: "petya", chapter: 1 },
+  uchastkovy: { campaign: "petya", chapter: 1 },
+  varan: { campaign: "petya", chapter: 2 },
+  tarakan: { campaign: "petya", chapter: 2 },
+  popugay: { campaign: "petya", chapter: 2 },
+  zmeya: { campaign: "petya", chapter: 2 },
+  krysa: { campaign: "petya", chapter: 3 },
+  buyvol: { campaign: "petya", chapter: 3 },
+  svinya: { campaign: "petya", chapter: 3 },
+  golub: { campaign: "petya", chapter: 3 },
+  koshka: { campaign: "uchastkovy", chapter: 1 },
+  lisa: { campaign: "uchastkovy", chapter: 1 },
+  piranya: { campaign: "uchastkovy", chapter: 1 },
+  petya: { campaign: "uchastkovy", chapter: 1 },
+  akula: { campaign: "uchastkovy", chapter: 2 },
+  lobster: { campaign: "uchastkovy", chapter: 2 },
+  oryol: { campaign: "uchastkovy", chapter: 2 },
+  leopard: { campaign: "uchastkovy", chapter: 3 },
+  slon: { campaign: "uchastkovy", chapter: 3 },
+  nosorog: { campaign: "uchastkovy", chapter: 3 },
+  gorilla: { campaign: "uchastkovy", chapter: 3 },
+  lev: { campaign: "uchastkovy", chapter: 4 }
+};
+var STORY_CARD_INDEX = CHARACTER_IDS.filter((c) => c !== "petya" && c !== "uchastkovy" && STORY_CAST[c] !== void 0);
 var BY_ID = new Map(STORY_MISSIONS.map((m) => [m.id, m]));
 function storyMission(id) {
   return BY_ID.get(id);
@@ -16089,7 +16426,7 @@ var PRIMARIES = ["avtomat", "avtomat", "obrez", "ksyuha", "uzi", "ppsh", "mp5", 
 var SIDEARMS2 = ["pistol", "pistol", "pistol", "tt", "p92", "deagle"];
 var MELEE = ["montirovka", "montirovka", "bita", "nozh", "topor"];
 var GADGETS2 = ["f1", "f1", "f1", "molotov", "flash", "smoke"];
-var FILL_FINISHES = ["berezka", "berezka", "berezka", "rzhavchina", "rzhavchina", "zima", "zima", "flora", "flora", "gzhel", "pioner", "malahit", "hohloma", "zoloto"];
+var FILL_FINISHES = ["akulka", "akulka", "blatkom", "blatkom", "haki", "haki", "iznos", "sport", "devyanostye", "cherkizon", "afgan", "video", "kosmos", "hohloma", "carsky"];
 var pick = (rnd, a) => a[Math.floor(rnd() * a.length) % a.length];
 function fillPersona(rnd, o) {
   let name = fillNickname(rnd, o.lang);
@@ -16391,7 +16728,7 @@ var SERVER_EVENT_PROPS = {
   shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget", "skin"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
   mod_bought: external_exports.object({ weapon: external_exports.string(), mod: external_exports.string(), cost: external_exports.number().int() }),
   /** The weapon case and (v0.23) the skin case: `kind` skin carries the finish. */
-  case_opened: external_exports.object({ weapon: external_exports.string(), rarity: external_exports.enum(["common", "rare", "epic", "legendary"]), price: external_exports.number().int(), kind: external_exports.enum(["weapon", "skin"]).optional(), finish: external_exports.string().max(24).optional() }),
+  case_opened: external_exports.object({ weapon: external_exports.string().optional(), rarity: external_exports.enum(["common", "rare", "epic", "legendary"]), price: external_exports.number().int(), kind: external_exports.enum(["weapon", "skin", "character"]).optional(), finish: external_exports.string().max(24).optional(), character: external_exports.string().max(24).optional() }),
   payment_completed: external_exports.object({ provider: external_exports.string(), packId: external_exports.string(), diamonds: external_exports.number().int(), amountCents: external_exports.number().int() }),
   email_linked: external_exports.object({}),
   /** v0.3: a provider attached to an account (google, facebook, discord, reddit, telegram). */
@@ -17597,16 +17934,21 @@ var EconomyError = class extends Error {
   }
   refusal;
 };
+function welcomeGiftOpen(until, now = /* @__PURE__ */ new Date()) {
+  return until === null || now.getTime() < until.getTime();
+}
 function secureRandom() {
   return randomInt(0, 2 ** 32) / 2 ** 32;
 }
 var EconomyRepo = class {
-  constructor(sql2, log2) {
+  constructor(sql2, log2, welcomeUntil = null) {
     this.sql = sql2;
     this.log = log2;
+    this.welcomeUntil = welcomeUntil;
   }
   sql;
   log;
+  welcomeUntil;
   /** Builds the inventory from the wallet row, owned items and modifications. */
   async load(tx, userId, wallet) {
     const items = await tx`SELECT kind, item_id FROM user_items WHERE user_id = ${userId}`;
@@ -17614,7 +17956,7 @@ var EconomyRepo = class {
     const weapons = new Set(FREE_WEAPONS);
     const characters = new Set(FREE_CHARACTERS);
     const gadgets = new Set(FREE_GADGETS);
-    const skins = /* @__PURE__ */ new Set();
+    const skins = new Set(wallet.welcome_gift_at ? welcomeSkins() : []);
     for (const it of items) {
       if (it.kind === "weapon" && isWeaponId(it.item_id)) weapons.add(it.item_id);
       if (it.kind === "character" && isCharacterId(it.item_id)) characters.add(it.item_id);
@@ -17646,7 +17988,8 @@ var EconomyRepo = class {
   }
   async lockWallet(tx, userId) {
     await tx`INSERT INTO profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
-    const rows = await tx`SELECT tokens, diamonds, level, loadout FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+    if (welcomeGiftOpen(this.welcomeUntil)) await tx`UPDATE profiles SET welcome_gift_at = now() WHERE user_id = ${userId} AND welcome_gift_at IS NULL`;
+    const rows = await tx`SELECT tokens, diamonds, level, loadout, welcome_gift_at FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
     return rows[0];
   }
   async debit(tx, userId, currency, amount, balanceBefore, reason, ref) {
@@ -17658,8 +18001,17 @@ var EconomyRepo = class {
   }
   async inventory(userId) {
     await this.sql`INSERT INTO profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
-    const rows = await this.sql`SELECT tokens, diamonds, level, loadout FROM profiles WHERE user_id = ${userId}`;
+    if (welcomeGiftOpen(this.welcomeUntil)) await this.sql`UPDATE profiles SET welcome_gift_at = now() WHERE user_id = ${userId} AND welcome_gift_at IS NULL`;
+    const rows = await this.sql`SELECT tokens, diamonds, level, loadout, welcome_gift_at FROM profiles WHERE user_id = ${userId}`;
     return this.load(this.sql, userId, rows[0]);
+  }
+  /**
+   * v0.2.18 part 2 — what a player owns, read only (a friend's collection): nothing is given or changed
+   * (the welcome gift counts only when the player already has it).
+   */
+  async collection(userId) {
+    const rows = await this.sql`SELECT tokens, diamonds, level, loadout, welcome_gift_at FROM profiles WHERE user_id = ${userId}`;
+    return this.load(this.sql, userId, rows[0] ?? { tokens: 0, diamonds: 0, level: 1, loadout: null, welcome_gift_at: null });
   }
   /** Loadout and owned characters of a player joining a room. */
   async gear(userId) {
@@ -17736,6 +18088,29 @@ var EconomyRepo = class {
       await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${entry.weapon}, 'weapon', 'case') ON CONFLICT DO NOTHING`;
       this.log.info("case opened", { userId, weapon: entry.weapon, rarity: entry.rarity });
       return { entry, inventory: await this.load(tx, userId, { ...wallet, [price.currency]: balance - price.amount }) };
+    });
+  }
+  /**
+   * v0.2.18 part 2 — opens the character case: a character sold for BLATS that the player does not own yet
+   * (never a duplicate, never a free one or one of the three for talons).
+   */
+  async openCharacterCase(userId, rand = secureRandom) {
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      const drop = drawCharacter(new Set(inv.characters), rand);
+      if (!drop) throw new EconomyError("collection_complete");
+      const price = CHARACTER_CASE_PRICE;
+      const balance = price.currency === "tokens" ? wallet.tokens : wallet.diamonds;
+      if (inv.level < price.level) throw new EconomyError("level");
+      if (balance < price.amount) throw new EconomyError("funds");
+      const [opening] = await tx`
+        INSERT INTO case_openings (user_id, kind, character_id, rarity, price, currency)
+        VALUES (${userId}, 'character', ${drop.character}, ${drop.grade}, ${price.amount}, ${price.currency}) RETURNING id`;
+      await this.debit(tx, userId, price.currency, price.amount, balance, "case", `charcase:${opening.id}`);
+      await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${drop.character}, 'character', 'case') ON CONFLICT DO NOTHING`;
+      this.log.info("character case opened", { userId, character: drop.character, grade: drop.grade });
+      return { ...drop, inventory: await this.load(tx, userId, { ...wallet, [price.currency]: balance - price.amount }) };
     });
   }
   /**
@@ -19485,7 +19860,7 @@ function pgContext(sql2, env2, log2) {
     invites: new PgInvites(sql2),
     analytics,
     adminAuth: new AdminAuth(sql2, env2.SESSION_SECRET, env2.ADMIN_SESSION_TTL_HOURS, env2.PUBLIC_URL.startsWith("https://"), origins),
-    economy: new EconomyRepo(sql2, log2),
+    economy: new EconomyRepo(sql2, log2, env2.WELCOME_GIFT_UNTIL ?? null),
     emailAuth: new EmailAuth(sql2, env2.SESSION_SECRET, log2),
     payments: new PaymentService(
       sql2,
@@ -20202,7 +20577,8 @@ async function makeFounder(sql2, userId) {
     for (const c of CHARACTER_IDS) await give("character", c);
     for (const w of WEAPON_IDS) await give("weapon", w);
     for (const g of GADGET_IDS) await give("gadget", g);
-    for (const s of allSkins()) if (!isFreeFinish(parseSkin(s).finish)) await give("skin", s);
+    for (const s of lineSkins()) if (!FINISHES[parseSkin(s).finish].gift) await give("skin", s);
+    await tx`UPDATE profiles SET welcome_gift_at = COALESCE(welcome_gift_at, now()) WHERE user_id = ${userId}`;
     for (const w of WEAPON_IDS) {
       for (const m of modsFor(WEAPONS[w])) {
         const r = await tx`INSERT INTO weapon_mods (user_id, weapon_id, mod_id) VALUES (${userId}, ${w}, ${m}) ON CONFLICT DO NOTHING RETURNING mod_id`;
@@ -21224,6 +21600,15 @@ var registerShopRoutes = (router, deps) => {
     const res = { weapon: entry.weapon, rarity: entry.rarity, inventory };
     ctx.json(200, res);
   });
+  router.post("/api/shop/character-case", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    if (!deps.env.CASES_ENABLED) throw new HttpError(403, "cases_disabled", "Cases are switched off on this server");
+    const user = currentUser(ctx);
+    adultCheck(await ctx.body(CaseOpenRequest, 1024), CHARACTER_CASE_PRICE);
+    const { character, grade, inventory } = await guard(() => pg().economy.openCharacterCase(user.userId));
+    deps.services.analytics.server("case_opened", { rarity: grade, price: CHARACTER_CASE_PRICE.amount, currency: CHARACTER_CASE_PRICE.currency, kind: "character", character }, user);
+    const res = { character, grade, inventory };
+    ctx.json(200, res);
+  });
   router.post("/api/shop/skin-case", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
     if (!deps.env.CASES_ENABLED) throw new HttpError(403, "cases_disabled", "Cases are switched off on this server");
     const user = currentUser(ctx);
@@ -21599,6 +21984,22 @@ var registerSocialRoutes = (router, deps) => {
     const me = currentUser(ctx);
     const l = await repo().lists(me.userId);
     const res = { friends: l.friends.map(withPresence), incoming: l.incoming, outgoing: l.outgoing };
+    ctx.json(200, res);
+  });
+  router.get("/api/friends/:id/collection", auth, rateLimit(readLimiter, byUser), async (ctx) => {
+    const me = currentUser(ctx);
+    const id = param(ctx);
+    const r = repo();
+    if (id !== me.userId && !await r.areFriends(me.userId, id)) throw new HttpError(403, "not_friends", "Only friends see each other\u2019s collection");
+    const player = await r.card(id);
+    if (!player) throw new HttpError(404, "player_not_found", "No such player");
+    const inv = await pgContext(deps.sql, deps.env, deps.log).economy.collection(id);
+    const skins = Object.fromEntries(GRADES.map((g) => [g, 0]));
+    for (const s of inv.skins) {
+      const p = parseSkin(s);
+      if (p && !FINISHES[p.finish].gift) skins[FINISHES[p.finish].rarity]++;
+    }
+    const res = { player, characters: inv.characters, skins };
     ctx.json(200, res);
   });
   router.post("/api/friends/request", auth, rateLimit(requestLimiter, byUser), async (ctx) => {

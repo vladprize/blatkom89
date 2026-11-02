@@ -31,7 +31,7 @@ occurred_at, received_at, platform, props jsonb)`.
 | `identity_linked` | v0.3: `POST /api/auth/oauth/finish`, `POST /api/auth/telegram/web` — a provider attached to an existing account | `provider` (`google`, `facebook`, `discord`, `reddit`, `telegram`) |
 | `shop_purchase` | `POST /api/shop/buy` | `kind` (`weapon`\|`character`\|`gadget`), `item`, `currency`, `amount` |
 | `mod_bought` | `POST /api/shop/mod` | `weapon`, `mod`, `cost` |
-| `case_opened` | `POST /api/shop/case`, `POST /api/shop/skin-case` (v0.23) | `weapon`, `rarity`, `price`; skin case: `kind: skin`, `finish` |
+| `case_opened` | `POST /api/shop/case`, `POST /api/shop/skin-case` (v0.23), `POST /api/shop/character-case` (v0.2.18 part 2) | `weapon`, `rarity`, `price`; skin case: `kind: skin`, `finish`; character case: `kind: character`, `character` (no `weapon`) |
 | `payment_completed` | payment webhook credited BLATS (the `diamonds` field — v0.2.18 BLATS keep the code name) | `provider`, `packId`, `diamonds`, `amountCents` |
 | `lobby_created` | `RoomManager.create` | `roomId`, `mapId`, `isPrivate` |
 | `lobby_joined` | `MatchRoom` join / resume | `roomId`, `viaInvite`, `resumed?` |

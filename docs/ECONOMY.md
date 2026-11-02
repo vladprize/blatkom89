@@ -12,13 +12,17 @@ legendary (grey / red / purple / gold) — are shown on every character and skin
 directly; the crypto theme is gone (no `$BLAT`, no BLAT DROP, no stakes — §8). In the database BLATS
 are still the `diamonds` columns and currency id: no data was renamed or moved.
 
+**v0.2.18 part 2:** twelve new characters from the owner's sheets (36 in all, §3a), the owner's skin
+line — twenty finishes on sale, a welcome gift of two for early players, the first line retired (§4a),
+and the character case for BLATS (§4c).
+
 ## 1. Currencies
 
 | | Talons (`tokens` in code) | BLATS (`diamonds` in code) |
 |---|---|---|
 | How you get them | online matches (not practice); 150 for every friend who comes through your link and plays a whole match (§6) | 10 for every new level from level 2 (§5a); bought for money (§5) |
 | Sold for money | never | yes: packs of 99 … 4 999 (1 BLATS = 1 US cent) |
-| Spent on | weapons, equipment, modifications, the weapon case, the first three paid characters | characters by grade, weapon skins by grade, the skin case |
+| Spent on | weapons, equipment, modifications, the weapon case, the first three paid characters | characters by grade, weapon skins by grade, the skin case, the character case |
 
 Neither currency is a cryptocurrency, neither can be withdrawn, exchanged or passed to another player.
 
@@ -34,8 +38,9 @@ winning team (25 to both teams on a draw); +20 for a match with friends by invit
 ## 2. What is free
 
 Two characters (Petya the rooster and Valuta the panther), a full kit of three weapons (Makarov,
-crowbar, AK-47), the F-1 grenade and two skin finishes on every weapon (Birch Camo, Rust). A new player
-spawns with a working loadout and can play every map and mode without spending anything.
+crowbar, AK-47) and the F-1 grenade. A new player spawns with a working loadout and can play every map
+and mode without spending anything. While the welcome gift lasts (§4a), every player also gets two skin
+finishes on every weapon («Shark», «Blatkom ’89»).
 
 ## 3. The Arsenal (talons)
 
@@ -73,8 +78,14 @@ and on the price. Grade colours (`GRADE_COLORS`): regular grey, rare red, epic p
 | Uchastkovy (lvl 1) / Mikhalych (lvl 2) / Karlych (lvl 3) | 150 / 200 / 300 talons |
 | every other character, by grade (`CHARACTER_GRADE_PRICES`): regular / rare / epic / legendary | 199 / 399 / 799 / 1 099 BLATS ($1.99 / $3.99 / $7.99 / $10.99) |
 
-Today: regular — Sonka, Tolyan, Gosha, Sizy, Prusak, Sery, Borka, Vityok, Slavik; rare — Bugai, Garik,
-Lyova, Batya, Murka, Alisa, Rogov; epic — Zhora, Samson; legendary — Arkadich. A locked character is
+Today (36 characters, v0.2.18 part 2): regular — Sonka, Tolyan, Gosha, Sizy, Prusak, Sery, Borka, Vityok,
+Slavik, **Cherry, Dlinny**; rare — Bugai, Garik, Lyova, Batya, Murka, Alisa, Rogov, **Vasilisk, Tuz,
+Rytsar, Pingvin**; epic — Zhora, Samson, **Zver, Arakh, Zhnets, Igla**; legendary — Arkadich, **Kasatik,
+Pyatak**. The twelve in bold are the owner's later sheets (references/65…76), graded by me as a proposal
+— any grade can be changed in `game-rules/characters.ts`, the price follows it. All characters fight
+with the same numbers (`CHARACTER_BASE_STATS`): the abilities drawn on the sheets (regeneration, webs,
+rage, splitting…) are looks and story only. Besides direct purchase, the character case (§4c) gives a
+missing one for 299 BLATS. A locked character is
 bought right on the character screen or on its card in the Arsenal («Buy for …»; the server decides),
 or tried in practice first — «Try in practice» comes back to where it was pressed (the character screen
 with the same character, or the Arsenal's tab). Characters bought before v0.2.18 stay owned.
@@ -90,22 +101,40 @@ the collection is complete the case is no longer sold. Draws use the OS CSPRNG (
 ## 4a. Weapon skins
 
 A skin is a **finish on one particular weapon** («АК-47 · Хохлома») and changes only how it looks
-(`game-rules/skins.ts`). Every weapon can wear every finish: 32 weapons × 10 finishes = 320 skins.
+(`game-rules/skins.ts`). Every weapon can wear every finish.
 
-| Grade | Finishes | Price each (`SKIN_PRICES`) | In the skin case |
+**v0.2.18 part 2 — the owner's line** (references/64-skins-lineup.png): twenty finishes on sale, two
+as a welcome gift; the plain factory paint («Standard») stays everyone's.
+
+| Grade | On sale (`SHOP_FINISHES`) | Price each (`SKIN_PRICES`) | In the skin case |
 |---|---|---|---|
-| regular | Birch Camo, Rust — **free on every weapon** (`FREE_FINISHES`, never stored, never drop); Winter | 99 BLATS ($0.99) | 40 % |
-| rare | Flora, Gzhel, Pioneer | 199 BLATS ($1.99) | 30 % |
-| epic | Malachite, Khokhloma | 299 BLATS ($2.99) | 20 % |
-| legendary | Party Gold, Amber | 499 BLATS ($4.99) | 10 % |
+| regular | Khaki, Worn (+ the gift: Shark, Blatkom ’89) | 99 BLATS ($0.99) | 40 % |
+| rare | Spartakiad ’80, Tracksuit, Wild Nineties, Raspberry Jacket, Video Parlour, Cherkizon, Radioactive, Afghan, Tattoo, Film | 199 BLATS ($1.99) | 30 % |
+| epic | Cosmos ’88, Golden Sunset, Khokhloma, Elektronika, Ice Camo | 299 BLATS ($2.99) | 20 % |
+| legendary | Tsar’s, The Office, Nuclear Winter | 499 BLATS ($4.99) | 10 % |
 
-* **Direct purchase** (`POST /api/shop/skin {weapon, finish}`): in the dressing room every finish can be
-  tried on (and taken into practice); a finish the player does not own shows its grade and «Buy for …»;
-  the skin is bought and worn at once. Refusals as above (`owned` for a free or owned skin, `funds`).
+* **Marks of others are left out** (the owner was told on 2 Nov): no Olympic rings («Спартакиада ’80»,
+  the line's «Олимпийский ’80»), no sportswear brand's stripes or logo («Спортивный»: two stripes), no
+  religious image («Царский», the line's «Святой калаш»), no state emblem («Контора», the line's «КГБ»:
+  gold stars and lines), no prison tattoos («Тату»: ornament), no maker's logo («Электроника»). The
+  finishes are painted by code (`apps/web/src/game/render/finish.ts`) over the weapon's pixel art.
+* **The welcome gift for early players** (`WELCOME_FINISHES`: «Shark», «Blatkom ’89») — both finishes on
+  every weapon. Not sold, never in the case. The server marks the player (`profiles.welcome_gift_at`, set
+  at the first inventory read or economy operation) while the gift lasts: `WELCOME_GIFT_UNTIL`
+  (ISO date; **unset = no end yet** — the owner sets the date, it is not invented here). Whoever got it
+  keeps it after the date. The game says so once in a toast.
+* **The first line is retired, not deleted**: Birch Camo, Rust, Winter, Flora, Gzhel, Pioneer, Malachite,
+  Party Gold, Amber stay valid ids; whoever owns one keeps it and can wear it (the dressing room shows a
+  retired finish only to its owner or wearer); none is sold or dropped any more. Birch Camo and Rust stay
+  free for everyone (`FREE_FINISHES`), so a player wearing one keeps it.
+* **Direct purchase** (`POST /api/shop/skin {weapon, finish}`): in the dressing room every finish of the
+  line can be tried on (and taken into practice); a finish the player does not own shows its grade and
+  «Buy for …»; the skin is bought and worn at once. Refusals: `owned` (owned, free or gifted),
+  `not_for_sale` (retired, or the gift), `funds`.
 * **The skin case** — 299 BLATS ($2.99): first the grade is drawn by the chances above (a grade whose
   skins are all owned drops out and the others share its chance — `skinCaseOdds`), then any unowned
-  skin of that grade with equal chance (`drawSkin`, OS CSPRNG). No duplicates; the free finishes are
-  not in it (256 skins). The odds open from the Arsenal before buying.
+  skin of that grade with equal chance (`drawSkin`, OS CSPRNG). No duplicates; only the finishes on sale
+  (`CASE_FINISHES`): 20 × 32 weapons = **640 skins**. The odds open from the Arsenal before buying.
 * Owned skins are `user_items` rows of kind `skin` (`item_id` = `weapon.finish`); the worn ones are
   `profiles.loadout.skins`, checked against ownership on every read (`ownsSkin` counts the free
   finishes). The room sends everyone's worn skins; the client paints the weapon's pixel art with the
@@ -113,13 +142,33 @@ A skin is a **finish on one particular weapon** («АК-47 · Хохлома») 
 
 ## 4b. Paid cases: the rules
 
-The skin case costs BLATS, i.e. money, so: **the odds are always shown before the purchase**, **no
+The skin case and the character case cost BLATS, i.e. money, so: **the odds are always shown before the purchase**, **no
 duplicates**, the server asks for an **18+ confirmation** on every paid case (`confirmAge: true`, else
 `400 confirm_age`; the Arsenal's checkbox), and `CASES_ENABLED=false` switches every case off on a
 server (`/api/shop/config` → `casesEnabled: false`, the case routes → `403 cases_disabled`) for
 markets where paid random items are restricted. Whether and where that is needed is a legal question
 for the operator — this document is not legal advice. Every opening is recorded with its price and
 currency (`case_openings`).
+
+## 4c. The character case (v0.2.18 part 2)
+
+`CHARACTER_CASE_PRICE` — **299 BLATS ($2.99)** for a character the player doesn't have, among the 31 sold
+for BLATS (`CASE_CHARACTERS`: never a free one or one of the three for talons). First the grade is drawn
+— **40 / 30 / 20 / 10 %** regular / rare / epic / legendary (`CHARACTER_CASE_CHANCE`); a grade the player
+has complete drops out and the others share its chance (`characterCaseOdds`) — then any missing
+character of that grade with equal chance (`drawCharacter`, OS CSPRNG). No duplicates; when all 31 are
+owned the case is no longer sold. The same rules as §4b: the odds (each grade's characters with their
+portraits) before buying, «I am 18 or older», `CASES_ENABLED`. `POST /api/shop/character-case` →
+`{ character, grade, inventory }`; the opening is a `case_openings` row of kind `character`
+(`character_id`; migration 024), the BLATS a ledger row `charcase:<opening>`; analytics `case_opened`
+with `kind: character`.
+
+## 4d. A friend's collection (v0.2.18 part 2)
+
+In Friends, a friend's avatar opens their collection: every character (theirs in colour with the grade's
+mark) and how many weapon skins of each grade they own (the welcome gift isn't counted).
+`GET /api/friends/:id/collection` — friends only (`403 not_friends`), read only. The lobby shows each
+player's character with its grade's colour.
 
 ## 5. Buying BLATS
 
@@ -195,7 +244,8 @@ invitation can never become money.
 `POST /api/admin/players/:id/grant` (role `admin`): ±1 … 1 000 000 talons or BLATS with a mandatory
 reason, never below zero, ledger reason `grant` with the admin's id, audited as `balance_grant`. Used
 for compensation and corrections, not for selling. «Сделать основателем» (one account): level 87 (its
-levels' BLATS paid as for anybody), every character, weapon, equipment, skin and modification as
+levels' BLATS paid as for anybody), every character, weapon, equipment, skin of the current line
+(v0.2.18 part 2: the 20 on sale on every weapon, plus the welcome gift's mark) and modification as
 grants, the gold badge.
 
 ## 8. Retired in v0.2.18: $BLAT, BLAT DROP, stakes
@@ -221,4 +271,8 @@ flags, BLATS for levels paid once and retroactively), `apps/server/src/admin/eco
 `packages/shared/src/__tests__/skins.test.ts` (skin ids, prices, the case's odds 40/30/20/10 and
 exhaustion, free finishes) and `apps/web/src/game/render/finish.test.ts`; browser:
 `tests/e2e/v0218.mjs` (the BLATS tab, a skin and a character bought, levels' BLATS),
-`tests/e2e/invite.mjs`, `tests/e2e/skins.mjs`.
+`tests/e2e/invite.mjs`, `tests/e2e/skins.mjs`. v0.2.18 part 2: the line, the gift and the retired finishes
+(`economy.test.ts`, `skins.test.ts`, server `economy.test.ts`: the gift from the first sign-in and none
+after `WELCOME_GIFT_UNTIL`), the character case (shared odds and draws; server: 18+, funds, only the 31 for
+BLATS, the collection completes, `CASES_ENABLED`), a friend's collection (`social.test.ts`); browser:
+`tests/e2e/v0218b.mjs`.

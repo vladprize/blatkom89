@@ -27,6 +27,7 @@ import { GADGET_IDS } from './gadgets.js';
 import type { GadgetId } from './gadgets.js';
 import type { Loadout } from './loadout.js';
 import type { MatchPerformance } from './progression.js';
+import { GRADES } from './grades.js';
 import type { Grade } from './grades.js';
 import { ownsSkin, skinPrice } from './skins.js';
 import type { FinishId } from './skins.js';
@@ -155,6 +156,44 @@ export function drawCase(owned: ReadonlySet<WeaponId>, r: number): CaseEntry | n
     if (x < 0) return e;
   }
   return left[left.length - 1]!;
+}
+
+/**
+ * v0.2.18 part 2 — the character case: 299 BLATS for a character the player doesn't own, sold for BLATS
+ * (never a free one or one of the three unlocked with talons, never a duplicate). The grade is drawn first
+ * (the owner's odds 40 / 30 / 20 / 10 — regular / rare / epic / legendary), then any character of that grade
+ * the player lacks, all equally likely; a grade already complete drops out and the others share its chance.
+ * Like the skin case it asks for the adult confirmation and obeys the server's CASES_ENABLED.
+ */
+export const CHARACTER_CASE_PRICE: ShopPrice = { currency: 'diamonds', amount: 299, level: 1 };
+export const CHARACTER_CASE_CHANCE: Readonly<Record<Grade, number>> = Object.freeze({ common: 40, rare: 30, epic: 20, legendary: 10 });
+/** The characters the case can give: every one sold for BLATS. */
+export const CASE_CHARACTERS: readonly CharacterId[] = CHARACTER_IDS.filter((c) => CHARACTER_PRICES[c]?.currency === 'diamonds');
+
+/** The chance of each grade (percent) for a player who owns `owned`; all zero when the collection is complete. */
+export function characterCaseOdds(owned: ReadonlySet<CharacterId>): Record<Grade, number> {
+  const left = (g: Grade) => CASE_CHARACTERS.some((c) => CHARACTERS[c].grade === g && !owned.has(c));
+  const total = GRADES.reduce((s, g) => s + (left(g) ? CHARACTER_CASE_CHANCE[g] : 0), 0);
+  const out = {} as Record<Grade, number>;
+  for (const g of GRADES) out[g] = total === 0 || !left(g) ? 0 : (CHARACTER_CASE_CHANCE[g] / total) * 100;
+  return out;
+}
+
+/** Draws a character the player does not own (`rand` uniform in [0, 1)); null when the collection is complete. */
+export function drawCharacter(owned: ReadonlySet<CharacterId>, rand: () => number): { character: CharacterId; grade: Grade } | null {
+  const odds = characterCaseOdds(owned);
+  let x = Math.min(Math.max(rand(), 0), 0.999999999) * 100;
+  let grade: Grade | null = null;
+  for (const g of GRADES) {
+    if (odds[g] <= 0) continue;
+    grade = g;
+    x -= odds[g];
+    if (x < 0) break;
+  }
+  if (!grade) return null;
+  const pool = CASE_CHARACTERS.filter((c) => CHARACTERS[c].grade === grade && !owned.has(c));
+  if (pool.length === 0) return null;
+  return { character: pool[Math.min(pool.length - 1, Math.floor(Math.min(Math.max(rand(), 0), 0.999999999) * pool.length))]!, grade };
 }
 
 export interface DiamondPack {

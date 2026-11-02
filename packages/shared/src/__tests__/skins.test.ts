@@ -5,6 +5,7 @@ import {
   FINISHES,
   FINISH_IDS,
   FREE_FINISHES,
+  LINE_FINISHES,
   SKIN_RARITIES,
   SKIN_RARITY_CHANCE,
   WEAPON_IDS,
@@ -29,9 +30,11 @@ function rng(seed: number): () => number {
   };
 }
 
-test('ten finishes over four rarities; every weapon wears every finish; ids round-trip', () => {
-  assert.equal(FINISH_IDS.length, 10);
-  assert.deepEqual(new Set(FINISH_IDS.map((f) => FINISHES[f].rarity)), new Set(SKIN_RARITIES));
+test('v0.2.18 part 2: the owner\'s line (22) and the retired first line (9) over four grades; every weapon wears every finish; ids round-trip', () => {
+  assert.equal(FINISH_IDS.length, 31);
+  assert.equal(LINE_FINISHES.length, 22);
+  assert.equal(FINISH_IDS.filter((f) => FINISHES[f].retired).length, 9);
+  assert.deepEqual(new Set(LINE_FINISHES.map((f) => FINISHES[f].rarity)), new Set(SKIN_RARITIES));
   assert.equal(SKIN_RARITIES.reduce((s, r) => s + SKIN_RARITY_CHANCE[r], 0), 100);
   assert.equal(allSkins().length, WEAPON_IDS.length * FINISH_IDS.length);
   assert.deepEqual(parseSkin(skinId('avtomat', 'hohloma')), { weapon: 'avtomat', finish: 'hohloma' });
@@ -58,10 +61,10 @@ test('the skin case never repeats a skin, never gives a free one, follows the gr
   const r2 = rng(11);
   for (let i = 0; i < 2000; i++) fresh[drawSkin(new Set(), r2)!.rarity]++;
   assert.ok(Math.abs(fresh.common - 800) < 90 && Math.abs(fresh.rare - 600) < 90 && Math.abs(fresh.epic - 400) < 80 && Math.abs(fresh.legendary - 200) < 60, JSON.stringify(fresh));
-  // a grade whose skins are all owned drops out (the 32 regular «Winter» skins are gone after 200 draws)
-  assert.equal(counts.common, 32, JSON.stringify(counts));
+  // a grade whose skins are all owned drops out (the 64 regular «Khaki» and «Worn» skins are gone after 200 draws)
+  assert.equal(counts.common, 64, JSON.stringify(counts));
   // everything but one legendary skin owned: the last draw must be that skin, then nothing
-  const last = skinId('granatomet', 'yantar');
+  const last = skinId('granatomet', 'yadernaya');
   const nearlyAll = new Set(allSkins().filter((s) => s !== last));
   const odds = skinCaseOdds(nearlyAll);
   assert.deepEqual([odds.common, odds.rare, odds.epic, odds.legendary], [0, 0, 0, 100]);

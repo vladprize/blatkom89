@@ -252,9 +252,23 @@ registry (real gun names included), the full test run and docs.
 | Invitations | 150 talons for every friend who plays a whole online match (Friends → «Invite to the game») | ✅ |
 | (2 Nov, after part 1) skin prices «как в сообщении»; «в арсенале раздел для покупки БЛАТ» and «рекламный баннер, что их можно купить» | prices stay 99 / 199 / 299 / 499; the Arsenal's «Buy BLATS» tab marked with the coin — a banner with the balance and rules, six packs with coin piles, prices and what each is enough for; the menu's BLATS banner under the Dossier and the Arsenal opens it (desktop and phones, one screen) and says «Buy →» only when a payment provider is connected, «on sale soon» until then | ✅ |
 
+**Part 2 (2026-11-02, evening):**
+
+| Request (owner) | Implementation (part 2) | Status |
+|---|---|---|
+| 12 new characters from the sheets | Cherry, Dlinny (regular 199), Vasilisk, Tuz, Rytsar, Pingvin (rare 399), Zver, Arakh, Zhnets, Igla (epic 799), Kasatik, Pyatak (legendary 1 099) — the grades are my proposal, one line each to change; English and Russian names, roles, quotes, districts and backstories from the sheets (abilities not implemented: equal stats); portraits from the sheets' panels, hero art for the dressing room and the files, top-down rigs re-modelled from the sheets (`tools/art/characters4.ts`, 58 frames each, no blood or tattoos); not in the story yet (the card index stays 22) | ✅ |
+| The character screen with 36 | 8 × 5 beside the file on computers, 12 × 3 on tablets, 6 × 6 portraits without names on phones (the chosen one's name in the summary) — one screen at 1280×720 … 360×640; the phone Arsenal's long lists scroll inside the tab under the wallet | ✅ |
+| The owner's skin line | 20 finishes on sale (2 regular, 10 rare, 5 epic, 3 legendary) painted by code over the weapons' pixel art, without others' marks (Spartakiad ’80 without rings, Tracksuit with two stripes, Tsar’s without an icon, The Office without an emblem, Tattoo without prison tattoos, Elektronika without a logo); the skin case gives only these (640 skins) | ✅ |
+| «Акула» and «Блатком ’89» — a welcome gift for early players | both on every weapon, not sold; one mark per player (`profiles.welcome_gift_at`, migration 024) while `WELCOME_GIFT_UNTIL` lasts — unset: no end yet (the date is the owner's); a toast once | ✅ (the end date: the owner's) |
+| Owned old finishes stay | the first line (Birch Camo … Amber) retired, not deleted: owners keep and wear them, nothing of it sold or dropped; Birch Camo and Rust stay free for whoever wears them | ✅ |
+| Two cases at 299 BLATS | the skin case (the new line) and the **character case** «Кейс братвы»: a character for BLATS you lack, 40 / 30 / 20 / 10 % by grade, odds with portraits before buying, no duplicates, 18+, `CASES_ENABLED`; desktop and phone | ✅ |
+| Grades in the lobby and in a friend's inventory | the lobby: each player's character with its grade's mark and colour; Friends: a friend's avatar opens their collection — every character (theirs in colour with the grade) and skins by grade (friends only, read only) | ✅ |
+| A starter pack | proposed to the owner (composition and price) — not built before the answer | ⏳ waiting for the owner |
+
+
 ## 3. Open risks / next steps
 
-- v0.2.18 parts 2–3 (above, §2j): 12 characters, the owner's skin line, two cases, grades in the lobby and friends, a starter pack; the maps Черкизон and Воркута; Xsolla + Telegram Stars (waiting for the owner's keys), own music, the asset registry. Invitations: watch the held queue in `/admin → Приглашения` — several guest accounts from different browsers can still farm talons slowly.
+- v0.2.18 part 3 (above, §2j): the maps Черкизон and Воркута; Xsolla + Telegram Stars (waiting for the owner's keys), own music, the © and asset registry (also: Arkadich's lore mentions «Montana» jeans — a real brand name, to be reworded there); the starter pack once the owner picks one; the welcome gift's end date (`WELCOME_GIFT_UNTIL`) when the owner sets it. Invitations: watch the held queue in `/admin → Приглашения` — several guest accounts from different browsers can still farm talons slowly.
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).
 - Build and run the Docker stack on the target host; test a backup restore.

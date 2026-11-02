@@ -61,7 +61,7 @@ try {
   await page.locator('.tabs button', { hasText: 'Case' }).click();
   await page.getByTestId('skin-case').waitFor({ timeout: 15000 });
   const owned0 = await page.getByTestId('skins-owned').innerText();
-  check(/0 of 256/.test(owned0), `the skin case is on the case tab next to the weapon case: 256 skins (the two free finishes aren't in it) («${owned0}»)`);
+  check(/0 of 640/.test(owned0), `the skin case is on the case tab next to the weapon case: 640 skins — the 20 finishes on sale on 32 weapons (the welcome gift and the retired first line aren't in it) («${owned0}»)`);
   await page.getByTestId('skin-odds-open').click();
   await page.getByTestId('skin-odds').waitFor({ timeout: 5000 });
   const odds = (await page.getByTestId('skin-odds').innerText()).replace(/\s+/g, ' ');
@@ -76,14 +76,18 @@ try {
   const revealed = (await page.getByTestId('skin-reveal').locator('.h1').innerText()).trim();
   check(revealed.includes('·'), `the skin is revealed: «${revealed}»`);
   const inv = await page.evaluate(() => window.__blatkom.app.online.inventory);
-  const skin = inv.skins[0];
+  // v0.2.18 part 2: the welcome gift («Акула», «Блатком ’89» on every weapon) is in the inventory too
+  const gift = (id) => /\.(akulka|blatkom)$/.test(id);
+  const caseSkins = inv.skins.filter((id) => !gift(id));
+  const skin = caseSkins[0];
   const [weapon, finish] = skin.split('.');
-  check(inv.skins.length === 1 && inv.diamonds === 701, `one skin in the inventory (${skin}), 299 BLATS spent`);
+  check(caseSkins.length === 1 && inv.diamonds === 701, `one skin from the case in the inventory (${skin}), 299 BLATS spent`);
+  check(inv.skins.filter(gift).length === 64, `the welcome gift: «Shark» and «Blatkom ’89» on all 32 weapons (${inv.skins.filter(gift).length})`);
   check(inv.loadout.skins[weapon] === finish, 'the new skin went on its weapon at once');
   await page.screenshot({ path: `${outDir}/skins_reveal.png` });
   const rows = await sql`SELECT kind, finish_id, price, currency FROM case_openings WHERE user_id = ${userId}`;
   check(rows.length === 1 && rows[0].kind === 'skin' && rows[0].finish_id === finish && rows[0].price === 299 && rows[0].currency === 'diamonds', 'the opening is recorded on the server (299 BLATS)');
-  check(!['berezka', 'rzhavchina'].includes(finish), `the case never gives a free finish (${finish})`);
+  check(!['berezka', 'rzhavchina', 'zima', 'flora', 'gzhel', 'pioner', 'malahit', 'zoloto', 'yantar', 'akulka', 'blatkom'].includes(finish), `the case gives only a finish on sale — never a gift or a retired one (${finish})`);
 
   // the dressing room: try the skin on and see it marked as yours
   await page.locator('[data-testid=skin-reveal] [data-try]').click();
@@ -92,11 +96,14 @@ try {
   check(chip.includes('✓'), `the dressing room marks the finish as yours («${chip.trim()}»)`);
   const painted = await page.waitForFunction(() => document.querySelector('.dressing__item')?.getAttribute('src')?.startsWith('data:image/png'), null, { timeout: 10000 }).then(() => true).catch(() => false);
   check(painted, 'the big weapon picture is painted with the finish');
-  const other = finish === 'zoloto' ? 'gzhel' : 'zoloto';
+  const other = finish === 'yadernaya' ? 'kosmos' : 'yadernaya';
   await page.locator(`[data-testid=skin-pick] [data-finish="${other}"]`).click();
   await page.getByTestId('skin-buy-row').waitFor({ timeout: 5000 });
   const note = (await page.getByTestId('skin-buy-row').innerText()).replace(/\s+/g, ' ');
-  check(other === 'zoloto' ? /Legendary/i.test(note) && /499/.test(note) : /Rare/i.test(note) && /199/.test(note), `an unowned finish can be tried on and offers its grade and price («${note}»)`);
+  check(other === 'yadernaya' ? /Legendary/i.test(note) && /499/.test(note) : /Epic/i.test(note) && /299/.test(note), `an unowned finish can be tried on and offers its grade and price («${note}»)`);
+  // the line in the picker: the 20 on sale and the 2 gifts (the retired first line only to those who have it)
+  const chips = await page.locator('[data-testid=skin-pick] .skinchip[data-finish]:not([data-finish=""])').evaluateAll((els) => els.map((e) => e.getAttribute('data-finish')));
+  check(chips.length === 22 && chips.includes('akulka') && chips.includes('blatkom') && !chips.includes('zima') && !chips.includes('berezka'), `the dressing room offers the owner's line: 22 finishes, the gifts among them, no retired ones (${chips.length}: ${chips.join(', ')})`);
   await page.locator(`[data-testid=skin-pick] [data-finish="${finish}"]`).click();
   await page.getByTestId('dressing-room').screenshot({ path: `${outDir}/skins_dressing.png` });
 

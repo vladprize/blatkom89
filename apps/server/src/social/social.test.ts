@@ -138,6 +138,28 @@ test('friends: a request by alias, live notice, acceptance; mutual requests; ref
   sc.close();
 });
 
+test('v0.2.18 part 2: a friend’s collection — characters and skins by grade, friends only, read-only', async () => {
+  const a = await devLogin(app.base, 'Collector One');
+  const b = await devLogin(app.base, 'Collector Two');
+  const c = await devLogin(app.base, 'Collector Three');
+  const ctx = pgContext(app.db.sql, app.env, silentLogger);
+  await ctx.economy.grantItem(b.userId, 'character', 'kasatka');
+  await ctx.economy.grantItem(b.userId, 'skin', 'avtomat.yadernaya');
+  await ctx.economy.grantItem(b.userId, 'skin', 'pistol.haki');
+  await ctx.economy.grantItem(b.userId, 'skin', 'tt.haki');
+  const look = (token: string, id: string) => api(app.base, `/api/friends/${id}/collection`, { token });
+  assert.equal((await look(a.token, b.userId)).status, 403, 'not friends yet');
+  await request(a.token, 'Collector Two');
+  assert.equal((await api(app.base, `/api/friends/${a.userId}/accept`, { method: 'POST', token: b.token })).status, 200);
+  const r = await look(a.token, b.userId);
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.player.name, 'Collector Two');
+  assert.ok(r.body.characters.includes('kasatka') && r.body.characters.includes('petya') && !r.body.characters.includes('lev'));
+  assert.deepEqual(r.body.skins, { common: 2, rare: 0, epic: 0, legendary: 1 }, 'the welcome gift isn’t counted');
+  assert.equal((await look(c.token, b.userId)).status, 403, 'a stranger');
+  assert.equal((await look(a.token, 'not-a-uuid')).status, 400);
+});
+
 test('direct messages: only between friends, live delivery, unread counts and read receipts, validation', async () => {
   const a = await devLogin(app.base, 'Writer');
   const b = await devLogin(app.base, 'Reader');

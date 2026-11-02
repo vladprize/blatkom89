@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import type { AvatarId } from '../game-rules/avatars.js';
 import type { CharacterId } from '../game-rules/characters.js';
+import type { Grade } from '../game-rules/grades.js';
 import type { GameMode } from '../game-rules/match.js';
 import type { MapId } from '../maps/types.js';
 import type { ClubSummary } from '../game-rules/clubs.js';
@@ -25,6 +26,16 @@ export interface PlayerCard {
   level: number;
   /** v0.2.17: the founder's account (a gold badge by the alias). */
   founder?: boolean;
+}
+
+/**
+ * v0.2.18 part 2 — GET /api/friends/:id/collection: what a friend has, by grade (only between friends).
+ * Characters: every one the friend owns (the free ones too); skins: how many of each grade.
+ */
+export interface FriendCollection {
+  player: PlayerCard;
+  characters: CharacterId[];
+  skins: Record<Grade, number>;
 }
 
 export interface FriendEntry extends PlayerCard {

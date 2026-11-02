@@ -1,7 +1,7 @@
-// The v0.23 roster end-to-end: the character screen lists all 24 characters with their portraits, every
-// one of the ten new characters has its personal file (the owner's art, name, grade and price — v0.2.18: in
-// BLATS by grade) and is locked for a new player, «Try in practice» starts a match as that character, and
-// all ten sprite atlases are loaded.
+// The roster end-to-end: the character screen lists all 36 characters with their portraits (v0.2.18 part 2:
+// the owner's twelve new sheets), every one of the ten of v0.23 and the twelve new ones has its personal file
+// (the owner's art, name, grade and price in BLATS by grade) and is locked for a new player, «Try in practice»
+// starts a match as that character, and all their sprite atlases are loaded.
 //
 // Usage: node tests/e2e/roster.mjs <baseUrl> <outDir>
 import { chromium } from 'playwright';
@@ -24,6 +24,19 @@ const NEW = [
   ['nosorog', 'Rogov', 'BLATS'],
   ['gorilla', 'Samson', 'BLATS'],
   ['lev', 'Arkadich', 'BLATS'],
+  // v0.2.18 part 2
+  ['zaychiha', 'Cherry', 'BLATS'],
+  ['zayac', 'Dlinny', 'BLATS'],
+  ['vasilisk', 'Vasilisk', 'BLATS'],
+  ['lenivec', 'Tuz', 'BLATS'],
+  ['kozel', 'Rytsar', 'BLATS'],
+  ['pingvin', 'Pingvin', 'BLATS'],
+  ['tigr', 'Zver', 'BLATS'],
+  ['pauk', 'Arakh', 'BLATS'],
+  ['bogomol', 'Zhnets', 'BLATS'],
+  ['ezh', 'Igla', 'BLATS'],
+  ['kasatka', 'Kasatik', 'BLATS'],
+  ['zvezda', 'Pyatak', 'BLATS'],
 ];
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const problems = [];
@@ -69,7 +82,7 @@ try {
   await page.locator('.chars button').first().waitFor({ timeout: 15000 });
   await page.waitForFunction(() => [...document.querySelectorAll('.chars button img')].every((i) => i.complete), null, { timeout: 15000 });
   const tiles = await page.locator('.chars button').count();
-  check(tiles === 24, `the character screen lists ${tiles} characters`);
+  check(tiles === 36, `the character screen lists ${tiles} characters`);
   check(await imagesLoaded('.chars button img'), 'every portrait is loaded');
   await page.screenshot({ path: `${outDir}/roster_characters.png` });
 
@@ -87,10 +100,10 @@ try {
     if (ok) files++;
     else console.log(`  ${id}: locked ${locked}, file: ${text.replace(/\s+/g, ' ').slice(0, 160)}`);
   }
-  check(files === NEW.length, `the ten new characters have personal files with the art, locked, priced in BLATS by grade (v0.2.18) (${files}/10)`);
+  check(files === NEW.length, `the ${NEW.length} characters of v0.23 and v0.2.18 part 2 have personal files with the art, locked, priced in BLATS by grade (${files}/${NEW.length})`);
   await page.screenshot({ path: `${outDir}/roster_dossier.png` });
 
-  // try the last one (Arkadich) in practice
+  // try the last one (Pyatak, the starfish) in practice
   await page.getByRole('button', { name: 'Try in practice' }).click();
   await page.waitForFunction(() => window.__blatkom?.game?.scene.getScene('game')?.session?.phase?.() === 'active', null, { timeout: 30000 });
   await page.waitForTimeout(800);
@@ -101,8 +114,8 @@ try {
     const v = s.views.get(me.slot);
     return { character: me.character, torso: v?.torso.texture.key, atlases: ids.filter((id) => g.textures.exists(`char_${id}`) && g.textures.get(`char_${id}`).getFrameNames().length > 50) };
   }, NEW.map((n) => n[0]));
-  check(game.character === 'lev' && game.torso === 'char_lev', `«Try in practice» plays as Arkadich (${game.character}, ${game.torso})`);
-  check(game.atlases.length === NEW.length, `all ten sprite atlases are loaded (${game.atlases.length})`);
+  check(game.character === 'zvezda' && game.torso === 'char_zvezda', `«Try in practice» plays as Pyatak (${game.character}, ${game.torso})`);
+  check(game.atlases.length === NEW.length, `all ${NEW.length} sprite atlases are loaded (${game.atlases.length})`);
   await page.screenshot({ path: `${outDir}/roster_practice.png` });
 } catch (e) {
   check(false, `flow failed: ${e.message.split('\n')[0]}`);

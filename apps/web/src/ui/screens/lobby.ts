@@ -1,10 +1,10 @@
 import { h, toast, founderTag } from '../dom.js';
-import { isTeamMode } from '@blatkom/shared';
+import { CHARACTERS, isTeamMode } from '@blatkom/shared';
 import type { CharacterId, GameMode, MapId, RosterEntry, Team } from '@blatkom/shared';
 import type { LobbyState } from '../../net/OnlineClient.js';
 import { shareInvite } from '../../telegram/tg.js';
 import { t } from '../../i18n/index.js';
-import { charName } from '../../i18n/content.js';
+import { charName, rarityLabel } from '../../i18n/content.js';
 import { mapField, mapPicker } from '../maps.js';
 import { openSheet } from '../sheet.js';
 import { avatarImg } from '../avatars.js';
@@ -52,7 +52,20 @@ function playerRow(p: RosterEntry): HTMLElement {
     'div',
     { class: `player ${p.team === 0 ? 'player--red' : p.team === 1 ? 'player--blue' : ''}` },
     avatarImg(p.avatar, p.character),
-    h('div', { class: 'n' }, h('span', { class: 'player__name' }, p.name), p.founder ? founderTag() : null, ' ', h('span', { class: 'muted player__meta', style: 'font-size:14px' }, `${charName(p.character)} · ${t('lvl')} ${p.level}${p.konRating !== undefined ? ` · ${t('tournament')} ${p.konRating}` : ''}`)),
+    h(
+      'div',
+      { class: 'n' },
+      h('span', { class: 'player__name' }, p.name),
+      p.founder ? founderTag() : null,
+      ' ',
+      h(
+        'span',
+        { class: 'muted player__meta', style: 'font-size:14px' },
+        // v0.2.18 part 2: the character's grade shows — a mark and the name in the grade's colour
+        h('span', { class: `player__char grade--${CHARACTERS[p.character].grade}`, 'data-grade': CHARACTERS[p.character].grade, title: rarityLabel(CHARACTERS[p.character].grade) }, `◆ ${charName(p.character)}`),
+        ` · ${t('lvl')} ${p.level}${p.konRating !== undefined ? ` · ${t('tournament')} ${p.konRating}` : ''}`,
+      ),
+    ),
     p.isHost ? h('span', { class: 'badge badge--host' }, t('host')) : null,
     h('span', { class: `badge ${state === 'off' ? 'badge--off' : state === 'ok' ? 'badge--ok' : ''}` }, stateText),
     // phones: the same as two small marks (a star for the host, a coloured dot for the state)

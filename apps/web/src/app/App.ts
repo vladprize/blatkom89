@@ -3,7 +3,7 @@
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
 import { CHARACTERS, CHARACTER_IDS, CHARACTER_PRICES, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, REAL_MONEY, buyRefusal, isCharacterId, isGameMode, isKonFormat, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
-import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonTopResponse, SiteConfig, GangBattle, GangBattleFormat, ShopConfig } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonTopResponse, SiteConfig, GangBattle, GangBattleFormat, ShopConfig, Inventory } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
@@ -393,7 +393,13 @@ export class App {
             toast(telegramLinkText(link, 'code'));
           }
           this.maybeWelcome();
-          void this.online!.loadInventory().then(() => this.refreshStrip()).catch(() => {});
+          void this.online!
+            .loadInventory()
+            .then((inv) => {
+              this.refreshStrip();
+              this.maybeWelcomeGift(inv);
+            })
+            .catch(() => {});
         })
         .catch(() => {});
     }
@@ -464,6 +470,19 @@ export class App {
         void poll();
       }, 800);
     }
+  }
+
+  /**
+   * v0.2.18 part 2: the welcome gift for early players («Акула» and «Блатком ’89» on every weapon) — said
+   * once per account, the first time the inventory has it.
+   */
+  private maybeWelcomeGift(inv: Pick<Inventory, 'skins'>) {
+    const me = this.online?.profile?.id;
+    if (!me || !inv.skins.includes('avtomat.akulka')) return;
+    const key = `blatkom89.welcomegift.${me}`;
+    if (storageGet(key)) return;
+    storageSet(key, '1');
+    toast(t('A welcome gift for the early players: the «Shark» and «Blatkom ’89» skins on every weapon — in the Arsenal'));
   }
 
   /** Signed in to another account (email): reload everything that depends on the player. */

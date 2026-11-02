@@ -93,7 +93,7 @@ export const SERVER_EVENT_PROPS = {
   shop_purchase: z.object({ kind: z.enum(['weapon', 'character', 'gadget', 'skin']), item: z.string(), currency: z.enum(['tokens', 'diamonds']), amount: z.number().int() }),
   mod_bought: z.object({ weapon: z.string(), mod: z.string(), cost: z.number().int() }),
   /** The weapon case and (v0.23) the skin case: `kind` skin carries the finish. */
-  case_opened: z.object({ weapon: z.string(), rarity: z.enum(['common', 'rare', 'epic', 'legendary']), price: z.number().int(), kind: z.enum(['weapon', 'skin']).optional(), finish: z.string().max(24).optional() }),
+  case_opened: z.object({ weapon: z.string().optional(), rarity: z.enum(['common', 'rare', 'epic', 'legendary']), price: z.number().int(), kind: z.enum(['weapon', 'skin', 'character']).optional(), finish: z.string().max(24).optional(), character: z.string().max(24).optional() }),
   payment_completed: z.object({ provider: z.string(), packId: z.string(), diamonds: z.number().int(), amountCents: z.number().int() }),
   email_linked: z.object({}),
   /** v0.3: a provider attached to an account (google, facebook, discord, reddit, telegram). */

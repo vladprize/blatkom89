@@ -29,6 +29,15 @@ const SMOKERS: Partial<Record<CharacterId, { f: number; s: number }>> = {
   buyvol: { f: 10.6, s: -4.7 },
   nosorog: { f: 11.0, s: 5.3 },
   gorilla: { f: 11.2, s: -5.1 },
+  zaychiha: { f: 7.2, s: 3.1 },
+  zayac: { f: 7.7, s: 3.4 },
+  vasilisk: { f: 8.9, s: 3.5 },
+  lenivec: { f: 7.7, s: 4.0 },
+  kozel: { f: 9.0, s: 3.7 },
+  pingvin: { f: 8.4, s: 2.9 },
+  pauk: { f: 9.8, s: 0.7 },
+  kasatka: { f: 9.3, s: 4.0 },
+  zvezda: { f: 8.1, s: 4.2 },
 };
 const LOCAL_TAG = '#f2e6c8';
 const ENEMY_TAG = '#ffffff';

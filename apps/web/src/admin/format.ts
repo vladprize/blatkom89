@@ -81,6 +81,18 @@ export const CHARACTER_NAMES: Record<string, string> = {
   nosorog: 'Рогов «Сиделец»',
   gorilla: 'Самсон «Бригадир»',
   lev: 'Аркадич «Цеховик»',
+  zaychiha: 'Черри «Зайчиха»',
+  zayac: 'Длинный «Заяц»',
+  vasilisk: 'Василиск «Кожаный Гребень»',
+  lenivec: 'Туз «Ленивец»',
+  kozel: 'Рыцарь «Козёл»',
+  pingvin: 'Пингвин «Бродяга»',
+  tigr: 'Зверь «Тигр»',
+  pauk: 'Арах «Паук»',
+  bogomol: 'Жнец «Богомол»',
+  ezh: 'Игла «Ёж-мутант»',
+  kasatka: 'Касатик «Советский гангстер»',
+  zvezda: 'Пятак «Морская звезда»',
 };
 /** The game itself is in English; the dashboard names things the way the owner's sheets do. */
 export const WEAPON_NAMES: Record<string, string> = {
@@ -137,8 +149,29 @@ export const PAYMENT_STATUSES: Record<string, string> = { created: 'ожидае
 export const PAYMENT_PROVIDERS: Record<string, string> = { stripe: 'Карта (Stripe)', nowpayments: 'NOWPayments (до v0.2.18)', telegram: 'Telegram Stars' };
 export const SIGN_IN_METHODS: Record<string, string> = { telegram: 'Telegram', guest: 'браузер (гость)', email: 'почта', dev: 'разработка' };
 export const RARITIES: Record<string, string> = { common: 'Обычный', rare: 'Редкий', epic: 'Эпический', legendary: 'Легендарный' };
-/** Weapon skins' finishes (v0.23), as in the game's Russian texts. */
+/** Weapon skins' finishes (v0.23 and the owner's line of v0.2.18 part 2), as in the game's Russian texts. */
 export const FINISH_NAMES: Record<string, string> = {
+  haki: 'Хаки',
+  iznos: 'Изношенный',
+  akulka: 'Акула',
+  blatkom: 'Блатком ’89',
+  sparta: 'Спартакиада ’80',
+  sport: 'Спортивный',
+  devyanostye: 'Лихие 90-е',
+  malina: 'Малиновый пиджак',
+  video: 'Видеосалон',
+  cherkizon: 'Черкизон',
+  radiaciya: 'Радиоактивный',
+  afgan: 'Афган',
+  tatu: 'Тату',
+  plenka: 'Плёнка',
+  kosmos: 'Космос ’88',
+  zakat: 'Золотой закат',
+  elektronika: 'Электроника',
+  led: 'Ледяной камуфляж',
+  carsky: 'Царский',
+  kontora: 'Контора',
+  yadernaya: 'Ядерная зима',
   berezka: 'Берёзка',
   rzhavchina: 'Ржавчина',
   zima: 'Зимний',
@@ -150,7 +183,7 @@ export const FINISH_NAMES: Record<string, string> = {
   zoloto: 'Золото партии',
   yantar: 'Янтарь',
 };
-export const CASE_KINDS: Record<string, string> = { weapon: 'Кейс с оружием', skin: 'Кейс со скинами' };
+export const CASE_KINDS: Record<string, string> = { weapon: 'Кейс с оружием', skin: 'Кейс со скинами', character: 'Кейс братвы (персонажи)' };
 
 export function itemName(kind: string, id: string): string {
   if (kind === 'skin') {

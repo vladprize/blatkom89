@@ -321,7 +321,7 @@ export const STORY_CHAPTERS: readonly StoryChapter[] = [
 ];
 
 /** Where each character turns up in the story (the card index shows where the unmet ones wait). */
-export const STORY_CAST: Readonly<Record<CharacterId, { campaign: StoryCampaign; chapter: number }>> = {
+export const STORY_CAST: Readonly<Partial<Record<CharacterId, { campaign: StoryCampaign; chapter: number }>>> = {
   vorona: { campaign: 'petya', chapter: 1 },
   mihalych: { campaign: 'petya', chapter: 1 },
   valuta: { campaign: 'petya', chapter: 1 },
@@ -348,8 +348,12 @@ export const STORY_CAST: Readonly<Record<CharacterId, { campaign: StoryCampaign;
   lev: { campaign: 'uchastkovy', chapter: 4 },
 };
 
-/** The card index: the district's people — everyone but the two heroes (22). */
-export const STORY_CARD_INDEX: readonly CharacterId[] = CHARACTER_IDS.filter((c) => c !== 'petya' && c !== 'uchastkovy');
+/**
+ * The card index: the district's people — everyone the story meets but the two heroes (22). v0.2.18: the
+ * characters of the owner's later sheets aren't in the story yet, so they aren't in the index either (a card
+ * that can never be met would wait for ever).
+ */
+export const STORY_CARD_INDEX: readonly CharacterId[] = CHARACTER_IDS.filter((c) => c !== 'petya' && c !== 'uchastkovy' && STORY_CAST[c] !== undefined);
 
 const BY_ID = new Map(STORY_MISSIONS.map((m) => [m.id, m]));
 

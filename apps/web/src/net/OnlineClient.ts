@@ -364,6 +364,13 @@ export class OnlineClient {
     return this.applyInventory(await this.api.buySkin(weapon, finish), true);
   }
 
+  /** v0.2.18 part 2: the character case — the new character joins the crew at once. */
+  async openCharacterCase() {
+    const r = await this.api.openCharacterCase();
+    this.applyInventory(r.inventory, true);
+    return r;
+  }
+
   /** The skin case: a new skin goes on its weapon at once when the weapon wore none (the room re-reads it). */
   async openSkinCase() {
     const r = await this.api.openSkinCase();
