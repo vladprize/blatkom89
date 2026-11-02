@@ -4,6 +4,7 @@ import {
   DEFAULT_LOADOUT,
   FINISHES,
   FINISH_IDS,
+  FREE_FINISHES,
   SKIN_RARITIES,
   SKIN_RARITY_CHANCE,
   WEAPON_IDS,
@@ -38,7 +39,7 @@ test('ten finishes over four rarities; every weapon wears every finish; ids roun
   for (const id of allSkins()) assert.match(id, /^[a-z0-9_]{2,24}\.[a-z0-9_]{2,24}$/, 'fits the database check');
 });
 
-test('the skin case never repeats a skin, follows the rarity odds and ends when the collection is complete', () => {
+test('the skin case never repeats a skin, never gives a free one, follows the grade odds and ends when the collection is complete', () => {
   const owned = new Set<string>();
   const rand = rng(7);
   const counts: Record<SkinRarity, number> = { common: 0, rare: 0, epic: 0, legendary: 0 };
@@ -47,13 +48,18 @@ test('the skin case never repeats a skin, follows the rarity odds and ends when 
     const id = skinId(d.weapon, d.finish);
     assert.ok(!owned.has(id), 'no duplicates');
     assert.equal(FINISHES[d.finish].rarity, d.rarity);
+    assert.ok(!FREE_FINISHES.includes(d.finish), 'the free finishes never drop');
     owned.add(id);
     counts[d.rarity]++;
   }
-  // 200 draws from a large collection: the shares are near 55 / 28 / 13 / 4
-  assert.ok(counts.common > 85 && counts.common < 135, JSON.stringify(counts));
-  assert.ok(counts.rare > 35 && counts.rare < 80, JSON.stringify(counts));
-  assert.ok(counts.legendary < 20, JSON.stringify(counts));
+  // the odds: near 40 / 30 / 20 / 10 (v0.2.18, the owner's) while nothing is owned
+  assert.deepEqual(skinCaseOdds(new Set()), { common: 40, rare: 30, epic: 20, legendary: 10 });
+  const fresh: Record<SkinRarity, number> = { common: 0, rare: 0, epic: 0, legendary: 0 };
+  const r2 = rng(11);
+  for (let i = 0; i < 2000; i++) fresh[drawSkin(new Set(), r2)!.rarity]++;
+  assert.ok(Math.abs(fresh.common - 800) < 90 && Math.abs(fresh.rare - 600) < 90 && Math.abs(fresh.epic - 400) < 80 && Math.abs(fresh.legendary - 200) < 60, JSON.stringify(fresh));
+  // a grade whose skins are all owned drops out (the 32 regular «Winter» skins are gone after 200 draws)
+  assert.equal(counts.common, 32, JSON.stringify(counts));
   // everything but one legendary skin owned: the last draw must be that skin, then nothing
   const last = skinId('granatomet', 'yantar');
   const nearlyAll = new Set(allSkins().filter((s) => s !== last));

@@ -15,10 +15,10 @@ import type { Logger } from '../logging/logger.js';
 import type { MatchCompletion, MatchRecorder, MatchStart } from '../services/contracts.js';
 import { awardMatchTokens } from '../economy/repo.js';
 import { moveClubRatings } from '../clubs/repo.js';
-import { BlatRepo, creditLevels } from '../blat/repo.js';
-import type { ConfirmResult } from '../blat/repo.js';
+import { ReferralRepo } from '../referrals/repo.js';
+import type { ConfirmResult } from '../referrals/repo.js';
+import { creditLevelBlats } from './levelRewards.js';
 import { applyKonResults, konOutcome } from '../kon/repo.js';
-import { refundStakes, settleMatchStakes } from '../blat/stakes.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -75,10 +75,10 @@ export class PgMatchRecorder implements MatchRecorder {
   }
 
   private async confirmReferrals(userIds: string[]): Promise<void> {
-    const blat = new BlatRepo(this.sql, { publicUrl: '' });
+    const refs = new ReferralRepo(this.sql, { publicUrl: '' });
     for (const id of userIds) {
-      if (!UUID_RE.test(id) || !(await blat.hasPending(id))) continue;
-      const r = await blat.tryConfirm(id);
+      if (!UUID_RE.test(id) || !(await refs.hasPending(id))) continue;
+      const r = await refs.tryConfirm(id);
       if (r) {
         this.log.info('referral', r.status === 'confirmed' ? { referee: id, referrer: r.paid.referrerId, reward: r.paid.reward, ordinal: r.paid.ordinal } : { referee: id, referrer: r.referrerId, held: r.reason });
         this.onReferral?.(r);
@@ -139,8 +139,8 @@ export class PgMatchRecorder implements MatchRecorder {
           await tx`INSERT INTO player_achievements (user_id, achievement_id, match_id) VALUES (${p.userId}, ${a}, ${m.matchId}) ON CONFLICT DO NOTHING`;
         }
         const totalTokens = await awardMatchTokens(tx, p.userId, m.matchId, tokens);
-        // V2.0: $BLAT for every level reached (each level once — a unique operation id per level)
-        const blat = await creditLevels(tx, p.userId, level);
+        // v0.2.18: BLATS for every new level (each level once — a unique operation id per level)
+        const blats = await creditLevelBlats(tx, p.userId, level);
         await tx`
           INSERT INTO match_participants (match_id, user_id, character, team, place, kills, assists, deaths, score, damage_dealt, completed, won, via_invite, xp_awarded, tokens_awarded, rating_delta, joined_at, left_at)
           VALUES (${m.matchId}, ${p.userId}, ${p.character}, ${p.team}, ${p.place}, ${p.kills}, ${p.assists}, ${p.deaths}, ${p.score}, ${p.damageDealt}, ${p.completed}, ${won}, ${p.viaInvite}, ${xp}, ${tokens}, ${rDelta}, ${m.startedAt}, ${p.completed ? null : m.endedAt})
@@ -149,7 +149,7 @@ export class PgMatchRecorder implements MatchRecorder {
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
             tokens_awarded = EXCLUDED.tokens_awarded, rating_delta = EXCLUDED.rating_delta, left_at = EXCLUDED.left_at`;
-        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof!.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating, blatGained: blat.gained, totalBlat: blat.balance });
+        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof!.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating, blatsGained: blats.gained, totalBlats: blats.balance });
         clubDeltas.push({ userId: p.userId, delta: rDelta });
       }
       // the clubs of the people who played (v0.3): their rating moves with their members'
@@ -160,16 +160,6 @@ export class PgMatchRecorder implements MatchRecorder {
         for (const [userId, k] of kon) {
           const r = out.get(userId);
           if (r) out.set(userId, { ...r, kon: k });
-        }
-      }
-      // v0.2.17: the $BLAT Tournament's stakes — settled here, once, from the server's own result
-      if (m.kon && (m.stake ?? 0) > 0) {
-        const stakes = await settleMatchStakes(tx, m.matchId, m.winnerTeam, participants.map((p) => ({ userId: p.userId, team: p.team, completed: p.completed })));
-        for (const [userId, st] of stakes) {
-          const r = out.get(userId);
-          if (!r) continue;
-          const [b] = await tx<Array<{ blat: number }>>`SELECT blat FROM profiles WHERE user_id = ${userId}`;
-          out.set(userId, { ...r, stake: st, totalBlat: b?.blat ?? r.totalBlat });
         }
       }
       await tx`
@@ -213,8 +203,5 @@ export class PgMatchRecorder implements MatchRecorder {
       UPDATE matches SET status = 'abandoned', ended_at = now(), end_reason = ${reason.slice(0, 40)}
       WHERE id = ${matchId} AND status = 'active'`;
     this.log.info('match abandoned', { matchId, reason });
-    // v0.2.17: a staked match that never finished — every stake goes back
-    const back = await refundStakes(this.sql, matchId);
-    if (back) this.log.info('stakes refunded', { matchId, players: back });
   }
 }

@@ -1,15 +1,17 @@
 /**
  * Playable characters. Combat attributes are identical by design (see CHARACTER_BASE_STATS);
  * the differences are visual and narrative only (the abilities on the owner's sheets are deliberately
- * not implemented: half of the roster is sold for money, so no character may be stronger). The first
- * two (the rooster and the panther) are free; the rest are unlocked in the shop (see economy.ts): eleven
- * for experience level + talons (tokens), eleven for diamonds. Player-facing text is English with a
- * Soviet flavour.
+ * not implemented: most of the roster is sold for money, so no character may be stronger).
+ *
+ * v0.2.18 (the owner): two are free (the rooster and the panther), three are unlocked with talons and
+ * experience (the wolf, the bear and the crow), the rest are sold for BLATS by grade (grades.ts,
+ * prices in economy.ts). Player-facing text is English with a Soviet flavour.
  */
+import type { Grade } from './grades.js';
 export const CHARACTER_IDS = [
   'petya',
   'valuta',
-  // for level + talons
+  // for level + talons (v0.2.18: these three; the rest are for BLATS)
   'uchastkovy',
   'mihalych',
   'vorona',
@@ -21,7 +23,6 @@ export const CHARACTER_IDS = [
   'krysa',
   'svinya',
   'buyvol',
-  // for diamonds
   'piranya',
   'akula',
   'oryol',
@@ -36,7 +37,7 @@ export const CHARACTER_IDS = [
 ] as const;
 export type CharacterId = (typeof CHARACTER_IDS)[number];
 
-/** Free for everyone, unlocked by level + tokens, or bought for diamonds. */
+/** Free for everyone, unlocked by level + talons, or bought for BLATS. */
 export type CharacterTier = 'base' | 'progress' | 'premium';
 
 export interface CharacterDef {
@@ -54,6 +55,8 @@ export interface CharacterDef {
   /** A short backstory for the character screen and the shop. */
   lore: string;
   tier: CharacterTier;
+  /** v0.2.18: regular / rare / epic / legendary — the label everywhere and the BLATS price. */
+  grade: Grade;
   /** UI accent colour (hex) taken from the character's palette. */
   accent: string;
   /** Short label used in kill feed / name tags. */
@@ -76,6 +79,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Anything, as long as it comes with respect.',
     lore: 'For twenty years he ran the textile mill dormitory with an iron fist: lights out at 23:00, guests until 22:00, immersion heaters strictly forbidden. The dormitory was resettled, the habit of giving orders stayed. Now Petya has appointed himself commandant of the whole yard — and nobody has dared to argue yet.',
     tier: 'base',
+    grade: 'common',
     accent: '#c8312a',
     tag: 'Petya',
   },
@@ -92,6 +96,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'A gun, connections and good information.',
     lore: 'Started out flogging chewing gum outside the Intourist hotel; now half the jeans in the district pass through his garages. Moves without a sound, talks in a whisper and never lets go of his little book of phone numbers. Need a VCR, a sheepskin coat or the right certificate with the right stamp? Everybody goes to Valuta. The only question is the price.',
     tier: 'base',
+    grade: 'common',
     accent: '#d8a637',
     tag: 'Valuta',
   },
@@ -110,6 +115,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Pistol, rifle, baton, sawn-off.',
     lore: 'Fifteen years on the beat, and he remembers everyone who ever crossed the street in the wrong place. His reports get read out at tenants’ meetings like detective novels. The bosses keep promising him a transfer to the city centre, but he is in no hurry: here he knows who, where and for how much.',
     tier: 'progress',
+    grade: 'common',
     accent: '#3d5a8c',
     tag: 'Uchastkovy',
   },
@@ -126,6 +132,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Rifle, sawn-off, pistol, hand-to-hand.',
     lore: 'Served his time, came home and went out for a loaf of bread. On the way he broke up two fights, made peace between the garage owners and somehow became head of security for the whole cooperative. They say he never did buy the bread. You don’t need to talk Mikhalych into anything — just ask him like a human being.',
     tier: 'progress',
+    grade: 'common',
     accent: '#6b7536',
     tag: 'Mikhalych',
   },
@@ -143,6 +150,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Pistols, SMGs',
     lore: 'Karlych has ears in every yard of the Old Town: caretakers, cabbies, canteen ladies — everyone tells him something. A cassette recorder hangs on his chest and his pockets are full of tapes of other people’s conversations. Karlych never sells information — he trades it. And if you were the last to hear the news, Karlych was the first.',
     tier: 'progress',
+    grade: 'common',
     accent: '#b8302a',
     tag: 'Karlych',
   },
@@ -158,7 +166,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     business: 'Connections, deliveries, reconnaissance',
     weaponsNote: 'SMGs, pistols, knife',
     lore: 'Every conductor at the station knows Sonka, and so does every scales lady at the market. She turns up wherever a deal is being made and disappears before anyone misses their wallet. She smiles, whispers, promises — and everyone walks away sure they got a bargain. They realise they were taken a week later. Beautiful, dirty, effective: that is her signature.',
-    tier: 'progress',
+    tier: 'premium',
+    grade: 'common',
     accent: '#6f8a3a',
     tag: 'Sonka',
   },
@@ -174,7 +183,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     business: 'Weapons, machinery, modifications, break-ins',
     weaponsNote: 'Rifles, SMGs, shotguns',
     lore: 'There is no lock in the cooperative Tolyan can’t open in a minute, and no engine he can’t push-start. He’ll build an armoured car out of an old Moskvich, a timer out of an alarm clock, and out of a written-off shotgun — a piece people drive over from other districts to see. Says little, smokes a lot and always smells of engine oil.',
-    tier: 'progress',
+    tier: 'premium',
+    grade: 'common',
     accent: '#8a7444',
     tag: 'Tolyan',
   },
@@ -190,7 +200,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     business: 'Communications, reconnaissance, passing on the word',
     weaponsNote: 'Pistols, SMGs, rifles',
     lore: 'Gosha sits on the radio tower above the market and listens to the whole city: the militsiya band, the cabbies, the port dispatchers. Every negotiation in the district goes through him — he’ll pass it on, remind you, warn you and, if needed, embellish it a little. Walkie-talkie on his belt, pipe in his beak, flying goggles on his forehead. Whoever owns the information owns the district.',
-    tier: 'progress',
+    tier: 'premium',
+    grade: 'common',
     accent: '#e0a020',
     tag: 'Gosha',
   },
@@ -208,6 +219,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Uzi, shotguns, knives, mines',
     lore: 'They found Vityok on a river barge, where he had single-handedly chased off a whole gang of dockers from the next district. Since then he gets called when the talking is over. He never has a plan — just a red bandana, a mouth full of teeth and the firm conviction that fish have a say too. His own people are a bit scared of him; strangers even more so.',
     tier: 'premium',
+    grade: 'common',
     accent: '#c24a3a',
     tag: 'Vityok',
   },
@@ -224,6 +236,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Rifles, SMGs, shotguns',
     lore: 'Zhora came to the port back when they only loaded timber and fish. Now VCRs, jeans and everything “not allowed” come through his piers. He wears a pinstripe suit, smokes a fat cigar and never raises his voice — why would he, when he can simply smile. Everyone who trades by the sea pays Zhora his cut. Those who don’t pay don’t trade any more.',
     tier: 'premium',
+    grade: 'epic',
     accent: '#3d5a8c',
     tag: 'Zhora',
   },
@@ -240,6 +253,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Sniper rifle',
     lore: 'They started calling Garik “Pendos” — the Yankee — back in 1980: aviator shades, a sheepskin bomber jacket and chewing gum he chews even in his sleep. He traded a crate of matryoshka dolls for the shades with a foreign sailor and has never taken them off since. Garik sits up on the port cranes and sees everything that happens at the piers. He says little, shoots rarely — and almost never misses.',
     tier: 'premium',
+    grade: 'rare',
     accent: '#e8b030',
     tag: 'Garik',
   },
@@ -256,6 +270,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Assault and sniper rifles, pistols',
     lore: 'Nobody hires Lyova — you put your name down on his waiting list. He takes only difficult jobs, works alone and never haggles: the price is named, the question is closed. He wears a sheepskin coat all year round and never takes the cigarette out of his mouth, even on a job. The district tells legends about his past; the few who know the truth prefer to keep quiet.',
     tier: 'premium',
+    grade: 'rare',
     accent: '#d89a2a',
     tag: 'Lyova',
   },
@@ -272,6 +287,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Machine guns, RPGs, heavy weapons',
     lore: 'Every kiosk, cooperative and car workshop in the city has a “roof” — protection. And every roof has Batya. He doesn’t run, doesn’t shout and doesn’t hurry: he arrives in person, sits down, listens in silence — and the matter is closed for good. A red tracksuit, a fur waistcoat and a gold chain with a star: the whole city knows him by these, and nobody wants to check whether it’s true that he never forgets.',
     tier: 'premium',
+    grade: 'rare',
     accent: '#c8312a',
     tag: 'Batya',
   },
@@ -288,6 +304,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Pistols, SMGs, shotguns',
     lore: 'Slavik grew up in the port and has spent his whole life mastering one skill: coming out of the water dry. Jeans, chewing gum, video cassettes, hard currency — whatever the district needs, with Slavik it’s “already on its way”. He adores gold, tracksuits and good cigars, and in an argument he always offers a deal first — and only then uses his claws.',
     tier: 'premium',
+    grade: 'common',
     accent: '#c8402a',
     tag: 'Slavik',
   },
@@ -305,7 +322,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     business: 'Sabotage, reconnaissance, poisoned zones',
     weaponsNote: 'SMGs, shotguns, grenades, toxic mixtures',
     lore: 'Sizy grew up on the roof of the chemical works and has glowed in the dark ever since — at least his left eye has. The pockets of his vest hold jars of green muck to his own recipe, a radiation badge sits on his chest, and his head is full of plans nobody understands, himself included. Wherever the Chemist has been, it smells of sulphur for a long time and nobody wants to stay.',
-    tier: 'progress',
+    tier: 'premium',
+    grade: 'common',
     accent: '#7fbf3a',
     tag: 'Sizy',
   },
@@ -321,7 +339,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     business: 'Scouting, scrounging, sabotage, survival',
     weaponsNote: 'SMGs, shotguns, home-made guns, traps',
     lore: 'They dusted Prusak with poison, evicted him and walled him up in the boiler-house basement — and every time he came back livelier than before. He knows every basement, heating duct and crawl space in the district; his rucksack holds whatever might come in handy, from sugar to spare parts. He doesn’t take his dark glasses off even at night. They say he will outlive us all, and the district too.',
-    tier: 'progress',
+    tier: 'premium',
+    grade: 'common',
     accent: '#9a5a24',
     tag: 'Prusak',
   },
@@ -337,7 +356,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     business: 'Muscle jobs, taking positions, clean-ups',
     weaponsNote: 'Shotguns, SMGs, heavy weapons, bat',
     lore: 'Sery pumped iron in a basement gym on barbells made of tractor axles and washed his workouts down with water from the chemical works’ settling tank. The muscles grew, the fur thinned, and here and there glowing green slime came through — Sery thinks it is just being in shape. He doesn’t explain much: first he takes the door off, then he asks who lived there.',
-    tier: 'progress',
+    tier: 'premium',
+    grade: 'common',
     accent: '#b52a2a',
     tag: 'Sery',
   },
@@ -353,7 +373,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     business: 'Revenge, destruction, freedom',
     weaponsNote: 'Shotguns, axe, chain, pistols',
     lore: 'Borka’s ear tag still says 89 — that is how the meat plant registered him. The night before «dispatch» he snapped his chain, broke down the gates of Slaughterhouse No. 3 and has been on the run ever since. Scars, tusks and a length of chain round his neck are all they left him. Borka forgives nobody in uniform and spares nobody, himself included.',
-    tier: 'progress',
+    tier: 'premium',
+    grade: 'common',
     accent: '#d0645a',
     tag: 'Borka',
   },
@@ -369,7 +390,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     business: 'Muscle clean-ups, security, knocking down barriers, heavy jobs',
     weaponsNote: 'Machine guns, shotguns, grenade launchers, fists',
     lore: 'For ten years Bugai stood on the door of the Kosmos restaurant and never let in a single man without a tie. The restaurant closed, the habit stayed: now he «stands on the door» of the whole industrial zone. Horns, a gold chain with a dollar sign and a cigar — a calling card nobody needs to see twice.',
-    tier: 'progress',
+    tier: 'premium',
+    grade: 'rare',
     accent: '#a4241e',
     tag: 'Bugai',
   },
@@ -386,6 +408,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Pistols, SMGs, knife',
     lore: 'Every barman and every black marketeer at the night market knows Murka. She hears everything said at the next table and remembers who owes whom. A tipster: she’ll tell you where the goods are, when the watchman leaves and who has the warehouse keys — for a cut, of course. One smile, one drag on her cigarette, and you won’t notice how you told her too much.',
     tier: 'premium',
+    grade: 'rare',
     accent: '#8e1f2c',
     tag: 'Murka',
   },
@@ -402,6 +425,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Pistols, SMGs, knives',
     lore: 'Alisa sold one co-op owner the fountain on the square, another a «Czech» furniture set made of chipboard, and a third his own IOU that he had given her in the first place. The clubs know her under five names, the police under six. Fur coat thrown open, a gold heart on her neck and a smile after which you had better check your pockets.',
     tier: 'premium',
+    grade: 'rare',
     accent: '#e0702a',
     tag: 'Alisa',
   },
@@ -418,6 +442,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Spiked bat, shotguns, grenade launchers, fists',
     lore: 'Rogov served three terms and walked out still in his orange prison overalls — says he got used to them. Crowns are tattooed on his hide, and round his neck hangs the chain of the handcuffs he broke himself. He talks little and only by the code. If Rogov is charging, step aside: walls fall too, he has checked.',
     tier: 'premium',
+    grade: 'rare',
     accent: '#e0601c',
     tag: 'Rogov',
   },
@@ -434,6 +459,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Machine guns, shotguns, fists, grenades',
     lore: 'Samson is the foreman of the central market’s porters and of all its crew. He lifts a crate of watermelons with one hand and a debtor with two fingers. At the market his word is law: the stallholders bring him pies, the co-op owners bring envelopes. Calm as long as nobody touches his own; if they do, the whole crew comes out.',
     tier: 'premium',
+    grade: 'epic',
     accent: '#9c1c22',
     tag: 'Samson',
   },
@@ -450,6 +476,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     weaponsNote: 'Golden rifle, pistols, grenades',
     lore: 'Officially Arkadich is the modest head of a consumer-goods workshop. Unofficially his underground workshops dress half the city: «Montana» jeans, jackets, bobble hats. A fur coat on his shoulders, gold on his neck, a cigar in his teeth — and not a single piece of paper anyone could produce against him. Arkadich never raises his voice: why would he, when everyone listens anyway?',
     tier: 'premium',
+    grade: 'legendary',
     accent: '#d4a237',
     tag: 'Arkadich',
   },

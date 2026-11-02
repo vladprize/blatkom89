@@ -119,7 +119,7 @@ export const registerClubRoutes: RouteModule = (router, deps) => {
     const mapId = body.mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)]!;
     let room;
     try {
-      room = deps.rooms.create(mapId, true, me.userId, null, 'teams', body.kon, 0, battle);
+      room = deps.rooms.create(mapId, true, me.userId, null, 'teams', body.kon, battle);
     } catch {
       throw new HttpError(503, 'capacity', 'The server is full, try again later');
     }

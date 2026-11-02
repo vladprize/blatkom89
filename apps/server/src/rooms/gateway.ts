@@ -9,7 +9,6 @@ import { WebSocketServer } from 'ws';
 import type { WebSocket } from 'ws';
 import { ClientMessageSchema, WS_CLOSE, PROTOCOL_VERSION } from '@blatkom/shared';
 import type { RoomManager } from './RoomManager.js';
-import { STAKE_REFUSAL_TEXT } from './MatchRoom.js';
 import type { Services } from '../services/contracts.js';
 import type { Logger } from '../logging/logger.js';
 import type { SocialHub } from '../social/hub.js';
@@ -98,19 +97,6 @@ export function attachGateway(server: Server, rooms: RoomManager, services: Serv
         return ws.close(WS_CLOSE.ROOM_NOT_FOUND, 'room not found');
       }
       const viaInvite = room.isPrivate;
-      // v0.2.17: a staked tournament room — the player agreed to this stake and may stake it (a player
-      // already in the room is coming back: their stake is in already)
-      if (room.stake > 0 && !room.hasMember(user.userId)) {
-        if (hello.stake !== room.stake) {
-          ws.send(JSON.stringify({ type: 'error', code: 'stake_confirm', message: `This room’s stake is ${room.stake} $BLAT — confirm it to come in` }));
-          return ws.close(WS_CLOSE.POLICY, 'stake_confirm');
-        }
-        const why = services.stakes ? await services.stakes.check(user.userId, room.stake).catch(() => 'stakes_off' as const) : ('stakes_off' as const);
-        if (why) {
-          ws.send(JSON.stringify({ type: 'error', code: why, message: STAKE_REFUSAL_TEXT[why] }));
-          return ws.close(WS_CLOSE.POLICY, why);
-        }
-      }
       // v0.2.17: a gang battle takes only its two gangs' people (a player already in the room is coming back)
       let gang: string | null = null;
       if (room.battle && !room.hasMember(user.userId)) {

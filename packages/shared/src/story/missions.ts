@@ -108,8 +108,13 @@ export const STORY_TICKET_TTL_MS = 3 * 3600_000;
  * but was never played — and paid nothing. A real run takes STORY_MIN_MS at least, so 0 is never a time.
  */
 export const STORY_OPENED_BEST_MS = 0;
-/** Compensation for a story reward that is already owned: a skin is worth a skin case. */
+/** Compensation for a story reward that is already owned: a skin is worth 150 talons. */
 export const STORY_OWNED_SKIN_TALONS = 150;
+/**
+ * v0.2.18: a story character already owned that is sold for BLATS is worth this many talons (a talon
+ * character is worth its talon price).
+ */
+export const STORY_OWNED_CHARACTER_TALONS = 500;
 
 const kit = (sidearm: WeaponId, melee: WeaponId, primary: WeaponId | null = null, gadget: GadgetId | null = null): StoryKit => ({ sidearm, melee, primary, gadget });
 const enemy = (character: CharacterId, role: StoryRole | 'self', k: StoryKit, difficulty: BotDifficulty = 'normal', extra: Partial<StoryNpc> = {}): StoryNpc => ({ character, role, side: 'enemy', kit: k, difficulty, ...extra });

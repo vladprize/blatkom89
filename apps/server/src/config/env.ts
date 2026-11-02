@@ -69,25 +69,12 @@ const EnvSchema = z.object({
   MATCH_FILL_BOTS: bool.default('true'),
   /** Paid cases can be switched off where randomised paid items are restricted (docs/ECONOMY.md). */
   CASES_ENABLED: bool.default('true'),
-  /** Card payments (Stripe Checkout). Both keys are required to enable them. */
+  /** Card payments for BLATS (Stripe Checkout). Both keys are required to enable them. */
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
-  /** Crypto payments (NOWPayments invoices). Both keys are required to enable them. */
-  NOWPAYMENTS_API_KEY: z.string().optional(),
-  NOWPAYMENTS_IPN_SECRET: z.string().optional(),
-  NOWPAYMENTS_SANDBOX: bool.default('false'),
-  /**
-   * V2.0: the BLAT DROP announcement date players count down to (ISO 8601, e.g. 2027-04-23T12:00:00Z),
-   * used until an administrator sets one in /admin → $BLAT (docs/BLAT.md §6).
-   */
-  BLAT_DROP_ANNOUNCE_AT: z.string().datetime({ offset: true }).optional(),
-  /** v0.2.17: the project's Solana wallet shown in the $BLAT section (default: the owner's address). */
-  PROJECT_SOL_WALLET: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(),
   /** v0.2.17: the main menu's X and Telegram buttons (left empty: «coming soon»). */
   SOCIAL_X_URL: z.string().url().optional(),
   SOCIAL_TELEGRAM_URL: z.string().url().optional(),
-  /** v0.2.17: stakes in the $BLAT Tournament (on by default; `false` switches them off — docs/KON.md §6). */
-  TOURNAMENT_STAKES: bool.default('true'),
   /** Password-reset emails through Resend (https://resend.com); without a key the admin issues reset links. */
   RESEND_API_KEY: z.string().optional(),
   MAIL_FROM: z.string().optional(),

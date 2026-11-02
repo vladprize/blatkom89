@@ -38,8 +38,8 @@ export interface StoryReward {
   first: boolean;
   talons: number;
   xp: number;
-  /** $BLAT for the levels this mission's experience reached (V2.0: each level pays once). */
-  blatGained: number;
+  /** v0.2.18: BLATS for the levels this mission's experience reached (10 a level, each level once). */
+  blatsGained: number;
   /** The chapter's achievement when this mission finished the chapter. */
   achievement: AchievementId | null;
   characters: CharacterId[];

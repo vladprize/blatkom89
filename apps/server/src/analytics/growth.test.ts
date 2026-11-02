@@ -5,7 +5,7 @@
  * Telegram, direct; a switched-off partner counts for nothing; an existing account is never re-labelled.
  * The first visit keeps its partner and campaign. Partners: admins only (CSRF, audited, codes unique),
  * the numbers per link. /api/admin/growth: registrations, unique players, first matches, sources, first
- * visits, invitations and their conversion, levels, the Kon, $BLAT issued; the overview's new numbers;
+ * visits, invitations and their conversion, levels, the Kon, BLATS for levels and talons for invitations; the overview's new numbers;
  * the CSV exports (admins only, formula-safe).
  */
 import { test, before, after } from 'node:test';
@@ -120,7 +120,7 @@ test('the first touch: sign-ups keep how they came (precedence, Telegram’s sta
   assert.equal((await guest('Bad Touch', { source: { referrer: 'http://evil/' } })).status, 400);
 });
 
-test('/api/admin/growth: unique players, first matches, sources, first visits, invitations, levels, the Kon, $BLAT; partners’ numbers; the overview; CSV', async () => {
+test('/api/admin/growth: unique players, first matches, sources, first visits, invitations, levels, the Kon, the rewards; partners’ numbers; the overview; CSV', async () => {
   const now = Date.now();
   // matches: p1 (the partner's) played a whole match; t1 played by invitation; a Kon 2×2 between u1, d1, i1 and f1
   const match = async (people: Array<{ id: string; viaInvite?: boolean; completed?: boolean }>, kon: string | null = null) => {
@@ -146,7 +146,7 @@ test('/api/admin/growth: unique players, first matches, sources, first visits, i
   await app.db.sql`UPDATE referrals SET status = 'confirmed', decided_at = now() WHERE referee_id = ${ids.f1!}`;
   // a level reached in the period
   await app.db.sql`UPDATE profiles SET level = 12, xp = 9000 WHERE user_id = ${ids.p1!}`;
-  await app.db.sql`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${ids.p1!}, 'blat', 750, 1050, 'level', 'level:12')`;
+  await app.db.sql`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${ids.p1!}, 'diamonds', 10, 10, 'level', 'level:12')`;
 
   const g = await api<AdminGrowth>(app.base, '/api/admin/growth?range=7d', { cookie });
   assert.equal(g.status, 200, g.text);
@@ -172,9 +172,11 @@ test('/api/admin/growth: unique players, first matches, sources, first visits, i
   assert.equal(g.body.levels.max, 12);
   assert.ok(g.body.levels.reached.some((x) => x.level === 12 && x.players === 1));
   assert.deepEqual([g.body.kon.matches, g.body.kon.players, g.body.kon.byFormat.find((x) => x.format === '2x2')?.matches], [1, 4, 1]);
-  const [issued] = await app.db.sql<Array<{ n: number }>>`SELECT COALESCE(sum(delta), 0)::int AS n FROM currency_ledger WHERE currency = 'blat' AND delta > 0`;
-  assert.equal(g.body.blat.issued, issued!.n);
-  assert.ok(g.body.blat.fromLevels >= 750 && g.body.blat.fromLevels + g.body.blat.fromReferrals === g.body.blat.issued);
+  // v0.2.18: BLATS for levels, talons for invitations
+  const [levels] = await app.db.sql<Array<{ n: number }>>`SELECT COALESCE(sum(delta), 0)::int AS n FROM currency_ledger WHERE currency = 'diamonds' AND reason = 'level'`;
+  const [invites] = await app.db.sql<Array<{ n: number }>>`SELECT COALESCE(sum(delta), 0)::int AS n FROM currency_ledger WHERE currency = 'tokens' AND reason = 'referral'`;
+  assert.deepEqual([g.body.rewards.blatsForLevels, g.body.rewards.talonsForInvitations], [levels!.n, invites!.n]);
+  assert.ok(levels!.n >= 10, `level 12 paid its 10 BLATS (${levels!.n})`);
 
   const partners = await api<AdminPartnerRow[]>(app.base, '/api/admin/partners?range=7d', { cookie });
   const one = partners.body.find((x) => x.code === 'streamer_one')!;
@@ -184,7 +186,7 @@ test('/api/admin/growth: unique players, first matches, sources, first visits, i
   assert.equal(partners.body.find((x) => x.code === 'gone_channel')?.active, false);
 
   const o = await api<AdminOverview>(app.base, '/api/admin/overview?range=7d', { cookie });
-  assert.deepEqual([o.body.uniquePlayers, o.body.firstMatchPlayers, o.body.blatIssued], [7, 7, issued!.n]);
+  assert.deepEqual([o.body.uniquePlayers, o.body.firstMatchPlayers, o.body.blatsForLevels], [7, 7, levels!.n]);
 
   const csv = await api(app.base, '/api/admin/export/partners.csv?range=7d', { cookie });
   assert.equal(csv.status, 200);

@@ -12,18 +12,18 @@ import type { TelegramLinkOutcome } from '../auth/telegramLink.js';
 import { pgContext } from '../services/persistence.js';
 import { sendResetMail } from '../auth/email.js';
 import type { Sql } from '../database/db.js';
-import { BlatRepo } from '../blat/repo.js';
+import { ReferralRepo } from '../referrals/repo.js';
 import { attachSource, partnerFromStartParam, recordVisitSource } from '../analytics/growth.js';
 
 /**
  * V2.0: a NEW account opened through a referral link is attached to its inviter (it counts once the new
- * player has played a whole match — blat/repo.ts). Existing accounts are never re-attached. Never fails
+ * player has played a whole match — referrals/repo.ts). Existing accounts are never re-attached. Never fails
  * the sign-in.
  */
 export async function attachReferral(sql: Sql, log: { warn(m: string, f?: Record<string, unknown>): void }, userId: string, isNew: boolean, code: string | null | undefined): Promise<boolean> {
   if (!isNew || !code) return false;
   try {
-    return (await new BlatRepo(sql, { publicUrl: '' }).attach(userId, code)) === 'attached';
+    return (await new ReferralRepo(sql, { publicUrl: '' }).attach(userId, code)) === 'attached';
   } catch (e) {
     log.warn('referral attach failed', { err: e as Error });
     return false;

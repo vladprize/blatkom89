@@ -11,7 +11,7 @@ import { SocialHub } from './social/hub.js';
 import { createPersistence } from './services/persistence.js';
 import { KeepAwake } from './services/keepAwake.js';
 import { setupBot } from './telegram/bot.js';
-import { notifyReferral } from './api/blat.js';
+import { notifyReferral } from './api/referrals.js';
 
 const env = loadEnv();
 const log = createLogger(env.LOG_LEVEL, { service: 'blatkom-server', version: env.SERVER_VERSION });

@@ -21,7 +21,7 @@ import { registerSocialRoutes } from './api/social.js';
 import { registerTelegramRoutes } from './telegram/bot.js';
 import { registerClubRoutes } from './api/clubs.js';
 import { registerOAuthRoutes } from './api/oauth.js';
-import { registerBlatRoutes } from './api/blat.js';
+import { registerReferralRoutes } from './api/referrals.js';
 import { registerKonRoutes } from './api/kon.js';
 import { registerStoryRoutes } from './api/story.js';
 import type { KeepAwake } from './services/keepAwake.js';
@@ -42,15 +42,15 @@ export interface AppDeps {
 
 export type RouteModule = (router: Router, deps: AppDeps) => void;
 
-export const ROUTE_MODULES: RouteModule[] = [registerAuthRoutes, registerOAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerClubRoutes, registerBlatRoutes, registerKonRoutes, registerStoryRoutes, registerTelegramRoutes, registerAdminRoutes];
+export const ROUTE_MODULES: RouteModule[] = [registerAuthRoutes, registerOAuthRoutes, registerProfileRoutes, registerRoomRoutes, registerEventRoutes, registerShopRoutes, registerSocialRoutes, registerClubRoutes, registerReferralRoutes, registerKonRoutes, registerStoryRoutes, registerTelegramRoutes, registerAdminRoutes];
 
 export function createApp(deps: AppDeps, modules: RouteModule[] = ROUTE_MODULES) {
   const router = new Router();
   const startedAt = Date.now();
   router.get('/api/health', (ctx) => ctx.json(200, { ok: true, version: deps.env.SERVER_VERSION, uptimeSec: Math.round((Date.now() - startedAt) / 1000), rooms: deps.rooms.count() }));
-  // v0.2.17: the menu's links and whether the $BLAT Tournament takes stakes
+  // v0.2.17: the menu's links
   router.get('/api/site', (ctx) => {
-    const res: SiteConfig = { x: deps.env.SOCIAL_X_URL ?? null, telegram: deps.env.SOCIAL_TELEGRAM_URL ?? null, stakes: deps.env.TOURNAMENT_STAKES };
+    const res: SiteConfig = { x: deps.env.SOCIAL_X_URL ?? null, telegram: deps.env.SOCIAL_TELEGRAM_URL ?? null };
     ctx.json(200, res, { 'cache-control': 'public, max-age=300' });
   });
   router.get('/api/ready', async (ctx) => {

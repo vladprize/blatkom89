@@ -11,7 +11,6 @@ import { GADGET_IDS } from '../game-rules/gadgets.js';
 import type { WeaponId } from '../game-rules/weapons.js';
 import { FINISH_IDS } from '../game-rules/skins.js';
 import { KON_FORMATS } from '../game-rules/kon.js';
-import { isKonStake } from '../game-rules/konStakes.js';
 import type { KonFormat } from '../game-rules/kon.js';
 import type { FinishId, SkinRarity } from '../game-rules/skins.js';
 import type { Currency, DiamondPack, Inventory, Rarity } from '../game-rules/economy.js';
@@ -21,7 +20,6 @@ import type { GameMode } from '../game-rules/match.js';
 import type { MapId } from '../maps/types.js';
 import type { AchievementId } from '../game-rules/progression.js';
 import type { StoryDone } from './story.js';
-import type { BlatPool } from '../game-rules/blat.js';
 import { MAX_NAME_LENGTH } from '../constants/game.js';
 import { LATIN_NAME_RE } from '../game-rules/aliases.js';
 import { PlatformSchema } from '../events/analytics.js';
@@ -149,21 +147,21 @@ export const LoadoutRequest = z
   })
   .strict();
 /** Opening a paid case requires an explicit adult confirmation (see docs/ECONOMY.md). */
-/** `confirmAge` is required only while a case costs real money (diamonds); talon cases need none. */
+/** `confirmAge` is required only while a case costs real money (BLATS); talon cases need none. */
 export const CaseOpenRequest = z.object({ confirmAge: z.literal(true).optional() }).strict();
-export const CheckoutRequest = z.object({ packId: z.string().regex(/^[a-z0-9]{2,16}$/), method: z.enum(['card', 'crypto']) }).strict();
+/** v0.2.18: one weapon's skin for BLATS (the free finishes are everyone's already). */
+export const SkinBuyRequest = z.object({ weapon: z.enum(WEAPON_IDS), finish: z.enum(FINISH_IDS) }).strict();
+export const CheckoutRequest = z.object({ packId: z.string().regex(/^[a-z0-9]{2,16}$/), method: z.enum(['card']) }).strict();
 
-/** v0.2.17: GET /api/site — the menu's X and Telegram links (null: «coming soon»), stakes in the $BLAT Tournament. */
+/** v0.2.17: GET /api/site — the menu's X and Telegram links (null: «coming soon»). */
 export interface SiteConfig {
   x: string | null;
   telegram: string | null;
-  stakes: boolean;
 }
 
-/** GET /api/shop/config — which payment methods are configured on this server. */
+/** GET /api/shop/config — which payment methods are configured on this server (v0.2.18: crypto is gone). */
 export interface ShopConfig {
   card: boolean;
-  crypto: boolean;
   casesEnabled: boolean;
   packs: DiamondPack[];
 }
@@ -207,10 +205,8 @@ export const UpdateProfileRequest = z
   })
   .strict();
 /** V2.0 part D: `kon` makes it a «Блатной кон» room (team deathmatch, fixed sides, people only). */
-/** v0.2.17: the $BLAT Tournament's stake (0 or one of KON_STAKE_AMOUNTS; tournament rooms only). */
-const KonStakeField = z.number().int().refine((v) => isKonStake(v), { message: 'not one of the stakes' });
-export const CreateRoomRequest = z.object({ mapId: z.enum(MAP_IDS), isPrivate: z.boolean().default(true), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional(), stake: KonStakeField.optional() }).strict();
-export const QuickMatchRequest = z.object({ mapId: z.enum(MAP_IDS).optional(), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional(), stake: KonStakeField.optional() }).strict();
+export const CreateRoomRequest = z.object({ mapId: z.enum(MAP_IDS), isPrivate: z.boolean().default(true), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional() }).strict();
+export const QuickMatchRequest = z.object({ mapId: z.enum(MAP_IDS).optional(), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional() }).strict();
 
 export interface PublicProfile {
   id: string;
@@ -236,10 +232,8 @@ export interface PublicProfile {
   avatar: AvatarId | null;
   tokens: number;
   diamonds: number;
-  /** V2.0: $BLAT — in-game points (game-rules/blat.ts). */
-  blat?: number;
-  /** V2.0: $BLAT paid by this very request for levels not paid before (the welcome, older levels). */
-  blatCredited?: number;
+  /** v0.2.18: BLATS paid by this very request for levels not paid before (10 a level, once). */
+  blatsCredited?: number;
   /** Email sign-in is set up (the account can be restored on another device). */
   email: string | null;
   /** Rating (the Top-100 table; starts at 1000). */
@@ -276,8 +270,6 @@ export interface CreateRoomResponse {
   mode: GameMode;
   /** V2.0 part D: a «Блатной кон» room. */
   kon?: KonFormat | null;
-  /** v0.2.17: the $BLAT Tournament's stake (0: none). */
-  stake?: number;
 }
 
 /** POST /api/rooms/quick */
@@ -286,8 +278,6 @@ export interface QuickMatchResponse {
   mapId: MapId;
   mode: GameMode;
   kon: KonFormat | null;
-  /** v0.2.17: the $BLAT Tournament's stake (0: none). */
-  stake?: number;
 }
 
 export type InviteStatus = 'joinable' | 'full' | 'in_progress' | 'finished' | 'expired' | 'not_found';
@@ -303,8 +293,6 @@ export interface InviteInfo {
   hostName: string | null;
   /** V2.0 part D: a «Блатной кон» room. */
   kon?: KonFormat | null;
-  /** v0.2.17: the $BLAT Tournament's stake everyone in the room puts in (0: none). */
-  stake?: number;
   /** v0.2.17: a gang battle — only these two gangs' people come in. */
   battle?: GangBattle | null;
 }
@@ -405,8 +393,8 @@ export interface AdminOverview {
   uniquePlayers?: number;
   /** V2.0 part F: people whose first online match was in the period. */
   firstMatchPlayers?: number;
-  /** V2.0 part F: $BLAT credited in the period. */
-  blatIssued?: number;
+  /** v0.2.18: BLATS paid for levels in the period. */
+  blatsForLevels?: number;
 }
 
 export interface AdminCharts {
@@ -516,11 +504,11 @@ export interface AdminPlayerDetail {
   items: Array<{ kind: 'weapon' | 'character' | 'gadget'; id: string; source: 'tokens' | 'diamonds' | 'case' | 'grant' | 'story'; acquiredAt: string }>;
   mods: Array<{ weapon: string; mod: string; acquiredAt: string }>;
   /** Latest balance changes, newest first; `admin` is set for grants. */
-  ledger: Array<{ at: string; currency: 'tokens' | 'diamonds' | 'blat'; delta: number; balanceAfter: number; reason: string; ref: string | null; admin: string | null }>;
+  ledger: Array<{ at: string; currency: 'tokens' | 'diamonds'; delta: number; balanceAfter: number; reason: string; ref: string | null; admin: string | null }>;
   payments: AdminPaymentRow[];
-  /** V2.0: $BLAT, the referral code, who invited the player and whom they invited; an admin's flag. */
-  blat?: {
-    balance: number;
+  /** The referral code, who invited the player and whom they invited; an admin's flag (no invitation rewards while set). */
+  referral?: {
+    /** Talons earned for invitations. */
     earned: number;
     refCode: string | null;
     referredBy: { id: string | null; name: string | null; status: AdminReferralRow['status'] } | null;
@@ -550,78 +538,27 @@ export interface AdminReferralRow {
   note: string | null;
 }
 
-/** V2.0: $BLAT in numbers (admin). */
-export interface AdminBlatSummary {
-  totalBalance: number;
-  holders: number;
-  /** All time, by source. */
-  issued: Record<'level' | 'referral' | 'grant', number>;
-  /** In the selected period, by source. */
-  issuedInRange: Record<'level' | 'referral' | 'grant', number>;
+/** The invitations in numbers (admin; v0.2.18: they pay talons). */
+export interface AdminReferralSummary {
   referrals: Record<AdminReferralRow['status'], number>;
-  top: Array<{ id: string; name: string; balance: number; flagged: boolean }>;
+  /** Talons paid for invitations: all time and in the selected period. */
+  talons: number;
+  talonsInRange: number;
+  /** Invitations attached in the selected period. */
+  attachedInRange: number;
+  /** Accounts flagged by an administrator (no invitation rewards). */
   flagged: number;
-  /** v0.2.17: the supply's pools (the cap and what each has given). */
-  pools?: Array<{ pool: BlatPool; cap: number; issued: number }>;
 }
-
-/** v0.2.17: POST /api/admin/players/:id/blat-allocation — a share out of a pool (not the players'). */
-export const AdminBlatAllocationRequest = z
-  .object({
-    pool: z.enum(['influencers', 'friends', 'reserve']),
-    amount: z.number().int().min(1).max(100_000_000),
-    note: z.string().trim().min(3).max(120),
-  })
-  .strict();
-export type AdminBlatAllocationRequest = z.infer<typeof AdminBlatAllocationRequest>;
 
 /** v0.2.17: POST /api/admin/players/:id/founder — what «Make founder» did. */
 export interface AdminFounderResult {
   level: number;
-  blat: number;
-  allocated: number;
   items: number;
 }
 
 export const AdminReferralDecision = z.object({ action: z.enum(['confirm', 'reject']), note: z.string().trim().max(200).optional() }).strict();
 
-/** V2.0 part C: the BLAT DROP announcement date as the admin sees it (`source`: who set it; v0.2.17:
- * `default` — the owner's date built into this release, BLAT_DROP_DEFAULT_ANNOUNCE_AT). */
-export interface AdminBlatDrop {
-  announceAt: string | null;
-  source: 'admin' | 'env' | 'default' | null;
-  updatedAt: string | null;
-  updatedBy: string | null;
-}
-export const AdminBlatDropRequest = z.object({ announceAt: z.string().datetime({ offset: true }).nullable() }).strict();
-
-/** V2.0 part C: a balance snapshot (`rowsNow`: rows left — deleted accounts leave with their data). */
-export interface AdminBlatSnapshot {
-  id: string;
-  takenAt: string;
-  takenBy: string | null;
-  note: string | null;
-  accounts: number;
-  eligible: number;
-  total: number;
-  eligibleTotal: number;
-  rowsNow: number;
-}
-export interface AdminBlatSnapshotRow {
-  userId: string;
-  name: string;
-  balance: number;
-  earned: number;
-  fromLevels: number;
-  fromReferrals: number;
-  fromGrants: number;
-  ledgerSum: number;
-  eligible: boolean;
-  reasons: string[];
-  flag: string | null;
-}
-export const AdminBlatSnapshotRequest = z.object({ note: z.string().trim().max(200).optional() }).strict();
-export const AdminBlatFlagRequest = z.object({ flag: z.string().trim().min(1).max(200).nullable() }).strict();
+export const AdminFlagRequest = z.object({ flag: z.string().trim().min(1).max(200).nullable() }).strict();
 
 export interface AdminPaymentRow {
   id: string;
@@ -743,13 +680,14 @@ export interface AdminGrowth {
   levels: {
     /** Every account by its level now. */
     buckets: Array<{ bucket: string; players: number }>;
-    /** Levels reached in the period (from the $BLAT level credits: one per player and level). */
+    /** Levels reached in the period (from the level credits — $BLAT until v0.2.17, BLATS since: one per player and level). */
     reached: Array<{ level: number; players: number }>;
     average: number | null;
     max: number;
   };
   kon: { matches: number; players: number; byFormat: Array<{ format: KonFormat; matches: number }> };
-  blat: { issued: number; fromLevels: number; fromReferrals: number };
+  /** v0.2.18: BLATS paid for levels and talons paid for invitations in the period. */
+  rewards: { blatsForLevels: number; talonsForInvitations: number };
 }
 
 /** V2.0 part F: a partner's link (an author, a streamer) and what it brought in the period. Measuring only — no payouts. */

@@ -2,14 +2,14 @@ import { readFileSync } from 'node:fs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
-import { CASE_PRICE, CASE_TABLE, CHARACTER_IDS, CHARACTER_PRICES, DEFAULT_LOADOUT, FINISHES, FREE_CHARACTERS, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, PROTOCOL_VERSION, REAL_MONEY, SKIN_CASE_PRICE, WEAPON_PRICES, parseSkin, skinId, tokensForMatch } from '@blatkom/shared';
+import { CASE_PRICE, CASE_TABLE, CHARACTER_IDS, CHARACTER_PRICES, DEFAULT_LOADOUT, DIAMOND_PACKS, FINISHES, FREE_CHARACTERS, FREE_FINISHES, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, PROTOCOL_VERSION, REAL_MONEY, SKIN_CASE_PRICE, SKIN_PRICES, WEAPON_PRICES, parseSkin, skinId, tokensForMatch } from '@blatkom/shared';
 import { WebSocket } from 'ws';
 import { startTestApp, api, devLogin, TEST_BOT_TOKEN } from '../admin/testkit.js';
 import { signInitData } from '../auth/telegram.js';
 import type { TestApp } from '../admin/testkit.js';
 import { pgContext } from '../services/persistence.js';
 import { silentLogger } from '../logging/logger.js';
-import { StripeProvider, NowPaymentsProvider, sortKeysDeep } from '../payments/providers.js';
+import { StripeProvider } from '../payments/providers.js';
 import type { FetchLike } from '../payments/providers.js';
 import { PaymentService } from '../payments/service.js';
 import { MemoryAnalytics } from '../services/memory.js';
@@ -113,26 +113,29 @@ test('economy: buying weapons checks funds, level and ownership; prices come fro
   assert.equal(led.filter((e) => e.reason === 'purchase').length, 2);
 });
 
-test('economy: characters — level + talons (v0.24: no diamonds); only owned characters can be preferred', async () => {
+test('economy v0.2.18: characters — three for level + talons, the rest for BLATS by grade; only owned characters can be preferred', async () => {
   const a = await devLogin(app.base, 'Коллекционер');
   const r0 = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { preferredCharacter: 'vorona' } });
   assert.equal(r0.status, 409);
   const leopard = CHARACTER_PRICES.leopard!;
-  await ctx().economy.grant(a.userId, 'tokens', CHARACTER_PRICES.vorona!.amount + leopard.amount + 7, null, 'test');
-  // diamonds buy nothing while REAL_MONEY is off
-  await ctx().economy.grant(a.userId, 'diamonds', 5000, null, 'test');
+  assert.deepEqual(leopard, { currency: 'diamonds', amount: 399, level: 1 }, 'a rare character: 399 BLATS, no level');
+  await ctx().economy.grant(a.userId, 'tokens', CHARACTER_PRICES.vorona!.amount + 7, null, 'test');
   let r = await api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'character', id: 'vorona' } });
   assert.equal(r.body.error.code, 'level');
   await setLevel(a.userId, CHARACTER_PRICES.vorona!.level);
   r = await api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'character', id: 'vorona' } });
   assert.equal(r.status, 200, r.text);
+  // talons don't buy a BLATS character
+  await ctx().economy.grant(a.userId, 'tokens', 5000, null, 'test');
   r = await api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'character', id: 'leopard' } });
-  assert.equal(r.body.error.code, 'level', 'the leopard closes the ladder');
-  await setLevel(a.userId, leopard.level);
+  assert.equal(r.body.error.code, 'funds', 'BLATS, not talons');
+  await ctx().economy.grant(a.userId, 'diamonds', leopard.amount + 5, null, 'test');
   r = await api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'character', id: 'leopard' } });
   assert.equal(r.status, 200, r.text);
-  assert.equal(r.body.tokens, 7);
-  assert.equal(r.body.diamonds, 5000, 'the diamonds are untouched');
+  assert.equal(r.body.tokens, 5007, 'the talons are untouched');
+  assert.equal(r.body.diamonds, 5);
+  const [row] = await app.db.sql<Array<{ source: string }>>`SELECT source FROM user_items WHERE user_id = ${a.userId} AND item_id = 'leopard'`;
+  assert.equal(row?.source, 'diamonds');
   assert.ok(r.body.characters.includes('vorona') && r.body.characters.includes('leopard'));
   const p = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { preferredCharacter: 'leopard' } });
   assert.equal(p.status, 200);
@@ -229,12 +232,14 @@ test('economy: cases cost talons (v0.24), never repeat a weapon and stop when th
   }
 });
 
-test('economy: the skin case — talons (v0.24), never a duplicate, the new skin goes on a bare weapon, odds recorded', async () => {
+test('economy v0.2.18: the skin case — 299 BLATS with the adult confirmation, never a duplicate or a free skin, the new skin goes on a bare weapon', async () => {
   const a = await quickUser('Модник');
   const open = () => api(app.base, '/api/shop/skin-case', { method: 'POST', token: a.token, body: { confirmAge: true } });
   assert.equal((await open()).body.error.code, 'funds');
-  assert.equal((await api(app.base, '/api/shop/skin-case', { method: 'POST', token: a.token, body: {} })).body.error.code, 'funds', 'no adult confirmation needed');
-  await ctx().economy.grant(a.userId, 'tokens', SKIN_CASE_PRICE.amount * 6 + 10, null, 'test');
+  assert.equal((await api(app.base, '/api/shop/skin-case', { method: 'POST', token: a.token, body: {} })).body.error.code, 'confirm_age', 'a case for money asks for 18+');
+  await ctx().economy.grant(a.userId, 'tokens', 10_000, null, 'test');
+  assert.equal((await open()).body.error.code, 'funds', 'talons don’t open it');
+  await ctx().economy.grant(a.userId, 'diamonds', SKIN_CASE_PRICE.amount * 6 + 10, null, 'test');
   const got = new Set<string>();
   const wornBefore = new Map<string, string | undefined>();
   for (let i = 0; i < 6; i++) {
@@ -245,6 +250,7 @@ test('economy: the skin case — talons (v0.24), never a duplicate, the new skin
     assert.ok(parseSkin(id), id);
     assert.equal(FINISHES[r.body.finish as keyof typeof FINISHES].rarity, r.body.rarity);
     assert.ok(!got.has(id), `no duplicate (${id})`);
+    assert.ok(!FREE_FINISHES.includes(r.body.finish), 'never a free skin');
     got.add(id);
     assert.ok(r.body.inventory.skins.includes(id));
     const prev = before[r.body.weapon as keyof typeof before];
@@ -254,11 +260,11 @@ test('economy: the skin case — talons (v0.24), never a duplicate, the new skin
     assert.equal(r.body.inventory.loadout.skins[r.body.weapon], prev ?? r.body.finish);
   }
   const inv = await ctx().economy.inventory(a.userId);
-  assert.equal(inv.tokens, 10);
+  assert.equal(inv.diamonds, 10);
   assert.equal(inv.skins.length, 6);
   const rows = await app.db.sql<Array<{ kind: string; finish_id: string; price: number; currency: string }>>`SELECT kind, finish_id, price, currency FROM case_openings WHERE user_id = ${a.userId}`;
   assert.equal(rows.length, 6);
-  assert.ok(rows.every((x) => x.kind === 'skin' && x.finish_id && x.price === SKIN_CASE_PRICE.amount && x.currency === 'tokens'));
+  assert.ok(rows.every((x) => x.kind === 'skin' && x.finish_id && x.price === SKIN_CASE_PRICE.amount && x.currency === 'diamonds'));
   const [ledger] = await app.db.sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM currency_ledger WHERE user_id = ${a.userId} AND reason = 'case' AND ref LIKE 'skincase:%'`;
   assert.equal(ledger!.n, 6);
   // cases switched off: the skin case too
@@ -341,30 +347,35 @@ test('economy: concurrent purchases cannot overspend', async () => {
 
 // ── Payments ──────────────────────────────────────────────────────────────
 
-test('payments: the game is free (REAL_MONEY off) — no packs, no checkout (no simulated purchases)', async () => {
+test('payments v0.2.18: BLATS packs from 99 are on sale; without a connected provider the checkout says so (no simulated purchases); no crypto', async () => {
   const a = await devLogin(app.base, 'Без карты');
   const cfg = await api(app.base, '/api/shop/config');
   assert.equal(cfg.body.card, false);
-  assert.equal(cfg.body.crypto, false);
-  assert.deepEqual(cfg.body.packs, []);
-  const r = await api(app.base, '/api/pay/checkout', { method: 'POST', token: a.token, body: { packId: 'd199', method: 'card' } });
-  assert.equal(r.status, 403);
-  assert.equal(r.body.error.code, 'payments_off');
+  assert.equal(cfg.body.crypto, undefined, 'no crypto method');
+  assert.deepEqual(cfg.body.packs, DIAMOND_PACKS.map((p) => ({ ...p })));
+  assert.equal(cfg.body.packs[0].diamonds, 99);
+  const r = await api(app.base, '/api/pay/checkout', { method: 'POST', token: a.token, body: { packId: 'b199', method: 'card' } });
+  assert.equal(r.status, 503);
+  assert.equal(r.body.error.code, 'payments_not_configured');
+  assert.equal((await api(app.base, '/api/pay/checkout', { method: 'POST', token: a.token, body: { packId: 'b199', method: 'crypto' } })).status, 400, 'crypto is no method');
+  assert.equal((await api(app.base, '/api/pay/nowpayments/ipn', { method: 'POST', body: {} })).status, 404);
   assert.equal((await api(app.base, '/api/pay/stripe/webhook', { method: 'POST', body: {} })).status, 404);
+  const [n] = await app.db.sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM payments WHERE user_id = ${a.userId}`;
+  assert.equal(n!.n, 0, 'no payment row without a provider');
 });
 
-test('payments: sessions opened inside Telegram cannot start card or crypto checkouts (Stars only)', async () => {
+test('payments: sessions opened inside Telegram cannot start a card checkout (Stars only)', async () => {
   const init = signInitData({ user: JSON.stringify({ id: 515151, first_name: 'Zhora' }), auth_date: String(Math.floor(Date.now() / 1000)) }, TEST_BOT_TOKEN);
   const t = await api(app.base, '/api/auth/telegram', { method: 'POST', body: { initData: init, platform: 'telegram_ios' } });
   assert.equal(t.status, 200, t.text);
-  const r = await api(app.base, '/api/pay/checkout', { method: 'POST', token: t.body.token, body: { packId: 'd199', method: 'card' } });
+  const r = await api(app.base, '/api/pay/checkout', { method: 'POST', token: t.body.token, body: { packId: 'b199', method: 'card' } });
   assert.equal(r.status, 403);
-  assert.ok(['telegram_stars_only', 'payments_off'].includes(r.body.error.code), r.text);
+  assert.equal(r.body.error.code, 'telegram_stars_only', r.text);
   const [n] = await app.db.sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM payments WHERE user_id = ${t.body.profile.id}`;
   assert.equal(n!.n, 0, 'no payment row is created');
 });
 
-test('payments: Stripe checkout + signed webhook credits diamonds exactly once; bad signatures are refused', async () => {
+test('payments: Stripe checkout + signed webhook credits BLATS exactly once; bad signatures are refused', async () => {
   const a = await devLogin(app.base, 'Платящий');
   const calls: Array<{ url: string; body: string; headers: Record<string, string> }> = [];
   const fakeFetch: FetchLike = async (url, init) => {
@@ -372,8 +383,8 @@ test('payments: Stripe checkout + signed webhook credits diamonds exactly once; 
     return { ok: true, status: 200, json: async () => ({ id: 'cs_test_123', url: 'https://checkout.stripe.com/c/pay/cs_test_123' }), text: async () => '' };
   };
   const stripe = new StripeProvider('sk_test_x', 'whsec_test', fakeFetch);
-  const svc = new PaymentService(app.db.sql, silentLogger, new MemoryAnalytics(), 'https://blatkom.example', stripe, null);
-  const co = await svc.checkout(a.userId, 'd499', 'card');
+  const svc = new PaymentService(app.db.sql, silentLogger, new MemoryAnalytics(), 'https://blatkom.example', stripe);
+  const co = await svc.checkout(a.userId, 'b499', 'card');
   assert.equal(co.url, 'https://checkout.stripe.com/c/pay/cs_test_123');
   const form = new URLSearchParams(calls[0]!.body);
   assert.equal(form.get('line_items[0][price_data][unit_amount]'), '499');
@@ -397,20 +408,16 @@ test('payments: Stripe checkout + signed webhook credits diamonds exactly once; 
   assert.equal((await ctx().economy.inventory(a.userId)).diamonds, 0);
 });
 
-test('payments: NOWPayments IPN signature (sorted keys, HMAC-SHA512); underpaid invoices credit nothing', async () => {
-  const a = await devLogin(app.base, 'Криптан');
-  const fakeFetch: FetchLike = async () => ({ ok: true, status: 200, json: async () => ({ id: 987654, invoice_url: 'https://nowpayments.io/payment/?iid=987654' }), text: async () => '' });
-  const np = new NowPaymentsProvider('np_key', 'ipn_secret', false, fakeFetch);
-  const svc = new PaymentService(app.db.sql, silentLogger, new MemoryAnalytics(), 'https://blatkom.example', null, np);
-  const co = await svc.checkout(a.userId, 'd999', 'crypto');
-  const body = { payment_status: 'finished', order_id: co.paymentId, price_amount: 9.99, price_currency: 'usd', pay_currency: 'usdttrc20', actually_paid: 9.99 };
-  const sig = createHmac('sha512', 'ipn_secret').update(JSON.stringify(sortKeysDeep(body))).digest('hex');
-  assert.equal(np.verifyIpn(body, sig), true);
-  assert.equal(np.verifyIpn({ ...body, price_amount: 0.01 }, sig), false);
-  await svc.onNowPaymentsIpn({ ...body, price_amount: 1.0 });
+test('payments: an underpaid Stripe session credits nothing; the full price once', async () => {
+  const a = await devLogin(app.base, 'Недоплатил');
+  const fakeFetch: FetchLike = async () => ({ ok: true, status: 200, json: async () => ({ id: 'cs_test_999', url: 'https://checkout.stripe.com/c/pay/cs_test_999' }), text: async () => '' });
+  const svc = new PaymentService(app.db.sql, silentLogger, new MemoryAnalytics(), 'https://blatkom.example', new StripeProvider('sk_test_x', 'whsec_test', fakeFetch));
+  const co = await svc.checkout(a.userId, 'b999', 'card');
+  const paid = (cents: number) => ({ type: 'checkout.session.completed', data: { object: { payment_status: 'paid', currency: 'usd', amount_total: cents, metadata: { payment_id: co.paymentId } } } });
+  await svc.onStripeEvent(paid(100));
   assert.equal((await ctx().economy.inventory(a.userId)).diamonds, 0, 'underpaid');
-  await svc.onNowPaymentsIpn(body);
-  await svc.onNowPaymentsIpn(body);
+  await svc.onStripeEvent(paid(999));
+  await svc.onStripeEvent(paid(999));
   assert.equal((await ctx().economy.inventory(a.userId)).diamonds, 999);
   const [n] = await app.db.sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM currency_ledger WHERE user_id = ${a.userId} AND reason = 'topup'`;
   assert.equal(n!.n, 1);
@@ -481,23 +488,47 @@ test('funnel: anonymous visits are recorded and linked to the account created fr
   }
 });
 
-test('economy v0.24: the game is free — two free characters and a free kit; everything else for talons up a level ladder', () => {
-  assert.equal(REAL_MONEY, false);
+test('economy v0.2.18: two free characters and a free kit; three characters, weapons and the weapon case for talons; the rest for BLATS', () => {
+  assert.equal(REAL_MONEY, true);
   assert.deepEqual([...FREE_CHARACTERS].sort(), ['petya', 'valuta']);
   const chars = Object.values(CHARACTER_PRICES);
-  assert.equal(chars.length, 22);
-  assert.ok(chars.every((p) => p!.currency === 'tokens'), 'no character costs diamonds');
-  // every character but the free two has a price; the ladder climbs with the level
+  assert.equal(chars.length, CHARACTER_IDS.length - 2);
+  assert.equal(chars.filter((p) => p!.currency === 'tokens').length, 3);
+  assert.ok(chars.filter((p) => p!.currency === 'diamonds').every((p) => [199, 399, 799, 1099].includes(p!.amount) && p!.level === 1));
   assert.deepEqual(CHARACTER_IDS.filter((c) => !CHARACTER_PRICES[c] && !FREE_CHARACTERS.includes(c)), []);
-  const ladder = [...chars].sort((x, y) => x!.level - y!.level || x!.amount - y!.amount);
-  for (let i = 1; i < ladder.length; i++) assert.ok(ladder[i]!.amount > ladder[i - 1]!.amount, `character ladder step ${i}`);
   assert.deepEqual([...FREE_WEAPONS].sort(), ['avtomat', 'montirovka', 'pistol']);
   const weapons = Object.values(WEAPON_PRICES);
   assert.equal(weapons.length, 19);
-  assert.ok(weapons.every((p) => p!.currency === 'tokens'), 'no weapon costs diamonds');
-  assert.ok(CASE_PRICE.currency === 'tokens' && SKIN_CASE_PRICE.currency === 'tokens', 'cases are opened with talons');
+  assert.ok(weapons.every((p) => p!.currency === 'tokens'), 'weapons are for talons');
+  assert.equal(CASE_PRICE.currency, 'tokens', 'the rare-weapon case is opened with talons');
+  assert.deepEqual(SKIN_CASE_PRICE, { currency: 'diamonds', amount: 299, level: 1 });
+  assert.deepEqual(SKIN_PRICES, { common: 99, rare: 199, epic: 299, legendary: 499 });
   // the free kit is complete: a sidearm, a melee weapon and a primary
   assert.ok(FREE_WEAPONS.includes(DEFAULT_LOADOUT.sidearm) && FREE_WEAPONS.includes(DEFAULT_LOADOUT.melee) && FREE_WEAPONS.includes(DEFAULT_LOADOUT.primary!));
+});
+
+test('economy v0.2.18: a skin bought for BLATS goes on its weapon; the free finishes are everyone’s and can be worn', async () => {
+  const a = await quickUser('Покупатель скинов');
+  const buy = (weapon: string, finish: string) => api(app.base, '/api/shop/skin', { method: 'POST', token: a.token, body: { weapon, finish } });
+  assert.equal((await buy('avtomat', 'berezka')).body.error.code, 'owned', 'a free finish is owned already');
+  assert.equal((await buy('avtomat', 'zoloto')).body.error.code, 'funds');
+  assert.equal((await buy('avtomat', 'nope')).status, 400);
+  await ctx().economy.grant(a.userId, 'diamonds', SKIN_PRICES.legendary + SKIN_PRICES.common, null, 'test');
+  let r = await buy('avtomat', 'zoloto');
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.diamonds, SKIN_PRICES.common);
+  assert.ok(r.body.skins.includes('avtomat.zoloto'));
+  assert.equal(r.body.loadout.skins.avtomat, 'zoloto', 'worn at once');
+  assert.equal((await buy('avtomat', 'zoloto')).body.error.code, 'owned');
+  r = await buy('pistol', 'zima');
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.diamonds, 0);
+  const ledger = await app.db.sql<Array<{ delta: number; ref: string }>>`SELECT delta, ref FROM currency_ledger WHERE user_id = ${a.userId} AND reason = 'purchase' ORDER BY id`;
+  assert.deepEqual(ledger.map((l) => [l.delta, l.ref]), [[-SKIN_PRICES.legendary, 'skin:avtomat.zoloto'], [-SKIN_PRICES.common, 'skin:pistol.zima']]);
+  // a free finish is worn without buying it; an unbought paid one is dropped
+  const l = await api(app.base, '/api/me/loadout', { method: 'POST', token: a.token, body: { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', skins: { montirovka: 'rzhavchina', obrez: 'gzhel' } } });
+  assert.equal(l.status, 200, l.text);
+  assert.deepEqual(l.body.loadout.skins, { montirovka: 'rzhavchina' });
 });
 
 test('economy v0.23: accounts made before the change keep the wolf, the bear and the sawn-off (migration 009)', async () => {

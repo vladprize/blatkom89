@@ -1,32 +1,35 @@
 /**
  * In-game economy (configuration + pure rules; the server is the only authority that persists it).
  *
- * v0.24: the game is free — nothing is sold for money (REAL_MONEY = false, the owner's decision).
- *  - Tokens (shown in the game as «talons») are earned by playing online matches and are never sold.
- *    Everything in the shop is unlocked with talons and experience (a level requirement).
+ * v0.2.18 (the owner's pre-release edits): two currencies.
+ *  - Talons («tokens» in the code) are earned by playing online matches, the story and invitations, and
+ *    are never sold. Weapons, modifications, equipment, the rare-weapon case and three characters
+ *    (Uchastkovy, Mikhalych, Karlych) are unlocked with talons and experience (a level requirement).
+ *  - BLATS («diamonds» in the code and the database; the red coin, 1 BLATS = 1 US cent) — the premium
+ *    currency: bought in packs (DIAMOND_PACKS), and 10 for every new level. Characters other than the
+ *    free and the talon ones are sold for BLATS by grade (199 / 399 / 799 / 1 099), weapon skins by grade
+ *    (99 / 199 / 299 / 499, skins.ts) and the skin case (299). Nothing sold for BLATS changes a number in
+ *    combat: characters are equal by design, skins only change looks.
  *  - Free for everyone: two characters (the rooster and the panther), a full kit of three weapons
- *    (Makarov, crowbar, AK-47) and the F-1 grenade.
- *  - Characters: 22 for talons from level 1 to level 26 (the eleven that were sold for diamonds until
- *    v0.24 now close the ladder, levels 16–26).
- *  - Shop weapons are sidegrades (see weapons.ts): 19 for talons, most of them from a level. Rare
- *    weapons and weapon skins come from cases bought with talons (no money in them), never as
- *    duplicates, with the odds shown.
- *  - Diamonds (100 💎 = $1) and the payment code stay for a later Telegram Stars shop: with
- *    REAL_MONEY off the server sells no packs and no item has a diamond price; an administrator can
- *    still grant diamonds, they just buy nothing.
+ *    (Makarov, crowbar, AK-47), the F-1 grenade and two skin finishes on every weapon.
+ *  - Shop weapons are sidegrades (see weapons.ts). Rare weapons come from the weapon case (talons, never
+ *    a duplicate, the odds shown).
  *  - Until v0.23 the wolf, the bear and the sawn-off were free: accounts made before then keep them
- *    (migration 009).
- *  - Modifications (silencer, sights, laser, grip, magazine) and equipment (grenades, mines, C4,
- *    turret) cost tokens only.
+ *    (migration 009). Characters bought with talons before v0.2.18 stay owned.
+ *  - The old $BLAT points (V2.0 – v0.2.17) are retired: nothing pays or shows them; the database keeps
+ *    what was credited (docs/ECONOMY.md).
  */
 import { WEAPONS, WEAPON_IDS, modsFor } from './weapons.js';
 import type { ModId, WeaponId } from './weapons.js';
-import { CHARACTER_IDS, FREE_CHARACTERS } from './characters.js';
+import { CHARACTERS, CHARACTER_IDS, FREE_CHARACTERS } from './characters.js';
 import type { CharacterId } from './characters.js';
 import { GADGET_IDS } from './gadgets.js';
 import type { GadgetId } from './gadgets.js';
 import type { Loadout } from './loadout.js';
 import type { MatchPerformance } from './progression.js';
+import type { Grade } from './grades.js';
+import { ownsSkin, skinPrice } from './skins.js';
+import type { FinishId } from './skins.js';
 
 export type Currency = 'tokens' | 'diamonds';
 
@@ -37,11 +40,22 @@ export interface ShopPrice {
   level: number;
 }
 
-/** Real-money sales (diamond packs and diamond prices). Off since v0.24: the game is free. */
-export const REAL_MONEY: boolean = false;
+/** Real-money sales (BLATS packs and BLATS prices): on since v0.2.18 (off from v0.24 to v0.2.17). */
+export const REAL_MONEY: boolean = true;
 
-/** 100 diamonds = 1 US dollar. */
+/** 100 BLATS = 1 US dollar (1 BLATS = 1 cent). */
 export const DIAMONDS_PER_USD = 100;
+
+/** v0.2.18: BLATS for every new level (levels 2 and up; the start, level 1, pays nothing). */
+export const BLATS_PER_LEVEL = 10;
+
+/** BLATS a level pays when it is reached. */
+export function blatsForLevel(level: number): number {
+  return Number.isInteger(level) && level >= 2 ? BLATS_PER_LEVEL : 0;
+}
+
+/** v0.2.18: a character's price in BLATS by grade (the owner's prices: $1.99 … $10.99). */
+export const CHARACTER_GRADE_PRICES: Readonly<Record<Grade, number>> = Object.freeze({ common: 199, rare: 399, epic: 799, legendary: 1099 });
 
 export const FREE_WEAPONS: readonly WeaponId[] = WEAPON_IDS.filter((w) => WEAPONS[w].tier === 'base');
 
@@ -69,33 +83,22 @@ export const WEAPON_PRICES: Readonly<Partial<Record<WeaponId, ShopPrice>>> = {
   rpg: { currency: 'tokens', amount: 1000, level: 19 },
 };
 
-export const CHARACTER_PRICES: Readonly<Partial<Record<CharacterId, ShopPrice>>> = {
-  // for experience (level) + tokens
+/** v0.2.18: three characters are unlocked with talons and experience (the owner: «3 за талоны»). */
+const TALON_CHARACTERS: Readonly<Partial<Record<CharacterId, ShopPrice>>> = {
   uchastkovy: { currency: 'tokens', amount: 150, level: 1 },
   mihalych: { currency: 'tokens', amount: 200, level: 2 },
   vorona: { currency: 'tokens', amount: 300, level: 3 },
-  zmeya: { currency: 'tokens', amount: 400, level: 5 },
-  varan: { currency: 'tokens', amount: 550, level: 7 },
-  popugay: { currency: 'tokens', amount: 700, level: 9 },
-  // v0.23: five more for talons, higher up the ladder
-  golub: { currency: 'tokens', amount: 800, level: 10 },
-  tarakan: { currency: 'tokens', amount: 900, level: 11 },
-  krysa: { currency: 'tokens', amount: 1000, level: 12 },
-  svinya: { currency: 'tokens', amount: 1100, level: 13 },
-  buyvol: { currency: 'tokens', amount: 1250, level: 15 },
-  // v0.24: the eleven that were sold for diamonds close the ladder
-  piranya: { currency: 'tokens', amount: 1300, level: 16 },
-  koshka: { currency: 'tokens', amount: 1350, level: 17 },
-  leopard: { currency: 'tokens', amount: 1400, level: 18 },
-  lobster: { currency: 'tokens', amount: 1450, level: 19 },
-  akula: { currency: 'tokens', amount: 1500, level: 20 },
-  lisa: { currency: 'tokens', amount: 1600, level: 21 },
-  oryol: { currency: 'tokens', amount: 1700, level: 22 },
-  nosorog: { currency: 'tokens', amount: 1800, level: 23 },
-  slon: { currency: 'tokens', amount: 1900, level: 24 },
-  gorilla: { currency: 'tokens', amount: 2000, level: 25 },
-  lev: { currency: 'tokens', amount: 2200, level: 26 },
 };
+
+/**
+ * Every character that is not free: the three for talons, the rest for BLATS at their grade's price
+ * (no level needed).
+ */
+export const CHARACTER_PRICES: Readonly<Partial<Record<CharacterId, ShopPrice>>> = Object.freeze(
+  Object.fromEntries(
+    CHARACTER_IDS.filter((c) => !FREE_CHARACTERS.includes(c)).map((c) => [c, TALON_CHARACTERS[c] ?? { currency: 'diamonds' as const, amount: CHARACTER_GRADE_PRICES[CHARACTERS[c].grade], level: 1 }]),
+  ) as Partial<Record<CharacterId, ShopPrice>>,
+);
 
 /** Equipment: the F-1 is free; the rest is bought once with tokens (some from a level). */
 export const FREE_GADGETS: readonly GadgetId[] = ['f1'];
@@ -156,17 +159,25 @@ export function drawCase(owned: ReadonlySet<WeaponId>, r: number): CaseEntry | n
 
 export interface DiamondPack {
   id: string;
+  /** BLATS in the pack. */
   diamonds: number;
-  /** Price in US cents (100 💎 = $1, no bulk bonus: the price is the price). */
+  /** Price in US cents (1 BLATS = 1 cent, no bulk bonus: the price is the price). */
   usdCents: number;
 }
+/** v0.2.18: BLATS packs, from 99 (the owner: «пакеты от 99 BLATS»). */
 export const DIAMOND_PACKS: readonly DiamondPack[] = [
-  { id: 'd199', diamonds: 199, usdCents: 199 },
-  { id: 'd299', diamonds: 299, usdCents: 299 },
-  { id: 'd499', diamonds: 499, usdCents: 499 },
-  { id: 'd999', diamonds: 999, usdCents: 999 },
-  { id: 'd1999', diamonds: 1999, usdCents: 1999 },
+  { id: 'b99', diamonds: 99, usdCents: 99 },
+  { id: 'b199', diamonds: 199, usdCents: 199 },
+  { id: 'b499', diamonds: 499, usdCents: 499 },
+  { id: 'b999', diamonds: 999, usdCents: 999 },
+  { id: 'b1999', diamonds: 1999, usdCents: 1999 },
+  { id: 'b4999', diamonds: 4999, usdCents: 4999 },
 ];
+
+/** «$1.99» — what an amount of BLATS is worth (1 BLATS = 1 cent). */
+export function blatsToUsd(blats: number): string {
+  return `$${(Math.max(0, Math.round(blats)) / DIAMONDS_PER_USD).toFixed(2)}`;
+}
 export function diamondPack(id: string): DiamondPack | undefined {
   return DIAMOND_PACKS.find((p) => p.id === id);
 }
@@ -255,6 +266,15 @@ export function buyRefusal(inv: Inventory, kind: ShopKind, id: string): BuyRefus
   if (owns(inv, kind, id)) return 'owned';
   if (inv.level < price.level) return 'level';
   if ((price.currency === 'tokens' ? inv.tokens : inv.diamonds) < price.amount) return 'funds';
+  return null;
+}
+
+/** v0.2.18: why `inv` cannot buy this weapon's skin right now (null = allowed). The free finishes are owned. */
+export function skinBuyRefusal(inv: Pick<Inventory, 'skins' | 'diamonds'>, weapon: WeaponId, finish: FinishId): BuyRefusal | null {
+  if (ownsSkin(inv.skins, weapon, finish)) return 'owned';
+  const price = skinPrice(finish);
+  if (!price) return 'not_for_sale';
+  if (inv.diamonds < price.amount) return 'funds';
   return null;
 }
 

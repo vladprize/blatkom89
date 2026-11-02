@@ -1,5 +1,6 @@
 /**
- * «Блатной кон» (V2.0 part D): the player's Kon numbers, history and the tables.
+ * The District Tournament («Блатной кон» in V2.0 part D, `kon` in the code): the player's numbers, history
+ * and the tables.
  *
  *   GET /api/kon             → KonResponse (the player's numbers, the last 20 Kon matches, people waiting
  *                              in public Kon rooms of each format)
@@ -13,7 +14,6 @@ import { HttpError } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
 import { RateLimiter, rateLimit } from '../security/rateLimit.js';
 import { KonRepo } from '../kon/repo.js';
-import { PgStakes } from '../blat/stakes.js';
 
 export const registerKonRoutes: RouteModule = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
@@ -27,8 +27,7 @@ export const registerKonRoutes: RouteModule = (router, deps) => {
   router.get('/api/kon', auth, rateLimit(limiter, byUser), async (ctx) => {
     const me = currentUser(ctx);
     const r = repo();
-    const stakes = await new PgStakes(deps.sql!, deps.env.TOURNAMENT_STAKES).status(me.userId);
-    const res: KonResponse = { me: await r.stats(me.userId), history: await r.history(me.userId, 20), waiting: deps.rooms.konWaiting(), waitingByStake: deps.rooms.konWaitingByStake(), stakes };
+    const res: KonResponse = { me: await r.stats(me.userId), history: await r.history(me.userId, 20), waiting: deps.rooms.konWaiting() };
     ctx.json(200, res, { 'cache-control': 'no-store' });
   });
 

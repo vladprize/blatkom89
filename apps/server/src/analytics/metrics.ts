@@ -55,7 +55,7 @@ export async function overview(sql: Sql, r: AdminRange, activeRooms: number, now
   const to = new Date(r.to);
   const today = utcDayString(now);
   const [counts] = await sql<
-    Array<{ total_players: number; new_players: number; dau: number; wau: number; mau: number; started: number; completed: number; avg_match: number | null; avg_session: number | null; errors: number; unique_players: number; first_match: number; blat_issued: number }>
+    Array<{ total_players: number; new_players: number; dau: number; wau: number; mau: number; started: number; completed: number; avg_match: number | null; avg_session: number | null; errors: number; unique_players: number; first_match: number; blats_levels: number }>
   >`
     SELECT
       (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND created_at <= ${to})::int AS total_players,
@@ -73,7 +73,7 @@ export async function overview(sql: Sql, r: AdminRange, activeRooms: number, now
       (SELECT count(*) FROM (
          SELECT mp.user_id, min(m.started_at) AS first FROM match_participants mp JOIN matches m ON m.id = mp.match_id GROUP BY mp.user_id
        ) f WHERE f.first BETWEEN ${from} AND ${to})::int AS first_match,
-      (SELECT COALESCE(sum(delta), 0) FROM currency_ledger WHERE currency = 'blat' AND delta > 0 AND created_at BETWEEN ${from} AND ${to})::int AS blat_issued`;
+      (SELECT COALESCE(sum(delta), 0) FROM currency_ledger WHERE currency = 'diamonds' AND reason = 'level' AND created_at BETWEEN ${from} AND ${to})::int AS blats_levels`;
   const [conv] = await sql<Array<{ cohort: number; converted: number }>>`
     SELECT count(*)::int AS cohort,
            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed))::int AS converted
@@ -111,7 +111,7 @@ export async function overview(sql: Sql, r: AdminRange, activeRooms: number, now
     errorCount: counts!.errors,
     uniquePlayers: counts!.unique_players,
     firstMatchPlayers: counts!.first_match,
-    blatIssued: counts!.blat_issued,
+    blatsForLevels: counts!.blats_levels,
   };
 }
 

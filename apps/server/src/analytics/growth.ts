@@ -138,8 +138,8 @@ export async function growth(sql: Sql, r: AdminRange, now = new Date()): Promise
     SELECT p.level, count(*)::int AS players FROM profiles p JOIN users u ON u.id = p.user_id
     WHERE u.deleted_at IS NULL AND u.merged_at IS NULL GROUP BY p.level`;
   const reached = await sql<Array<{ level: number; players: number }>>`
-    SELECT substring(ref FROM 7)::int AS level, count(*)::int AS players FROM currency_ledger
-    WHERE currency = 'blat' AND reason = 'level' AND ref ~ '^level:[0-9]{1,6}$' AND created_at BETWEEN ${from} AND ${to}
+    SELECT substring(ref FROM 7)::int AS level, count(DISTINCT user_id)::int AS players FROM currency_ledger
+    WHERE currency IN ('blat', 'diamonds') AND reason = 'level' AND ref ~ '^level:[0-9]{1,6}$' AND created_at BETWEEN ${from} AND ${to}
     GROUP BY 1 ORDER BY 1`;
   const konRows = await sql<Array<{ format: KonFormat; matches: number }>>`
     SELECT kon_format AS format, count(*)::int AS matches FROM matches
@@ -147,11 +147,11 @@ export async function growth(sql: Sql, r: AdminRange, now = new Date()): Promise
   const [konPlayers] = await sql<Array<{ n: number }>>`
     SELECT count(DISTINCT mp.user_id)::int AS n FROM match_participants mp JOIN matches m ON m.id = mp.match_id
     WHERE m.kon_format IS NOT NULL AND m.status = 'completed' AND m.ended_at BETWEEN ${from} AND ${to}`;
-  const [blat] = await sql<Array<{ issued: number; levels: number; referrals: number }>>`
-    SELECT COALESCE(sum(delta), 0)::int AS issued,
-           COALESCE(sum(delta) FILTER (WHERE reason = 'level'), 0)::int AS levels,
-           COALESCE(sum(delta) FILTER (WHERE reason = 'referral'), 0)::int AS referrals
-    FROM currency_ledger WHERE currency = 'blat' AND delta > 0 AND created_at BETWEEN ${from} AND ${to}`;
+  // v0.2.18: BLATS for levels and talons for invitations
+  const [rewards] = await sql<Array<{ levels: number; referrals: number }>>`
+    SELECT COALESCE(sum(delta) FILTER (WHERE currency = 'diamonds' AND reason = 'level'), 0)::int AS levels,
+           COALESCE(sum(delta) FILTER (WHERE currency = 'tokens' AND reason = 'referral'), 0)::int AS referrals
+    FROM currency_ledger WHERE delta > 0 AND reason IN ('level', 'referral') AND created_at BETWEEN ${from} AND ${to}`;
   const totalPlayers = levelRows.reduce((a, x) => a + x.players, 0);
   const levelSum = levelRows.reduce((a, x) => a + x.level * x.players, 0);
   const konBy = new Map(konRows.map((x) => [x.format, x.matches]));
@@ -179,7 +179,7 @@ export async function growth(sql: Sql, r: AdminRange, now = new Date()): Promise
       max: levelRows.reduce((a, x) => Math.max(a, x.level), 0),
     },
     kon: { matches: konRows.reduce((a, x) => a + x.matches, 0), players: konPlayers!.n, byFormat: KON_FORMATS.map((format) => ({ format, matches: konBy.get(format) ?? 0 })) },
-    blat: { issued: blat!.issued, fromLevels: blat!.levels, fromReferrals: blat!.referrals },
+    rewards: { blatsForLevels: rewards!.levels, talonsForInvitations: rewards!.referrals },
   };
 }
 

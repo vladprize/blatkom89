@@ -58,7 +58,6 @@ import type {
   MatchConfig,
   RosterEntry,
   ServerMessage,
-  StakeRefusal,
   WorldEvent,
   Standing,
   FinishId,
@@ -89,11 +88,6 @@ export interface RoomOptions {
    * (never filled), the mode can't change, nobody joins a match that is on (game-rules/kon.ts).
    */
   kon?: KonFormat | null;
-  /**
-   * v0.2.17: the $BLAT Tournament's stake (Kon rooms only; 0: none). Everyone stakes the same; the
-   * stakes are reserved before the match starts and settled with its results (blat/stakes.ts).
-   */
-  stake?: number;
   /**
    * v0.2.17: a gang battle (Kon rooms only): red is the challenger's gang, blue the gang called out; only
    * their people come in, each on their gang's side (game-rules/gangBattle.ts).
@@ -165,15 +159,6 @@ interface Client {
   lastChatAt: number;
 }
 
-/** v0.2.17: why a player couldn't stake (the server's English; the client shows its own text by code). */
-export const STAKE_REFUSAL_TEXT: Readonly<Record<StakeRefusal, string>> = Object.freeze({
-  stakes_off: 'Stakes are switched off on this server',
-  account_new: 'A new account stakes from its second day',
-  blat_flagged: 'Your $BLAT are being checked — stakes are not available',
-  blat_low: 'Not enough $BLAT for the stake',
-  daily_limit: 'The day’s stake limit is reached',
-});
-
 const AUTO_START_DELAY_MS = 4000;
 /** Free gear (used when the economy is unavailable). */
 export const FREE_GEAR: PlayerGear = Object.freeze({ loadout: DEFAULT_LOADOUT, characters: new Set(FREE_CHARACTERS) });
@@ -186,10 +171,6 @@ export class MatchRoom {
   readonly createdAt = Date.now();
   /** V2.0 part D: the «Блатной кон» format (null: an ordinary room). */
   readonly kon: KonFormat | null;
-  /** v0.2.17: the $BLAT Tournament's stake everyone puts in (0: none). */
-  readonly stake: number;
-  /** v0.2.17: the stakes are being reserved (the match starts once they are). */
-  private staking = false;
   /** v0.2.17: a gang battle — the sides are the two gangs (null: an ordinary room). */
   readonly battle: GangBattle | null;
   /** Match rules; `mode` changes when the host switches between free-for-all and teams. */
@@ -241,7 +222,6 @@ export class MatchRoom {
     this.inviteCode = opts.inviteCode ?? null;
     this.autoStart = opts.autoStart ?? !opts.isPrivate;
     this.kon = opts.kon ?? null;
-    this.stake = this.kon ? Math.max(0, Math.floor(opts.stake ?? 0)) : 0;
     this.battle = this.kon ? (opts.battle ?? null) : null;
     // a Kon room is people only, whatever the server's fill setting
     this.fillBots = this.kon ? false : (opts.fillBots ?? false);
@@ -820,66 +800,12 @@ export class MatchRoom {
   }
 
   // ── Match lifecycle ─────────────────────────────────────────────────────
-  /** Starts the match; a staked tournament room first reserves every stake (v0.2.17). */
+  /** Starts the match (v0.2.17's staked tournament rooms reserved the stakes first; stakes are gone since v0.2.18). */
   private requestStart() {
-    if (this.stake <= 0 || !this.services.stakes) return this.startMatch();
-    if (this.staking || this.world.phase !== 'waiting') return;
-    void this.reserveAndStart();
+    this.startMatch();
   }
 
-  /**
-   * v0.2.17: every connected player's stake in one transaction, all or nothing; the match starts when
-   * they are reserved and the lineup is still the one that staked. A player who can't stake leaves the
-   * room with the reason (the others wait for someone who can); a lineup that changed meanwhile gets
-   * every stake back.
-   */
-  private async reserveAndStart() {
-    const stakes = this.services.stakes!;
-    this.staking = true;
-    this.broadcastRoster();
-    const matchId = randomUUID();
-    const lineup = [...this.clients.values()].filter((c) => c.connected).map((c) => c.user.userId).sort();
-    let res: Awaited<ReturnType<typeof stakes.reserve>>;
-    try {
-      res = await stakes.reserve({ matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, kon: this.kon!, stake: this.stake, userIds: lineup });
-    } catch (e) {
-      this.staking = false;
-      this.log.error('stake reservation failed', { err: e as Error });
-      this.services.analytics.error({ source: 'server', component: 'stakes', category: 'reserve', message: (e as Error).message });
-      if (this.closed) return;
-      for (const c of this.clients.values()) if (c.connected) this.error(c, 'internal', 'The stakes could not be reserved — try again');
-      this.autoStartAt = 0;
-      this.broadcastRoster();
-      return;
-    }
-    this.staking = false;
-    if (!res.ok) {
-      const c = this.clients.get(res.userId);
-      if (c && !this.closed) {
-        this.error(c, res.reason, STAKE_REFUSAL_TEXT[res.reason]);
-        this.removeClient(c, 'stake');
-        try {
-          c.ws?.close(WS_CLOSE.NORMAL, 'stake');
-        } catch {
-          /* ignore */
-        }
-      }
-      this.autoStartAt = 0;
-      if (!this.closed) this.broadcastRoster();
-      return;
-    }
-    const now = [...this.clients.values()].filter((c) => c.connected).map((c) => c.user.userId).sort();
-    if (this.closed || this.world.phase !== 'waiting' || now.join() !== lineup.join() || now.length < this.minToStart) {
-      void stakes.refund(matchId).catch((e: Error) => this.log.error('stake refund failed', { err: e, matchId }));
-      this.autoStartAt = 0;
-      if (!this.closed) this.broadcastRoster();
-      return;
-    }
-    this.log.info('stakes reserved', { matchId, stake: this.stake, players: lineup.length });
-    this.startMatch(matchId);
-  }
-
-  private startMatch(reservedMatchId?: string) {
+  private startMatch() {
     // the lineup fills up (and the sides even out) the moment the match is started
     if (this.fillBots) this.fillNow();
     for (const seat of this.seats.values()) {
@@ -910,7 +836,7 @@ export class MatchRoom {
         this.konLineup.set(c.user.userId, { team: p?.team ?? null, character: c.character, viaInvite: c.viaInvite, kills: 0, assists: 0, deaths: 0, score: 0, damageDealt: 0, playtimeMs: 0 });
       }
     }
-    this.matchId = reservedMatchId ?? randomUUID();
+    this.matchId = randomUUID();
     this.matchStartedAtWall = Date.now();
     this.resultsSent = false;
     const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite, team: this.world.players.get(c.user.userId)?.team ?? null }));
@@ -1021,7 +947,6 @@ export class MatchRoom {
         fillAtEnd,
         participants,
         kon: this.kon,
-        stake: this.stake,
       })
       .then((personal) => {
         let levelChanged = false;
@@ -1062,7 +987,7 @@ export class MatchRoom {
       const allReady = enough && connected.every((c) => c.ready);
       if (allReady) {
         if (!this.autoStartAt) this.autoStartAt = now + (this.autoStart ? AUTO_START_DELAY_MS : 600);
-        if (now >= this.autoStartAt && !this.staking) {
+        if (now >= this.autoStartAt) {
           this.autoStartAt = 0;
           this.requestStart();
         }
@@ -1164,8 +1089,8 @@ export class MatchRoom {
     }
   }
 
-  /** Closes the room; the promise settles once a match that was on is written down as abandoned (its stakes
-   *  back) — the server's shutdown waits for it before it closes the database. */
+  /** Closes the room; the promise settles once a match that was on is written down as abandoned — the
+   *  server's shutdown waits for it before it closes the database. */
   close(reason: string): Promise<void> {
     if (this.closed) return Promise.resolve();
     let abandoned: Promise<void> = Promise.resolve();
@@ -1248,7 +1173,6 @@ export class MatchRoom {
       mode: this.config.mode,
       minToStart: this.minToStart,
       kon: this.kon,
-      ...(this.stake > 0 ? { stake: this.stake, staking: this.staking } : {}),
       ...(this.battle ? { battle: this.battle } : {}),
     };
   }
@@ -1301,12 +1225,12 @@ export class MatchRoom {
 
   /** For the admin dashboard: people and filled players counted separately. */
   info() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, fill: this.seats.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon, stake: this.stake };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.clients.size, fill: this.seats.size, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon };
   }
 
   /** For players: the lineup as they see it in the room. */
   publicInfo() {
-    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon, stake: this.stake, ...(this.battle ? { battle: this.battle } : {}) };
+    return { id: this.id, mapId: this.mapId, mode: this.config.mode, phase: this.world.phase, players: this.lineup, maxPlayers: this.config.maxPlayers, isPrivate: this.isPrivate, hostName: this.hostName(), kon: this.kon, ...(this.battle ? { battle: this.battle } : {}) };
   }
 
   static protocolVersion = PROTOCOL_VERSION;

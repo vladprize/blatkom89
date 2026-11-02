@@ -1,5 +1,5 @@
 /**
- * Diamond top-ups: creates provider checkouts and applies verified provider notifications.
+ * BLATS top-ups («diamonds» in the code): creates provider checkouts and applies verified provider notifications.
  * A payment row is credited exactly once (row lock + unique ledger ref); underpaid, failed and
  * expired payments credit nothing. See docs/ECONOMY.md («Платежи»).
  */
@@ -9,9 +9,9 @@ import type { Sql } from '../database/db.js';
 import type { Logger } from '../logging/logger.js';
 import type { Analytics } from '../services/contracts.js';
 import { HttpError } from '../http/router.js';
-import type { NowPaymentsProvider, StripeProvider } from './providers.js';
+import type { StripeProvider } from './providers.js';
 
-type Provider = 'stripe' | 'nowpayments';
+type Provider = 'stripe';
 
 interface PaymentRow {
   id: string;
@@ -30,15 +30,14 @@ export class PaymentService {
     private readonly analytics: Analytics,
     private readonly publicUrl: string,
     readonly card: StripeProvider | null,
-    readonly crypto: NowPaymentsProvider | null,
   ) {}
 
-  async checkout(userId: string, packId: string, method: 'card' | 'crypto'): Promise<CheckoutResponse> {
+  async checkout(userId: string, packId: string, _method: 'card'): Promise<CheckoutResponse> {
     const pack = diamondPack(packId);
-    if (!pack) throw new HttpError(400, 'bad_pack', 'No such diamond pack');
-    const provider = method === 'card' ? this.card : this.crypto;
-    if (!provider) throw new HttpError(503, 'payments_not_configured', method === 'card' ? 'Card payments aren’t connected yet' : 'Crypto payments aren’t connected yet');
-    const providerName: Provider = method === 'card' ? 'stripe' : 'nowpayments';
+    if (!pack) throw new HttpError(400, 'bad_pack', 'No such BLATS pack');
+    const provider = this.card;
+    if (!provider) throw new HttpError(503, 'payments_not_configured', 'Payments are being connected — coming soon');
+    const providerName: Provider = 'stripe';
     const [row] = await this.sql<Array<{ id: string }>>`
       INSERT INTO payments (user_id, provider, pack_id, diamonds, amount_cents, status)
       VALUES (${userId}, ${providerName}, ${pack.id}, ${pack.diamonds}, ${pack.usdCents}, 'created') RETURNING id`;
@@ -50,7 +49,6 @@ export class PaymentService {
         pack,
         successUrl: `${base}/?pay=success&pid=${id}`,
         cancelUrl: `${base}/?pay=cancel&pid=${id}`,
-        ipnUrl: `${base}/api/pay/nowpayments/ipn`,
       });
       await this.sql`UPDATE payments SET provider_ref = ${s.providerRef}, updated_at = now() WHERE id = ${id}`;
       this.log.info('checkout created', { paymentId: id, provider: providerName, pack: pack.id, userId });
@@ -141,18 +139,5 @@ export class PaymentService {
       default:
         return;
     }
-  }
-
-  /** NOWPayments IPN (signature already verified). */
-  async onNowPaymentsIpn(body: Record<string, unknown>): Promise<void> {
-    const pid = String(body.order_id ?? '');
-    const status = String(body.payment_status ?? '');
-    if (status === 'finished') {
-      // price_amount is in the invoice currency (USD) — the full price must have been requested
-      const priceUsd = Number(body.price_amount);
-      await this.markPaid(pid, 'nowpayments', Number.isFinite(priceUsd) ? Math.round(priceUsd * 100) : undefined);
-    } else if (status === 'failed') await this.markClosed(pid, 'nowpayments', 'failed');
-    else if (status === 'expired') await this.markClosed(pid, 'nowpayments', 'expired');
-    else if (status === 'refunded') await this.markRefunded(pid, 'nowpayments');
   }
 }

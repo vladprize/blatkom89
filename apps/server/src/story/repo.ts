@@ -5,11 +5,11 @@
  * and skins — once (the achievement row and a unique ledger reference guard it, also under retries and
  * concurrent requests). A character or skin the player already owns is paid in talons instead.
  */
-import { ACHIEVEMENTS, ACHIEVEMENT_TARGETS, CHARACTER_PRICES, STORY_OPENED_BEST_MS, STORY_OWNED_SKIN_TALONS, isChapterDone, levelForXp, missionsBefore, storyChapter } from '@blatkom/shared';
+import { ACHIEVEMENTS, ACHIEVEMENT_TARGETS, CHARACTER_PRICES, STORY_OPENED_BEST_MS, STORY_OWNED_CHARACTER_TALONS, STORY_OWNED_SKIN_TALONS, isChapterDone, levelForXp, missionsBefore, storyChapter } from '@blatkom/shared';
 import type { AchievementId, CharacterId, SkinId, StoryDone, StoryMission, StoryReward } from '@blatkom/shared';
 import type postgres from 'postgres';
 import type { Sql } from '../database/db.js';
-import { creditLevels } from '../blat/repo.js';
+import { creditLevelBlats } from '../progression/levelRewards.js';
 
 type Tx = postgres.TransactionSql<Record<string, unknown>>;
 
@@ -50,7 +50,7 @@ export class StoryRepo {
           completions = story_progress.completions + 1
         RETURNING completions`;
       const first = row!.completions === 1;
-      const out: StoryReward = { mission: m.id, first, talons: 0, xp: 0, blatGained: 0, achievement: null, characters: [], skins: [], compensated: [], tokens: prof.tokens, xpTotal: prof.xp, level: prof.level, done: [] };
+      const out: StoryReward = { mission: m.id, first, talons: 0, xp: 0, blatsGained: 0, achievement: null, characters: [], skins: [], compensated: [], tokens: prof.tokens, xpTotal: prof.xp, level: prof.level, done: [] };
       if (first) {
         let tokens = prof.tokens;
         const pay = async (amount: number, ref: string) => {
@@ -86,9 +86,9 @@ export class StoryRepo {
         }
         const level = levelForXp(xpTotal).level;
         await tx`UPDATE profiles SET xp = ${xpTotal}, level = ${level}, tokens = ${tokens}, updated_at = now() WHERE user_id = ${userId}`;
-        // V2.0: $BLAT for every level reached (each level once — a unique operation id per level)
-        const blat = await creditLevels(tx, userId, level);
-        out.blatGained = blat.gained;
+        // v0.2.18: BLATS for every new level (each level once — a unique operation id per level)
+        const blats = await creditLevelBlats(tx, userId, level);
+        out.blatsGained = blats.gained;
         out.tokens = tokens;
         out.xpTotal = xpTotal;
         out.level = level;
@@ -126,7 +126,8 @@ export class StoryRepo {
       else out.skins.push(id as SkinId);
       return;
     }
-    const worth = kind === 'character' ? (CHARACTER_PRICES[id as CharacterId]?.amount ?? 0) : STORY_OWNED_SKIN_TALONS;
+    const price = kind === 'character' ? CHARACTER_PRICES[id as CharacterId] : undefined;
+    const worth = kind === 'character' ? (price?.currency === 'tokens' ? price.amount : price ? STORY_OWNED_CHARACTER_TALONS : 0) : STORY_OWNED_SKIN_TALONS;
     const before = out.talons;
     await pay(worth, `story:own:${kind}:${id}`);
     if (out.talons > before) out.compensated.push({ kind, id, talons: out.talons - before });
