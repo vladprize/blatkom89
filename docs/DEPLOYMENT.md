@@ -64,16 +64,12 @@ Copy `.env.example` to `.env` and set at least:
 | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD` | optional first admin, created on start only when no admin exists — remove after first start (or use the CLI below) |
 | `MATCH_DURATION_SEC`, `MATCH_SCORE_LIMIT`, `MATCH_MIN_PLAYERS`, `MATCH_MAX_PLAYERS` | match rules (defaults 240 s, 50 points, 2, 10; at most 10 players per room) |
 | `MATCH_TEAM_SCORE_LIMIT`, `MATCH_CAPTURE_LIMIT`, `MATCH_BASE_SCORE_LIMIT` | team modes: eliminations in «red vs blue» (40), flags in capture the flag (3), points in base capture (250) |
-| `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` | not needed since v0.24 (the game is free, `REAL_MONEY = false`); for later: diamonds by card (Stripe Checkout); webhook `https://$DOMAIN/api/pay/stripe/webhook` — events in [ECONOMY.md](ECONOMY.md) §5 |
-| `NOWPAYMENTS_API_KEY` + `NOWPAYMENTS_IPN_SECRET` | not needed since v0.24; for later: diamonds by crypto (NOWPayments invoices; `NOWPAYMENTS_SANDBOX=true` for the sandbox) |
+| `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` | optional (v0.2.18): BLATS packs by card (Stripe Checkout); webhook `https://$DOMAIN/api/pay/stripe/webhook` — events in [ECONOMY.md](ECONOMY.md) §5. Without them the BLATS tab says «Payments are being connected — coming soon» and checkout answers `503`. (The crypto method and its `NOWPAYMENTS_*` keys were removed in v0.2.18.) |
 | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`, `DISCORD_CLIENT_ID` + `DISCORD_CLIENT_SECRET`, `FACEBOOK_APP_ID` + `FACEBOOK_APP_SECRET`, `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` | optional: «sign in with …» for that provider; redirect URI `https://$DOMAIN/api/auth/oauth/<provider>/callback` ([SIGN_IN.md](SIGN_IN.md)). `FACEBOOK_GRAPH_VERSION` (default `v23.0`) |
 | `TELEGRAM_WEB_LOGIN` | `true`: «sign in with Telegram» on the website (needs the bot token and the bot's `/setdomain`); the Mini App signs in by itself either way |
 | `RESEND_API_KEY` + `MAIL_FROM` | optional: password-reset letters (Resend; the sender domain must be verified there). Without them admins issue one-time reset links in `/admin` |
-| `CASES_ENABLED` | `true` (default) / `false` — paid rare-weapon cases |
-| `BLAT_DROP_ANNOUNCE_AT` | optional (V2.0): the BLAT DROP announcement date players count down to, ISO 8601 (`2027-04-23T12:00:00Z`); an administrator's date set in `/admin → $BLAT` wins over it ([BLAT.md](BLAT.md) §6) |
-| `PROJECT_SOL_WALLET` | optional (v0.2.17): the project's Solana wallet shown in BLAT DROP with «Copy» (default: the owner's address built in); nothing in the game sends to it or reads from it |
+| `CASES_ENABLED` | `true` (default) / `false` — both cases: the rare-weapon case (talons) and the skin case (BLATS, 18+); off for markets where paid random items are restricted |
 | `SOCIAL_X_URL`, `SOCIAL_TELEGRAM_URL` | optional (v0.2.17): where the menu's X and Telegram buttons lead; without them the buttons say «coming soon» |
-| `TOURNAMENT_STAKES` | `true` (default) / `false` — $BLAT stakes in the $BLAT Tournament ([KON.md](KON.md) §6); off: the tournament plays for the rating only |
 | `MATCH_FILL_BOTS` | complete small lineups with players the server runs itself (default `true`: 4 in free-for-all, 3 a side in team modes; Quick Match after a 5 s head start, rooms with friends at kick-off; see docs/NETCODE.md §2a) |
 | `GUEST_SIGNUPS_PER_IP_HOUR` | new guest accounts per address per hour (default 10; raise it for events where many new players share one Wi-Fi) |
 | `LOG_LEVEL`, `MAX_ROOMS`, `SESSION_TTL_HOURS`, `TELEGRAM_AUTH_MAX_AGE_SEC` | optional |
@@ -146,3 +142,11 @@ proxy_read_timeout 1h;`) and set `TRUST_PROXY=true` so rate limits see real clie
 - [ ] Menu music: confirm the rights holders' terms for «Hurt» (Infraction & Emerel Gray) for use in
       the game and the attribution they require (credited in the menu and `THIRD_PARTY_LICENSES.txt`),
       or replace `apps/web/public/assets/audio/theme.mp3` before public launch.
+
+## v0.2.18: variables no longer read
+
+`BLAT_DROP_ANNOUNCE_AT`, `PROJECT_SOL_WALLET`, `TOURNAMENT_STAKES`, `NOWPAYMENTS_API_KEY`,
+`NOWPAYMENTS_IPN_SECRET`, `NOWPAYMENTS_SANDBOX` — the crypto theme is gone ([BLAT.md](BLAT.md)). The
+server ignores them; delete them from the host's environment (Render → Environment) when convenient.
+Migration `023_blats.sql` only adds (a column and two unique indexes) and runs by itself on start.
+

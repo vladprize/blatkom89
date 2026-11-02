@@ -218,16 +218,45 @@ sideways; fullscreen is asked for on phones only, in matches, and stays afterwar
 Telegram profile is released into the player's account (kept, marked merged), while two accounts with
 progress are never merged automatically — Telegram keeps its own; a linking code lives 10 minutes.
 
+## 2j. v0.2.18 (2026-11-02) — the owner's pre-release edits, delivered in three parts
+
+Two messages from the owner (a list of fixes; 12 character sheets, two maps and the new economy) and
+the decisions announced back: **no crypto at all** (no $BLAT, BLAT DROP, Solana, stakes or tokenomics),
+BLATS («БЛАТ», the red coin) as the premium currency for money (1 BLATS = 1 cent), grades everywhere,
+characters for talons and BLATS by grade, skins for BLATS, invitations for talons, the tournament renamed
+«Турнир района» without stakes, full screen everywhere, no character abilities (pay-to-win), no real
+persons, brands or camp symbols on the new maps. Three parts: **1** (this one) the economy and the fixes;
+**2** twelve new characters, two cases at 299 BLATS, grades visible in the lobby and a friend's inventory,
+a starter pack and offers; **3** the maps «Черкизон» and «Магадан» (symmetric, one screen), Xsolla and
+Telegram Stars, own music, © and an asset registry, the full test run and docs.
+
+| Request (owner) | Implementation (part 1) | Status |
+|---|---|---|
+| «убери крипту» | the client, the server's routes (404) and the dashboard have no $BLAT, BLAT DROP, Solana, stakes, NOWPayments; the data stays (migration 023 adds only; [docs/BLAT.md](docs/BLAT.md)) | ✅ |
+| BLATS instead of diamonds; packs from 99 | the `diamonds` columns shown as BLATS / «БЛАТ» with the red coin: the menu's BLATS tile, the Dossier, the Arsenal's wallet and BLATS tab — six packs 99 … 4 999 ($0.99 … $49.99); card payments (Stripe) ready, «Payments are being connected — coming soon» until keys are set; 10 BLATS for every new level, the levels reached before paid once at the next sign-in | ✅ (payments not connected — part 3) |
+| Grades everywhere: regular / rare / epic / legendary — grey / red / purple / gold | `game-rules/grades.ts`; every character and skin has one, shown on the character screen, in the Arsenal (cells, the dressing room, prices) | ✅ (the lobby and a friend's inventory — part 2) |
+| Prices: characters $1.99 / $3.99 / $7.99 / $10.99, skins $0.99 / $1.99 / $2.99 / $4.99 — in BLATS | `CHARACTER_GRADE_PRICES` 199 / 399 / 799 / 1 099, `SKIN_PRICES` 99 / 199 / 299 / 499; skins bought directly in the dressing room (`POST /api/shop/skin`); two free finishes (Birch Camo, Rust) on every weapon; the skin case 299 BLATS, 40 / 30 / 20 / 10 %, odds shown, no duplicates, 18+, `CASES_ENABLED` | ✅ |
+| 2 free, 3 for talons, the rest for BLATS | Petya, Valuta free; Uchastkovy / Mikhalych / Karlych 150 / 200 / 300 talons (levels 1 / 2 / 3); the other 19 by grade | ✅ |
+| Buy a character right on the character screen; «Try in practice» back to where it started | «Buy for …» on the character screen (talons or BLATS, the server decides); the practice's pause menu and results say «Back to the characters» / «Back to the Arsenal» and return there with the same character / tab | ✅ |
+| Arsenal: smaller weapon cells, one screen | compact grids and grade price legends; the cases' odds in sheets | ✅ |
+| Story: the portrait and the line in the middle (computer and phone) | the comic's speaker page centred over the scene, the picture darkened around it | ✅ |
+| Phone: no PLAY splash — the loading window as before | removed; the music starts with the first tap where the browser needs one | ✅ |
+| Phone sideways in the browser: not the full window | a window wider than 2.4 : 1 is cropped in height instead of letterboxed — the game fills it edge to edge (804×290, 844×390 checked) | ✅ |
+| A full-screen button on a computer and a phone | the menu's corner, over a match (under the pause button), the pause menu: the Fullscreen API (computers, Android, iPad), Telegram's own fullscreen (Bot API 8.0), an iPhone's «Share → Add to Home Screen» note + a web app manifest (`display: fullscreen`) | ✅ (real iPhone / Telegram clients not tested) |
+| The score must make sense: FFA showed red/blue | free-for-all: «YOU» and «LEADER» («2ND» when you lead), your bar green, everyone else's red; teams: red and blue | ✅ |
+| The tournament: «Турнир района», no stakes | renamed everywhere (menu, screen, lobby, results); stakes removed | ✅ |
+| Invitations | 150 talons for every friend who plays a whole online match (Friends → «Invite to the game») | ✅ |
+
 ## 3. Open risks / next steps
 
-- $BLAT: approve the level table and the referral rules (docs/BLAT.md); watch the held queue in `/admin → $BLAT` — several guest accounts from different browsers can still farm invitations slowly (documented there).
+- v0.2.18 parts 2–3 (above, §2j): 12 characters, two cases, grades in the lobby and friends, a starter pack; the maps Черкизон and Магадан; Xsolla + Telegram Stars (waiting for the owner's keys), own music, the asset registry. Invitations: watch the held queue in `/admin → Приглашения` — several guest accounts from different browsers can still farm talons slowly.
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).
 - Build and run the Docker stack on the target host; test a backup restore.
 - Live Telegram verification on iOS/Android/Desktop/Web (checklist in `docs/TELEGRAM.md` §4), including the v0.3 bot (/start, invitations through `?start=`, the first answer after a sleep).
 - Real-device performance pass (only software-GL headless Chromium was available; JS cost per frame measured at ~6 ms there).
 - Fill the operator placeholders in `apps/web/public/privacy.html` (operator, contact, email provider, payment-record and backup retention).
-- Payments are off since v0.24 (`REAL_MONEY = false`, the owner's decision). Before selling again: Telegram Stars inside the Mini App (docs/TELEGRAM.md, «Payments inside Telegram»), a provider for the website (the Stripe / NOWPayments code is kept; Paddle was considered and needs written approval), real test purchases and refunds, the privacy-policy paragraph about payments, consumer-law and loot-box rules for the target markets.
+- Payments: BLATS are on sale since v0.2.18 (`REAL_MONEY = true`) but no provider is connected on the live server — the game says «coming soon». Next: Xsolla for the website and Telegram Stars inside the Mini App (part 3); the Stripe code stays as an alternative. Name the provider in the privacy policy before switching payments on., real test purchases and refunds, the privacy-policy paragraph about payments, consumer-law and loot-box rules for the target markets.
 - Retention ideas discussed with the owner (not built): daily tasks, a first-win bonus, a 7-day login calendar, opt-in bot reminders, seasons, ranked ranks, districts for crews.
 - Resend (or another mail provider) with a verified sender domain for password-reset letters.
 - Content growth (more maps/characters) fits the existing map format and atlas conventions.
@@ -266,8 +295,8 @@ progress are never merged automatically — Telegram keeps its own; a linking co
 | Critical tests pass | ✅ | 169/169 unit+integration; browser E2E (development and production mode) — see `docs/TESTING.md` §3 |
 | No real secrets are exposed | ✅ | `.env*` ignored; bot token/DB/session secrets server-only; logger redaction |
 | Deployment instructions match the actual project | 🟡 | non-Docker path executed locally; Docker/compose/Caddy not executed |
-| The first release is completely free | ✅ (again since v0.24) | nothing is sold for money (`REAL_MONEY = false`): everything is unlocked with talons earned in matches; checkouts are refused (`403 payments_off`) |
-| Real payments work end-to-end | ⛔ | Stripe / NOWPayments code, signatures and credit-once are tested with fixtures; no live provider account, so no real purchase has been made |
+| The first release is completely free | 🟡 changed by the owner (v0.2.18) | free to play: every map and mode, two characters and a full kit are free, weapons and equipment come with talons and levels; BLATS (characters by grade, skins, the skin case) are sold for money — on sale in the game, payments not connected yet («coming soon») |
+| Real payments work end-to-end | ⛔ | the Stripe code, signatures and credit-once are tested with fixtures; no live provider account, so no real purchase has been made (the crypto method was removed in v0.2.18; Xsolla and Telegram Stars — part 3) |
 | Diamonds inside Telegram (Stars, `XTR`) | ⛔ | not implemented; card/crypto disabled inside Telegram (UI + server) |
 | Password-reset letters | 🟡 | Resend integration written; not sent live (no key). Admin one-time reset links work (tested) |
 | Whole game in English with Soviet flavour | ✅ | all player-facing texts; E2E drive the English UI; signage on maps stays Cyrillic by design; `/admin` Russian |

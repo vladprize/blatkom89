@@ -63,8 +63,9 @@ export function fullscreenButton(root: HTMLElement, cls = 'iconbtn', testid = 'f
 }
 
 /**
- * Over a match: the button left of the chat button (the HUD publishes where), so a phone held sideways can
- * go full screen without leaving the match. Not on an iPhone's browser (the note is in the pause menu).
+ * Over a match: the button under the menu button (the HUD publishes where — clear of the score boxes and
+ * the chat button), so a phone held sideways can go full screen without leaving the match. Not on an
+ * iPhone's browser (the note is in the pause menu).
  */
 export class MatchFullscreenButton {
   private readonly btn: HTMLButtonElement | null;
@@ -101,12 +102,11 @@ export class MatchFullscreenButton {
     const r = canvas.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const k = r.width / l.W;
-    const size = Math.round(Math.max(30, l.chatBtn.size * k));
+    const size = Math.round(Math.max(30, l.fsBtn.size * k));
     const s = b.style;
     s.width = s.height = `${size}px`;
-    // one button left of the chat button
-    s.left = `${Math.round(r.left + (l.chatBtn.x - 42) * k - size / 2)}px`;
-    s.top = `${Math.round(r.top + l.chatBtn.y * k - size / 2)}px`;
+    s.left = `${Math.round(r.left + l.fsBtn.x * k - size / 2)}px`;
+    s.top = `${Math.round(r.top + l.fsBtn.y * k - size / 2)}px`;
     s.visibility = '';
   }
 

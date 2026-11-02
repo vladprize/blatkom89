@@ -3,8 +3,8 @@
 // character screen and its personal file, the practice screen and its map sheet (v0.3: every picture
 // loaded, the captions the same on both sides), the profile one part at a time (v0.2.17: the dossier, the
 // achievements in two columns, the account), and the Arsenal: «Экипировка» (the dressing room and the four slots) and every shop tab
-// (weapons, equipment, characters, cases) — with no diamonds, no «Top up» and no diamonds tab (the game
-// is free); the Arsenal's sheets (a slot's own items, an item's card) open and fit. Two sizes and both
+// (weapons, equipment, characters, cases and — v0.2.18 — BLATS, with the BLATS and «Top up» in the
+// wallet); the Arsenal's sheets (a slot's own items, an item's card) open and fit. Two sizes and both
 // languages: 393×680 in Russian, 360×640 in English.
 //
 // Usage: node tests/e2e/phone.mjs <baseUrl> <outDir>
@@ -88,7 +88,7 @@ for (const [w, hgt, lang] of [
   });
   check(gaps.between >= 24 && gaps.below < gaps.above && gaps.below <= gaps.between, `${size}: the menu sits low, the logo clear of it (${JSON.stringify(gaps)})`);
   const wallet = await page.locator('.tile__wallet').innerText().catch(() => '');
-  check(!/💎/.test(wallet) && (await page.locator('.tile__wallet .cur--diamonds').count()) === 0, `${size}: the menu's wallet shows talons only («${wallet.trim()}»)`);
+  check(!/💎/.test(wallet) && (await page.locator('.tile__wallet .cur--diamonds').count()) === 1 && (await page.getByTestId('dossier-blats').count()) === 1, `${size}: the menu's wallet shows talons and BLATS with the red coin («${wallet.replace(/\s+/g, ' ').trim()}»)`);
 
   // the Arsenal: the wallet on top, «Экипировка | Магазин», every tab on one screen
   await page.getByTestId('arsenal-tile').click();
@@ -100,11 +100,15 @@ for (const [w, hgt, lang] of [
     const kit = document.querySelector('[data-testid=kit-card]')?.getBoundingClientRect();
     return {
       order: !!wallet && !!modes && !!kit && wallet.bottom <= modes.top && modes.bottom <= kit.top,
-      diamonds: document.querySelectorAll('.arsenal--phone .cur--diamonds, [data-testid=wallet-topup]').length,
+      blats: !!document.querySelector('.arsenal--phone .wallet [data-testid=wallet-blats]') && !!document.querySelector('.arsenal--phone .wallet [data-testid=wallet-topup]'),
+      inRow: (() => {
+        const w = document.querySelector('.arsenal--phone .wallet')?.getBoundingClientRect();
+        return !!w && w.right <= innerWidth + 0.5 && w.left >= -0.5;
+      })(),
       slots: document.querySelectorAll('.kitslot').length,
     };
   });
-  check(top.order && top.diamonds === 0 && top.slots === 4, `${size}: the Arsenal opens on the kit — wallet, then the two halves, then the dressing room and four slots; no diamonds (${JSON.stringify(top)})`);
+  check(top.order && top.blats && top.inRow && top.slots === 4, `${size}: the Arsenal opens on the kit — the wallet (talons, BLATS, «Top up»), then the two halves, then the dressing room and four slots (${JSON.stringify(top)})`);
   await screen('the Arsenal kit');
   // a slot's sheet lists only the player's own items
   await page.getByTestId('slot-change-3').click();
@@ -115,8 +119,8 @@ for (const [w, hgt, lang] of [
   await page.getByTestId('ars-shop').click();
   await page.waitForTimeout(300);
   const tabs = await page.locator('.arschips button').allTextContents();
-  check(tabs.length === 4, `${size}: the shop has four departments, no diamonds (${tabs.join(' · ')})`);
-  for (const tab of ['weapons', 'gear', 'characters', 'case']) {
+  check(tabs.length === 5 && tabs.some((x) => (ru ? /БЛАТ/ : /BLATS/).test(x)), `${size}: the shop has five departments, BLATS the last (${tabs.join(' · ')})`);
+  for (const tab of ['weapons', 'gear', 'characters', 'case', 'diamonds']) {
     await page.locator(`.arschips [data-tab="${tab}"]`).click();
     await page.waitForTimeout(400);
     await screen(`the shop: ${tab}`);

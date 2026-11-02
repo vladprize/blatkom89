@@ -701,6 +701,7 @@ export class HudScene extends Phaser.Scene {
       H,
       touch: this.touch,
       chatBtn: { x: mmx - 26 - 42, y: padT + 18, size: 34 },
+      fsBtn: { x: mmx - 26, y: padT + 18 + 44, size: 34 },
       chat: this.touch ? { left: padL, width: Math.min(W * 0.42, 420), top: this.feedY0 + 5 * 22 + 8 } : { left: padL, width: Math.min(W * 0.4, 360), bottom: pad + ins.bottom + 74 + 10 },
       goal: { x: cx, y: goalY },
     });

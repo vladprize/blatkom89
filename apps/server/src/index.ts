@@ -56,7 +56,7 @@ async function shutdown(signal: string) {
   log.info('shutting down', { signal });
   keepAwake.stop();
   server.close();
-  // the matches that were on are written down as abandoned (their stakes back) before the database closes
+  // the matches that were on are written down as abandoned before the database closes
   await rooms.stop();
   await persistence.close?.();
   await sql.end({ timeout: 5 });

@@ -1,6 +1,7 @@
 // The v0.23 roster end-to-end: the character screen lists all 24 characters with their portraits, every
-// one of the ten new characters has its personal file (the owner's art, name and price) and is locked for a
-// new player, «Try in practice» starts a match as that character, and all ten sprite atlases are loaded.
+// one of the ten new characters has its personal file (the owner's art, name, grade and price — v0.2.18: in
+// BLATS by grade) and is locked for a new player, «Try in practice» starts a match as that character, and
+// all ten sprite atlases are loaded.
 //
 // Usage: node tests/e2e/roster.mjs <baseUrl> <outDir>
 import { chromium } from 'playwright';
@@ -13,16 +14,16 @@ if (!base || !outDir) {
 }
 mkdirSync(outDir, { recursive: true });
 const NEW = [
-  ['golub', 'Sizy', 'talons'],
-  ['tarakan', 'Prusak', 'talons'],
-  ['krysa', 'Sery', 'talons'],
-  ['svinya', 'Borka', 'talons'],
-  ['buyvol', 'Bugai', 'talons'],
-  ['koshka', 'Murka', 'talons'],
-  ['lisa', 'Alisa', 'talons'],
-  ['nosorog', 'Rogov', 'talons'],
-  ['gorilla', 'Samson', 'talons'],
-  ['lev', 'Arkadich', 'talons'],
+  ['golub', 'Sizy', 'BLATS'],
+  ['tarakan', 'Prusak', 'BLATS'],
+  ['krysa', 'Sery', 'BLATS'],
+  ['svinya', 'Borka', 'BLATS'],
+  ['buyvol', 'Bugai', 'BLATS'],
+  ['koshka', 'Murka', 'BLATS'],
+  ['lisa', 'Alisa', 'BLATS'],
+  ['nosorog', 'Rogov', 'BLATS'],
+  ['gorilla', 'Samson', 'BLATS'],
+  ['lev', 'Arkadich', 'BLATS'],
 ];
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const problems = [];
@@ -82,11 +83,11 @@ try {
     }, null, { timeout: 10000 });
     const text = await page.locator('.dossier').innerText();
     const locked = await page.locator('.chars button[aria-pressed="true"].locked').count();
-    const ok = locked === 1 && new RegExp(currency, 'i').test(text) && /Personal File/i.test(text);
+    const ok = locked === 1 && new RegExp(currency, 'i').test(text) && /Personal File/i.test(text) && /\b(Regular|Rare|Epic|Legendary)\b/i.test(text);
     if (ok) files++;
     else console.log(`  ${id}: locked ${locked}, file: ${text.replace(/\s+/g, ' ').slice(0, 160)}`);
   }
-  check(files === NEW.length, `the ten new characters have personal files with the art, locked, priced in talons (v0.24: all of them) (${files}/10)`);
+  check(files === NEW.length, `the ten new characters have personal files with the art, locked, priced in BLATS by grade (v0.2.18) (${files}/10)`);
   await page.screenshot({ path: `${outDir}/roster_dossier.png` });
 
   // try the last one (Arkadich) in practice

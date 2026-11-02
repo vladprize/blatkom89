@@ -222,15 +222,21 @@ try {
   await page.getByTestId('dressing-room').waitFor({ timeout: 10000 });
   const heroOk = await page.locator('[data-testid="dressing-room"] img').first().evaluate((img) => img.complete && img.naturalWidth > 0);
   check(heroOk, 'the Arsenal dressing room shows the character art');
-  // v0.24: the game is free — no case banner with a diamond price, no top-up, no diamonds tab, and the
-  // dressing room in two columns; four slot columns of the same height with the same number of rows
+  // v0.2.18: BLATS are sold in the online game only — the demo (no server) sells nothing: no case banner,
+  // no top-up, its BLATS tab says so; the dressing room in two columns; four slot columns of the same
+  // height with the same number of rows
   const free = await page.evaluate(() => ({
     banner: !!document.querySelector('[data-testid=promo-case]'),
     topup: !!document.querySelector('[data-testid=promo-topup-btn], [data-testid=wallet-topup]'),
     tabs: [...document.querySelectorAll('.tabs button')].map((b) => b.textContent),
     two: !!document.querySelector('.dressing__grid--two'),
   }));
-  check(!free.banner && !free.topup && !free.tabs.includes('Diamonds') && free.tabs.length === 5 && free.two, `nothing is sold for money: no case banner, no top-up, no diamonds tab (${JSON.stringify(free)})`);
+  check(!free.banner && !free.topup && free.tabs.includes('BLATS') && !free.tabs.includes('Diamonds') && free.tabs.length === 6 && free.two, `the demo sells nothing: no case banner, no top-up; a BLATS tab (${JSON.stringify(free)})`);
+  await page.locator('.tabs button', { hasText: 'BLATS' }).click();
+  const blatsDemo = (await page.locator('.screen--arsenal').innerText()).replace(/\s+/g, ' ');
+  check(/Buying BLATS works in the online version of the game/.test(blatsDemo), 'the demo’s BLATS tab: «Buying BLATS works in the online version of the game.»');
+  await page.locator('.tabs button').first().click();
+  await page.getByTestId('dressing-room').waitFor({ timeout: 10000 });
   const kit = await page.evaluate(() => [...document.querySelectorAll('.slotcard')].map((c) => ({ h: Math.round(c.getBoundingClientRect().height), rows: c.querySelectorAll('.slotpick > .wbtn').length, shop: c.querySelectorAll('.wbtn--shop').length })));
   check(kit.length === 4 && new Set(kit.map((k) => k.h)).size === 1 && new Set(kit.map((k) => k.rows)).size === 1 && kit.every((k) => k.rows >= 3) && kit.some((k) => k.shop > 0), `the kit's four columns line up: same height, same rows, shop items fill the gaps (${JSON.stringify(kit)})`);
   await page.locator('.wbtn--shop[data-shop="tt"]').click();

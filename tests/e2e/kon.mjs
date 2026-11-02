@@ -1,8 +1,8 @@
-// The $BLAT Tournament (V2.0 part D «Блатной кон», renamed in v0.2.17) end-to-end: A (English, desktop)
-// and B (Russian, phone). New accounts play without a stake (stakes open on an account's second day —
-// tests/e2e/v0217.mjs plays a staked match). The menu's «$BLAT Tournament» button (on the phone three in a row, the menu still on one screen); the Kon
-// screen — rating 1000, the four formats with their rules, the search and «Create a room»; A creates a
-// 1×1 room, B joins through the invitation: both see «$BLAT Турнир 1×1», people only, no side to switch
+// The District Tournament (V2.0 part D «Блатной кон»; v0.2.18: «Турнир района», no stakes — only the
+// rating) end-to-end: A (English, desktop) and B (Russian, phone). The menu's «District Tournament» button
+// (on the phone three in a row, the menu still on one screen); the Kon screen — rating 1000, the four
+// formats with their rules, no stakes, the search and «Create a room»; A creates a 1×1 room, B joins
+// through the invitation: both see «Турнир района 1×1», people only, no side to switch
 // to; A starts, B leaves the match — after the grace period A wins: the results show the Kon rating
 // (+20), A's Kon screen shows the win in the history and A first in the table, B's shows the loss; then
 // the search: A and a third browser C press «Find opponents» in 1×1 and land in one public room that
@@ -70,22 +70,26 @@ try {
     const btns = [...document.querySelectorAll('.menu__play > .btn:not(.btn--red):not(.menu__story)')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.getBoundingClientRect());
     return { kon: !!kon, row: btns.length === 3 && btns.every((r) => Math.abs(r.top - btns[0].top) < 2), over: document.scrollingElement.scrollHeight - innerHeight, side: document.scrollingElement.scrollWidth - innerWidth };
   });
-  check(bm.kon && bm.row && bm.over <= 0 && bm.side <= 0, `B’s phone menu: «$BLAT Турнир» between the friends and practice, three in a row, one screen (${JSON.stringify(bm)})`);
+  check(bm.kon && bm.row && bm.over <= 0 && bm.side <= 0, `B’s phone menu: «Турнир района» between the friends and practice, three in a row, one screen (${JSON.stringify(bm)})`);
+  check(/Турнир района/.test(await B.page.getByTestId('menu-kon').innerText()), `B’s button: «${(await B.page.getByTestId('menu-kon').innerText()).replace(/\s+/g, ' ')}»`);
   await B.page.screenshot({ path: `${outDir}/kon_menu_B_phone.png` });
   await openKon(A.page);
   check((await text(A.page, 'kon-rating')).startsWith('1000'), `A’s Kon screen: rating 1000 («${await text(A.page, 'kon-rating')}»)`);
   await A.page.getByTestId('kon-format-1x1').click();
   check(/1 against 1 · to 10 eliminations/.test(await text(A.page, 'kon-rules')), `1×1 rules: «${await text(A.page, 'kon-rules')}»`);
+  const konText = await A.page.getByTestId('kon').innerText();
+  check(/District Tournament/.test(await A.page.locator('.topbar .h1').innerText()) || /DISTRICT TOURNAMENT/i.test(await A.page.locator('.topbar .h1').innerText()), 'A’s screen: «District Tournament»');
+  check(!/\$BLAT|\bpool\b/i.test(konText) && /rating, wins and streaks are what is at stake/.test(konText) && (await A.page.locator('[data-testid^=kon-stake], [data-testid^=stake]').count()) === 0, 'no stakes, no pool, no $BLAT — the rating, wins and streaks are what is at stake');
   await A.page.screenshot({ path: `${outDir}/kon_screen_A.png`, fullPage: true });
   // A creates a 1×1 room, B comes through the invitation
   await A.page.getByTestId('kon-create').click();
   await A.page.getByTestId('lobby-kon').waitFor({ timeout: 20000 });
   const link = (await A.page.locator('.lobby__link').innerText()).trim();
   check(/\?invite=[A-Za-z0-9]+$/.test(link), `A’s Kon room has an invitation link (${link})`);
-  check(/\$BLAT TOURNAMENT 1×1/i.test(await A.page.locator('.topbar .h1').innerText()), 'A’s lobby: «$BLAT Tournament 1×1»');
+  check(/DISTRICT TOURNAMENT 1×1/i.test(await A.page.locator('.topbar .h1').innerText()), 'A’s lobby: «District Tournament 1×1»');
   await B.page.goto(link);
   await B.page.getByTestId('lobby-kon').waitFor({ timeout: 60000 });
-  check(/\$BLAT Турнир/i.test(await B.page.getByTestId('lobby-kon').innerText()) && /1×1/.test(await B.page.getByTestId('lobby-kon').innerText()), 'B (Russian, phone) is in the same tournament room: «$BLAT Турнир 1×1»');
+  check(/Турнир района/i.test(await B.page.getByTestId('lobby-kon').innerText()) && /1×1/.test(await B.page.getByTestId('lobby-kon').innerText()), 'B (Russian, phone) is in the same tournament room: «Турнир района 1×1»');
   await A.page.waitForFunction(() => document.querySelectorAll('.teamcol .player:not(.player--free)').length === 2, null, { timeout: 15000 });
   check((await A.page.locator('.teamcol__join').count()) === 0, 'both sides are full: nobody is offered the other side');
   check((await A.page.locator('.lobby .seg--modes').count()) === 0, 'no mode switch in a Kon room');
@@ -100,7 +104,7 @@ try {
   await A.page.getByTestId('kon-line').waitFor({ timeout: 90000 });
   const line = await text(A.page, 'kon-line');
   check(/Tournament rating 1020 \+20 · win/.test(line), `A’s results: «${line}»`);
-  check(/\$BLAT Tournament 1×1/.test(await A.page.locator('.tag', { hasText: 'Match report' }).locator('xpath=..').innerText()), 'the match report says «$BLAT Tournament 1×1»');
+  check(/District Tournament 1×1/i.test(await A.page.locator('.tag', { hasText: 'Match report' }).locator('xpath=..').innerText()), 'the match report says «District Tournament 1×1»');
   await A.page.screenshot({ path: `${outDir}/kon_results_A.png` });
   // A's Kon screen
   await A.page.getByRole('button', { name: 'To menu' }).click();

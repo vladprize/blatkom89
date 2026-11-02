@@ -60,8 +60,8 @@ try {
   const A = await player('Founder', 'en', { width: 1280, height: 760 });
   const B = await player('Recruit', 'ru', { width: 393, height: 680 });
   const tiles = await A.page.locator('.stiles .stile').count();
-  // V2.0: a fourth tile, $BLAT
-  check(tiles === 4 && (await A.page.getByTestId('menu-clubs').count()) === 1 && (await A.page.getByTestId('menu-blat').count()) === 1, `the menu has Friends · Gangs · Top-100 · $BLAT (${tiles} tiles)`);
+  // v0.2.18: the fourth tile is BLATS (the $BLAT tile is gone)
+  check(tiles === 4 && (await A.page.getByTestId('menu-clubs').count()) === 1 && (await A.page.getByTestId('menu-blats').count()) === 1 && (await A.page.getByTestId('menu-blat').count()) === 0, `the menu has Friends · Gangs · Top-100 · BLATS (${tiles} tiles)`);
   const tileA = (await A.page.getByTestId('menu-clubs').innerText()).replace(/\s+/g, ' ').trim();
   const tileRu = (await B.page.getByTestId('menu-clubs').innerText()).replace(/\s+/g, ' ').trim();
   check(/^GANGS/i.test(tileA) && /^ОПГ/.test(tileRu), `v0.2.8: the tile says «${tileA}» in English and «${tileRu}» in Russian`);

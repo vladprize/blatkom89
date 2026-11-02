@@ -1,8 +1,8 @@
-// Weapon skins end-to-end (v0.23; v0.24: the case costs talons, no money in it, so no adult checkbox): a
-// player with talons opens the skin case in the Arsenal, sees the skin revealed and in the collection,
-// the dressing room marks it as theirs and paints the weapon, an unowned finish can be tried on, and in
-// practice the weapon in hand and the HUD icon wear the skin. The talons are granted straight in the
-// test database (DATABASE_URL).
+// Weapon skins end-to-end (v0.23; v0.2.18: the skin case costs 299 BLATS — money — so its odds open from
+// the case tab and it asks «I am 18 or older»): a player with BLATS opens the skin case in the Arsenal,
+// sees the skin revealed and in the collection, the dressing room marks it as theirs and paints the weapon,
+// an unowned finish can be tried on and offers its grade and price, and in practice the weapon in hand and
+// the HUD icon wear the skin. The BLATS are granted straight in the test database (DATABASE_URL).
 //
 // Usage: DATABASE_URL=… node tests/e2e/skins.mjs <baseUrl> <outDir>
 import { chromium } from 'playwright';
@@ -55,16 +55,22 @@ try {
   await page.getByRole('button', { name: 'Done' }).click();
   await page.getByTestId('menu-nick').waitFor({ timeout: 20000 });
   const userId = await page.evaluate(() => window.__blatkom.app.online.profile.id);
-  await sql`UPDATE profiles SET tokens = 1000 WHERE user_id = ${userId}`;
+  await sql`UPDATE profiles SET diamonds = 1000 WHERE user_id = ${userId}`;
 
   await page.getByTestId('arsenal-tile').click();
   await page.locator('.tabs button', { hasText: 'Case' }).click();
   await page.getByTestId('skin-case').waitFor({ timeout: 15000 });
   const owned0 = await page.getByTestId('skins-owned').innerText();
-  check(/0 of 320/.test(owned0), `the skin case is on the case tab next to the weapon case («${owned0}»)`);
-  check((await page.locator('[data-testid=skin-odds] tbody tr').count()) === 4, 'the skin odds list four rarities');
+  check(/0 of 256/.test(owned0), `the skin case is on the case tab next to the weapon case: 256 skins (the two free finishes aren't in it) («${owned0}»)`);
+  await page.getByTestId('skin-odds-open').click();
+  await page.getByTestId('skin-odds').waitFor({ timeout: 5000 });
+  const odds = (await page.getByTestId('skin-odds').innerText()).replace(/\s+/g, ' ');
+  check((await page.locator('[data-testid=skin-odds] tbody tr').count()) === 4 && /40/.test(odds) && /30/.test(odds) && /20/.test(odds) && /10/.test(odds), `the skin odds before buying: four grades, 40 / 30 / 20 / 10 % («${odds.slice(0, 120)}…»)`);
+  await page.getByTestId('sheet-close').click();
+  await page.getByTestId('skin-odds').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
   await page.getByTestId('open-skin-case').click();
-  check((await page.getByTestId('case-adult').count()) === 0 && (await page.getByTestId('case-confirm').isEnabled()), 'a talon case is opened with a plain confirmation (no money, no adult checkbox)');
+  check((await page.getByTestId('case-adult').count()) === 1 && !(await page.getByTestId('case-confirm').isEnabled()), 'a case for BLATS asks «I am 18 or older» before it opens');
+  await page.getByTestId('case-adult').check();
   await page.getByTestId('case-confirm').click();
   await page.getByTestId('skin-reveal').waitFor({ timeout: 15000 });
   const revealed = (await page.getByTestId('skin-reveal').locator('.h1').innerText()).trim();
@@ -72,11 +78,12 @@ try {
   const inv = await page.evaluate(() => window.__blatkom.app.online.inventory);
   const skin = inv.skins[0];
   const [weapon, finish] = skin.split('.');
-  check(inv.skins.length === 1 && inv.tokens === 850, `one skin in the inventory (${skin}), 150 talons spent`);
+  check(inv.skins.length === 1 && inv.diamonds === 701, `one skin in the inventory (${skin}), 299 BLATS spent`);
   check(inv.loadout.skins[weapon] === finish, 'the new skin went on its weapon at once');
   await page.screenshot({ path: `${outDir}/skins_reveal.png` });
   const rows = await sql`SELECT kind, finish_id, price, currency FROM case_openings WHERE user_id = ${userId}`;
-  check(rows.length === 1 && rows[0].kind === 'skin' && rows[0].finish_id === finish && rows[0].price === 150 && rows[0].currency === 'tokens', 'the opening is recorded on the server (150 talons)');
+  check(rows.length === 1 && rows[0].kind === 'skin' && rows[0].finish_id === finish && rows[0].price === 299 && rows[0].currency === 'diamonds', 'the opening is recorded on the server (299 BLATS)');
+  check(!['berezka', 'rzhavchina'].includes(finish), `the case never gives a free finish (${finish})`);
 
   // the dressing room: try the skin on and see it marked as yours
   await page.locator('[data-testid=skin-reveal] [data-try]').click();
@@ -87,8 +94,9 @@ try {
   check(painted, 'the big weapon picture is painted with the finish');
   const other = finish === 'zoloto' ? 'gzhel' : 'zoloto';
   await page.locator(`[data-testid=skin-pick] [data-finish="${other}"]`).click();
-  const note = await page.getByTestId('skin-pick').innerText();
-  check(/Not yours yet/.test(note), 'an unowned finish can be tried on, with a note where it comes from');
+  await page.getByTestId('skin-buy-row').waitFor({ timeout: 5000 });
+  const note = (await page.getByTestId('skin-buy-row').innerText()).replace(/\s+/g, ' ');
+  check(other === 'zoloto' ? /Legendary/i.test(note) && /499/.test(note) : /Rare/i.test(note) && /199/.test(note), `an unowned finish can be tried on and offers its grade and price («${note}»)`);
   await page.locator(`[data-testid=skin-pick] [data-finish="${finish}"]`).click();
   await page.getByTestId('dressing-room').screenshot({ path: `${outDir}/skins_dressing.png` });
 

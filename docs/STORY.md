@@ -53,8 +53,9 @@ server keeps progress by mission id and writes new achievements into its table a
 finished chapter 3 find chapter 4's first mission open.
 
 Every mission pays the first time: 60–190 talons and 40–115 XP (`STORY_MISSIONS`); experience brings
-levels and the levels their $BLAT (V2.0, each level once). A character or skin the player already owns
-is paid in talons instead (the character's price; a skin = a skin case, 150).
+levels and the levels their BLATS (v0.2.18: 10 a level, each level once). A character or skin the player
+already owns is paid in talons instead (`STORY_OWNED_CHARACTER_TALONS` = 500 for a character,
+`STORY_OWNED_SKIN_TALONS` = 150 for a skin).
 
 ## 2. A mission
 
@@ -137,7 +138,7 @@ its best time and one more completion); the first completion pays the mission's 
 `story`, `ref` = `story:<mission>`, unique per player and `ref` — never twice, also under concurrent
 requests) and its XP; a finished chapter inserts its achievement (`ON CONFLICT DO NOTHING`) and pays the
 chapter's talons, characters and skins (`user_items.source = 'story'`); the level achievements the new
-experience reaches; the profile; $BLAT for new levels (`creditLevels`). Rate limits: 120 reads, 30
+experience reaches; the profile; BLATS for new levels (`creditLevelBlats`). Rate limits: 120 reads, 30
 starts and 30 reports a minute per player. Analytics (server-side): `story_started { mission }`,
 `story_completed { mission, ms, first }`.
 
@@ -193,7 +194,7 @@ languages, placeholders by objective, bubbles fit, no prison nicknames; the last
 — and only it — ends with «Продолжение следует» after a look into 2089), `story/backend.test.ts` (the
 offline backend), `app/settings.test.ts` (refused storage), shared `story.test.ts` (open missions,
 chapters, people met), server `api/story.test.ts` (DB-backed: tickets, locks, the 15-second rule, pays
-once under concurrency, chapters, owned rewards in talons, $BLAT for levels). E2E: `story.mjs` (a real
+once under concurrency, chapters, owned rewards in talons, BLATS for levels, no $BLAT row ever). E2E: `story.mjs` (a real
 server: the prologue, mission 1 with its comics, the server's rewards, three lives and the failure
 screen, «Протокол» on a phone, its comic over the department store's picture on a desktop and on a phone)
 and `story-offline.mjs` (the single file from disk: chapter 2 with the square's picture inside the file, the

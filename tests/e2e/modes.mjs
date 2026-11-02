@@ -63,17 +63,14 @@ const fail = async (e) => {
 };
 process.on('uncaughtException', fail);
 
-// The start screen: Chromium (like most browsers) refuses sound before the first tap, so the loading
-// screen ends with «▶ Play» when the menu music would play; a player arriving by an invite link (no
-// music yet) goes straight in. Waits for either and presses Play when it is there.
+// v0.2.18 (the owner): no «▶ Play» start screen — the loading window goes straight into the menu. Chromium
+// (like most browsers) refuses sound before the first tap; the menu music then starts with the player's
+// first tap or key anywhere.
 async function pressPlay(page) {
   await page.waitForFunction(() => {
     const boot = document.getElementById('boot');
-    return !boot || boot.classList.contains('boot--hidden') || !!document.querySelector('[data-testid=boot-play]');
+    return !boot || boot.classList.contains('boot--hidden');
   }, null, { timeout: 90000 });
-  const play = page.getByTestId('boot-play');
-  if (await play.count()) await play.click();
-  await page.waitForFunction(() => !document.getElementById('boot') || document.getElementById('boot').classList.contains('boot--hidden'), null, { timeout: 10000 });
 }
 
 async function nickname(p, nick) {
@@ -87,8 +84,10 @@ try {
   // ── A: a capture-the-flag room ──────────────────────────────────────────
   await A.page.goto(base + '/');
   await pressPlay(A.page);
-  check(await A.page.evaluate(() => window.__blatkom.music.playing()), 'A: «▶ Play» on the start screen starts the menu music');
+  check((await A.page.getByTestId('boot-play').count()) === 0, 'A: no start screen — the loading window goes straight into the menu');
   await nickname(A, `Flag Bearer ${RUN}`);
+  await A.page.waitForFunction(() => window.__blatkom.music.playing(), null, { timeout: 10000 }).catch(() => {});
+  check(await A.page.evaluate(() => window.__blatkom.music.playing()), 'A: the first taps start the menu music');
   await A.page.getByTestId('menu-nick').waitFor({ timeout: 20000 });
   // A picks an avatar in the menu (saved on the server): B will see it in the lobby
   await A.page.locator('[data-testid=profile-strip] [data-testid=avatar-button]').click();

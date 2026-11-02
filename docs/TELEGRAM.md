@@ -153,7 +153,7 @@ The rules, in one transaction (`bind`):
 * The account already has this Telegram → `already`; another Telegram → `conflict` (nothing changes).
 * This Telegram belongs to no account → bound (`linked`).
 * It belongs to an **empty** account — made by an earlier launch in Telegram: no match played, no XP,
-  no talons or diamonds, nothing owned, no gang, no friends, no email, device key or other sign-in —
+  no talons or BLATS, nothing owned, no gang, no friends, no email, device key or other sign-in —
   that account lets the id go: it is **kept as it was** (nothing is deleted), marked
   `merged_into` / `merged_at` (left out of player counts), and the id moves (`linked`, `merged`).
 * It belongs to an account **with anything in it** → `conflict`: nothing changes; Telegram keeps
@@ -179,7 +179,7 @@ sign-in inside Telegram, fullscreen / orientation / safe areas / minimise and ba
 - [ ] A Telegram account with Russian as the app language opens the game in Russian, an English one in
       English; the EN/RU switch works and is remembered after closing and reopening the Mini App.
 - [ ] A team match (red vs blue, capture the flag or base capture) with players on both phones.
-- [ ] v0.24: the game is free — the Arsenal shows no diamonds, no «Top up» and no Diamonds tab (inside Telegram and on the website alike); everything is unlocked with talons.
+- [ ] v0.2.18: the BLATS tab inside Telegram says «Buying BLATS inside Telegram is coming soon (via Telegram Stars)» (no card buttons); on the website it shows the packs. The menu's full-screen button switches Telegram's own fullscreen on and off (Bot API 8.0+).
 - [ ] `/admin` shows the two players and the match.
 - [ ] V2.0 part E: on the website (a guest with some XP) Profile → «Link Telegram» → «Open Telegram» →
       **Start** → «🔗 Link and play» → the game opens in Telegram with the same alias and XP; the website
@@ -197,11 +197,11 @@ played by the test).
 ## Payments inside Telegram
 
 Telegram requires digital goods sold inside a Mini App to be paid with Telegram Stars (`XTR`).
-Since v0.24 nothing is sold for money at all (`REAL_MONEY = false`, [ECONOMY.md](ECONOMY.md)):
-`POST /api/pay/checkout` answers `403 payments_off` for everybody. When sales return, the website's
-card / crypto code is kept for browsers and sessions opened through Telegram are refused
-(`403 telegram_stars_only`). Implementing Stars means: an invoice
+v0.2.18: BLATS are sold for money on the website (card, Stripe — not connected on the live server yet;
+[ECONOMY.md](ECONOMY.md) §5); inside the Mini App the BLATS tab says Stars are coming soon and sessions
+opened through Telegram are refused at checkout (`403 telegram_stars_only`). Implementing Stars (part 3)
+means: an invoice
 link from the bot (`createInvoiceLink`, currency `XTR`, price in Stars), answering
-`pre_checkout_query`, crediting diamonds once on `successful_payment` (idempotent by
+`pre_checkout_query`, crediting BLATS once on `successful_payment` (idempotent by
 `telegram_payment_charge_id`, `payments.provider = 'telegram'` is already allowed by the schema) and
 handling refunds (`refundStarPayment`). See [ECONOMY.md](ECONOMY.md) §5.

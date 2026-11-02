@@ -59,6 +59,8 @@ export interface HudLayout {
   touch: boolean;
   /** Centre and size of the chat button (left of the menu button). */
   chatBtn: { x: number; y: number; size: number };
+  /** v0.2.18: centre and size of the full-screen button (under the menu button, clear of the score boxes). */
+  fsBtn: { x: number; y: number; size: number };
   /** The chat log: its left edge, width and either top (phones, under the kill feed) or bottom (computers, above the health panel). */
   chat: { left: number; width: number; top?: number; bottom?: number };
   /** A story mission's objective line: centred on `x`, its top at `y` (under the score and health panels). */

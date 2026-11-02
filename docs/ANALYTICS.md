@@ -32,7 +32,7 @@ occurred_at, received_at, platform, props jsonb)`.
 | `shop_purchase` | `POST /api/shop/buy` | `kind` (`weapon`\|`character`\|`gadget`), `item`, `currency`, `amount` |
 | `mod_bought` | `POST /api/shop/mod` | `weapon`, `mod`, `cost` |
 | `case_opened` | `POST /api/shop/case`, `POST /api/shop/skin-case` (v0.23) | `weapon`, `rarity`, `price`; skin case: `kind: skin`, `finish` |
-| `payment_completed` | payment webhook credited diamonds | `provider`, `packId`, `diamonds`, `amountCents` |
+| `payment_completed` | payment webhook credited BLATS (the `diamonds` field — v0.2.18 BLATS keep the code name) | `provider`, `packId`, `diamonds`, `amountCents` |
 | `lobby_created` | `RoomManager.create` | `roomId`, `mapId`, `isPrivate` |
 | `lobby_joined` | `MatchRoom` join / resume | `roomId`, `viaInvite`, `resumed?` |
 | `lobby_left` | `MatchRoom` leave | `roomId`, `phase`, `reason` |
@@ -117,7 +117,7 @@ Let the selected range be `[from, to]` (timestamps) with UTC days `firstDay … 
 | Technical errors | `app_errors` rows with `occurred_at ∈ [from, to]` |
 | Unique players (V2.0) | distinct people with a `match_participants` row in a match with `started_at ∈ [from, to]` |
 | Started their first match (V2.0) | people whose earliest match participation (`min(matches.started_at)`) is in `[from, to]` |
-| $BLAT issued (V2.0) | sum of positive $BLAT ledger deltas with `created_at ∈ [from, to]` |
+| BLATS for levels (v0.2.18; «$BLAT issued» before) | sum of the `diamonds` ledger rows with `reason = 'level'` and `created_at ∈ [from, to]` |
 
 Since V2.0 part E, «total players», «new players», the cohorts and the player list leave out empty
 first-launch Telegram profiles merged into a player's account (`users.merged_at`, [TELEGRAM.md](TELEGRAM.md) §4):
@@ -184,7 +184,7 @@ fields — and the **new** account made by that browser gets `users.source_chann
 | Channel (precedence) | When | `source_detail` |
 |---|---|---|
 | `partner` | an **active** partner's code: `?p=` in the browser, or Telegram's **signed** start parameter `p_<code>` (the bot's `t.me/<bot>?start=p_<code>` opens the game with `?p=`) | the code |
-| `referral` | the new account was attached to a player's referral link ([BLAT.md](BLAT.md)) | — |
+| `referral` | the new account was attached to a player's referral link ([ECONOMY.md](ECONOMY.md) §6) | — |
 | `invite` | the first visit came with a room invitation, or Telegram's start parameter is a room code | — |
 | `utm` | a campaign | `source / medium / campaign` |
 | `referrer` | another site | the domain |
@@ -203,9 +203,9 @@ codes and campaigns are chosen by the operator.
 | First visits | visitors first seen in range by what they came with — partner (code), campaign (`utm_source`), another site (domain), direct; with the share that got an account |
 | Room invitations | `invite_created` events in range; opened: `invite_opened` events; joined a lobby by invitation: distinct users of `lobby_joined` events with `viaInvite = true`; played by invitation: distinct people with a completed participation `via_invite` in matches started in range (of them: accounts made in range); conversion = played ÷ invitations |
 | Players' referral links | `referrals` attached in range; of them `confirmed` (a whole match); conversion = confirmed ÷ attached |
-| Levels | every account by its current `profiles.level` in buckets 1, 2–4, 5–9, 10–19, 20–29, 30–49, 50+; average and maximum; «reached in the period» = $BLAT level credits (`ref = level:<n>`) in range — one per player and level (the day $BLAT launched it also holds levels reached earlier) |
-| Блатной кон | completed matches with `kon_format` in range, by format, and the distinct people in them |
-| $BLAT | issued in range: all, from levels, from invitations |
+| Levels | every account by its current `profiles.level` in buckets 1, 2–4, 5–9, 10–19, 20–29, 30–49, 50+; average and maximum; «reached in the period» = level credits (`ref = level:<n>` — $BLAT before v0.2.18, BLATS since) in range — one per player and level (the day $BLAT launched it also holds levels reached earlier) |
+| The District Tournament («Блатной кон») | completed matches with `kon_format` in range, by format, and the distinct people in them |
+| Rewards (v0.2.18) | in range: BLATS for levels (`diamonds` rows, reason `level`) and talons for invitations (`tokens` rows, reason `referral`) |
 
 **Partner links** (authors, streamers) — `partners`: a code (`[a-z0-9_]{3,24}`, unique), a name, a note,
 active or not; created and switched off by an administrator (audited). The website link is
@@ -222,27 +222,26 @@ All amounts come from `currency_ledger`, `user_items`, `weapon_mods`, `case_open
 
 | Metric | Definition |
 |---|---|
-| Issued / spent by reason | sum of positive / negative `delta` per `currency` and `reason` with `created_at ∈ [from, to]`; reasons `match`, `topup`, `grant`, `purchase`, `mod`, `case`, `refund` (diamonds taken back after a refund) |
-| On hand now | sum of `profiles.tokens` / `diamonds` of existing users at request time, and how many hold > 0 (not range-dependent) |
-| Revenue | payments with status `paid` or `refunded` and `paid_at ∈ [from, to]`, per currency: gross, refunded, net = gross − refunded; by provider and by diamond pack |
+| Issued / spent by reason | sum of positive / negative `delta` per `currency` and `reason` with `created_at ∈ [from, to]`; reasons `match`, `topup`, `grant`, `purchase`, `mod`, `case`, `refund` (BLATS taken back after a refund), v0.2.18: `level` (BLATS for levels), `referral` (talons for invitations), `story` |
+| On hand now | sum of `profiles.tokens` / `diamonds` (BLATS) of existing users at request time, and how many hold > 0 (not range-dependent) |
+| Revenue | payments with status `paid` or `refunded` and `paid_at ∈ [from, to]`, per currency: gross, refunded, net = gross − refunded; by provider and by BLATS pack |
 | Payers, ARPPU | distinct users with such payments; net revenue ÷ payers |
 | Waiting / failed | checkouts created in range still `created` / `failed` or `expired` |
-| Arsenal purchases | `user_items` with `acquired_at ∈ [from, to]` bought for talons or diamonds (case drops and grants are listed separately by source) |
-| Modifications, cases | `weapon_mods.acquired_at` / `case_openings.created_at` in range; cases by rarity and diamonds spent |
+| Arsenal purchases | `user_items` with `acquired_at ∈ [from, to]` bought for talons or BLATS (case drops and grants are listed separately by source) |
+| Modifications, cases | `weapon_mods.acquired_at` / `case_openings.created_at` in range; cases by rarity and BLATS spent |
 | Daily chart | the same ledger sums and paid revenue per UTC day |
 
-## 7a. $BLAT (dashboard «$BLAT», V2.0)
+## 7a. Invitations (dashboard «Приглашения», v0.2.18; «$BLAT» before)
 
-From `profiles`, `currency_ledger` (`currency = 'blat'`) and `referrals` (rules: [BLAT.md](BLAT.md)).
-$BLAT rows never enter the talon / diamond numbers of §7.
+From `referrals` and `currency_ledger` (rules: [ECONOMY.md](ECONOMY.md) §6). The retired `$BLAT` rows
+(`currency = 'blat'`) enter no number of the dashboard ([BLAT.md](BLAT.md)).
 
 | Metric | Definition |
 |---|---|
-| On hand | sum of `profiles.blat` at request time, and how many players hold > 0 (not range-dependent) |
-| Issued all time / in the period | sum of positive `delta` of $BLAT rows by `reason` (`level`, `referral`, `grant`), all time and with `created_at ∈ [from, to]` |
-| Invitations by status | `referrals` rows per `status` (pending, held, confirmed, rejected), all time |
-| Flagged accounts | existing users with `blat_flag` set |
-| Biggest balances | the 20 highest `profiles.blat` of existing users, flagged ones marked |
+| Came in the period | `referrals` attached with `attached_at ∈ [from, to]` |
+| By status | `referrals` rows per `status` (pending, held, confirmed, rejected), all time |
+| Talons for invitations | sum of `tokens` ledger rows with `reason = 'referral'`, all time and with `created_at ∈ [from, to]` |
+| Flagged accounts | existing users with a flag set by an administrator (`users.blat_flag` — the column keeps its old name) |
 
 ## 8. Exports
 

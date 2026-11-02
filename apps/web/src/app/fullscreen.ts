@@ -17,10 +17,22 @@ type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void
 const doc = () => document as FsDoc;
 const rootEl = () => document.documentElement as FsEl;
 
-/** Opened from the home screen (an installed web app): no browser bars to hide. */
+/** The page itself is full screen through the Fullscreen API (the button's own full screen). */
+function apiFullscreen(): boolean {
+  const d = doc();
+  return !!(d.fullscreenElement ?? d.webkitFullscreenElement);
+}
+
+/**
+ * Opened from the home screen (an installed web app): no browser bars to hide. The Fullscreen API's own
+ * full screen matches «display-mode: fullscreen» as well — that one is the button's, not an installed app.
+ */
 export function isStandalone(): boolean {
   const nav = navigator as Navigator & { standalone?: boolean };
-  return nav.standalone === true || (typeof window.matchMedia === 'function' && (window.matchMedia('(display-mode: fullscreen)').matches || window.matchMedia('(display-mode: standalone)').matches));
+  if (nav.standalone === true) return true;
+  if (typeof window.matchMedia !== 'function') return false;
+  if (window.matchMedia('(display-mode: standalone)').matches) return true;
+  return !apiFullscreen() && window.matchMedia('(display-mode: fullscreen)').matches;
 }
 
 /** An iPhone (or an iPod) — its browsers can't put a page in full screen. */
@@ -42,8 +54,7 @@ export function fullscreenWay(): FullscreenWay {
 export function isFullscreen(): boolean {
   const t = tg();
   if (t) return t.isFullscreen === true;
-  const d = doc();
-  return !!(d.fullscreenElement ?? d.webkitFullscreenElement);
+  return apiFullscreen();
 }
 
 /** On, off — or the home-screen note on an iPhone. Never throws (a refused request just stays as it was). */

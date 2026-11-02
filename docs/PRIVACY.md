@@ -12,12 +12,12 @@
 
 ## Part 1 — Privacy policy (player-facing text)
 
-**BLATKOM ’89 — privacy policy.** Revised 23 October 2026.
+**BLATKOM ’89 — privacy policy.** Revised 2 November 2026 (v0.2.18; the public pages `apps/web/public/privacy.html` / `privacy-ru.html` are the published text).
 
-**In short.** The game is free to play; purchases are optional and there are no ads. We keep only
-what the game, your profile and its statistics need. We never get your phone number, and we don’t
-keep your Telegram @username or photo. Card and crypto-wallet details are entered on the payment
-provider’s page and never reach us. Data is not sold or used for advertising. You can delete your
+**In short.** The game is free to play and has no ads; BLATS, the in-game currency, will also be sold for
+money (optional — not open yet). We keep only what the game, your profile and its statistics need. We
+never get your phone number, and we don’t keep your Telegram @username or photo. Card details are
+entered on the payment provider’s page and never reach us. Nothing in the game is a cryptocurrency. Data is not sold or used for advertising. You can delete your
 profile at any time: **Settings → “Delete my data”**.
 
 ### 1. Who is responsible for the data
@@ -48,12 +48,12 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
    or purchases), that profile is kept as it was, without the Telegram ID, marked as merged into your
    account.
 4. **Game data:** character, profile avatar (one of the game's portraits, by id), match participation (map, place, eliminations, assists, deaths, damage,
-   time), XP, level, achievements, streaks, time in game, match history; the «Блатной кон» rating, wins, losses, draws and streaks (shown
-   in the Kon tables with your in-game name); the story missions you finished, when and your best time; talon and diamond balances and
+   time), XP, level, achievements, streaks, time in game, match history; the District Tournament («Турнир района») rating, wins, losses, draws and streaks (shown
+   in the tournament tables with your in-game name); the story missions you finished, when and your best time; talon and BLATS balances and
    every change to them, owned weapons, characters, equipment, modifications and weapon skins, loadout, case openings.
-5. **Purchases (optional):** pack, price, currency, payment provider, the provider’s payment reference,
-   status and time. You pay on the provider’s page — Stripe (cards), NOWPayments (cryptocurrency); we
-   pass them only an internal payment number.
+5. **Purchases (optional; not open yet):** pack, price, currency, payment provider, the provider’s payment
+   reference, status and time. You pay on the provider’s page (card; the provider is named in the public
+   policy before payments open); we pass it only an internal payment number. Talons are never sold.
 6. **Technical data:** platform type, game version, sign-in times, the days you played, session lengths,
    app events (launch, connection errors, reconnects) and error reports (passwords, tokens, email
    addresses and long identifiers are removed before saving).
@@ -63,14 +63,12 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
    join date), the gangs you asked to join, and the name, tag, motto, flag and emblem of a gang you
    started — removed when you leave, withdraw or delete the
    profile.
-7b. **$BLAT and invitations (V2.0):** your $BLAT balance (in-game points — not money, they can't be
-   bought, sold or withdrawn) and every credit (for levels, for invitations); your personal invitation
-   code; who invited you, if you came through someone's link, and the people who came through yours
-   (their in-game names, whether the invitation counted); if an administrator marked your account as
-   suspicious, that mark and its reason. The person who invited you sees your in-game name and whether
-   your invitation counted. When the operator takes a snapshot of $BLAT balances, it keeps your internal
-   id, in-game name and balance at that moment (no Telegram id, email or device data) until the snapshot
-   is deleted or you delete your profile.
+7b. **Invitations (V2.0; v0.2.18 in talons):** your personal invitation code; who invited you, if you
+   came through someone's link, and the people who came through yours (their in-game names, whether the
+   invitation counted — a counted invitation pays its talons into the talon history); if an
+   administrator marked your account as suspicious, that mark and its reason. The person who invited you
+   sees your in-game name and whether your invitation counted. The retired «$BLAT» points (V2.0 –
+   v0.2.17: balance, history, snapshot lines) stay in the database unused and go with the profile.
 8. **Visit statistics:** a random visitor identifier created by your browser, first/last visit, days
    with visits, platform type and the domain of the site you came from — to count how many visitors
    become players; linked to your profile once you sign in.
@@ -107,8 +105,8 @@ Google, Discord, Facebook and Reddit when you sign in with them (on their page).
 | Private messages with friends | 180 days |
 | Friend list and requests | until removed by you or the friend, or the profile is deleted |
 | Gang membership and join requests | until you leave (or are shown out), withdraw, or the profile is deleted |
-| $BLAT balance and its history, your invitation code, who invited you | until you delete the profile |
-| Your line in a $BLAT balance snapshot | until the operator deletes the snapshot, or you delete the profile |
+| Your invitation code, who invited you, who came through your link | until you delete the profile |
+| The retired $BLAT points (balance, history, snapshot lines), unused | until you delete the profile (or the operator deletes them) |
 | Error reports | 90 days |
 | Sign-in session records | 90 days after the session ends |
 | Password-reset links | valid 1 hour, deleted 7 days later |
@@ -119,7 +117,7 @@ Google, Discord, Facebook and Reddit when you sign in with them (on their page).
 
 ### 6. How to delete your data
 **Settings → “Delete my data”** — immediate and irreversible: profile, statistics, match history,
-achievements, the story’s progress, balances and owned items (bought ones included), $BLAT and its history, your invitation
+achievements, the story’s progress, balances and owned items (bought ones included), the retired $BLAT points, your invitation
 code and who invited you, email and password hash, the sign-ins
 with Google / Discord / Facebook / Reddit, days active and all sessions. A reward your inviter already
 received for you stays with them (as a number in their history, no longer linked to you). Usage events and error reports lose the link to you and expire on schedule; payment
@@ -139,17 +137,17 @@ When this policy changes, we update the revision date.
 |---|---|---|---|
 | `users` | `telegram_id`, `display_name` (+ `name_key`, its case-folded form for uniqueness), `language_code`, `platform`, `dev_device_id` (dev mode, or `g1:` + HMAC of a guest browser secret), `email`, `password_hash` (scrypt), `email_linked_at`, `created_at`, `last_seen_at`; V2.0: `ref_code` (the player's invitation code), `blat_flag` (an admin's «suspicious» mark with its reason), `merged_into` / `merged_at` (an empty first-launch profile that let its Telegram ID go to the player's account; SET NULL when that account is deleted); V2.0 part F: `source_channel` / `source_detail` / `partner_id` (how the account came: a partner link, an invitation, a campaign, another site's domain, Telegram, direct) | identity, display, sign-in, analytics, referral programme | until account deletion |
 | `telegram_link_codes` (V2.0 part E) | HMAC of a one-time code, user id, created / expires / used times | attaching Telegram to an existing account | valid 10 minutes; purged a day after expiry; immediately on account deletion (cascade) |
-| `currency_ledger`, `user_items`, `weapon_mods`, `case_openings` | balance changes (with admin id for grants; V2.0: $BLAT credits `level:<n>` / `referral:<invited player's id>`), owned items (weapon skins included), modifications, case draws (weapons and skins) | economy, support, no double credits | until account deletion (cascade); an inviter's `referral:<id>` row stays with the inviter after the invited player is deleted (the id no longer resolves) |
-| `blat_snapshots`, `blat_snapshot_rows` (V2.0 part C) | a snapshot's moment, admin, note, totals, rules; per account: `user_id` (cascade), the alias at that moment, balance, earned, sums by source, the ledger's sum, the flag, eligibility | balance snapshots ([BLAT.md](BLAT.md) §6) | until an admin deletes the snapshot; an account's rows go with the account |
-| `app_settings` (V2.0 part C) | none (e.g. the BLAT DROP date) and the admin who changed it | central settings | kept |
-| `referrals` (V2.0) | invited player (`referee_id`, cascade), inviter (`referrer_id`, SET NULL on deletion), the code used, attach/decision times, status, number, reward, an admin's note | referral programme ([BLAT.md](BLAT.md)) | until the invited player's account is deleted |
-| `payments` | `user_id` (SET NULL on deletion), provider and its reference, pack, amount, status, times | accounting, crediting diamonds once | **[accounting retention period]** — not purged automatically |
+| `currency_ledger`, `user_items`, `weapon_mods`, `case_openings` | balance changes (with admin id for grants; v0.2.18: BLATS for levels `level:<n>`, talons for invitations `referral:<invited player's id>`; the retired $BLAT rows of V2.0 – v0.2.17 kept unused), owned items (weapon skins included), modifications, case draws (weapons and skins) | economy, support, no double credits | until account deletion (cascade); an inviter's `referral:<id>` row stays with the inviter after the invited player is deleted (the id no longer resolves) |
+| `blat_snapshots`, `blat_snapshot_rows` (V2.0 part C) | a snapshot's moment, admin, note, totals, rules; per account: `user_id` (cascade), the alias at that moment, balance, earned, sums by source, the ledger's sum, the flag, eligibility | the retired $BLAT balance snapshots (V2.0 – v0.2.17, unused since v0.2.18, [BLAT.md](BLAT.md)) | until deleted; an account's rows go with the account |
+| `app_settings` (V2.0 part C) | none (e.g. the retired BLAT DROP date) and the admin who changed it | central settings | kept |
+| `referrals` (V2.0) | invited player (`referee_id`, cascade), inviter (`referrer_id`, SET NULL on deletion), the code used, attach/decision times, status, number, reward, an admin's note | invitations ([ECONOMY.md](ECONOMY.md) §6) | until the invited player's account is deleted |
+| `payments` | `user_id` (SET NULL on deletion), provider and its reference, pack, amount, status, times | accounting, crediting BLATS once | **[accounting retention period]** — not purged automatically |
 | `user_identities` (v0.3) | provider (`google`/`facebook`/`discord`/`reddit`), the provider's id for the player (`provider_uid`), user id, first/last use | sign-in with a provider | until account deletion (cascade) |
 | `auth_handoffs` (v0.3) | SHA-256 of a one-time code, user id, provider, whether the account is new/linked | handing a provider sign-in back to the page | valid 5 minutes; deleted on use, by the next sign-in once 10 minutes old, by the daily retention job after 1 day; immediately on account deletion (cascade) |
 | `password_resets` | HMAC of the one-time token, user id, who created it (`email`/`admin`) | password reset | 7 days after expiry; immediately on account deletion |
 | `visitors`, `visitor_days` | random browser id, first/last visit, platform, referring domain, `user_id` (SET NULL on deletion); V2.0 part F: the first visit's campaign (`utm_source` / `utm_medium` / `utm_campaign`) and partner link (`partner_id`) | visitor funnel, sources | 400 days after the last visit |
 | `partners` (V2.0 part F) | none about players: a partner link's code, name, note, active, the admin who made it | measuring partner links (no payouts) | until an admin removes it |
-| `profiles` | counters, XP/level, rating, streaks, preferred character, avatar id; V2.0: `blat`, `blat_earned`, `blat_level`; the «Блатной кон» rating and record (`kon_*`) | progression, Top-100, $BLAT, the Kon tables | until account deletion (cascade) |
+| `profiles` | counters, XP/level, rating, streaks, preferred character, avatar id; V2.0: `blat`, `blat_earned`, `blat_level` (retired, unused); v0.2.18 `blats_level`; the District Tournament rating and record (`kon_*`) | progression, Top-100, BLATS for levels, the tournament tables | until account deletion (cascade) |
 | `friendships` | pairs of user ids, request/accept times | friends, presence | until removed; immediately on account deletion (cascade) |
 | `direct_messages` | sender, recipient, text (≤ 500 chars), sent/read times | private messages between friends | 180 days; immediately on account deletion (cascade) |
 | `clubs`, `club_members`, `club_requests` | a club's name/tag/motto/flag/emblem and `head_id` (SET NULL on deletion); membership (club, user, role, join time); requests (club, user, time) | clubs, the club table | membership and requests until left/withdrawn, immediately on account deletion (the head hands the club over first); a club until disbanded, closed by its last member or removed by an admin (audited) |
@@ -170,7 +168,7 @@ Never collected or stored: Telegram `username`, `photo_url`, phone number, `is_p
 or its hash/signature, session tokens or reset tokens in plain text, plain-text passwords, card numbers
 or wallet credentials (payments happen on the providers' hosted pages; we send them only an internal
 payment id). Admins see emails only masked. Client error messages are sanitised (ANALYTICS.md §2.3).
-Processors: hosting provider; Stripe / NOWPayments only for players who buy diamonds; Resend only for
+Processors: hosting provider; the card payment provider (Stripe) only for players who buy BLATS, once payments open; Resend only for
 players who request a password-reset letter. Google / Discord / Facebook / Reddit / Telegram act as
 sign-in providers only for players who choose them (the server sends them the code it got back and its
 own client secret; it asks for the basic profile only and keeps the id; provider access tokens are used
@@ -233,9 +231,10 @@ copy for a specific player can be assembled by an administrator from the player 
 
 - [ ] Fill in operator name and contact (Part 1 §1), the email provider, the payment-record and backup
       retention periods (Part 1 §5) — in `privacy.html` too.
-- [ ] Payments: check the providers' terms (Stripe, NOWPayments), consumer law for digital goods in
-      your markets (refunds, withdrawal right, prices with taxes) and whether paid randomised cases are
-      allowed there (`CASES_ENABLED`).
+- [ ] Payments (before switching them on): name the provider in the public policy (Stripe; later Xsolla /
+      Telegram Stars), check its terms, consumer law for digital goods in your markets (refunds,
+      withdrawal right, prices with taxes), and whether paid random cases (the skin case for BLATS, 18+)
+      are allowed there (`CASES_ENABLED`).
 - [ ] Decide the age rating and whether the policy needs a section on minors.
 - [ ] Check the legal basis / consent requirements for your audience and the hosting location
       (cross-border transfer), and sign a data-processing agreement with the hosting provider if required.

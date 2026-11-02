@@ -21,16 +21,17 @@
 //      picker, the skin on the weapon in hand and on the HUD icon in practice (tests/e2e/skins.mjs)
 //  12. the roster (v0.23): 24 characters with portraits, the ten new ones' personal files and prices,
 //      practice as a new character, all ten sprite atlases loaded (tests/e2e/roster.mjs)
-//  13. phones (v0.24): the menu, the characters and the Arsenal (kit, every shop tab, its sheets) fit one
-//      phone screen at 393×680 RU and 360×640 EN, and nothing is sold for money (tests/e2e/phone.mjs)
+//  13. phones (v0.24): the menu, the characters and the Arsenal (kit, every shop tab — v0.2.18 BLATS too —
+//      its sheets) fit one phone screen at 393×680 RU and 360×640 EN (tests/e2e/phone.mjs)
 //  14. clubs (v0.3): the table and a club's page, founding (Latin names), a request taken live, the menu
 //      tile with the club's flag (tests/e2e/clubs.mjs)
-//  15. $BLAT (V2.0): the welcome on the menu tile, the $BLAT screen and the personal link, a second
-//      browser through the link, the invitation counted after a whole match, the inviter told live;
-//      BLAT DROP; with E2E_ADMIN_USER the dashboard's $BLAT page and snapshots (tests/e2e/blat.mjs)
-//  16. the $BLAT Tournament (V2.0 «Блатной кон», renamed in v0.2.17): the menu button, the tournament
-//      screen, a 1×1 room through an invitation, the leaver loses and the rating moves, the history and
-//      the table, the search (tests/e2e/kon.mjs)
+//  15. invitations (V2.0; v0.2.18 in talons): nothing paid at sign-up, the invite screen and the personal
+//      link, a second browser through the link, the invitation counted after a whole match (+150 talons),
+//      the inviter told live; with E2E_ADMIN_USER the dashboard's «Приглашения» and the player's card
+//      (tests/e2e/invite.mjs)
+//  16. the District Tournament (V2.0 «Блатной кон»; v0.2.18 «Турнир района», no stakes): the menu button,
+//      the tournament screen, a 1×1 room through an invitation, the leaver loses and the rating moves, the
+//      history and the table, the search (tests/e2e/kon.mjs)
 //  17. sources (V2.0 part F, with E2E_ADMIN_USER): a partner link made on the dashboard's «Источники»,
 //      a phone through it with utm_*, the account and the first visit keep them, the counts, the CSV
 //      (tests/e2e/growth.mjs)
@@ -44,10 +45,11 @@
 //      «The Report» on a phone (tests/e2e/story.mjs); the same story in the single file opened from disk
 //      offline — progress in this browser, chapter 2, and a browser that refuses storage (Safari): the
 //      warning, the story still moves on within the session (tests/e2e/story-offline.mjs)
-//  20. v0.2.17: the BLAT DROP banners counting down to the owner's date, BLAT DROP's panes and the
-//      wallet's «Copy», the founder (with E2E_ADMIN_USER), a staked 1×1 tournament match won by the
-//      pool, the story's centred captions and Arkadich's card, the game's keys typing after a match
-//      (tests/e2e/v0217.mjs)
+//  20. v0.2.18: no «PLAY» screen and no crypto, full screen (the corner, over a match, the pause menu,
+//      the iPhone's note), BLATS for levels, the BLATS tab and its packs, a skin bought in the dressing
+//      room and a character on the character screen, practice coming back to where it was started, the
+//      score by mode, a phone held sideways filling the window, the story's speaker in the middle, the
+//      founder (with E2E_ADMIN_USER), the game's keys typing after a match (tests/e2e/v0218.mjs)
 //  21. v0.2.17 part 3: a gang calls another out from its page — the battle room of the two gangs, the
 //      call's card live to both gangs' people, sides by gang, nobody else let in (a stranger's link is
 //      turned away), the battle played and counted for both gangs; a friend's «To battle» → a duel room
@@ -198,19 +200,19 @@ try {
   console.log('\n[e2e] clubs: the table, founding a club, a request taken live (two browsers)');
   const clubs = spawnSync(process.execPath, ['tests/e2e/clubs.mjs', base, join(out, 'clubs')], { stdio: 'inherit' });
   if (clubs.status !== 0) failed = true;
-  console.log('\n[e2e] $BLAT: the welcome, the screen, an invitation through the link counted (two browsers)');
-  const blatArgs = ['tests/e2e/blat.mjs', base, join(out, 'blat')];
-  if (process.env.E2E_ADMIN_USER) blatArgs.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
-  const blat = spawnSync(process.execPath, blatArgs, { stdio: 'inherit' });
-  if (blat.status !== 0) failed = true;
-  console.log('\n[e2e] the $BLAT Tournament: a 1×1 room by invitation, the rating, the history, the search (three browsers)');
+  console.log('\n[e2e] invitations: the screen, the link, an invitation counted in talons (two browsers)');
+  const inviteArgs = ['tests/e2e/invite.mjs', base, join(out, 'invite')];
+  if (process.env.E2E_ADMIN_USER) inviteArgs.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
+  const invite = spawnSync(process.execPath, inviteArgs, { stdio: 'inherit' });
+  if (invite.status !== 0) failed = true;
+  console.log('\n[e2e] the District Tournament: a 1×1 room by invitation, the rating, the history, the search (three browsers)');
   const kon = spawnSync(process.execPath, ['tests/e2e/kon.mjs', base, join(out, 'kon')], { stdio: 'inherit' });
   if (kon.status !== 0) failed = true;
-  console.log('\n[e2e] v0.2.17: the BLAT DROP banners, the wallet, the founder, a staked tournament match, the comics, the keys after a match (two browsers)');
-  const v0217Args = ['tests/e2e/v0217.mjs', base, join(out, 'v0217')];
-  if (process.env.E2E_ADMIN_USER) v0217Args.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
-  const v0217 = spawnSync(process.execPath, v0217Args, { stdio: 'inherit' });
-  if (v0217.status !== 0) failed = true;
+  console.log('\n[e2e] v0.2.18: full screen, BLATS, a skin and a character bought, practice coming back, the score by mode, sideways, the story, the founder (four browsers)');
+  const v0218Args = ['tests/e2e/v0218.mjs', base, join(out, 'v0218')];
+  if (process.env.E2E_ADMIN_USER) v0218Args.push(process.env.E2E_ADMIN_USER, process.env.E2E_ADMIN_PASS ?? '');
+  const v0218 = spawnSync(process.execPath, v0218Args, { stdio: 'inherit' });
+  if (v0218.status !== 0) failed = true;
   console.log('\n[e2e] v0.2.17 part 3: gang against gang, a friend called to a duel (two browsers, two socket players)');
   const battle = spawnSync(process.execPath, ['tests/e2e/battle.mjs', base, join(out, 'battle')], { stdio: 'inherit' });
   if (battle.status !== 0) failed = true;

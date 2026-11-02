@@ -6,21 +6,21 @@ names weapons, characters and maps the way the owner's sheets do). API: `/api/ad
 (`apps/server/src/admin/`). Metric definitions: [ANALYTICS.md](ANALYTICS.md); economy rules:
 [ECONOMY.md](ECONOMY.md).
 
-Tabs: «Обзор» (KPIs and charts; V2.0: unique players, first matches, $BLAT issued), «Воронка» (visitors → account → match → return, sources),
+Tabs: «Обзор» (KPIs and charts; V2.0: unique players, first matches), «Воронка» (visitors → account → match → return, sources),
 «Источники» (V2.0 part F: new accounts by how they came — partner link, a player's referral link, room
 invitation, campaign `utm_*`, another site, Telegram, direct — with first match, whole match and return;
 first visits by source; room invitations and referral links with their conversion; **partner links** for
 authors and streamers — created and switched off here, measured only, no payouts; levels; the Kon;
 [ANALYTICS.md](ANALYTICS.md) §6a),
-«Экономика» (talons, diamonds, revenue, purchases, modifications, cases), «Игроки» (search, player
+«Экономика» (talons, BLATS, revenue, purchases, modifications, cases), «Приглашения» (v0.2.18, in place of
+«$BLAT»: invitations — came in the period, waiting, held, counted, turned down, the talons paid for them,
+flagged accounts; the list by status — an admin counts or turns down the ones held for a check), «Игроки» (search, player
 card with wallet, purchases, ledger, payments and admin actions), «ОПГ» (v0.3 clubs, called gangs —
 «ОПГ» — since v0.2.8: every gang — the game's own marked «игры» — with its rating, people, boss and
-requests; an admin removes a player's gang, e.g. for an offensive name or flag), «$BLAT» (V2.0: points
-on hand, issued for levels / invitations in all time and in the period, the biggest balances, invitations
-by status — an admin counts or turns down the ones held for a check; the BLAT DROP announcement date
-players count down to; balance snapshots with CSV / JSON downloads; [BLAT.md](BLAT.md)), «Ошибки»,
-«Экспорт», «Аудит». The player card has a «$BLAT и приглашения» block (balance, code, who invited the
-player, their invitations; an admin marks or clears «suspicious»).
+requests; an admin removes a player's gang, e.g. for an offensive name or flag), «Ошибки», «Экспорт»,
+«Аудит». The player card has an «Приглашения» block (talons earned for invitations, code, who invited
+the player, their invitations by status; an admin marks or clears «suspicious») and the ledger «Движение
+талонов и BLATS». The $BLAT page, BLAT DROP and the snapshots are gone since v0.2.18 ([BLAT.md](BLAT.md)).
 
 The page itself is public (it contains no data); **every** data request is authorised on the server.
 Hiding the URL is not part of the security model.
@@ -64,9 +64,8 @@ Passwords: minimum 12 characters; stored as `scrypt$N$r$p$salt$hash` (N=16384, r
 | Funnel and economy panels | ✅ | ✅ |
 | Balance grants / corrections, password-reset links | — | ✅ |
 | Open a player's story up to a mission (v0.2.16, for checking the story) | see only | ✅ |
-| $BLAT: count / turn down a held invitation, mark an account suspicious | — | ✅ |
-| v0.2.17: «Сделать основателем», «Доля из фонда» (a pool's $BLAT) | see only | ✅ |
-| BLAT DROP date, balance snapshots (take, download, delete) | see only | ✅ |
+| Invitations: count / turn down a held invitation, mark an account suspicious | — | ✅ |
+| v0.2.17: «Сделать основателем» | see only | ✅ |
 | CSV exports | — | ✅ |
 | Audit log | — | ✅ |
 | Create administrators | — | ✅ |
@@ -94,10 +93,10 @@ what the role cannot use.
 Recorded actions: `login`, `login_failed`, `logout`, `admin_bootstrap`, `admin_created`,
 `admin_created_cli`, `player_viewed` (opening a player's card, target = player id),
 `balance_grant` (currency, amount, reason, balance after), `password_reset_link`, `story_opened` (v0.2.16: the mission, the missions marked done), `club_delete` (name, tag, members),
-`referral_confirm` (inviter, reward, number) / `referral_reject` (note), `blat_flag` / `blat_unflag` (reason),
-`blat_drop_date` (from → to), `blat_snapshot` (accounts, totals), `export_blat_snapshot` (format, rows),
-`blat_snapshot_delete`, v0.2.17: `founder_made` (level, $BLAT, what the founder's pool gave, items added),
-`blat_allocation` (pool, amount, note, balance after),
+`referral_confirm` (inviter, reward, number) / `referral_reject` (note), `player_flag` / `player_unflag`
+(reason; `blat_flag` / `blat_unflag` before v0.2.18), v0.2.17: `founder_made` (level, items added); the
+log keeps the older `blat_drop_date`, `blat_snapshot`, `export_blat_snapshot`, `blat_snapshot_delete` and
+`blat_allocation` rows of V2.0 – v0.2.17,
 `export_players`, `export_matches`, `export_daily` (with row counts / date range); V2.0 part F:
 `partner_created` (code, name), `partner_updated` (what changed), `export_sources`, `export_partners`. Visible to `admin`
 in the «Аудит» tab (latest 200). Kept 365 days ([PRIVACY.md](PRIVACY.md) §4).
@@ -121,25 +120,18 @@ Range parameters (where noted): `range=24h|7d|30d|90d` (default `7d`) or
 | `GET /api/admin/funnel?range…` | viewer | visitor and new-player cohorts, referrers, daily visitors (`AdminFunnel`) |
 | `GET /api/admin/economy?range…` | viewer | currency flows, revenue, purchases, modifications, cases (`AdminEconomy`) |
 | `GET /api/admin/players?q=&sort=&dir=&page=&pageSize=` | viewer | search by name (case-insensitive, Cyrillic-safe), exact Telegram ID, internal UUID or exact email (the address itself is never listed); `sort` ∈ `created, last_seen, name, level, xp, matches, wins, losses, kills, assists, playtime`; `pageSize` 5–100 |
-| `GET /api/admin/players/:id` | viewer | profile, progression, sessions summary, sign-in methods, masked email, wallet, owned items and modifications, last 50 ledger rows (talons, diamonds, $BLAT), last 30 payments, achievements, last 50 matches, last 50 errors, `blat` (balance, total, code, invited by, invitations by status, flag), `story` (v0.2.16: the story missions done; a best time of 0 — opened by an admin) (audited) |
+| `GET /api/admin/players/:id` | viewer | profile, progression, sessions summary, sign-in methods, masked email, wallet (talons, BLATS), owned items and modifications, last 50 ledger rows (talons and BLATS; the retired `blat` rows are left out), last 30 payments, achievements, last 50 matches, last 50 errors, `referral` (talons earned for invitations, code, invited by, invitations by status, flag), the story |
 | `POST /api/admin/players/:id/grant` | admin | `{currency: tokens\|diamonds, amount: ±1…1 000 000, note: 3–120 chars}` → `{balance}`; never below zero (`409 insufficient_balance`); ledger reason `grant` with the admin id; audited; 30 actions / 5 min per admin (CSRF) |
 | `POST /api/admin/players/:id/story-open` | admin | v0.2.16, for checking the story: `{mission}` (a written mission, e.g. `a12`) → `{opened, done}`; the campaign's missions before it count as done for the player — best time 0, **nothing paid** (no talons, experience, chapter achievements or items; a chapter's reward still comes when the player plays its last mission); missions already done stay as they were (repeating it changes nothing); `400 bad_mission`, `404`, `409 no_profile`; audited; 30 actions / 5 min per admin (CSRF). In the dashboard: the player card's «Сюжет» block |
-| `POST /api/admin/players/:id/founder` | admin | v0.2.17, «Сделать основателем»: the founder's account (docs/BLAT.md §1a) — the gold «Founder» badge and the ★ into /admin in the game's menu, level 87, every character, weapon, piece of equipment, skin and modification, $BLAT up to 320 000 000 out of the founder's pool (once per account) → `{level, blat, allocated, items}`; **one founder**: another account gets `409 founder_taken`; repeating it on the founder changes nothing; audited; 30 actions / 5 min per admin (CSRF). In the dashboard: the gold button on the player card (the confirmation names the player and the masked email) |
-| `POST /api/admin/players/:id/blat-allocation` | admin | v0.2.17, «Доля из фонда»: `{pool: influencers\|friends\|reserve, amount: 1…100 000 000, note: 3–120}` → `{balance}`; out of that pool only (`409 pool_exhausted` when it can't give that much); ledger reason `allocation`; audited; 30 actions / 5 min per admin (CSRF) |
+| `POST /api/admin/players/:id/founder` | admin | v0.2.17, «Сделать основателем»: the founder's account — the gold «Founder» badge and the ★ into /admin in the game's menu, level 87 (its levels' BLATS paid as for anybody), every character, weapon, piece of equipment, skin and modification as grants; one founder (`409 founder_taken`); repeating changes nothing; audited (CSRF) |
 | `POST /api/admin/players/:id/reset-link` | admin | one-time password-reset link (valid 1 h) for a player with a registered email → `{link, expiresAt}`; `404 no_email` otherwise; audited; hand it over only to the account owner (CSRF) |
 | `GET /api/admin/clubs` | viewer | every club (`AdminClubRow`: rank, tag, name, motto, rating, people, real members, head, requests, recruiting, `house`, created) |
 | `DELETE /api/admin/clubs/:id` | admin | removes a player club; its people get `club_left` (disbanded); `409 house_club` for the game's own clubs; audited; 30 actions / 5 min per admin (CSRF) |
-| `GET /api/admin/blat?range…` | viewer | $BLAT: on hand, holders, issued all time / in range by source (`level`, `referral`, `grant`), invitations by status, flagged accounts, the 20 biggest balances, v0.2.17: `pools` — every pool's cap and what it has given (`AdminBlatSummary`) |
+| `GET /api/admin/referrals/summary?range…` | viewer | v0.2.18: invitations by status, attached in the period, talons paid (all time / in the period), flagged accounts (`AdminReferralSummary`) |
 | `GET /api/admin/referrals?status=pending\|held\|confirmed\|rejected` | viewer | the last 300 invitations (`AdminReferralRow`) |
-| `POST /api/admin/referrals/:refereeId` | admin | `{action: confirm\|reject, note?}` — a held or pending invitation; confirm pays the inviter at their current tier; `409 not_open` if already decided; the inviter hears it live; audited; 30 actions / 5 min per admin (CSRF) |
-| `POST /api/admin/players/:id/blat-flag` | admin | `{flag: reason (1–200) \| null}` — a suspicious account's invitations wait for a decision; audited (CSRF) |
-| `GET /api/admin/blat/drop` | viewer | the BLAT DROP date, its source (`admin` / `env` / none), who set it and when (`AdminBlatDrop`) |
-| `POST /api/admin/blat/drop` | admin | `{announceAt: ISO-8601 \| null}` (2020 … ten years ahead, `400 bad_date` otherwise); null shows players «not set yet»; audited; 30 actions / 5 min (CSRF) |
-| `GET /api/admin/blat/snapshots` | viewer | the last 50 snapshots (`AdminBlatSnapshot`: moment, who, accounts, eligible, totals, rows left) |
-| `POST /api/admin/blat/snapshots` | admin | `{note?}` — freezes every balance now (one transaction); audited (CSRF) |
-| `GET /api/admin/blat/snapshots/:id/export?format=csv\|json` | admin | the rows (CSV formula-safe; JSON with the rules); audited |
-| `DELETE /api/admin/blat/snapshots/:id` | admin | removes a snapshot; audited (CSRF) |
-| `GET /api/admin/growth?range…` | viewer | V2.0 part F: registrations, unique players, first matches, accounts by source, first visits by source, room invitations and players' referral links with their conversion, levels, the Kon, $BLAT issued (`AdminGrowth`; docs/ANALYTICS.md §6a) |
+| `POST /api/admin/referrals/:refereeId` | admin | `{action: confirm\|reject, note?}` — a held or pending invitation; confirm pays the inviter 150 talons; `409 not_open` if already decided; the inviter hears it live; audited; 30 actions / 5 min per admin (CSRF) |
+| `POST /api/admin/players/:id/flag` | admin | `{flag: reason (1–200) \| null}` — a suspicious account's invitations wait for a decision; audited `player_flag` / `player_unflag` (CSRF) |
+| `GET /api/admin/growth?range…` | viewer | V2.0 part F: registrations, unique players, first matches, accounts by source, first visits by source, room invitations and players' referral links with their conversion, levels, the tournament, the rewards — BLATS for levels and talons for invitations (`AdminGrowth`; docs/ANALYTICS.md §6a) |
 | `GET /api/admin/partners?range…` | viewer | partner links with their website / Telegram links and what they brought in range (`AdminPartnerRow`) |
 | `POST /api/admin/partners` | admin | `{name, code?, note?}` → `201 {id, code}`; without a code one is made from the name; `409 code_taken`; audited (CSRF). Measuring only — no payouts |
 | `POST /api/admin/partners/:id` | admin | `{name?, note?, active?}` — rename, note, switch off / on; audited (CSRF) |

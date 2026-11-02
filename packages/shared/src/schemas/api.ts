@@ -205,8 +205,10 @@ export const UpdateProfileRequest = z
   })
   .strict();
 /** V2.0 part D: `kon` makes it a «Блатной кон» room (team deathmatch, fixed sides, people only). */
-export const CreateRoomRequest = z.object({ mapId: z.enum(MAP_IDS), isPrivate: z.boolean().default(true), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional() }).strict();
-export const QuickMatchRequest = z.object({ mapId: z.enum(MAP_IDS).optional(), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional() }).strict();
+/** v0.2.17 clients still open during the v0.2.18 release may send a tournament `stake`: accepted and ignored (stakes are gone). */
+const legacyStake = z.number().int().min(0).max(100_000).optional();
+export const CreateRoomRequest = z.object({ mapId: z.enum(MAP_IDS), isPrivate: z.boolean().default(true), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional(), stake: legacyStake }).strict();
+export const QuickMatchRequest = z.object({ mapId: z.enum(MAP_IDS).optional(), mode: z.enum(GAME_MODES).default('ffa'), kon: z.enum(KON_FORMATS).optional(), stake: legacyStake }).strict();
 
 export interface PublicProfile {
   id: string;

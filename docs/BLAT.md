@@ -1,240 +1,39 @@
-# $BLAT — in-game points, level rewards, the referral programme, the supply (V2.0, v0.2.17)
+# $BLAT — retired in v0.2.18
 
-$BLAT are **in-game points**. They are not money: they cannot be bought, sold, withdrawn or exchanged
-for anything, and the game never shows a price, a market value or a «rate» for them. Since v0.2.17 they
-change hands in exactly one way — **stakes in the $BLAT Tournament** (everyone in a staked room stakes the
-same, the winners take the pool; [KON.md](KON.md) §6). The game screen says so in plain words. The
-owner plans a $BLAT drop in the Solana network (§6a); the game itself has no token, connects to no
-wallet and sends no transaction — it only shows the project's wallet address.
+**$BLAT, BLAT DROP and the tournament's stakes are gone from the game since v0.2.18** (the owner's
+pre-release edits: «убери крипту»). Nothing in the game, the server's routes or the dashboard pays,
+moves or shows them any more. The game has no token, no wallet, no exchange and no stakes.
 
-Rules live in `packages/shared/src/game-rules/blat.ts`; credits happen only on the server
-(`apps/server/src/blat/repo.ts`), inside database transactions. The client displays what the server
-returns. Admin view: «$BLAT» in `/admin` ([ADMIN.md](ADMIN.md)). BLAT DROP and balance snapshots: §6.
+What replaced them:
 
-## 1. Where the numbers live
-
-| | |
+| Was (V2.0 – v0.2.17) | Now (v0.2.18) |
 |---|---|
-| Balance | `profiles.blat` (integer, 0 … 2 000 000 000), all-time total `profiles.blat_earned`, the highest level already paid `profiles.blat_level` |
-| Every change | a row in `currency_ledger` with `currency = 'blat'`, `reason` = `level` / `referral` / `allocation` (a pool's share, §1a) / `stake` / `stake_win` / `stake_refund` (the tournament, [KON.md](KON.md) §6) (`grant` is reserved — no admin $BLAT grants), `delta`, `balance_after`, `created_at` and an **operation id** `ref` |
-| Operation ids | `level:<n>` — the reward for level *n*; `referral:<invited player's id>` — the reward for one invitation; `allocation:founder`, `allocation:<pool>:<uuid>`; `stake:<match>`, `stake_win:<match>`, `stake_refund:<match>` |
-| Duplicates | impossible: a unique index `currency_ledger_blat_once (user_id, ref) WHERE currency = 'blat'`; a $BLAT row without `ref` is refused by a CHECK |
-| Bounds | one credit ≤ 1 000 000 (`BLAT_LIMITS.maxCredit`), a balance ≤ 2 000 000 000 (`maxBalance`, also a CHECK); balances of tens of millions are shown with thousands separators |
+| $BLAT for levels | **BLATS** for levels — 10 for every new level from level 2, the premium currency (the red coin, «БЛАТ» in Russian) — [ECONOMY.md](ECONOMY.md) §5a |
+| $BLAT for invitations | **150 talons** for every friend who comes through the link and plays a whole online match — [ECONOMY.md](ECONOMY.md) §6 |
+| the $BLAT screen | Friends → «Invite to the game» (the link, the counts, the latest invitations); the menu's BLATS tile → the Arsenal's BLATS tab |
+| BLAT DROP (the announcement, the countdown, the tokenomics, the project's wallet) | nothing |
+| the $BLAT Tournament with stakes | the District Tournament («Турнир района») — the rating only — [KON.md](KON.md) |
+| the founder's $BLAT pool | the founder keeps level 87 (its levels' BLATS as for anybody), every item and the badge |
+| the dashboard's «$BLAT» page (balances, BLAT DROP date, snapshots) | «Приглашения» (invitations, held ones, talons paid) |
 
-Every credit locks the player's profile row (`FOR UPDATE`), inserts the ledger row with
-`ON CONFLICT DO NOTHING` and only then moves the balance — so retries, reconnects, two tabs and two
-servers can never pay the same operation twice (tested with concurrent requests in
-`apps/server/src/blat/blat.test.ts`).
+## The data is kept
 
-Migration `016_blat.sql` only **adds** columns, a table and constraints; nothing existing is dropped,
-rewritten or reset.
+Per the standing rule «не удаляй существующие данные, не проводи разрушительные миграции», migration
+`023_blats.sql` only **adds**. Everything the retired features wrote stays in the database, unused:
 
-## 1a. The supply and its pools (v0.2.17)
+* `profiles.blat`, `profiles.blat_earned`, `profiles.blat_level`;
+* `currency_ledger` rows with `currency = 'blat'` (reasons `level`, `referral`, `allocation`, `stake`,
+  `stake_win`, `stake_refund`) — hidden from the admin's player ledger;
+* `blat_pools`, `blat_snapshots`, `blat_snapshot_rows`, the `app_settings` key `blat_drop.announce_at`;
+* the stake columns of the tournament's tables (migration 022);
+* `referrals` (still used — the invitations now pay talons; old rows keep their `$BLAT` reward numbers).
 
-The owner: «the whole supply is capped at 2 000 000 000 $BLAT: 320 000 000 mine (the biggest holding),
-100 000 000 for my friends, 300 000 000 for influencers, 1 260 000 000 for the players» — the 20 000 000
-left over is the reserve.
+Rows that belong to a player (`profiles`, the ledger, `blat_snapshot_rows`, `referrals`) are deleted
+with the player's account (foreign keys `ON DELETE CASCADE`); the privacy policy says so. Removing the
+retired columns and tables for good would be a separate, deliberate migration — not part of v0.2.18.
 
-| Pool (`blat_pools`) | Cap | Pays |
-|---|---|---|
-| `players` | 1 260 000 000 (63 %) | the level rewards and the invitations — automatically |
-| `founder` | 320 000 000 (16 %) | «Make founder» on the owner's card (below) |
-| `influencers` | 300 000 000 (15 %) | an administrator's allocation |
-| `friends` | 100 000 000 (5 %) | an administrator's allocation |
-| `reserve` | 20 000 000 (1 %) | an administrator's allocation |
+## The old routes
 
-Every credit takes its amount out of its pool inside the same transaction (`takeFromPool`: `issued +
-amount ≤ cap`, the pool's row locked), so the pools never give more than their caps and the supply never
-passes 2 000 000 000. What was paid before v0.2.17 counts to the players' pool (migration 022). Stakes
-move $BLAT between players and take nothing from a pool. The admin's $BLAT page shows every pool: its
-cap and what it has given.
-
-**The founder's account** (`/admin → the player → «Сделать основателем»`, admin role, audited): the gold
-«Founder» badge by the alias (the menu, the profile, rooms, friends, the Top-100), the ★ in the menu's
-corner that opens `/admin` (the dashboard still asks for its password), level 87 (its levels pay their
-$BLAT from the players' pool as for anyone), every character, weapon, piece of equipment, skin and
-modification, and $BLAT up to 320 000 000 out of the founder's pool (`allocation:founder` — once per
-account). Repeating it changes nothing that was done. The live database is reached only from the server,
-so the owner presses it on his own card (found by his email in /admin → Игроки).
-
-**Allocations** (`/admin → the player → «Доля из фонда»`, admin role, audited): an amount out of the
-influencers', the friends' or the reserve pool with a note; refused when the pool can't give that much.
-
-## 2. Level rewards
-
-Every level pays once. Level 1 is the welcome: a new account has 300 $BLAT from its first minute.
-
-**The table is a DRAFT — the owner approves it before the public launch** (`BLAT_LEVEL_FIRST`,
-`BLAT_LEVEL_STEPS`, `BLAT_LEVEL_CAP_REWARD`): 300 at level 1, then +50 a level up to 10, +100 up to 20,
-+200 up to 30, +300 up to 40, +325 up to 50 — 10 000 at level 50 and 10 000 for every level after.
-
-| Level | Reward | All levels up to it |
-|---|---|---|
-| 1 | 300 | 300 |
-| 2 | 350 | 650 |
-| 3 | 400 | 1 050 |
-| 5 | 500 | 2 000 |
-| 10 | 750 | 5 250 |
-| 11 | 850 | 6 100 |
-| 20 | 1 750 | 18 250 |
-| 21 | 1 950 | 20 200 |
-| 30 | 3 750 | 46 750 |
-| 40 | 6 750 | 100 750 |
-| 50 | 10 000 | 186 125 |
-| 51+ | 10 000 each | — |
-
-When levels are paid (`creditLevels`, always «every unpaid level from 1 to the current one»):
-
-- **with the match results**, in the same transaction as XP and talons — the results screen shows
-  «+N $BLAT for the new level · total»;
-- **whenever the player's own profile is read** (sign-in, `/api/me`) and `blat_level` is below the level:
-  the welcome of a new account and, after the update, every level an existing player reached before
-  $BLAT existed. That response carries `blatCredited`; the client shows «+300 $BLAT — welcome to the
-  district» / «+N $BLAT for the levels you reached» once, on the menu;
-- when the $BLAT screen is opened (`GET /api/blat`, same rule).
-
-## 3. The referral programme
-
-**Links.** Every player gets a personal code (8 letters and digits without look-alikes, made the first
-time the $BLAT screen is opened, `users.ref_code`): `https://<site>/?ref=<code>` and, with a bot,
-`https://t.me/<bot>?start=ref_<code>` (the bot answers `/start ref_<code>` with a button that opens the
-game with the code). The room invitations (`?invite=` / `start=<room>`) are untouched and keep working.
-
-**Who counts** (`REFERRAL_RULES`):
-
-1. a **new** account is created in a browser (or Telegram) that was opened through the link — the code
-   is kept in the browser until the first sign-in (`apps/web/src/net/referral.ts`; inside Telegram the
-   server reads it from the signed launch data, never from `initDataUnsafe`); an existing account that
-   opens a link is never attached;
-2. one inviter per account, set once (`referrals.referee_id` is the primary key) and never changed;
-   one's own code is ignored;
-3. the invitation counts after the new player's **first whole online match**: the match completed, it
-   lasted at least 60 s (`minMatchSec`) and the player dealt damage. Practice against bots never counts.
-   It is checked when that match's results are saved and again whenever the player opens $BLAT
-   (self-healing, idempotent);
-4. no reward for clicks, for existing players, for bots, for one's own account.
-
-**Reward.** The n-th confirmed invitation of an inviter pays by the owner's scale
-(`REFERRAL_TIERS`): 1–4 → 1 500, 5–9 → 3 000, 10–24 → 5 000, 25–49 → 7 500, 50–99 → 10 000,
-100–249 → 12 500, 250–499 → 15 000, 500+ → 20 000. A higher tier applies only to new invitations —
-paid rewards are never recounted. The number `n` is taken under a lock, so two invitations confirmed at
-the same moment get different numbers.
-
-**Statuses** (`referrals.status`): `pending` (attached, waiting for the match) → `confirmed` (paid), or
-→ `held` (waits for an administrator) → `confirmed` / `rejected`.
-
-**Checks that hold an invitation for an administrator** (no reward until decided):
-
-- more than 20 confirmations of one inviter in 24 hours (`dailyCap`);
-- an account on either side marked as suspicious by an administrator (`users.blat_flag`, with a reason).
-
-The administrator counts it (paid at the inviter's current tier) or turns it down; both decisions and
-every flag change are in the audit log (`referral_confirm`, `referral_reject`, `blat_flag`,
-`blat_unflag`). The game uses no device fingerprinting or other aggressive tracking for this — only
-what it already has: the guest-account secret of the browser (stored as an HMAC), the sign-in limits
-per network address (`GUEST_SIGNUPS_PER_IP_HOUR`) and the match record.
-
-**Known limit (honest):** someone can open several new guest accounts in different browsers and play a
-whole match with each; with filled lineups (`MATCH_FILL_BOTS`) one person can finish a match alone. The
-sign-up limit per address, the 60-second whole-match rule, the daily cap and the review queue make this
-slow and visible in `/admin → $BLAT`, but not impossible. Before $BLAT gains any value outside the
-game, review the held queue and the flagged accounts.
-
-**Notifications.** The inviter hears a confirmation live (a social event over the open connection):
-«<name> played their first match through your link: +1 500 $BLAT»; a held one: «An invitation of yours
-is being checked — the reward comes after the check».
-
-## 4. API
-
-| Method | Path | Who | What |
-|---|---|---|---|
-| GET | `/api/blat` | player | balance, total, by source, the next level's reward, the referral link / counters / last 20 invitations, the last 50 $BLAT operations, `justCredited` |
-| — | `/api/me`, sign-in responses | player | `profile.blat`, `profile.blatCredited` (only when this very request paid levels) |
-| — | match results (`PersonalResult`) | player | `blatGained`, `totalBlat` |
-| — | social event `referral` | the inviter | `{ name, reward, balance, held }` |
-| GET | `/api/admin/blat?range=…` | viewer | on hand, holders, issued all time / in the period by source, invitations by status, flagged accounts, the 20 biggest balances |
-| GET | `/api/admin/referrals?status=` | viewer | the last 300 invitations |
-| POST | `/api/admin/referrals/:refereeId` | admin + CSRF | `{ action: 'confirm' \| 'reject', note? }` — a held or pending invitation |
-| POST | `/api/admin/players/:id/blat-flag` | admin + CSRF | `{ flag: '<reason>' \| null }` |
-| GET | `/api/blat/drop` | anyone (30 / min per address) | `{ announceAt: ISO \| null, serverNow: ISO }` — the BLAT DROP date and the server's clock |
-| GET | `/api/admin/blat/drop` | viewer | the date, where it comes from (`admin` / `env` / none), who set it and when |
-| POST | `/api/admin/blat/drop` | admin + CSRF | `{ announceAt: ISO \| null }` — set the date or clear it («not set yet»); 2020 … ten years ahead; audited `blat_drop_date` |
-| GET / POST | `/api/admin/blat/snapshots` | viewer / admin + CSRF | the last 50 snapshots / take one now (`{ note? }`); audited `blat_snapshot` |
-| GET | `/api/admin/blat/snapshots/:id/export?format=csv\|json` | admin | the frozen rows (CSV formula-safe; JSON with the rules); audited `export_blat_snapshot` |
-| DELETE | `/api/admin/blat/snapshots/:id` | admin + CSRF | removes a snapshot and its rows; audited `blat_snapshot_delete` |
-
-The admin player card shows the balance, the code, who invited the player, their invitations by status
-and the flag; the ledger table there lists $BLAT operations with talons and diamonds.
-
-## 5. Deleting an account
-
-Deleting an account deletes its balance, its ledger rows, its own `referrals` row and its rows in every
-balance snapshot (§6). An inviter keeps a
-reward already paid for that player (the ledger row `referral:<id>` stays with the inviter; the id no
-longer leads anywhere). Details: [PRIVACY.md](PRIVACY.md).
-
-## 6. BLAT DROP and balance snapshots (V2.0 part C, v0.2.17)
-
-**v0.2.17:** the owner's date — «one date: in 3 months 15 days» (from 24 October 2026): **8 February
-2027, 23:00 in Cyprus** (21:00 UTC). The release writes it as an administrator's setting (migration 022;
-an administrator can change or clear it in `/admin → $BLAT`); without any setting the same date is built
-in (`BLAT_DROP_DEFAULT_ANNOUNCE_AT`). Two banners in the owner's design count down to it live by the
-server's clock (the design's own digits drawn over its screens, `ui/dropBanner.ts`, made by
-`tools/make-drop-banners.py`): the main menu's under the Dossier and the Arsenal (on phones a band that
-gives up height first, so the menu stays one screen) and the $BLAT tab's under «For levels»; both open
-BLAT DROP and say «Drop on Solana».
-
-**The BLAT DROP tab** (v0.2.17): three panes side by side on a wide screen, three tabs on a phone
-(nothing to scroll): the countdown (as below, with «The drop is planned in the Solana network»);
-**Play-to-Earn** — «BLATKOM ’89 is out to change Play-to-Earn: $BLAT go to everyone who plays, not to
-those who pay», how to earn (levels, friends, the story, the tournament) and the year's plans (now — the
-announcement on 8 February 2027 — the drop in the Solana network, its date in the announcement — through
-2027 OPG wars, tournament seasons, new chapters, maps and characters; «these are plans, not promises»);
-**the tokenomics** — 2 000 000 000 $BLAT by pools (§1a) and **the project's wallet**: the Solana and
-Phantom logos, «Project wallet», the address (`PROJECT_SOL_WALLET`, default the owner's
-`7ktcRxxhp9gijH4Pbbr4HBckP8HocFN8YzngvTqBArJ1`) and «Copy». No caption under it (the owner: «we sell
-nothing»); nothing in the game sends to that wallet or reads from it.
-
-**BLAT DROP tab** (the second tab of the $BLAT screen): black, red and bordeaux, the coin, «BLAT DROP»,
-«BLAT DROP ANNOUNCE DATE», the date in the player's language and time zone and a countdown in days,
-hours, minutes and seconds. The countdown runs **by the server's clock**: every answer of
-`/api/blat/drop` carries the server's time, the client keeps the difference to its own clock
-(`dropMsLeft`), so a phone whose clock is wrong counts down to the same second as everyone. Without a
-date the tab says «The announcement date isn't set yet» / «Дата объявления ещё не установлена»; once the
-date has passed — «The date has come — watch the news». Under it, always: $BLAT are in-game points;
-BLAT DROP is an announcement date, not a promise — no token, price, profit or listing is guaranteed.
-
-**Where the date comes from:** an administrator sets it in `/admin → $BLAT → BLAT DROP` (stored in
-`app_settings`, key `blat_drop.announce_at`; «Убрать дату» stores «not set»); before any administrator
-has touched it, the server variable `BLAT_DROP_ANNOUNCE_AT` (optional) is used. One central value — every
-player gets the change the next time the tab is opened. The dashboard suggests a date six months ahead
-when none is set; nothing is shown to players until it is saved.
-
-**Balance snapshots** (`/admin → $BLAT → Снимки балансов`, admin role). A snapshot freezes every
-$BLAT balance at one moment — one `REPEATABLE READ` transaction, so a credit made meanwhile is wholly in
-or wholly out — into `blat_snapshots` / `blat_snapshot_rows`. Rules (version 2 since v0.2.12 — the
-`merged` reason; version 1 before; stored with every snapshot):
-
-| | |
-|---|---|
-| Included | every existing account with a $BLAT balance above 0 at that moment: internal id, alias at that moment, balance, total earned, the sums from levels / invitations / grants, the ledger's sum |
-| Eligible | not flagged by an administrator **and** the $BLAT ledger adds up to the balance **and** not a merged profile |
-| Not eligible (`reasons`) | `flagged` — an administrator marked the account as suspicious; `ledger_mismatch` — the ledger does not explain the balance (look before anything else); `merged` — an empty first-launch Telegram profile that gave its Telegram id to the player's real account (V2.0 part E, [TELEGRAM.md](TELEGRAM.md) §4): it keeps its welcome $BLAT but can't be signed in to, and the player's real account has its own |
-| Totals | accounts and eligible accounts, $BLAT in all and $BLAT of the eligible ones |
-| Never in it | Telegram ids, emails, sign-in data, anything about devices |
-| Kept | until an administrator deletes the snapshot; an account deleted later leaves every snapshot with its row («сейчас» shows the rows left) |
-
-Exports: CSV (formula-safe cells, UTF-8 with BOM) and JSON (the snapshot, its rules and the rows), both
-audited. **A snapshot is a record, not a transfer:** the game balance stays the game balance; any later
-use of a snapshot (for example a separate on-chain distribution) is a separate decision with its own
-legal review, and would need its own data (such as wallet addresses) collected with the players'
-consent — none of that exists in the game.
-
-## 7. What this release does not do
-
-- no cryptocurrency token, no wallet connection, no transactions, no automatic exchange of points for
-  anything (the wallet address is shown, nothing more);
-- no transfers between players except the tournament's equal stakes, no buying or selling of $BLAT, no
-  prices, no market value;
-- no payouts to partners or streamers (an administrator's allocation from the influencers' pool is an
-  in-game credit, nothing else).
+`/api/blat*`, `/api/blat/drop*`, `/api/admin/blat*` and the tournament's stake fields are gone: the
+routes answer 404, an older client's `stake` in a room request is ignored. The history of how $BLAT
+worked (V2.0 – v0.2.17) is in the git history of this file and in [V2_REPORT.md](V2_REPORT.md).
