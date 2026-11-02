@@ -1313,6 +1313,7 @@ export class App {
       textures: this.host.game.textures,
       ...(tab ? { tab } : {}),
       onTry: (tryOn, at) => this.startPractice({ ...this.lastPractice, tryOn, returnTo: { screen: 'arsenal', tab: at } }),
+      onTryCharacter: (c, at) => this.startPractice({ ...this.lastPractice, character: c, returnTo: { screen: 'arsenal', tab: at } }),
       onWallet: () => this.refreshStrip(),
       onCharacter: (c) => this.showCharacters(true, c),
     });

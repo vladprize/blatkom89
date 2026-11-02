@@ -90,7 +90,7 @@ try {
   const src = await admin.getByTestId('sources-table').locator('tbody tr', { hasText: CODE }).first().evaluate((el) => [...el.cells].map((c) => c.textContent.trim()));
   check(src[0] === 'Партнёрская ссылка' && src[2] === '1', `the sources table: ${src.join(' | ')}`);
   const tiles = await admin.getByTestId('growth-tiles').innerText();
-  check(/Уникальные игроки/i.test(tiles) && /Начали первый матч/i.test(tiles) && /Награды/.test(tiles) && /BLATS/.test(tiles) && /талонов за приглашения/.test(tiles) && !/\$BLAT/.test(tiles), 'the page’s numbers: unique players, first matches, the rewards (BLATS for levels, talons for invitations — no $BLAT)');
+  check(/Уникальные игроки/i.test(tiles) && /Начали первый матч/i.test(tiles) && /Награды/i.test(tiles) && /BLATS/i.test(tiles) && /талонов за приглашения/i.test(tiles) && !/\$BLAT/i.test(tiles), `the page’s numbers: unique players, first matches, the rewards (BLATS for levels, talons for invitations — no $BLAT) («${tiles.replace(/\s+/g, ' ').slice(0, 300)}»)`);
   await admin.screenshot({ path: `${outDir}/growth_admin.png`, fullPage: true });
   const csv = await admin.evaluate(async () => (await fetch('/api/admin/export/partners.csv?range=7d', { credentials: 'same-origin' })).text());
   check(csv.includes(`${CODE},E2E Streamer`) && /,1,1,0,0,0,0\r?\n/.test(csv.split('\n').find((l) => l.startsWith(CODE)) + '\n'), `the partners’ CSV has the link with its numbers (${csv.split('\n').find((l) => l.startsWith(CODE))?.trim()})`);

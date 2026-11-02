@@ -11,7 +11,7 @@
 //    are the player's without buying;
 //  • a character bought right on the character screen (rare 399); «Try in practice» on a locked one plays
 //    as them and the pause menu's «Back to the characters» returns to the same character; the Arsenal's
-//    «Test in practice» comes back to the Arsenal;
+//    «Test in practice» and its character card's «Try in practice» come back to the Arsenal;
 //  • the score by mode: free-for-all — «YOU» and «LEADER» (no red and blue); teams — red and blue, no labels;
 //  • a phone held sideways (804×290 and 844×390): the game fills the whole window;
 //  • the story: a speaker's portrait and line sit in the middle of the screen (computer and phone);
@@ -78,7 +78,7 @@ async function player(name, lang, viewport, o = {}) {
   page.on('console', (m) => {
     if (m.type() === 'error' && !/ERR_TUNNEL_CONNECTION_FAILED|telegram\.org|WebSocket/.test(m.text())) problems.push(`[${name} console] ${m.text()}`);
   });
-  await page.goto(base + (o.path ?? '/'));
+  await page.goto(base + (o.path ?? '/'), { waitUntil: 'domcontentloaded', timeout: 90000 });
   // nothing is tapped: the loading window goes away by itself
   await page.waitForFunction(() => {
     const boot = document.getElementById('boot');
@@ -94,7 +94,7 @@ async function player(name, lang, viewport, o = {}) {
   return { name, ctx, page, id: me.id, phone };
 }
 const toMenu = async (page) => {
-  await page.goto(base + '/');
+  await page.goto(base + '/', { waitUntil: 'domcontentloaded', timeout: 90000 });
   await page.waitForFunction(() => {
     const boot = document.getElementById('boot');
     return !boot || boot.classList.contains('boot--hidden');
@@ -287,6 +287,22 @@ try {
   await A.page.locator('.chars').waitFor({ timeout: 20000 });
   const sel = await A.page.locator('.chars button[aria-pressed=true]').innerText();
   check(/Arkadich/i.test(sel) && (await A.page.getByTestId('char-try').count()) === 1, `back on the character screen with Arkadich selected («${sel.trim()}»)`);
+
+  // ── the Arsenal's characters tab: «Try in practice» comes back to the Arsenal ──
+  await toMenu(A.page);
+  await A.page.getByTestId('arsenal-tile').click();
+  await A.page.locator('.tabs button', { hasText: 'Characters' }).click();
+  await A.page.locator('[data-char=popugay]').first().click();
+  await A.page.getByTestId('char-sheet-try').click();
+  await active(A.page);
+  check((await localCharacter(A.page)) === 'popugay', `the Arsenal's character card: «Try in practice» plays as Gosha (${await localCharacter(A.page)})`);
+  await A.page.keyboard.press('Escape');
+  await A.page.getByTestId('pause-leave').waitFor({ timeout: 10000 });
+  const leaveArs = (await A.page.getByTestId('pause-leave').innerText()).trim();
+  check(/^Back to the Arsenal$/i.test(leaveArs), `its way out: «${leaveArs}»`);
+  await A.page.getByTestId('pause-leave').click();
+  await A.page.locator('[data-char=popugay]').first().waitFor({ timeout: 20000 });
+  check(true, 'back in the Arsenal, on the characters tab');
 
   // ── teams: red and blue ──────────────────────────────────────────────────
   await toMenu(A.page);

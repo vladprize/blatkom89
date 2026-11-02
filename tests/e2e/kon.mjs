@@ -71,7 +71,7 @@ try {
     return { kon: !!kon, row: btns.length === 3 && btns.every((r) => Math.abs(r.top - btns[0].top) < 2), over: document.scrollingElement.scrollHeight - innerHeight, side: document.scrollingElement.scrollWidth - innerWidth };
   });
   check(bm.kon && bm.row && bm.over <= 0 && bm.side <= 0, `B’s phone menu: «Турнир района» between the friends and practice, three in a row, one screen (${JSON.stringify(bm)})`);
-  check(/Турнир района/.test(await B.page.getByTestId('menu-kon').innerText()), `B’s button: «${(await B.page.getByTestId('menu-kon').innerText()).replace(/\s+/g, ' ')}»`);
+  check(/Турнир района/i.test(await B.page.getByTestId('menu-kon').innerText()), `B’s button: «${(await B.page.getByTestId('menu-kon').innerText()).replace(/\s+/g, ' ')}»`);
   await B.page.screenshot({ path: `${outDir}/kon_menu_B_phone.png` });
   await openKon(A.page);
   check((await text(A.page, 'kon-rating')).startsWith('1000'), `A’s Kon screen: rating 1000 («${await text(A.page, 'kon-rating')}»)`);

@@ -1,0 +1,16 @@
+{
+  "name": "BLATKOM ’89",
+  "short_name": "BLATKOM ’89",
+  "description": "District business is serious business. A top-down multiplayer 2D action game set in a late-Soviet neighbourhood.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#0d0b0a",
+  "theme_color": "#0d0b0a",
+  "icons": [
+    { "src": "assets/ui/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/ui/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

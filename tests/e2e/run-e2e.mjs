@@ -194,7 +194,7 @@ try {
   console.log('\n[e2e] the roster: 24 characters, the ten new ones in the files and in practice');
   const roster = spawnSync(process.execPath, ['tests/e2e/roster.mjs', base, join(out, 'roster')], { stdio: 'inherit' });
   if (roster.status !== 0) failed = true;
-  console.log('\n[e2e] phones: every screen and the Arsenal on one phone screen, nothing for money');
+  console.log('\n[e2e] phones: every screen and the Arsenal (BLATS too) on one phone screen');
   const phone = spawnSync(process.execPath, ['tests/e2e/phone.mjs', base, join(out, 'phone')], { stdio: 'inherit' });
   if (phone.status !== 0) failed = true;
   console.log('\n[e2e] clubs: the table, founding a club, a request taken live (two browsers)');

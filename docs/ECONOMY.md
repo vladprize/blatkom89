@@ -75,8 +75,9 @@ and on the price. Grade colours (`GRADE_COLORS`): regular grey, rare red, epic p
 
 Today: regular — Sonka, Tolyan, Gosha, Sizy, Prusak, Sery, Borka, Vityok, Slavik; rare — Bugai, Garik,
 Lyova, Batya, Murka, Alisa, Rogov; epic — Zhora, Samson; legendary — Arkadich. A locked character is
-bought right on the character screen («Buy for …»; the server decides) or tried in practice first
-(«Try in practice» comes back to the same character). Characters bought before v0.2.18 stay owned.
+bought right on the character screen or on its card in the Arsenal («Buy for …»; the server decides),
+or tried in practice first — «Try in practice» comes back to where it was pressed (the character screen
+with the same character, or the Arsenal's tab). Characters bought before v0.2.18 stay owned.
 
 ## 4. The rare-weapon case (talons)
 

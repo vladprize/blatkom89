@@ -226,9 +226,13 @@ BLATS («БЛАТ», the red coin) as the premium currency for money (1 BLATS = 
 characters for talons and BLATS by grade, skins for BLATS, invitations for talons, the tournament renamed
 «Турнир района» without stakes, full screen everywhere, no character abilities (pay-to-win), no real
 persons, brands or camp symbols on the new maps. Three parts: **1** (this one) the economy and the fixes;
-**2** twelve new characters, two cases at 299 BLATS, grades visible in the lobby and a friend's inventory,
-a starter pack and offers; **3** the maps «Черкизон» and «Магадан» (symmetric, one screen), Xsolla and
-Telegram Stars, own music, © and an asset registry, the full test run and docs.
+**2** twelve new characters, the owner's skin line (`references/64-skins-lineup.png`, 2 Nov: regular /
+rare / epic / legendary, the welcome gifts «Акула» and «Блатком ’89»; without the Olympic rings, a
+sportswear brand's stripes, a religious icon, a state agency's emblem or prison tattoos it shows), two
+cases at 299 BLATS, grades visible in the lobby and a friend's inventory, a starter pack and offers;
+**3** the maps «Черкизон» and «Воркута» (the owner, 2 Nov: Vorkuta instead of Magadan — a mining town,
+nothing of the camps; symmetric, one screen), Xsolla and Telegram Stars, own music, © and an asset
+registry (real gun names included), the full test run and docs.
 
 | Request (owner) | Implementation (part 1) | Status |
 |---|---|---|
@@ -237,7 +241,7 @@ Telegram Stars, own music, © and an asset registry, the full test run and docs.
 | Grades everywhere: regular / rare / epic / legendary — grey / red / purple / gold | `game-rules/grades.ts`; every character and skin has one, shown on the character screen, in the Arsenal (cells, the dressing room, prices) | ✅ (the lobby and a friend's inventory — part 2) |
 | Prices: characters $1.99 / $3.99 / $7.99 / $10.99, skins $0.99 / $1.99 / $2.99 / $4.99 — in BLATS | `CHARACTER_GRADE_PRICES` 199 / 399 / 799 / 1 099, `SKIN_PRICES` 99 / 199 / 299 / 499; skins bought directly in the dressing room (`POST /api/shop/skin`); two free finishes (Birch Camo, Rust) on every weapon; the skin case 299 BLATS, 40 / 30 / 20 / 10 %, odds shown, no duplicates, 18+, `CASES_ENABLED` | ✅ |
 | 2 free, 3 for talons, the rest for BLATS | Petya, Valuta free; Uchastkovy / Mikhalych / Karlych 150 / 200 / 300 talons (levels 1 / 2 / 3); the other 19 by grade | ✅ |
-| Buy a character right on the character screen; «Try in practice» back to where it started | «Buy for …» on the character screen (talons or BLATS, the server decides); the practice's pause menu and results say «Back to the characters» / «Back to the Arsenal» and return there with the same character / tab | ✅ |
+| Buy a character right on the character screen; «Try in practice» back to where it started | «Buy for …» on the character screen and on the Arsenal's character card (talons or BLATS, the server decides); «Try in practice» on both; the practice's pause menu and results say «Back to the characters» / «Back to the Arsenal» and return there with the same character / tab | ✅ |
 | Arsenal: smaller weapon cells, one screen | compact grids and grade price legends; the cases' odds in sheets | ✅ |
 | Story: the portrait and the line in the middle (computer and phone) | the comic's speaker page centred over the scene, the picture darkened around it | ✅ |
 | Phone: no PLAY splash — the loading window as before | removed; the music starts with the first tap where the browser needs one | ✅ |
@@ -249,7 +253,7 @@ Telegram Stars, own music, © and an asset registry, the full test run and docs.
 
 ## 3. Open risks / next steps
 
-- v0.2.18 parts 2–3 (above, §2j): 12 characters, two cases, grades in the lobby and friends, a starter pack; the maps Черкизон and Магадан; Xsolla + Telegram Stars (waiting for the owner's keys), own music, the asset registry. Invitations: watch the held queue in `/admin → Приглашения` — several guest accounts from different browsers can still farm talons slowly.
+- v0.2.18 parts 2–3 (above, §2j): 12 characters, the owner's skin line, two cases, grades in the lobby and friends, a starter pack; the maps Черкизон and Воркута; Xsolla + Telegram Stars (waiting for the owner's keys), own music, the asset registry. Invitations: watch the held queue in `/admin → Приглашения` — several guest accounts from different browsers can still farm talons slowly.
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).
 - Build and run the Docker stack on the target host; test a backup restore.

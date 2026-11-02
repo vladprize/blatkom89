@@ -100,6 +100,8 @@ export interface ArsenalOptions {
   onWallet?: () => void;
   /** Show this character in the character screen. */
   onCharacter?: (c: CharacterId) => void;
+  /** v0.2.18: play a practice match as this character, then come back to the Arsenal's `tab`. */
+  onTryCharacter?: (c: CharacterId, tab: ArsenalTab) => void;
 }
 
 const slotLabel = (slot: 1 | 2 | 3 | 4) => (slot === 1 ? t('Sidearm') : slot === 2 ? t('Melee') : slot === 3 ? t('Primary') : t('Equipment'));
@@ -1579,10 +1581,26 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       },
       () => {
         const price = CHARACTER_PRICES[c];
+        const mine = !price || (inv ? inv.characters.includes(c) : false);
         return h(
           'div',
           { class: 'itemacts' },
           price ? buyButton('character', c, price, true) : null,
+          // v0.2.18 (the owner): try a locked character in practice — and come back here, not to the menu
+          !mine && o.onTryCharacter
+            ? h(
+                'button',
+                {
+                  class: 'btn btn--small',
+                  'data-testid': 'char-sheet-try',
+                  onclick: () => {
+                    closeSheet();
+                    o.onTryCharacter!(c, tab);
+                  },
+                },
+                t('Try in practice'),
+              )
+            : null,
           o.onCharacter
             ? h(
                 'button',

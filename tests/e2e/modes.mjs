@@ -190,8 +190,10 @@ try {
   C.on('pageerror', (e) => problems.push(`[C pageerror] ${e.message}`));
   await C.goto(base + '/');
   await C.waitForFunction(() => document.getElementById('boot')?.classList.contains('boot--hidden') ?? true, null, { timeout: 90000 });
+  // v0.2.18: the menu comes at once; the music fades in as soon as the browser has the soundtrack
+  await C.waitForFunction(() => window.__blatkom.music.playing(), null, { timeout: 20000 }).catch(() => {});
   const cState = await C.evaluate(() => ({ start: !!document.querySelector('[data-testid=boot-play]'), playing: window.__blatkom.music.playing() }));
-  check(!cState.start && cState.playing, `autoplay allowed: the menu opens without the start screen and the music is already playing (${JSON.stringify(cState)})`);
+  check(!cState.start && cState.playing, `autoplay allowed: the menu opens without a start screen and the music plays with it, no tap needed (${JSON.stringify(cState)})`);
   await free.close();
 } catch (e) {
   await fail(e);

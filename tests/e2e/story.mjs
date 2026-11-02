@@ -10,7 +10,7 @@
 // objective line, the hero dropped three times (a heart each, back after each fall) — «Mission failed»
 // with the narrator's line, «Again» goes straight into the mission, the pause menu's
 // «Back to the story» leaves it, and «← Back» from the hub is the menu; «The Report» opens its comic over
-// the department store's big picture (the speaker's portrait and bubble along the bottom). B: the phone menu — «Сюжет» beside «Быстрый матч», friends, Kon and
+// the department store's big picture (v0.2.18: the speaker's portrait and bubble in the middle of the screen). B: the phone menu — «Сюжет» beside «Быстрый матч», friends, Kon and
 // practice in a row, one screen; the hub and the comic upright without sideways scroll, and the big picture
 // behind «The Report»'s comic on the phone.
 //
@@ -211,9 +211,10 @@ try {
   const speakerA = await A.page.evaluate(() => {
     const art = document.querySelector('[data-testid=comic-panel] .comic__art')?.getBoundingClientRect();
     const bub = document.querySelector('[data-testid=comic-panel] .comic__bubble')?.getBoundingClientRect();
-    return { beside: !!art && !!bub && Math.abs(art.bottom - bub.bottom) < 40 && (bub.left >= art.right - 2 || bub.right <= art.left + 2), low: !!bub && bub.top > innerHeight * 0.55 && bub.bottom <= innerHeight, scene: !!document.querySelector('[data-testid=comic-scene]') };
+    const mid = (r) => (r.top + r.bottom) / 2;
+    return { beside: !!art && !!bub && Math.abs(mid(art) - mid(bub)) < 40 && (bub.left >= art.right - 2 || bub.right <= art.left + 2), middle: !!bub && Math.abs(mid(bub) - innerHeight / 2) < innerHeight * 0.15 && bub.bottom <= innerHeight, scene: !!document.querySelector('[data-testid=comic-scene]') };
   });
-  check(speakerA.beside && speakerA.low && speakerA.scene, `a speaker: the portrait beside the bubble along the bottom, the picture behind (${JSON.stringify(speakerA)})`);
+  check(speakerA.beside && speakerA.middle && speakerA.scene, `a speaker (v0.2.18): the portrait beside the bubble in the middle of the screen, the picture behind (${JSON.stringify(speakerA)})`);
   await A.page.screenshot({ path: `${outDir}/story_scene_desktop.png` });
   await A.page.getByTestId('comic-skip').click();
   await A.page.getByTestId('story-goal').waitFor({ state: 'visible', timeout: 30000 });
@@ -286,9 +287,10 @@ try {
     const art = document.querySelector('.comic__art')?.getBoundingClientRect();
     const bub = document.querySelector('.comic__bubble')?.getBoundingClientRect();
     const scene = document.querySelector('[data-testid=comic-scene]')?.getAttribute('data-scene') ?? null;
-    return { art: !!art, scene, beside: !!art && !!bub && bub.left >= art.right - 2 && Math.abs(art.bottom - bub.bottom) < 40, inside: !!bub && !!art && bub.right <= innerWidth && art.left >= 0 && bub.bottom <= innerHeight, low: !!bub && bub.top > innerHeight * 0.6, side: document.scrollingElement.scrollWidth - innerWidth };
+    const mid = (r) => (r.top + r.bottom) / 2;
+    return { art: !!art, scene, beside: !!art && !!bub && bub.left >= art.right - 2 && Math.abs(mid(art) - mid(bub)) < 40, inside: !!bub && !!art && bub.right <= innerWidth && art.left >= 0 && bub.bottom <= innerHeight, middle: !!bub && Math.abs(mid(bub) - innerHeight / 2) < innerHeight * 0.15, side: document.scrollingElement.scrollWidth - innerWidth };
   });
-  check(comicBox.art && comicBox.scene === 'hall2089' && comicBox.beside && comicBox.inside && comicBox.low && comicBox.side <= 0, `the prologue upright: 2089's hall on the whole screen, the portrait beside the bubble along the bottom (${JSON.stringify(comicBox)})`);
+  check(comicBox.art && comicBox.scene === 'hall2089' && comicBox.beside && comicBox.inside && comicBox.middle && comicBox.side <= 0, `the prologue upright: 2089's hall on the whole screen, the portrait beside the bubble in the middle (${JSON.stringify(comicBox)})`);
   await B.page.screenshot({ path: `${outDir}/story_comic_phone.png` });
   await B.page.getByTestId('comic-skip').click();
   await B.page.getByTestId('story').waitFor({ timeout: 15000 });
@@ -311,9 +313,9 @@ try {
     const img = document.querySelector('[data-testid=comic-scene]').getBoundingClientRect();
     const bub = document.querySelector('[data-testid=comic-panel] .comic__bubble')?.getBoundingClientRect();
     const art = document.querySelector('[data-testid=comic-panel] .comic__art')?.getBoundingClientRect();
-    return { covers: img.left <= 1 && img.top <= 1 && img.right >= innerWidth - 1 && img.bottom >= innerHeight - 1, inside: !!bub && !!art && bub.left >= 0 && bub.right <= innerWidth && bub.bottom <= innerHeight && art.left >= 0, low: !!bub && bub.top > innerHeight * 0.6, side: document.scrollingElement.scrollWidth - innerWidth };
+    return { covers: img.left <= 1 && img.top <= 1 && img.right >= innerWidth - 1 && img.bottom >= innerHeight - 1, inside: !!bub && !!art && bub.left >= 0 && bub.right <= innerWidth && bub.bottom <= innerHeight && art.left >= 0, middle: !!bub && Math.abs((bub.top + bub.bottom) / 2 - innerHeight / 2) < innerHeight * 0.15, side: document.scrollingElement.scrollWidth - innerWidth };
   });
-  check(sceneB.covers && sceneB.inside && sceneB.low && sceneB.side <= 0, `the phone: the picture fills the screen, the portrait and bubble along the bottom (${JSON.stringify(sceneB)})`);
+  check(sceneB.covers && sceneB.inside && sceneB.middle && sceneB.side <= 0, `the phone: the picture fills the screen, the portrait and bubble in the middle (${JSON.stringify(sceneB)})`);
   await B.page.screenshot({ path: `${outDir}/story_scene_phone.png` });
   await B.ctx.close();
   check(problems.length === 0, `no page errors (${problems.join(' | ')})`);

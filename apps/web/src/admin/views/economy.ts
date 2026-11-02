@@ -1,4 +1,4 @@
-/** Economy: talons and diamonds in and out, real-money revenue, purchases, modifications and cases. */
+/** Economy: talons and BLATS (the `diamonds` columns) in and out, real-money revenue, purchases, modifications and cases. */
 import type { AdminCurrencyFlow, AdminEconomy } from '@blatkom/shared';
 import { h, clear } from '../dom.js';
 import { apiFetch, rangeQuery } from '../api.js';
@@ -111,11 +111,11 @@ export async function renderEconomy(root: HTMLElement): Promise<void> {
           [1, 2],
         ),
         h('h4', { class: 'sub' }, 'Наборы BLATS'),
-        hBarChart(rev.byPack.map((p) => ({ label: `${p.packId.replace(/^d/, '')} 💎`, value: p.payments })), { ariaLabel: 'Покупки по наборам', color: COLORS.blue }),
+        hBarChart(rev.byPack.map((p) => ({ label: `${p.packId.replace(/^[bd]/, '')} BLATS`, value: p.payments })), { ariaLabel: 'Покупки по наборам', color: COLORS.blue }),
       ),
       flowCard('Талоны', e.tokens, COLORS.amber),
       flowCard('BLATS', e.diamonds, COLORS.blue),
-      card('Самое покупаемое', hBarChart(e.purchases.top.map((t) => ({ label: itemName(t.kind, t.id), value: t.count })), { ariaLabel: 'Топ покупок', color: COLORS.red }), h('p', { class: 'note' }, 'Только покупки за талоны и алмазы; выпавшее из кейсов и выданное — в таблице ниже.')),
+      card('Самое покупаемое', hBarChart(e.purchases.top.map((t) => ({ label: itemName(t.kind, t.id), value: t.count })), { ariaLabel: 'Топ покупок', color: COLORS.red }), h('p', { class: 'note' }, 'Только покупки за талоны и BLATS; выпавшее из кейсов и выданное — в таблице ниже.')),
       card(
         'Покупки по типам',
         table(

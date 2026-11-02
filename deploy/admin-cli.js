@@ -2159,7 +2159,7 @@ var MAX_NAME_LENGTH = 24;
 var CHARACTER_IDS = [
   "petya",
   "valuta",
-  // for level + talons
+  // for level + talons (v0.2.18: these three; the rest are for BLATS)
   "uchastkovy",
   "mihalych",
   "vorona",
@@ -2171,7 +2171,6 @@ var CHARACTER_IDS = [
   "krysa",
   "svinya",
   "buyvol",
-  // for diamonds
   "piranya",
   "akula",
   "oryol",
@@ -2199,6 +2198,7 @@ var CHARACTERS = {
     weaponsNote: "Anything, as long as it comes with respect.",
     lore: "For twenty years he ran the textile mill dormitory with an iron fist: lights out at 23:00, guests until 22:00, immersion heaters strictly forbidden. The dormitory was resettled, the habit of giving orders stayed. Now Petya has appointed himself commandant of the whole yard \u2014 and nobody has dared to argue yet.",
     tier: "base",
+    grade: "common",
     accent: "#c8312a",
     tag: "Petya"
   },
@@ -2215,6 +2215,7 @@ var CHARACTERS = {
     weaponsNote: "A gun, connections and good information.",
     lore: "Started out flogging chewing gum outside the Intourist hotel; now half the jeans in the district pass through his garages. Moves without a sound, talks in a whisper and never lets go of his little book of phone numbers. Need a VCR, a sheepskin coat or the right certificate with the right stamp? Everybody goes to Valuta. The only question is the price.",
     tier: "base",
+    grade: "common",
     accent: "#d8a637",
     tag: "Valuta"
   },
@@ -2233,6 +2234,7 @@ var CHARACTERS = {
     weaponsNote: "Pistol, rifle, baton, sawn-off.",
     lore: "Fifteen years on the beat, and he remembers everyone who ever crossed the street in the wrong place. His reports get read out at tenants\u2019 meetings like detective novels. The bosses keep promising him a transfer to the city centre, but he is in no hurry: here he knows who, where and for how much.",
     tier: "progress",
+    grade: "common",
     accent: "#3d5a8c",
     tag: "Uchastkovy"
   },
@@ -2249,6 +2251,7 @@ var CHARACTERS = {
     weaponsNote: "Rifle, sawn-off, pistol, hand-to-hand.",
     lore: "Served his time, came home and went out for a loaf of bread. On the way he broke up two fights, made peace between the garage owners and somehow became head of security for the whole cooperative. They say he never did buy the bread. You don\u2019t need to talk Mikhalych into anything \u2014 just ask him like a human being.",
     tier: "progress",
+    grade: "common",
     accent: "#6b7536",
     tag: "Mikhalych"
   },
@@ -2266,6 +2269,7 @@ var CHARACTERS = {
     weaponsNote: "Pistols, SMGs",
     lore: "Karlych has ears in every yard of the Old Town: caretakers, cabbies, canteen ladies \u2014 everyone tells him something. A cassette recorder hangs on his chest and his pockets are full of tapes of other people\u2019s conversations. Karlych never sells information \u2014 he trades it. And if you were the last to hear the news, Karlych was the first.",
     tier: "progress",
+    grade: "common",
     accent: "#b8302a",
     tag: "Karlych"
   },
@@ -2281,7 +2285,8 @@ var CHARACTERS = {
     business: "Connections, deliveries, reconnaissance",
     weaponsNote: "SMGs, pistols, knife",
     lore: "Every conductor at the station knows Sonka, and so does every scales lady at the market. She turns up wherever a deal is being made and disappears before anyone misses their wallet. She smiles, whispers, promises \u2014 and everyone walks away sure they got a bargain. They realise they were taken a week later. Beautiful, dirty, effective: that is her signature.",
-    tier: "progress",
+    tier: "premium",
+    grade: "common",
     accent: "#6f8a3a",
     tag: "Sonka"
   },
@@ -2297,7 +2302,8 @@ var CHARACTERS = {
     business: "Weapons, machinery, modifications, break-ins",
     weaponsNote: "Rifles, SMGs, shotguns",
     lore: "There is no lock in the cooperative Tolyan can\u2019t open in a minute, and no engine he can\u2019t push-start. He\u2019ll build an armoured car out of an old Moskvich, a timer out of an alarm clock, and out of a written-off shotgun \u2014 a piece people drive over from other districts to see. Says little, smokes a lot and always smells of engine oil.",
-    tier: "progress",
+    tier: "premium",
+    grade: "common",
     accent: "#8a7444",
     tag: "Tolyan"
   },
@@ -2313,7 +2319,8 @@ var CHARACTERS = {
     business: "Communications, reconnaissance, passing on the word",
     weaponsNote: "Pistols, SMGs, rifles",
     lore: "Gosha sits on the radio tower above the market and listens to the whole city: the militsiya band, the cabbies, the port dispatchers. Every negotiation in the district goes through him \u2014 he\u2019ll pass it on, remind you, warn you and, if needed, embellish it a little. Walkie-talkie on his belt, pipe in his beak, flying goggles on his forehead. Whoever owns the information owns the district.",
-    tier: "progress",
+    tier: "premium",
+    grade: "common",
     accent: "#e0a020",
     tag: "Gosha"
   },
@@ -2331,6 +2338,7 @@ var CHARACTERS = {
     weaponsNote: "Uzi, shotguns, knives, mines",
     lore: "They found Vityok on a river barge, where he had single-handedly chased off a whole gang of dockers from the next district. Since then he gets called when the talking is over. He never has a plan \u2014 just a red bandana, a mouth full of teeth and the firm conviction that fish have a say too. His own people are a bit scared of him; strangers even more so.",
     tier: "premium",
+    grade: "common",
     accent: "#c24a3a",
     tag: "Vityok"
   },
@@ -2347,6 +2355,7 @@ var CHARACTERS = {
     weaponsNote: "Rifles, SMGs, shotguns",
     lore: "Zhora came to the port back when they only loaded timber and fish. Now VCRs, jeans and everything \u201Cnot allowed\u201D come through his piers. He wears a pinstripe suit, smokes a fat cigar and never raises his voice \u2014 why would he, when he can simply smile. Everyone who trades by the sea pays Zhora his cut. Those who don\u2019t pay don\u2019t trade any more.",
     tier: "premium",
+    grade: "epic",
     accent: "#3d5a8c",
     tag: "Zhora"
   },
@@ -2363,6 +2372,7 @@ var CHARACTERS = {
     weaponsNote: "Sniper rifle",
     lore: "They started calling Garik \u201CPendos\u201D \u2014 the Yankee \u2014 back in 1980: aviator shades, a sheepskin bomber jacket and chewing gum he chews even in his sleep. He traded a crate of matryoshka dolls for the shades with a foreign sailor and has never taken them off since. Garik sits up on the port cranes and sees everything that happens at the piers. He says little, shoots rarely \u2014 and almost never misses.",
     tier: "premium",
+    grade: "rare",
     accent: "#e8b030",
     tag: "Garik"
   },
@@ -2379,6 +2389,7 @@ var CHARACTERS = {
     weaponsNote: "Assault and sniper rifles, pistols",
     lore: "Nobody hires Lyova \u2014 you put your name down on his waiting list. He takes only difficult jobs, works alone and never haggles: the price is named, the question is closed. He wears a sheepskin coat all year round and never takes the cigarette out of his mouth, even on a job. The district tells legends about his past; the few who know the truth prefer to keep quiet.",
     tier: "premium",
+    grade: "rare",
     accent: "#d89a2a",
     tag: "Lyova"
   },
@@ -2395,6 +2406,7 @@ var CHARACTERS = {
     weaponsNote: "Machine guns, RPGs, heavy weapons",
     lore: "Every kiosk, cooperative and car workshop in the city has a \u201Croof\u201D \u2014 protection. And every roof has Batya. He doesn\u2019t run, doesn\u2019t shout and doesn\u2019t hurry: he arrives in person, sits down, listens in silence \u2014 and the matter is closed for good. A red tracksuit, a fur waistcoat and a gold chain with a star: the whole city knows him by these, and nobody wants to check whether it\u2019s true that he never forgets.",
     tier: "premium",
+    grade: "rare",
     accent: "#c8312a",
     tag: "Batya"
   },
@@ -2411,6 +2423,7 @@ var CHARACTERS = {
     weaponsNote: "Pistols, SMGs, shotguns",
     lore: "Slavik grew up in the port and has spent his whole life mastering one skill: coming out of the water dry. Jeans, chewing gum, video cassettes, hard currency \u2014 whatever the district needs, with Slavik it\u2019s \u201Calready on its way\u201D. He adores gold, tracksuits and good cigars, and in an argument he always offers a deal first \u2014 and only then uses his claws.",
     tier: "premium",
+    grade: "common",
     accent: "#c8402a",
     tag: "Slavik"
   },
@@ -2428,7 +2441,8 @@ var CHARACTERS = {
     business: "Sabotage, reconnaissance, poisoned zones",
     weaponsNote: "SMGs, shotguns, grenades, toxic mixtures",
     lore: "Sizy grew up on the roof of the chemical works and has glowed in the dark ever since \u2014 at least his left eye has. The pockets of his vest hold jars of green muck to his own recipe, a radiation badge sits on his chest, and his head is full of plans nobody understands, himself included. Wherever the Chemist has been, it smells of sulphur for a long time and nobody wants to stay.",
-    tier: "progress",
+    tier: "premium",
+    grade: "common",
     accent: "#7fbf3a",
     tag: "Sizy"
   },
@@ -2444,7 +2458,8 @@ var CHARACTERS = {
     business: "Scouting, scrounging, sabotage, survival",
     weaponsNote: "SMGs, shotguns, home-made guns, traps",
     lore: "They dusted Prusak with poison, evicted him and walled him up in the boiler-house basement \u2014 and every time he came back livelier than before. He knows every basement, heating duct and crawl space in the district; his rucksack holds whatever might come in handy, from sugar to spare parts. He doesn\u2019t take his dark glasses off even at night. They say he will outlive us all, and the district too.",
-    tier: "progress",
+    tier: "premium",
+    grade: "common",
     accent: "#9a5a24",
     tag: "Prusak"
   },
@@ -2460,7 +2475,8 @@ var CHARACTERS = {
     business: "Muscle jobs, taking positions, clean-ups",
     weaponsNote: "Shotguns, SMGs, heavy weapons, bat",
     lore: "Sery pumped iron in a basement gym on barbells made of tractor axles and washed his workouts down with water from the chemical works\u2019 settling tank. The muscles grew, the fur thinned, and here and there glowing green slime came through \u2014 Sery thinks it is just being in shape. He doesn\u2019t explain much: first he takes the door off, then he asks who lived there.",
-    tier: "progress",
+    tier: "premium",
+    grade: "common",
     accent: "#b52a2a",
     tag: "Sery"
   },
@@ -2476,7 +2492,8 @@ var CHARACTERS = {
     business: "Revenge, destruction, freedom",
     weaponsNote: "Shotguns, axe, chain, pistols",
     lore: "Borka\u2019s ear tag still says 89 \u2014 that is how the meat plant registered him. The night before \xABdispatch\xBB he snapped his chain, broke down the gates of Slaughterhouse No. 3 and has been on the run ever since. Scars, tusks and a length of chain round his neck are all they left him. Borka forgives nobody in uniform and spares nobody, himself included.",
-    tier: "progress",
+    tier: "premium",
+    grade: "common",
     accent: "#d0645a",
     tag: "Borka"
   },
@@ -2492,7 +2509,8 @@ var CHARACTERS = {
     business: "Muscle clean-ups, security, knocking down barriers, heavy jobs",
     weaponsNote: "Machine guns, shotguns, grenade launchers, fists",
     lore: "For ten years Bugai stood on the door of the Kosmos restaurant and never let in a single man without a tie. The restaurant closed, the habit stayed: now he \xABstands on the door\xBB of the whole industrial zone. Horns, a gold chain with a dollar sign and a cigar \u2014 a calling card nobody needs to see twice.",
-    tier: "progress",
+    tier: "premium",
+    grade: "rare",
     accent: "#a4241e",
     tag: "Bugai"
   },
@@ -2509,6 +2527,7 @@ var CHARACTERS = {
     weaponsNote: "Pistols, SMGs, knife",
     lore: "Every barman and every black marketeer at the night market knows Murka. She hears everything said at the next table and remembers who owes whom. A tipster: she\u2019ll tell you where the goods are, when the watchman leaves and who has the warehouse keys \u2014 for a cut, of course. One smile, one drag on her cigarette, and you won\u2019t notice how you told her too much.",
     tier: "premium",
+    grade: "rare",
     accent: "#8e1f2c",
     tag: "Murka"
   },
@@ -2525,6 +2544,7 @@ var CHARACTERS = {
     weaponsNote: "Pistols, SMGs, knives",
     lore: "Alisa sold one co-op owner the fountain on the square, another a \xABCzech\xBB furniture set made of chipboard, and a third his own IOU that he had given her in the first place. The clubs know her under five names, the police under six. Fur coat thrown open, a gold heart on her neck and a smile after which you had better check your pockets.",
     tier: "premium",
+    grade: "rare",
     accent: "#e0702a",
     tag: "Alisa"
   },
@@ -2541,6 +2561,7 @@ var CHARACTERS = {
     weaponsNote: "Spiked bat, shotguns, grenade launchers, fists",
     lore: "Rogov served three terms and walked out still in his orange prison overalls \u2014 says he got used to them. Crowns are tattooed on his hide, and round his neck hangs the chain of the handcuffs he broke himself. He talks little and only by the code. If Rogov is charging, step aside: walls fall too, he has checked.",
     tier: "premium",
+    grade: "rare",
     accent: "#e0601c",
     tag: "Rogov"
   },
@@ -2557,6 +2578,7 @@ var CHARACTERS = {
     weaponsNote: "Machine guns, shotguns, fists, grenades",
     lore: "Samson is the foreman of the central market\u2019s porters and of all its crew. He lifts a crate of watermelons with one hand and a debtor with two fingers. At the market his word is law: the stallholders bring him pies, the co-op owners bring envelopes. Calm as long as nobody touches his own; if they do, the whole crew comes out.",
     tier: "premium",
+    grade: "epic",
     accent: "#9c1c22",
     tag: "Samson"
   },
@@ -2573,6 +2595,7 @@ var CHARACTERS = {
     weaponsNote: "Golden rifle, pistols, grenades",
     lore: "Officially Arkadich is the modest head of a consumer-goods workshop. Unofficially his underground workshops dress half the city: \xABMontana\xBB jeans, jackets, bobble hats. A fur coat on his shoulders, gold on his neck, a cigar in his teeth \u2014 and not a single piece of paper anyone could produce against him. Arkadich never raises his voice: why would he, when everyone listens anyway?",
     tier: "premium",
+    grade: "legendary",
     accent: "#d4a237",
     tag: "Arkadich"
   }
@@ -2968,6 +2991,15 @@ var DEFS2 = {
 var GADGETS = Object.fromEntries(GADGET_IDS.map((id, index) => [id, { ...DEFS2[id], id, index }]));
 var TURRET = Object.freeze({ hp: 100, radius: 9, fireIntervalMs: 160, spread: 0.06, ammo: 90, turnRate: 6 });
 
+// packages/shared/src/game-rules/grades.ts
+var GRADE_COLORS = Object.freeze({
+  common: "#a7a49c",
+  rare: "#e2463b",
+  epic: "#a85ee6",
+  legendary: "#f2b632"
+});
+var GRADE_RANK = Object.freeze({ common: 0, rare: 1, epic: 2, legendary: 3 });
+
 // packages/shared/src/game-rules/skins.ts
 var FINISH_IDS = ["berezka", "rzhavchina", "zima", "flora", "gzhel", "pioner", "malahit", "hohloma", "zoloto", "yantar"];
 var FINISHES = Object.freeze({
@@ -2982,12 +3014,19 @@ var FINISHES = Object.freeze({
   zoloto: { id: "zoloto", name: "Party Gold", rarity: "legendary" },
   yantar: { id: "yantar", name: "Amber", rarity: "legendary" }
 });
-var SKIN_RARITY_CHANCE = Object.freeze({ common: 55, rare: 28, epic: 13, legendary: 4 });
+var FREE_FINISHES = ["berezka", "rzhavchina"];
+function isFreeFinish(f) {
+  return FREE_FINISHES.includes(f);
+}
+var SKIN_PRICES = Object.freeze({ common: 99, rare: 199, epic: 299, legendary: 499 });
+var SKIN_RARITY_CHANCE = Object.freeze({ common: 40, rare: 30, epic: 20, legendary: 10 });
+var CASE_FINISHES = FINISH_IDS.filter((f) => !isFreeFinish(f));
 
 // packages/shared/src/game-rules/loadout.ts
 var DEFAULT_LOADOUT = Object.freeze({ sidearm: "pistol", melee: "montirovka", primary: "avtomat", gadget: "f1", mods: {}, skins: {} });
 
 // packages/shared/src/game-rules/economy.ts
+var CHARACTER_GRADE_PRICES = Object.freeze({ common: 199, rare: 399, epic: 799, legendary: 1099 });
 var FREE_WEAPONS = WEAPON_IDS.filter((w) => WEAPONS[w].tier === "base");
 var WEAPON_PRICES = {
   // four for talons from the start (the first one after about three matches)
@@ -3012,33 +3051,16 @@ var WEAPON_PRICES = {
   awm: { currency: "tokens", amount: 900, level: 17 },
   rpg: { currency: "tokens", amount: 1e3, level: 19 }
 };
-var CHARACTER_PRICES = {
-  // for experience (level) + tokens
+var TALON_CHARACTERS = {
   uchastkovy: { currency: "tokens", amount: 150, level: 1 },
   mihalych: { currency: "tokens", amount: 200, level: 2 },
-  vorona: { currency: "tokens", amount: 300, level: 3 },
-  zmeya: { currency: "tokens", amount: 400, level: 5 },
-  varan: { currency: "tokens", amount: 550, level: 7 },
-  popugay: { currency: "tokens", amount: 700, level: 9 },
-  // v0.23: five more for talons, higher up the ladder
-  golub: { currency: "tokens", amount: 800, level: 10 },
-  tarakan: { currency: "tokens", amount: 900, level: 11 },
-  krysa: { currency: "tokens", amount: 1e3, level: 12 },
-  svinya: { currency: "tokens", amount: 1100, level: 13 },
-  buyvol: { currency: "tokens", amount: 1250, level: 15 },
-  // v0.24: the eleven that were sold for diamonds close the ladder
-  piranya: { currency: "tokens", amount: 1300, level: 16 },
-  koshka: { currency: "tokens", amount: 1350, level: 17 },
-  leopard: { currency: "tokens", amount: 1400, level: 18 },
-  lobster: { currency: "tokens", amount: 1450, level: 19 },
-  akula: { currency: "tokens", amount: 1500, level: 20 },
-  lisa: { currency: "tokens", amount: 1600, level: 21 },
-  oryol: { currency: "tokens", amount: 1700, level: 22 },
-  nosorog: { currency: "tokens", amount: 1800, level: 23 },
-  slon: { currency: "tokens", amount: 1900, level: 24 },
-  gorilla: { currency: "tokens", amount: 2e3, level: 25 },
-  lev: { currency: "tokens", amount: 2200, level: 26 }
+  vorona: { currency: "tokens", amount: 300, level: 3 }
 };
+var CHARACTER_PRICES = Object.freeze(
+  Object.fromEntries(
+    CHARACTER_IDS.filter((c) => !FREE_CHARACTERS.includes(c)).map((c) => [c, TALON_CHARACTERS[c] ?? { currency: "diamonds", amount: CHARACTER_GRADE_PRICES[CHARACTERS[c].grade], level: 1 }])
+  )
+);
 var GADGET_PRICES = {
   smoke: { currency: "tokens", amount: 100, level: 1 },
   flash: { currency: "tokens", amount: 150, level: 2 },
@@ -7296,29 +7318,8 @@ var clubMottoSchema = external_exports.string().transform((s) => s.replace(/[\u0
 var CreateClubBody = external_exports.object({ name: clubNameSchema, tag: clubTagSchema, motto: clubMottoSchema.optional(), flag: ClubFlagSchema, emblem: ClubEmblemSchema }).strict();
 var UpdateClubBody = external_exports.object({ motto: clubMottoSchema.optional(), flag: ClubFlagSchema.optional(), emblem: ClubEmblemSchema.optional() }).strict();
 
-// packages/shared/src/game-rules/blat.ts
-var BLAT_LIMITS = Object.freeze({ maxBalance: 2e9, maxCredit: 1e6 });
-var BLAT_LEVEL_STEPS = Object.freeze([
-  { upTo: 10, step: 50 },
-  { upTo: 20, step: 100 },
-  { upTo: 30, step: 200 },
-  { upTo: 40, step: 300 },
-  { upTo: 50, step: 325 }
-]);
-var REFERRAL_TIERS = Object.freeze([
-  { from: 1, reward: 1500 },
-  { from: 5, reward: 3e3 },
-  { from: 10, reward: 5e3 },
-  { from: 25, reward: 7500 },
-  { from: 50, reward: 1e4 },
-  { from: 100, reward: 12500 },
-  { from: 250, reward: 15e3 },
-  { from: 500, reward: 2e4 }
-]);
+// packages/shared/src/game-rules/referrals.ts
 var REFERRAL_RULES = Object.freeze({ minMatchSec: 60, dailyCap: 20 });
-var BLAT_POOLS = Object.freeze({ players: 126e7, founder: 32e7, influencers: 3e8, friends: 1e8, reserve: 2e7 });
-var BLAT_POOL_IDS = Object.keys(BLAT_POOLS);
-var BLAT_FOUNDER_HOLDING = BLAT_POOLS.founder;
 
 // packages/shared/src/game-rules/kon.ts
 var KON_FORMATS = ["1x1", "2x2", "3x3", "5x5"];
@@ -7329,19 +7330,6 @@ var KON_RULES = Object.freeze({
   "5x5": { size: 5, teamScoreLimit: 30, durationScale: 1.25 }
 });
 var KON_RATING = Object.freeze({ start: 1e3, floor: 100, k: 24, kNew: 40, newMatches: 10 });
-
-// packages/shared/src/game-rules/konStakes.ts
-var KON_STAKE_AMOUNTS = [100, 500, 1e3, 5e3];
-var KON_STAKES = Object.freeze({
-  amounts: KON_STAKE_AMOUNTS,
-  /** At most this much staked in 24 hours (stakes that came back don't count). */
-  dailyLimit: 2e4,
-  /** An account stakes from its second day on. */
-  minAccountAgeMs: 24 * 36e5
-});
-function isKonStake(v) {
-  return v === 0 || KON_STAKE_AMOUNTS.includes(v);
-}
 
 // packages/shared/src/maps/types.ts
 var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp"];
@@ -8005,7 +7993,7 @@ var ClientMessageSchema = external_exports.discriminatedUnion("type", [
     character: external_exports.enum(CHARACTER_IDS),
     reconnectToken: external_exports.string().min(16).max(128).optional(),
     clientVersion: external_exports.string().max(32).optional(),
-    /** v0.2.17: the $BLAT Tournament stake the player agreed to (must equal the room's to come in). */
+    /** v0.2.17 only: a tournament stake (stakes are gone since v0.2.18; an older client's is ignored). */
     stake: external_exports.number().int().min(0).max(1e5).optional()
   }),
   external_exports.object({ type: external_exports.literal("ready"), ready: external_exports.boolean() }),
@@ -8068,7 +8056,7 @@ var SERVER_EVENT_PROPS = {
   match_abandoned: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), phase: external_exports.string() }),
   map_played: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS) }),
   invite_created: external_exports.object({ code: external_exports.string(), roomId: external_exports.string() }),
-  shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
+  shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget", "skin"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
   mod_bought: external_exports.object({ weapon: external_exports.string(), mod: external_exports.string(), cost: external_exports.number().int() }),
   /** The weapon case and (v0.23) the skin case: `kind` skin carries the finish. */
   case_opened: external_exports.object({ weapon: external_exports.string(), rarity: external_exports.enum(["common", "rare", "epic", "legendary"]), price: external_exports.number().int(), kind: external_exports.enum(["weapon", "skin"]).optional(), finish: external_exports.string().max(24).optional() }),
@@ -8162,31 +8150,25 @@ var LoadoutRequest = external_exports.object({
   skins: external_exports.record(external_exports.enum(WEAPON_IDS), external_exports.enum(FINISH_IDS)).optional()
 }).strict();
 var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true).optional() }).strict();
-var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card", "crypto"]) }).strict();
+var SkinBuyRequest = external_exports.object({ weapon: external_exports.enum(WEAPON_IDS), finish: external_exports.enum(FINISH_IDS) }).strict();
+var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card"]) }).strict();
 var UpdateProfileRequest = external_exports.object({
   displayName: displayNameSchema.optional(),
   preferredCharacter: external_exports.enum(CHARACTER_IDS).optional(),
   /** A profile avatar (game-rules/avatars.ts); null removes it. */
   avatar: external_exports.enum(AVATAR_IDS).nullable().optional()
 }).strict();
-var KonStakeField = external_exports.number().int().refine((v) => isKonStake(v), { message: "not one of the stakes" });
-var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional(), stake: KonStakeField.optional() }).strict();
-var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional(), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional(), stake: KonStakeField.optional() }).strict();
+var legacyStake = external_exports.number().int().min(0).max(1e5).optional();
+var CreateRoomRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS), isPrivate: external_exports.boolean().default(true), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional(), stake: legacyStake }).strict();
+var QuickMatchRequest = external_exports.object({ mapId: external_exports.enum(MAP_IDS).optional(), mode: external_exports.enum(GAME_MODES).default("ffa"), kon: external_exports.enum(KON_FORMATS).optional(), stake: legacyStake }).strict();
 var AdminLoginRequest = external_exports.object({ username: external_exports.string().min(3).max(32), password: external_exports.string().min(1).max(256) }).strict();
 var AdminCreateUserRequest = external_exports.object({
   username: external_exports.string().regex(/^[a-z0-9_.-]{3,32}$/),
   password: external_exports.string().min(12).max(256),
   role: external_exports.enum(["admin", "viewer"])
 }).strict();
-var AdminBlatAllocationRequest = external_exports.object({
-  pool: external_exports.enum(["influencers", "friends", "reserve"]),
-  amount: external_exports.number().int().min(1).max(1e8),
-  note: external_exports.string().trim().min(3).max(120)
-}).strict();
 var AdminReferralDecision = external_exports.object({ action: external_exports.enum(["confirm", "reject"]), note: external_exports.string().trim().max(200).optional() }).strict();
-var AdminBlatDropRequest = external_exports.object({ announceAt: external_exports.string().datetime({ offset: true }).nullable() }).strict();
-var AdminBlatSnapshotRequest = external_exports.object({ note: external_exports.string().trim().max(200).optional() }).strict();
-var AdminBlatFlagRequest = external_exports.object({ flag: external_exports.string().trim().min(1).max(200).nullable() }).strict();
+var AdminFlagRequest = external_exports.object({ flag: external_exports.string().trim().min(1).max(200).nullable() }).strict();
 var AdminGrantRequest = external_exports.object({
   currency: external_exports.enum(["tokens", "diamonds"]),
   amount: external_exports.number().int().min(-1e6).max(1e6).refine((v) => v !== 0, "amount must not be 0"),

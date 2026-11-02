@@ -122,9 +122,9 @@ test('fill: in a room with friends the host starts alone; the lineup fills up to
   assert.deepEqual(roster.players.filter((p) => p.isHost).map((p) => p.id), [a.userId]);
   for (const p of roster.players) if (p.id !== a.userId) assert.match(p.id, UUID);
   assert.ok(t.run(2000, () => t.room.phase === 'active'));
-  // the filled players play: they leave their spawn points
+  // the filled players play: they leave their spawn points (4 s: a bot may first stand and look around)
   const spawned = new Map([...t.room.world.players.values()].map((p) => [p.id, { x: p.x, y: p.y }]));
-  t.run(2500);
+  t.run(4000);
   const moved = [...t.room.world.players.values()].filter((p) => p.id !== a.userId && Math.hypot(p.x - spawned.get(p.id)!.x, p.y - spawned.get(p.id)!.y) > 40);
   assert.ok(moved.length >= 2, `filled players move (${moved.length})`);
   // players see the whole lineup; the dashboard counts people and filled players apart
