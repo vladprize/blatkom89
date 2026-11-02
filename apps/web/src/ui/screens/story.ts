@@ -11,7 +11,6 @@ import { asset, fmtDuration, h, portrait, fill } from '../dom.js';
 import { CAMPAIGNS, CHAPTER_TITLES, FAIL_LINES, MISSION_SCRIPTS, line } from '../../story/script.js';
 import { sceneForMap, sceneThumbUrl } from '../../story/scenes.js';
 import type { StoryFail } from '../../story/StorySession.js';
-import { fmtBlat } from './blat.js';
 import { inPane, paneTabs } from '../panes.js';
 
 const CAMPAIGN_ORDER: readonly StoryCampaign[] = ['petya', 'uchastkovy'];
@@ -191,7 +190,7 @@ export function renderStoryWin(o: { mission: StoryMission; ms: number; reward: S
   if (r?.first) {
     if (r.talons > 0) lines.push(h('li', null, `+${count(r.talons, 'talon')}`));
     if (r.xp > 0) lines.push(h('li', null, t('+{n} XP', { n: r.xp })));
-    if (r.blatGained > 0) lines.push(h('li', null, t('+{n} $BLAT for the levels you reached', { n: fmtBlat(r.blatGained) })));
+    if (r.blatsGained > 0) lines.push(h('li', null, t('+{n} BLATS for the levels you reached', { n: r.blatsGained })));
     if (r.achievement) lines.push(h('li', { class: 'gold' }, t('Achievement: «{title}»', { title: achievementText(r.achievement).title })));
     for (const c of r.characters) lines.push(h('li', { class: 'gold' }, t('New character: {name}', { name: charName(c) })));
     for (const s of r.skins) {

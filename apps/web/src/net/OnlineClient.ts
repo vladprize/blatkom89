@@ -2,8 +2,8 @@
  * Online flow controller: authentication (Telegram initData or dev login), room creation/quick
  * match/invites over HTTP, the game WebSocket, lobby state and the OnlineSession lifecycle.
  */
-import type { AvatarId, CharacterId, GameMode, InviteInfo, Inventory, KonFormat, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, TelegramLinkOutcome, WeaponId, GangBattle, GangBattleFormat, GangBattleResponse } from '@blatkom/shared';
-import { STAKE_REFUSALS, latinName } from '@blatkom/shared';
+import type { AvatarId, CharacterId, FinishId, GameMode, InviteInfo, Inventory, KonFormat, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, TelegramLinkOutcome, WeaponId, GangBattle, GangBattleFormat, GangBattleResponse } from '@blatkom/shared';
+import { latinName } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { readLoginReturn } from './oauth.js';
 import { captureReferral, captureTelegramLink, clearReferral, pendingReferral } from './referral.js';
@@ -41,9 +41,6 @@ export interface LobbyState {
   limits?: { teamScoreLimit: number; captureLimit: number; baseScoreLimit: number };
   /** V2.0 part D: a «Блатной кон» room (fixed sides of this format, people only). */
   kon: KonFormat | null;
-  /** v0.2.17: the $BLAT Tournament's stake everyone puts in (0: none); `staking` — being reserved now. */
-  stake: number;
-  staking: boolean;
   /** v0.2.17: a gang battle — the sides are the two gangs (red: the challenger). */
   battle?: GangBattle;
   /** The match length in this room (ms, from the server's rules). */
@@ -80,23 +77,21 @@ const VISIT_DAY_KEY = 'blatkom89.visit-day';
 /** Free hosting (e.g. Render) sleeps after ~15 min without HTTP traffic — ping while in a room. */
 const KEEPALIVE_MS = 4 * 60_000;
 
-/** v0.2.17: the $BLAT Tournament's stake refusals — the player is out of the room. */
-const STAKE_CODES: ReadonlySet<string> = new Set(['stake_confirm', ...STAKE_REFUSALS]);
 /** v0.2.17: a gang battle refused the player (not one of its gangs). */
 const OUT_CODES: ReadonlySet<string> = new Set(['battle_gang']);
 
 export class OnlineClient {
   readonly api = new Api();
   private me: PublicProfile | null = null;
-  /** V2.0: a profile read paid $BLAT for levels (the welcome, levels reached before $BLAT) — say so once. */
-  onBlatCredited: ((amount: number, level: number) => void) | null = null;
+  /** v0.2.18: a profile read paid BLATS for levels (the levels reached before BLATS existed) — say so once. */
+  onBlatsCredited: ((amount: number, level: number) => void) | null = null;
   get profile(): PublicProfile | null {
     return this.me;
   }
   set profile(p: PublicProfile | null) {
-    const credited = p?.blatCredited ?? 0;
-    this.me = p && credited ? { ...p, blatCredited: 0 } : p;
-    if (p && credited > 0) this.onBlatCredited?.(credited, p.level);
+    const credited = p?.blatsCredited ?? 0;
+    this.me = p && credited ? { ...p, blatsCredited: 0 } : p;
+    if (p && credited > 0) this.onBlatsCredited?.(credited, p.level);
   }
   /** Friends, presence, private messages, invitations (opened once signed in). */
   readonly social = new SocialClient(this.api, () => this.profile?.id ?? null);
@@ -364,6 +359,11 @@ export class OnlineClient {
     return r;
   }
 
+  /** v0.2.18: buys one weapon's skin for BLATS; it goes on that weapon at once (the room re-reads it). */
+  async buySkin(weapon: WeaponId, finish: FinishId): Promise<Inventory> {
+    return this.applyInventory(await this.api.buySkin(weapon, finish), true);
+  }
+
   /** The skin case: a new skin goes on its weapon at once when the weapon wore none (the room re-reads it). */
   async openSkinCase() {
     const r = await this.api.openSkinCase();
@@ -420,23 +420,20 @@ export class OnlineClient {
     await this.joinRoom(r.roomId, c);
   }
 
-  /**
-   * V2.0 part D: «Блатной кон» search — a public Kon room of the format (on the map, if one is chosen);
-   * v0.2.17: of the stake (the $BLAT Tournament — everyone stakes the same).
-   */
-  async konQuick(c: CharacterId, kon: KonFormat, mapId?: MapId, stake = 0): Promise<void> {
+  /** The District Tournament's search — a public tournament room of the format (on the map, if one is chosen). */
+  async konQuick(c: CharacterId, kon: KonFormat, mapId?: MapId): Promise<void> {
     await this.ensureAuth();
-    const r = await this.api.quickMatch(mapId, 'teams', kon, stake);
+    const r = await this.api.quickMatch(mapId, 'teams', kon);
     this.inviteUrl = null;
-    await this.joinRoom(r.roomId, c, r.stake ?? 0);
+    await this.joinRoom(r.roomId, c);
   }
 
-  async createRoom(mapId: MapId, c: CharacterId, mode: GameMode = 'ffa', kon?: KonFormat, stake = 0): Promise<void> {
+  async createRoom(mapId: MapId, c: CharacterId, mode: GameMode = 'ffa', kon?: KonFormat): Promise<void> {
     await this.ensureAuth();
-    const r = await this.api.createRoom(mapId, true, mode, kon, stake);
+    const r = await this.api.createRoom(mapId, true, mode, kon);
     this.inviteUrl = r.inviteUrl ?? r.webUrl;
     this.inviteRoom = r.roomId;
-    await this.joinRoom(r.roomId, c, r.stake ?? 0);
+    await this.joinRoom(r.roomId, c);
   }
 
   /** v0.2.17: call the gang `clubId` out to a battle — the room of the two gangs, the caller in it. */
@@ -445,7 +442,7 @@ export class OnlineClient {
     const r = await this.api.gangBattle(clubId, kon, mapId);
     this.inviteUrl = r.inviteUrl ?? r.webUrl;
     this.inviteRoom = r.roomId;
-    await this.joinRoom(r.roomId, c, 0);
+    await this.joinRoom(r.roomId, c);
     return r;
   }
 
@@ -456,8 +453,7 @@ export class OnlineClient {
     return info;
   }
 
-  /** `stake` (v0.2.17): the room's $BLAT Tournament stake the player agreed to (0: none). */
-  async joinRoom(roomId: string, c: CharacterId, stake = 0): Promise<void> {
+  async joinRoom(roomId: string, c: CharacterId): Promise<void> {
     await this.ensureAuth();
     this.closeConn();
     if (this.chatRoomId !== roomId) {
@@ -473,9 +469,9 @@ export class OnlineClient {
         onStatus: (st, reason) => {
           if (this.session) this.session.status = st === 'open' ? 'online' : st === 'reconnecting' || st === 'connecting' ? 'reconnecting' : 'lost';
           if (st === 'closed' && reason !== 'user' && this.conn === conn) {
-            // v0.2.17: the server said why it turned the player away (the stake, a gang battle) just before
-            // closing — that text stays on the screen
-            if (reason && (STAKE_CODES.has(reason) || OUT_CODES.has(reason))) return this.cleanup();
+            // v0.2.17: the server said why it turned the player away (a gang battle) just before closing —
+            // that text stays on the screen
+            if (reason && OUT_CODES.has(reason)) return this.cleanup();
             // back after the reconnect grace (V2.0 part E): the room went on without the player
             const away = conn.everJoined && (reason === 'room_full' || reason === 'room_closed' || reason === 'room not found');
             const msg = away
@@ -494,7 +490,7 @@ export class OnlineClient {
           }
         },
       },
-      { token: this.api.token!, roomId, character: c, ...(stake > 0 ? { stake } : {}) },
+      { token: this.api.token!, roomId, character: c },
     );
     this.conn = conn;
     conn.connect();
@@ -542,8 +538,6 @@ export class OnlineClient {
           mode: m.mode,
           minToStart: m.minToStart ?? this.config?.minPlayers ?? 2,
           kon: m.kon ?? null,
-          stake: m.stake ?? 0,
-          staking: m.staking === true,
           ...(m.battle ? { battle: m.battle } : {}),
           ...(this.config ? { durationMs: this.config.durationMs } : {}),
           ...(this.config ? { limits: { teamScoreLimit: this.config.teamScoreLimit, captureLimit: this.config.captureLimit, baseScoreLimit: this.config.baseScoreLimit } } : {}),
@@ -586,11 +580,11 @@ export class OnlineClient {
           break;
         }
         {
-          // turned away for good (a gang battle of others, a stake the player can't make): no «Retry»
-          const shut = OUT_CODES.has(m.code) || (STAKE_CODES.has(m.code) && m.code !== 'stake_confirm');
+          // turned away for good (a gang battle of others): no «Retry»
+          const shut = OUT_CODES.has(m.code);
           this.cb.onError(
             errorText(m.code, m.message),
-            m.code === 'unauthorized' || m.code === 'room_not_found' || m.code === 'room_full' || m.code === 'version_mismatch' || STAKE_CODES.has(m.code) || OUT_CODES.has(m.code),
+            m.code === 'unauthorized' || m.code === 'room_not_found' || m.code === 'room_full' || m.code === 'version_mismatch' || OUT_CODES.has(m.code),
             !shut,
             shut ? t('No entry') : undefined,
           );

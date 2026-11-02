@@ -96,7 +96,7 @@ export function playComic(root: HTMLElement, beats: readonly Beat[], o: ComicOpt
     showScene(sc);
     [...dots.children].forEach((d, k) => d.classList.toggle('on', k <= i));
     const art = b.who === 'caption' ? null : (b.art ?? speakerArt(b.who));
-    // v0.2.17: a caption page sits in the middle of the screen, big; a speaker's page along the bottom
+    // v0.2.17: a caption page sits in the middle of the screen, big; v0.2.18: a speaker's page too (the owner)
     el.classList.toggle('comic--captionpage', !art);
     let panel: HTMLElement;
     if (!art) {

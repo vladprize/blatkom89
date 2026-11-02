@@ -118,7 +118,7 @@ export function refusalText(r: BuyRefusal): string {
   return ru() ? RU_REFUSALS[r] : REFUSAL_TEXT[r];
 }
 
-/** «Rare / Epic / Legendary». */
+/** v0.2.18: «Regular / Rare / Epic / Legendary» (the grades). */
 export function rarityLabel(r: 'common' | 'rare' | 'epic' | 'legendary'): string {
-  return r === 'common' ? t('Common') : r === 'rare' ? t('Rare') : r === 'epic' ? t('Epic') : t('Legendary');
+  return r === 'common' ? t('Regular') : r === 'rare' ? t('Rare') : r === 'epic' ? t('Epic') : t('Legendary');
 }

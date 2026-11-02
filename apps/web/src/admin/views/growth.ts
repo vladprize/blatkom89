@@ -1,7 +1,7 @@
 /**
  * V2.0 part F — «Источники»: where players come from (the first touch of new accounts and of first
  * visits), invitations and their conversion, partner links for authors and streamers (measured only —
- * nothing is paid), the level distribution, the Kon and $BLAT issued.
+ * nothing is paid), the level distribution, the District Tournament, BLATS for levels and talons for invitations.
  */
 import type { AdminGrowth, AdminMe, AdminPartnerRow, AdminSourceRow } from '@blatkom/shared';
 import { h, clear, toast } from '../dom.js';
@@ -12,7 +12,7 @@ import { rangePicker, getRange } from './range.js';
 
 const CHANNEL: Record<AdminSourceRow['channel'], string> = {
   partner: 'Партнёрская ссылка',
-  referral: 'Приглашение игрока ($BLAT)',
+  referral: 'Приглашение игрока (талоны)',
   invite: 'Приглашение в комнату',
   utm: 'Кампания (utm)',
   referrer: 'Другой сайт',
@@ -168,7 +168,7 @@ export async function renderGrowth(root: HTMLElement, me: AdminMe): Promise<void
       tile('Приглашения в комнату', num(inv.roomInvites), `открыли ${num(inv.opened)}`),
       tile('Сыграли по приглашению', num(inv.played), `конверсия ${pct(inv.conversion)} · новых ${num(inv.newPlayers)}`),
       tile('Пришли по ссылке игрока', num(inv.referralAttached), `засчитано ${num(inv.referralConfirmed)} (${pct(inv.referralConversion)})`),
-      tile('$BLAT начислено', num(g.blat.issued), `уровни ${num(g.blat.fromLevels)} · приглашения ${num(g.blat.fromReferrals)}`),
+      tile('Награды', `${num(g.rewards.blatsForLevels)} BLATS`, `за уровни · талонов за приглашения: ${num(g.rewards.talonsForInvitations)}`),
     ),
   );
   body.append(
@@ -238,12 +238,12 @@ export async function renderGrowth(root: HTMLElement, me: AdminMe): Promise<void
         g.levels.reached.length
           ? h('div', {}, h('h4', {}, 'Достигнуто в периоде'), hBarChart(g.levels.reached.slice(0, 20).map((x) => ({ label: `уровень ${x.level}`, value: x.players })), { ariaLabel: 'Уровни, достигнутые в периоде', color: COLORS.green }))
           : null,
-        h('p', { class: 'note' }, '«Достигнуто» — по начислениям $BLAT за уровни: один раз на игрока и уровень (в день выхода $BLAT туда попали и уровни, взятые раньше).'),
+        h('p', { class: 'note' }, '«Достигнуто» — по начислениям за уровни ($BLAT до v0.2.18, BLATS с неё): один раз на игрока и уровень (в день выхода начислений туда попали и уровни, взятые раньше).'),
       ),
       h(
         'section',
         { class: 'card' },
-        h('h3', {}, '$BLAT Турнир (бывш. «Блатной кон»)'),
+        h('h3', {}, 'Турнир района'),
         table(
           ['Формат', 'Матчи'],
           g.kon.byFormat.map((x) => [x.format.replace('x', '×'), num(x.matches)]),

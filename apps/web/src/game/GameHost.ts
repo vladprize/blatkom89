@@ -8,16 +8,10 @@ import { GameScene } from './scenes/GameScene.js';
 import { HudScene } from './scenes/HudScene.js';
 import { PreviewScene } from './scenes/PreviewScene.js';
 import { VhsPipeline } from './render/VhsPipeline.js';
-import { VIEW_SHORT_WORLD, TEXELS_PER_WORLD_PX } from '../app/config.js';
-import type { GameSession } from './session/types.js';
+import { internalSize } from './viewSize.js';
 
-export function internalSize(w: number, h: number): { width: number; height: number } {
-  const short = VIEW_SHORT_WORLD * TEXELS_PER_WORLD_PX;
-  const landscape = w >= h;
-  const aspect = landscape ? w / h : h / w;
-  const long = Math.min(Math.round(short * aspect), short * 2.4);
-  return landscape ? { width: long, height: short } : { width: short, height: long };
-}
+export { internalSize };
+import type { GameSession } from './session/types.js';
 
 export class GameHost {
   readonly game: Phaser.Game;

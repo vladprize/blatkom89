@@ -63,7 +63,7 @@ export async function renderOverview(root: HTMLElement): Promise<void> {
       tile('Конверсия в 1-й матч', pct(o.firstMatchConversion), 'новые игроки периода'),
       tile('Удержание D1', pct(o.d1Retention), `когорта: ${num(o.d1CohortSize)}`),
       tile('Удержание D7', pct(o.d7Retention), `когорта: ${num(o.d7CohortSize)}`),
-      tile('$BLAT начислено', o.blatIssued === undefined ? 'нет данных' : num(o.blatIssued), 'за уровни и приглашения'),
+      tile('BLATS за уровни', o.blatsForLevels === undefined ? 'нет данных' : num(o.blatsForLevels), '10 за каждый новый уровень'),
       tile('Тех. ошибки', num(o.errorCount)),
     ),
   );

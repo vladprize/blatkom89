@@ -3,7 +3,7 @@
  * the lobby's «invite friends» panel and the card of an incoming invitation. Everything reads the
  * SocialClient store and redraws itself when it changes; the server decides every action.
  */
-import { displayNameSchema, DM_MAX_LENGTH, LEADERBOARD_BY } from '@blatkom/shared';
+import { displayNameSchema, DM_MAX_LENGTH, LEADERBOARD_BY, REFERRAL_TALONS } from '@blatkom/shared';
 import type { DirectMessage, FriendEntry, FriendRequestEntry, FriendStatus, LeaderboardBy, LeaderboardEntry, LeaderboardResponse, PlayerCard, RoomInviteEvent, GameMode } from '@blatkom/shared';
 import { h, fill, toast, founderTag } from '../dom.js';
 import { avatarImg } from '../avatars.js';
@@ -60,7 +60,7 @@ function live(el: HTMLElement, social: SocialClient, draw: () => void): HTMLElem
 const sortFriends = (list: FriendEntry[]) => [...list].sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.name.localeCompare(b.name));
 
 // ── Friends screen ─────────────────────────────────────────────────────────
-export function renderFriends(o: { online: OnlineClient; root: HTMLElement; onPlayWith: (f: FriendEntry) => void; onTop: () => void }): HTMLElement {
+export function renderFriends(o: { online: OnlineClient; root: HTMLElement; onPlayWith: (f: FriendEntry) => void; onTop: () => void; onInvite?: () => void }): HTMLElement {
   const { online } = o;
   const social = online.social;
   const myName = online.profile?.displayName ?? '';
@@ -143,7 +143,13 @@ export function renderFriends(o: { online: OnlineClient; root: HTMLElement; onPl
       h('span', { class: 'tag' }, t('Add a friend')),
       h('div', { class: 'muted', style: 'margin-top:6px' }, t('Friends find you by your alias:'), ' ', h('b', { class: 'myalias', 'data-testid': 'my-alias' }, myName), ' ', h('button', { class: 'linkish', onclick: () => void copyAlias() }, t('copy'))),
       h('div', { class: 'row addfriend' }, input, h('button', { class: 'btn btn--red', 'data-testid': 'send-request', onclick: () => void send() }, t('Send request'))),
-      h('button', { class: 'btn btn--small btn--ghost', style: 'align-self:flex-start', onclick: o.onTop }, t('Find players in the Top-100 →')),
+      h(
+        'div',
+        { class: 'row', style: 'gap:8px' },
+        h('button', { class: 'btn btn--small btn--ghost', onclick: o.onTop }, t('Find players in the Top-100 →')),
+        // v0.2.18: invite a friend to the game — talons when they play their first whole match
+        o.onInvite ? h('button', { class: 'btn btn--small btn--red', 'data-testid': 'friends-invite-game', onclick: o.onInvite }, t('Invite to the game · +{n} talons', { n: REFERRAL_TALONS })) : null,
+      ),
     ),
     requests,
     list,
@@ -152,7 +158,7 @@ export function renderFriends(o: { online: OnlineClient; root: HTMLElement; onPl
   return live(root, social, draw);
 }
 
-/** v0.2.17: what to fight a friend in — a mode of the room, or a duel of the $BLAT Tournament (1×1, the rating). */
+/** v0.2.17: what to fight a friend in — a mode of the room, or a duel of the District Tournament (1×1, the rating). */
 export type FriendBattle = { kind: 'mode'; mode: GameMode } | { kind: 'duel' };
 
 /**
@@ -177,7 +183,7 @@ export function openFriendBattleSheet(root: HTMLElement, o: { friend: FriendEntr
         'button',
         { class: 'modebtn modebtn--duel', role: 'radio', 'aria-pressed': String(on({ kind: 'duel' })), 'aria-checked': String(on({ kind: 'duel' })), 'data-mode': 'duel', 'data-testid': 'friend-battle-duel', onclick: () => ((pick = { kind: 'duel' }), draw()) },
         tourneyIcon(26),
-        h('span', { class: 'modebtn__txt' }, h('b', null, t('Duel 1×1')), h('small', null, t('the $BLAT Tournament, for the rating'))),
+        h('span', { class: 'modebtn__txt' }, h('b', null, t('Duel 1×1')), h('small', null, t('the District Tournament, for the rating'))),
       ),
     );
   };

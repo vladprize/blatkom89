@@ -6,7 +6,7 @@ import { RU_ACHIEVEMENTS } from '../../i18n/ru-content.js';
 import { apiFetch } from '../api.js';
 import { num, dateTime, playtime, duration, money, itemName, ACHIEVEMENT_NAMES, ACHIEVEMENT_DESCRIPTIONS, MAP_NAMES, CHARACTER_NAMES, PLATFORM_NAMES, ITEM_KINDS, ITEM_SOURCES, LEDGER_REASONS, MOD_NAMES, PAYMENT_PROVIDERS, PAYMENT_STATUSES, SIGN_IN_METHODS, WEAPON_NAMES } from '../format.js';
 
-const CURRENCY_NAMES: Record<string, string> = { tokens: 'талоны', diamonds: 'алмазы', blat: '$BLAT' };
+const CURRENCY_NAMES: Record<string, string> = { tokens: 'талоны', diamonds: 'BLATS' };
 
 /** V2.0 part F: the account's first touch as one line. */
 const ORIGIN: Record<string, string> = { partner: 'партнёрская ссылка', referral: 'ссылка игрока', invite: 'приглашение в комнату', utm: 'кампания', referrer: 'другой сайт', telegram: 'Telegram', direct: 'прямой заход' };
@@ -17,9 +17,9 @@ function originText(d: AdminPlayerDetail): string {
 }
 const REF_STATUS: Record<string, string> = { pending: 'ждёт первого матча', held: 'на проверке', confirmed: 'засчитано', rejected: 'отклонено' };
 
-/** V2.0: $BLAT, the referral code, who invited the player and whom they invited; the admin's flag. */
-function blatCard(d: AdminPlayerDetail, me: AdminMe | null | undefined, onChanged: () => void): HTMLElement | null {
-  const b = d.blat;
+/** The referral code, who invited the player and whom they invited (talons since v0.2.18); the admin's flag. */
+function referralCard(d: AdminPlayerDetail, me: AdminMe | null | undefined, onChanged: () => void): HTMLElement | null {
+  const b = d.referral;
   if (!b) return null;
   const p = d.player;
   const flagBtn =
@@ -34,10 +34,10 @@ function blatCard(d: AdminPlayerDetail, me: AdminMe | null | undefined, onChange
               if (b.flag) {
                 if (!confirm(`Снять пометку с «${p.displayName}»? Его следующие приглашения снова будут засчитываться сами.`)) return;
               } else {
-                flag = (prompt(`Пометить «${p.displayName}» как подозрительный аккаунт? Приглашения с его участием будут ждать решения, баланс не попадёт в выгрузки. Причина:`) ?? '').trim().slice(0, 200);
+                flag = (prompt(`Пометить «${p.displayName}» как подозрительный аккаунт? Приглашения с его участием будут ждать решения администратора. Причина:`) ?? '').trim().slice(0, 200);
                 if (!flag) return;
               }
-              apiFetch(`/api/admin/players/${encodeURIComponent(p.id)}/blat-flag`, { method: 'POST', body: { flag } })
+              apiFetch(`/api/admin/players/${encodeURIComponent(p.id)}/flag`, { method: 'POST', body: { flag } })
                 .then(() => {
                   toast(flag ? 'Аккаунт помечен' : 'Пометка снята', 'ok');
                   onChanged();
@@ -51,12 +51,11 @@ function blatCard(d: AdminPlayerDetail, me: AdminMe | null | undefined, onChange
   return h(
     'section',
     { class: 'card' },
-    h('h3', {}, '$BLAT и приглашения'),
+    h('h3', {}, 'Приглашения'),
     h(
       'div',
       { class: 'tiles small' },
-      h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Баланс'), h('div', { class: 'tile-value' }, num(b.balance))),
-      h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Заработано всего'), h('div', { class: 'tile-value' }, num(b.earned))),
+      h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Талонов за приглашения'), h('div', { class: 'tile-value' }, num(b.earned))),
       h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Засчитано приглашений'), h('div', { class: 'tile-value' }, num(b.referrals.confirmed))),
       h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Ждут / на проверке'), h('div', { class: 'tile-value' }, `${num(b.referrals.pending)} / ${num(b.referrals.held)}`)),
     ),
@@ -149,7 +148,7 @@ function table(head: string[], rows: Array<Array<string | HTMLElement>>, numeric
 /** Admin-only actions: audited balance adjustment and a one-time password-reset link. */
 function actions(d: AdminPlayerDetail, onChanged: () => void): HTMLElement {
   const p = d.player;
-  const currency = h('select', { 'aria-label': 'Валюта' }, h('option', { value: 'tokens' }, 'Талоны'), h('option', { value: 'diamonds' }, 'Алмазы')) as HTMLSelectElement;
+  const currency = h('select', { 'aria-label': 'Валюта' }, h('option', { value: 'tokens' }, 'Талоны'), h('option', { value: 'diamonds' }, 'BLATS')) as HTMLSelectElement;
   const amount = h('input', { type: 'number', step: 1, min: -1000000, max: 1000000, placeholder: 'Сколько (минус — списать)', 'aria-label': 'Сумма', class: 'grow' }) as HTMLInputElement;
   const note = h('input', { type: 'text', maxlength: 120, placeholder: 'Причина — попадёт в журнал', 'aria-label': 'Причина', class: 'grow' }) as HTMLInputElement;
   const grantBtn = h('button', { class: 'btn', type: 'submit' }, 'Провести') as HTMLButtonElement;
@@ -189,36 +188,15 @@ function actions(d: AdminPlayerDetail, onChanged: () => void): HTMLElement {
       .catch((err: Error) => toast(err.message))
       .finally(() => (resetBtn.disabled = !d.account.emailMasked));
   });
-  // v0.2.17: $BLAT out of a pool (influencers, friends of the project, the reserve)
-  const pool = h('select', { 'aria-label': 'Пул', 'data-testid': 'alloc-pool' }, h('option', { value: 'influencers' }, 'Блогеры'), h('option', { value: 'friends' }, 'Друзья проекта'), h('option', { value: 'reserve' }, 'Резерв')) as HTMLSelectElement;
-  const allocAmount = h('input', { type: 'number', step: 1, min: 1, max: 100000000, placeholder: 'Сколько $BLAT', 'aria-label': 'Сколько $BLAT', class: 'grow', 'data-testid': 'alloc-amount' }) as HTMLInputElement;
-  const allocNote = h('input', { type: 'text', maxlength: 120, placeholder: 'За что — попадёт в журнал', 'aria-label': 'За что', class: 'grow', 'data-testid': 'alloc-note' }) as HTMLInputElement;
-  const allocBtn = h('button', { class: 'btn', type: 'submit', 'data-testid': 'alloc-go' }, 'Выдать $BLAT') as HTMLButtonElement;
-  const alloc = h('form', { class: 'action-form' }, pool, allocAmount, allocNote, allocBtn);
-  alloc.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const n = Number(allocAmount.value);
-    if (!Number.isInteger(n) || n <= 0) return toast('Сумма — целое число больше нуля');
-    if (allocNote.value.trim().length < 3) return toast('Укажите, за что (от 3 символов)');
-    if (!confirm(`Выдать ${num(n)} $BLAT из пула «${pool.selectedOptions[0]?.textContent}» игроку «${p.displayName}»?`)) return;
-    allocBtn.disabled = true;
-    apiFetch<{ balance: number }>(`/api/admin/players/${encodeURIComponent(p.id)}/blat-allocation`, { method: 'POST', body: { pool: pool.value, amount: n, note: allocNote.value.trim() } })
-      .then((r) => {
-        toast(`Готово: у игрока ${num(r.balance)} $BLAT`, 'ok');
-        onChanged();
-      })
-      .catch((err: Error) => toast(err.message))
-      .finally(() => (allocBtn.disabled = false));
-  });
   // v0.2.17: the founder's account
   const founderBtn = h('button', { class: 'btn btn--gold', type: 'button', 'data-testid': 'make-founder' }, d.founder ? 'Основатель ✓ — повторить' : 'Сделать основателем') as HTMLButtonElement;
   founderBtn.addEventListener('click', () => {
     const mail = d.account.emailMasked ? `, почта ${d.account.emailMasked}` : ', почта не привязана';
-    if (!confirm(`Сделать «${p.displayName}»${mail} аккаунтом основателя?\n\nЗолотая плашка «Создатель», скрытый вход в админку из игры, 87 уровень, все персонажи, оружие, снаряжение, скины и модификации, $BLAT до 320 000 000 из пула основателя.\n\nОснователь в игре один, и пул основателя выдаётся один раз — проверьте, что это ваш аккаунт.`)) return;
+    if (!confirm(`Сделать «${p.displayName}»${mail} аккаунтом основателя?\n\nЗолотая плашка «Создатель», скрытый вход в админку из игры, 87 уровень, все персонажи, оружие, снаряжение, скины и модификации.\n\nОснователь в игре один — проверьте, что это ваш аккаунт.`)) return;
     founderBtn.disabled = true;
     apiFetch<AdminFounderResult>(`/api/admin/players/${encodeURIComponent(p.id)}/founder`, { method: 'POST' })
       .then((r) => {
-        toast(`Готово: ${r.level} уровень, ${num(r.blat)} $BLAT, добавлено предметов: ${num(r.items)}`, 'ok');
+        toast(`Готово: ${r.level} уровень, добавлено предметов: ${num(r.items)}`, 'ok');
         onChanged();
       })
       .catch((err: Error) => toast(err.message))
@@ -228,13 +206,10 @@ function actions(d: AdminPlayerDetail, onChanged: () => void): HTMLElement {
     'section',
     { class: 'card' },
     h('h3', {}, 'Действия администратора'),
-    h('p', { class: 'note' }, 'Начисление или списание талонов и алмазов (компенсации, исправления). Баланс не может уйти в минус; каждая операция пишется в журнал аудита и в историю игрока.'),
+    h('p', { class: 'note' }, 'Начисление или списание талонов и BLATS (компенсации, исправления). Баланс не может уйти в минус; каждая операция пишется в журнал аудита и в историю игрока.'),
     form,
     h('div', { style: 'height:12px' }),
-    h('p', { class: 'note' }, '$BLAT из пула: блогерам — 300 000 000, друзьям проекта — 100 000 000, резерв — 20 000 000 (весь запас — 2 000 000 000). Пул не выдаст больше, чем в нём осталось; запись — в журнале.'),
-    alloc,
-    h('div', { style: 'height:12px' }),
-    h('p', { class: 'note' }, 'Аккаунт основателя: золотая плашка «Создатель» рядом с ником, скрытый вход в админку из игры, 87 уровень, всё снаряжение и $BLAT до 320 000 000 (пул основателя).'),
+    h('p', { class: 'note' }, 'Аккаунт основателя: золотая плашка «Создатель» рядом с ником, скрытый вход в админку из игры, 87 уровень и всё снаряжение.'),
     founderBtn,
     h('div', { style: 'height:12px' }),
     resetBtn,
@@ -316,7 +291,7 @@ export async function renderPlayer(root: HTMLElement, id: string, me?: AdminMe |
           'div',
           { class: 'tiles small' },
           h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Талоны'), h('div', { class: 'tile-value' }, num(d.wallet.tokens))),
-          h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Алмазы'), h('div', { class: 'tile-value' }, num(d.wallet.diamonds))),
+          h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'BLATS'), h('div', { class: 'tile-value' }, num(d.wallet.diamonds))),
           h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Предметов'), h('div', { class: 'tile-value' }, num(d.items.length))),
           h('div', { class: 'tile' }, h('div', { class: 'tile-label' }, 'Модификаций'), h('div', { class: 'tile-value' }, num(d.mods.length))),
         ),
@@ -333,11 +308,11 @@ export async function renderPlayer(root: HTMLElement, id: string, me?: AdminMe |
       ),
       me?.role === 'admin' ? actions(d, () => void renderPlayer(root, id, me)) : h('section', { class: 'card' }, h('h3', {}, 'Действия администратора'), h('p', { class: 'note' }, 'Начисления и ссылки для сброса пароля доступны роли admin.')),
     ),
-    ...[blatCard(d, me, () => void renderPlayer(root, id, me)), storyCard(d, me, () => void renderPlayer(root, id, me))].filter((x): x is HTMLElement => x !== null),
+    ...[referralCard(d, me, () => void renderPlayer(root, id, me)), storyCard(d, me, () => void renderPlayer(root, id, me))].filter((x): x is HTMLElement => x !== null),
     h(
       'section',
       { class: 'card' },
-      h('h3', {}, 'Движение талонов, алмазов и $BLAT'),
+      h('h3', {}, 'Движение талонов и BLATS'),
       table(
         ['Время', 'Валюта', 'Изменение', 'Баланс', 'Причина', 'Ссылка / комментарий', 'Админ'],
         d.ledger.map((l) => [dateTime(l.at), CURRENCY_NAMES[l.currency] ?? l.currency, `${l.delta > 0 ? '+' : ''}${num(l.delta)}`, num(l.balanceAfter), LEDGER_REASONS[l.reason] ?? l.reason, l.ref ?? '—', l.admin ?? '—']),
@@ -351,7 +326,7 @@ export async function renderPlayer(root: HTMLElement, id: string, me?: AdminMe |
       { class: 'card' },
       h('h3', {}, 'Платежи'),
       table(
-        ['Создан', 'Оплачен', 'Способ', 'Набор', 'Алмазы', 'Сумма', 'Статус'],
+        ['Создан', 'Оплачен', 'Способ', 'Набор', 'BLATS', 'Сумма', 'Статус'],
         d.payments.map((x) => [dateTime(x.createdAt), x.paidAt ? dateTime(x.paidAt) : '—', PAYMENT_PROVIDERS[x.provider] ?? x.provider, x.packId, num(x.diamonds), money(x.amountCents, x.currency), PAYMENT_STATUSES[x.status] ?? x.status]),
         [4, 5],
         'Платежей не было',

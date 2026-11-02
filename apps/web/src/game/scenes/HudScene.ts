@@ -24,13 +24,16 @@ const TUTORIAL_KEY = 'blatkom89.tutorial.v1';
 /** Team colours: names / text and fills (red 0, blue 1). */
 const TEAM_TEXT = ['#ff8a7a', '#8cc8f6'] as const;
 const TEAM_FILL = [0xd8392e, 0x4a9be0] as const;
+/** v0.2.18: free-for-all has no sides (no red and blue): the player green, the others plain or red (enemies). */
+const FFA_ME_TEXT = '#9fe07a';
+const FFA_OTHER_TEXT = '#efe3c6';
+const FFA_ME_FILL = 0x7cc85a;
+const FFA_ENEMY_FILL = 0xd8392e;
 const BASE_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 /** Extra height of the score box in capture the flag / base capture (the objective strip). */
 const OBJ_STRIP = 22;
 
 const BEIGE = '#e8dcc0';
-const RED = '#d8392e';
-const BLUE = '#4a9be0';
 const FONT = 'Oswald, "PT Sans Narrow", sans-serif';
 const PANEL = 0x0d0b0a;
 
@@ -93,6 +96,11 @@ export class HudScene extends Phaser.Scene {
   private scoreBg!: Phaser.GameObjects.Graphics;
   private myScore!: Phaser.GameObjects.Text;
   private leadScore!: Phaser.GameObjects.Text;
+  /** v0.2.18: the score boxes' captions — «YOU» / «LEADER» in free-for-all (no team colours there). */
+  private myLabel!: Phaser.GameObjects.Text;
+  private leadLabel!: Phaser.GameObjects.Text;
+  /** The score boxes as drawn: team colours (red, blue) or free-for-all (me, the leader). */
+  private scoreStyle: 'teams' | 'ffa' | null = null;
   private timer!: Phaser.GameObjects.Text;
   private mode!: Phaser.GameObjects.Text;
   /** Team matches: a frame around the local player's team score. */
@@ -290,6 +298,8 @@ export class HudScene extends Phaser.Scene {
     this.scoreBg = this.add.graphics();
     this.myScore = txt(this, 0, 0, '0', 26, BEIGE, '700').setOrigin(0.5);
     this.leadScore = txt(this, 0, 0, '0', 26, BEIGE, '700').setOrigin(0.5);
+    this.myLabel = txt(this, 0, 0, '', 8, '#d9c7a3', '600').setOrigin(0.5, 0);
+    this.leadLabel = txt(this, 0, 0, '', 8, '#e8c060', '600').setOrigin(0.5, 0);
     this.timer = txt(this, 0, 0, '00:00', 24, BEIGE, '600').setOrigin(0.5, 0);
     this.mode = txt(this, 0, 0, '', 10, '#b8a888', '500').setOrigin(0.5, 0);
     this.teamMark = this.add.graphics();
@@ -609,17 +619,11 @@ export class HudScene extends Phaser.Scene {
       goalY = this.feedY0;
       this.feedY0 += 30;
     }
-    // score box
-    this.scoreBg.clear();
-    this.scoreBg.fillStyle(0x8a1a16, 0.95).fillRect(cx - 118, padT, 50, 40);
-    this.scoreBg.lineStyle(2, 0xd8392e, 1).strokeRect(cx - 117, padT + 1, 48, 38);
-    this.scoreBg.fillStyle(0x14304e, 0.95).fillRect(cx + 68, padT, 50, 40);
-    this.scoreBg.lineStyle(2, 0x4a9be0, 1).strokeRect(cx + 69, padT + 1, 48, 38);
-    this.panel(this.scoreBg, cx - 62, padT, 124, 46 + this.extraTop);
+    // score box (its colours follow the mode: drawScoreBoxes)
     this.scoreCx = cx;
     this.scorePad = padT;
-    this.myScore.setPosition(cx - 93, padT + 20);
-    this.leadScore.setPosition(cx + 93, padT + 20);
+    this.scoreStyle = null;
+    this.drawScoreBoxes(isTeamMode(this.session.hud().gameMode));
     this.timer.setPosition(cx, padT + 2);
     this.mode.setPosition(cx, padT + 31);
     // minimap
@@ -707,12 +711,13 @@ export class HudScene extends Phaser.Scene {
 
   // ── events ─────────────────────────────────────────────────────────────
   private onKillFeed(e: KillFeedEntry) {
-    // free-for-all: the local player red, everyone else blue; teams: everyone in their team colour
-    const teamColor = (team: number | null | undefined, local: boolean) => (team === 0 || team === 1 ? TEAM_TEXT[team] : local ? RED : BLUE);
+    // teams: everyone in their team colour; v0.2.18 free-for-all (no sides, no red and blue): the local player
+    // green, everyone else plain
+    const teamColor = (team: number | null | undefined, local: boolean) => (team === 0 || team === 1 ? TEAM_TEXT[team] : local ? FFA_ME_TEXT : FFA_OTHER_TEXT);
     const k = txt(this, 0, 0, e.killer, 14, teamColor(e.killerTeam, e.killerLocal), '600');
     let right = k.width;
     // assisters ride along after the killer: «Petya + Valyuta [sawn-off] Mikhalych»
-    const a = e.assists.length ? txt(this, right + 5, 3, `+ ${e.assists.join(', ')}`, 11, e.killerTeam === 0 || e.killerTeam === 1 ? TEAM_TEXT[e.killerTeam] : e.assistLocal ? '#ff8a7a' : '#9fbfdf', '500') : null;
+    const a = e.assists.length ? txt(this, right + 5, 3, `+ ${e.assists.join(', ')}`, 11, e.killerTeam === 0 || e.killerTeam === 1 ? TEAM_TEXT[e.killerTeam] : e.assistLocal ? FFA_ME_TEXT : '#b8ab90', '500') : null;
     if (a) right = a.x + a.width;
     const icon = fitIcon(this.add.image(right + 8, k.height / 2, 'weapons', `ico_${e.weapon}`).setOrigin(0, 0.5), `ico_${e.weapon}`, 46, 15, 0.8);
     const v = txt(this, icon.x + icon.displayWidth + 8, 0, e.victim, 14, teamColor(e.victimTeam, e.victimLocal), '600');
@@ -905,6 +910,39 @@ export class HudScene extends Phaser.Scene {
     if (phase === 'active') this.goUntil = this.time.now + 900;
   }
 
+  /**
+   * v0.2.18 (the owner: «в FFA иногда показывает красный и синий — сделай везде логично»): team modes — the
+   * red box and the blue box; free-for-all — no team colours: «YOU» (my score) and «LEADER» (the best of the
+   * others; «2ND» when I lead).
+   */
+  private drawScoreBoxes(teams: boolean) {
+    const style = teams ? 'teams' : 'ffa';
+    if (this.scoreStyle === style) return;
+    this.scoreStyle = style;
+    const cx = this.scoreCx;
+    const padT = this.scorePad;
+    const g = this.scoreBg;
+    g.clear();
+    if (teams) {
+      g.fillStyle(0x8a1a16, 0.95).fillRect(cx - 118, padT, 50, 40);
+      g.lineStyle(2, 0xd8392e, 1).strokeRect(cx - 117, padT + 1, 48, 38);
+      g.fillStyle(0x14304e, 0.95).fillRect(cx + 68, padT, 50, 40);
+      g.lineStyle(2, 0x4a9be0, 1).strokeRect(cx + 69, padT + 1, 48, 38);
+    } else {
+      g.fillStyle(0x2a2620, 0.95).fillRect(cx - 118, padT, 50, 40);
+      g.lineStyle(2, 0xd9c7a3, 0.9).strokeRect(cx - 117, padT + 1, 48, 38);
+      g.fillStyle(0x3a2c10, 0.95).fillRect(cx + 68, padT, 50, 40);
+      g.lineStyle(2, 0xd8a637, 1).strokeRect(cx + 69, padT + 1, 48, 38);
+    }
+    this.panel(g, cx - 62, padT, 124, 46 + this.extraTop);
+    this.myScore.setPosition(cx - 93, padT + (teams ? 20 : 24));
+    this.leadScore.setPosition(cx + 93, padT + (teams ? 20 : 24));
+    this.myLabel.setPosition(cx - 93, padT + 3).setVisible(!teams);
+    this.leadLabel.setPosition(cx + 93, padT + 3).setVisible(!teams);
+    this.myScore.setFontSize(teams ? 26 : 22);
+    this.leadScore.setFontSize(teams ? 26 : 22);
+  }
+
   // ── per frame ───────────────────────────────────────────────────────────
   override update(time: number, delta: number): void {
     if (this.scale.width !== this.layoutW || this.scale.height !== this.layoutH) this.layout();
@@ -914,9 +952,19 @@ export class HudScene extends Phaser.Scene {
     const sorted = players.slice().sort((a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths);
     const leader = sorted.find((p) => !p.isLocal);
     const teams = isTeamMode(hud.gameMode);
-    // score / timer: free-for-all — mine vs the best opponent; teams — red vs blue
+    // score / timer: free-for-all — mine vs the best opponent (no team colours); teams — red vs blue
+    this.drawScoreBoxes(teams);
     this.myScore.setText(String(teams ? hud.teamScore[0] : (me?.score ?? 0)));
     this.leadScore.setText(String(teams ? hud.teamScore[1] : (leader?.score ?? 0)));
+    if (!teams) {
+      const ahead = !!me && (!leader || me.score > leader.score);
+      const labelSig = `${getLang()}|${ahead}`;
+      if (this.leadLabel.getData('sig') !== labelSig) {
+        this.leadLabel.setData('sig', labelSig);
+        this.myLabel.setText(t('YOU'));
+        this.leadLabel.setText(ahead ? t('2ND') : t('LEADER'));
+      }
+    }
     const left = hud.phase === 'active' ? hud.timeLeftMs : hud.phase === 'countdown' || hud.phase === 'ready' ? hud.timeLeftMs : 0;
     this.timer.setText(fmtTime(left));
     this.timer.setColor(hud.phase === 'active' && left < 30_000 ? '#ff6a5a' : BEIGE);
@@ -1025,13 +1073,13 @@ export class HudScene extends Phaser.Scene {
       if (!p.alive) continue;
       const mate = teams && hud.myTeam !== null && p.team === hud.myTeam;
       if (p.isLocal) {
-        this.mmDots.fillStyle(teams && hud.myTeam !== null ? TEAM_FILL[hud.myTeam] : 0xff4a3a, 1).fillCircle(ox + p.x * s, oy + p.y * s, 3);
+        this.mmDots.fillStyle(teams && hud.myTeam !== null ? TEAM_FILL[hud.myTeam] : FFA_ME_FILL, 1).fillCircle(ox + p.x * s, oy + p.y * s, 3);
         this.mmDots.lineStyle(1, 0xffe0c0, 1).lineBetween(ox + p.x * s, oy + p.y * s, ox + p.x * s + Math.cos(p.aim) * 6, oy + p.y * s + Math.sin(p.aim) * 6);
       } else if (mate) {
         this.mmDots.fillStyle(TEAM_FILL[hud.myTeam!], 0.9).fillCircle(ox + p.x * s, oy + p.y * s, 2.2);
         this.mmDots.lineStyle(1, 0xf2e6c8, 0.7).strokeCircle(ox + p.x * s, oy + p.y * s, 2.6);
       } else if (time - (this.lastShotAt.get(p.slot) ?? -1e9) < 2000) {
-        this.mmDots.fillStyle(teams && (p.team === 0 || p.team === 1) ? TEAM_FILL[p.team] : 0x4a9be0, 1).fillCircle(ox + p.x * s, oy + p.y * s, 2.5);
+        this.mmDots.fillStyle(teams && (p.team === 0 || p.team === 1) ? TEAM_FILL[p.team] : FFA_ENEMY_FILL, 1).fillCircle(ox + p.x * s, oy + p.y * s, 2.5);
       }
     }
     for (const pk of this.session.pickups()) {
@@ -1322,7 +1370,7 @@ export class HudScene extends Phaser.Scene {
       if (p.isLocal) g.fillStyle(0x8a1a16, 0.35).fillRect(x + 8, ry - 3, w - 16, rowH);
       const size = Math.min(22, rowH - 4);
       const portrait = this.add.image(x + 16, ry, `portrait_small_${p.character}`).setOrigin(0, 0).setDisplaySize(size, size);
-      const nameColor = p.team === 0 || p.team === 1 ? TEAM_TEXT[p.team] : p.isLocal ? RED : BEIGE;
+      const nameColor = p.team === 0 || p.team === 1 ? TEAM_TEXT[p.team] : p.isLocal ? FFA_ME_TEXT : BEIGE;
       const n = fitText(txt(this, x + 46, ry + 1, '', font, nameColor, p.isLocal ? '700' : '500'), `${row.rank}. ${p.name}${p.isBot ? ` · ${t('bot')}` : ''}`, nameRoom);
       this.scoreboard.add([portrait, n]);
       cols.forEach(([, get], c) => {

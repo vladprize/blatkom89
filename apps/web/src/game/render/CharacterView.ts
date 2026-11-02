@@ -35,6 +35,9 @@ const ENEMY_TAG = '#ffffff';
 /** Team matches: name tags, health bars and the ring under the feet in the team colour. */
 const TEAM_TAG = ['#ff9a8a', '#9fd0f8'] as const;
 const TEAM_FILL = [0xd8392e, 0x4a9be0] as const;
+/** v0.2.18: free-for-all has no sides — the player's own bar green, the others' (all enemies) red; never blue. */
+const FFA_ME = 0x7cc85a;
+const FFA_ENEMY = 0xd8322a;
 
 export class CharacterView {
   readonly slot: number;
@@ -249,7 +252,8 @@ export class CharacterView {
     const bx = Math.round(p.x - w / 2);
     const by = Math.round(p.y - 21);
     this.bar.fillStyle(0x0b0908, 0.85).fillRect(bx - 1, by - 1, w + 2, 3.5);
-    this.bar.fillStyle(p.team === 0 || p.team === 1 ? TEAM_FILL[p.team] : p.isLocal ? 0xd8322a : 0x3d8fd8, 1).fillRect(bx, by, (w * Math.max(0, p.hp)) / 100, 1.5);
+    // v0.2.18: team modes — the team's colour; free-for-all — no team colours: mine green, everyone else's red (all enemies)
+    this.bar.fillStyle(p.team === 0 || p.team === 1 ? TEAM_FILL[p.team] : p.isLocal ? FFA_ME : FFA_ENEMY, 1).fillRect(bx, by, (w * Math.max(0, p.hp)) / 100, 1.5);
     const lvl = p.level === null ? '' : String(p.level);
     if (this.levelTag.text !== lvl) this.levelTag.setText(lvl);
     if (lvl) {

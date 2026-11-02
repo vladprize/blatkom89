@@ -51,7 +51,7 @@ export async function renderEconomy(root: HTMLElement): Promise<void> {
   const main = rev.byCurrency[0];
   const net = main ? main.grossCents - main.refundedCents : null;
   body.append(
-    h('p', { class: 'note' }, `Период: ${e.range.firstDay} — ${e.range.lastDay} (UTC). Обновлено ${dateTime(e.generatedAt)}. Талоны зарабатываются в матчах, алмазы покупаются за деньги.`),
+    h('p', { class: 'note' }, `Период: ${e.range.firstDay} — ${e.range.lastDay} (UTC). Обновлено ${dateTime(e.generatedAt)}. Талоны зарабатываются в матчах, BLATS покупаются за деньги (1 BLATS = 1 цент) и даются по 10 за новый уровень.`),
     h(
       'div',
       { class: 'tiles' },
@@ -63,7 +63,7 @@ export async function renderEconomy(root: HTMLElement): Promise<void> {
       tile('Не прошли', num(rev.failed), 'ошибка или истёк срок'),
       tile('Покупки в Арсенале', num(e.purchases.total), 'оружие, персонажи, снаряжение'),
       tile('Модификации', num(e.mods.total)),
-      tile('Кейсы', num(e.cases.total), `${num(e.cases.diamondsSpent)} алмазов`),
+      tile('Кейсы', num(e.cases.total), `${num(e.cases.diamondsSpent)} BLATS`),
     ),
   );
   if (rev.byCurrency.length > 1) body.append(h('p', { class: 'note' }, `Платежи в нескольких валютах: ${rev.byCurrency.map((c) => `${money(c.grossCents - c.refundedCents, c.currency)}`).join(' · ')}.`));
@@ -84,14 +84,14 @@ export async function renderEconomy(root: HTMLElement): Promise<void> {
         ),
       ),
       card(
-        'Алмазы по дням',
+        'BLATS по дням',
         lineChart(
           days,
           [
             { name: 'Выдано', color: COLORS.blue, values: e.daily.map((d) => d.diamondsIssued) },
             { name: 'Потрачено', color: COLORS.violet, values: e.daily.map((d) => d.diamondsSpent) },
           ],
-          { ariaLabel: 'Алмазы по дням' },
+          { ariaLabel: 'BLATS по дням' },
         ),
       ),
       card(
@@ -110,11 +110,11 @@ export async function renderEconomy(root: HTMLElement): Promise<void> {
           rev.byProvider.map((p) => [PAYMENT_PROVIDERS[p.provider] ?? p.provider, num(p.payments), money(p.grossCents, main?.currency)]),
           [1, 2],
         ),
-        h('h4', { class: 'sub' }, 'Наборы алмазов'),
+        h('h4', { class: 'sub' }, 'Наборы BLATS'),
         hBarChart(rev.byPack.map((p) => ({ label: `${p.packId.replace(/^d/, '')} 💎`, value: p.payments })), { ariaLabel: 'Покупки по наборам', color: COLORS.blue }),
       ),
       flowCard('Талоны', e.tokens, COLORS.amber),
-      flowCard('Алмазы', e.diamonds, COLORS.blue),
+      flowCard('BLATS', e.diamonds, COLORS.blue),
       card('Самое покупаемое', hBarChart(e.purchases.top.map((t) => ({ label: itemName(t.kind, t.id), value: t.count })), { ariaLabel: 'Топ покупок', color: COLORS.red }), h('p', { class: 'note' }, 'Только покупки за талоны и алмазы; выпавшее из кейсов и выданное — в таблице ниже.')),
       card(
         'Покупки по типам',
@@ -130,8 +130,8 @@ export async function renderEconomy(root: HTMLElement): Promise<void> {
         e.cases.total
           ? hBarChart(e.cases.byRarity.map((c) => ({ label: RARITIES[c.rarity] ?? c.rarity, value: c.count })), { ariaLabel: 'Кейсы по редкости', color: COLORS.violet })
           : emptyState('кейсы не открывали'),
-        e.cases.byKind?.length ? table(['Кейс', 'Открыто', 'Алмазов'], e.cases.byKind.map((k) => [CASE_KINDS[k.kind] ?? k.kind, num(k.count), num(k.diamondsSpent)]), [1, 2]) : null,
-        h('p', { class: 'note' }, `Доля кейсов в тратах алмазов: ${pct(e.diamonds.spentTotal > 0 ? e.cases.diamondsSpent / e.diamonds.spentTotal : null)}.`),
+        e.cases.byKind?.length ? table(['Кейс', 'Открыто', 'BLATS'], e.cases.byKind.map((k) => [CASE_KINDS[k.kind] ?? k.kind, num(k.count), num(k.diamondsSpent)]), [1, 2]) : null,
+        h('p', { class: 'note' }, `Доля кейсов в тратах BLATS: ${pct(e.diamonds.spentTotal > 0 ? e.cases.diamondsSpent / e.diamonds.spentTotal : null)}.`),
       ),
     ),
   );

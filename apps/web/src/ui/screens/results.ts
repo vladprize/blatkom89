@@ -7,7 +7,6 @@ import { t, plural, count } from '../../i18n/index.js';
 import { achievementText, mapName } from '../../i18n/content.js';
 import { konLabel } from './kon.js';
 import { modeName } from '../modes.js';
-import { blatAmount, blatCoin, fmtBlat } from './blat.js';
 
 const teamLabel = (team: Team) => (team === 0 ? t('RED TEAM') : t('BLUE TEAM'));
 
@@ -37,6 +36,8 @@ export function renderResults(o: {
   offlineNote?: string;
   onRematch: () => void;
   onMenu: () => void;
+  /** v0.2.18: the way out when it isn't the menu (a practice from the Arsenal: «Back to the Arsenal»). */
+  menuLabel?: string;
   /** Online: the room chat (under the buttons). */
   chat?: HTMLElement | null;
   /** V2.0 part D: the match was a «Блатной кон» match of this format. */
@@ -100,30 +101,9 @@ export function renderResults(o: {
               how ? h('div', { class: 'muted', style: 'font-size:14px', 'data-testid': 'talon-breakdown' }, how) : null,
             )
           : null,
-        // v0.2.17: the $BLAT Tournament's stake — the pool won, the stake lost, or the stake back
-        personal.stake
-          ? h(
-              'div',
-              { class: 'row stakeline', 'data-testid': 'stake-line', 'data-outcome': personal.stake.outcome },
-              blatCoin(16, ''),
-              h('b', null, personal.stake.outcome === 'win' ? `+${fmtBlat(personal.stake.payout - personal.stake.stake)}` : personal.stake.outcome === 'loss' ? `−${fmtBlat(personal.stake.stake)}` : personal.stake.payout > personal.stake.stake ? `+${fmtBlat(personal.stake.payout - personal.stake.stake)}` : '±0'),
-              h(
-                'span',
-                { class: 'muted' },
-                personal.stake.outcome === 'win'
-                  ? t('$BLAT: your share of the pool ({n})', { n: fmtBlat(personal.stake.payout) })
-                  : personal.stake.outcome === 'loss'
-                    ? t('$BLAT: the stake stays in the pool')
-                    : personal.stake.outcome === 'draw'
-                      ? t('$BLAT: a draw — the stake is back')
-                      : t('$BLAT: the stake is back'),
-                ` · ${t('{total} in total', { total: fmtBlat(personal.totalBlat ?? 0) })}`,
-              ),
-            )
-          : null,
-        // V2.0: $BLAT for the levels reached in this match
-        personal.blatGained
-          ? h('div', { class: 'row blat-gain', 'data-testid': 'blat-gain' }, blatAmount(personal.blatGained), h('span', { class: 'muted' }, t('$BLAT for the new level · {total} in total', { total: fmtBlat(personal.totalBlat ?? 0) })))
+        // v0.2.18: BLATS for the levels reached in this match (10 a level)
+        personal.blatsGained
+          ? h('div', { class: 'row blats-gain', 'data-testid': 'blats-gain' }, h('b', null, '+', amount(personal.blatsGained, 'diamonds')), h('span', { class: 'muted' }, t('BLATS for the new level · {total} in total', { total: personal.totalBlats ?? 0 })))
           : null,
         ...personal.newAchievements.map((a) => h('div', { class: 'ach' }, h('div', { class: 'ico' }, '★'), h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 't' }, achievementText(a).title), h('div', { class: 'muted' }, achievementText(a).description)))),
         o.localProfile ? h('div', { class: 'muted', style: 'font-size:14px' }, t('Local profile — kept in this browser.')) : null,
@@ -186,7 +166,7 @@ export function renderResults(o: {
     h(
       'div',
       { class: `wrap${side ? ' wrap--wide' : ''}` },
-      h('div', { class: 'row results__top' }, h('span', { class: 'tag' }, t('Match report')), h('span', { class: 'muted' }, `${mapName(r.mapId)} · ${o.kon ? t('$BLAT Tournament {f}', { f: konLabel(o.kon) }) : modeName(mode)} · ${fmtDuration(r.durationMs)} · ${reason}`)),
+      h('div', { class: 'row results__top' }, h('span', { class: 'tag' }, t('Match report')), h('span', { class: 'muted' }, `${mapName(r.mapId)} · ${o.kon ? t('District Tournament {f}', { f: konLabel(o.kon) }) : modeName(mode)} · ${fmtDuration(r.durationMs)} · ${reason}`)),
       h(
         'div',
         { class: 'results__body' },
@@ -221,7 +201,7 @@ export function renderResults(o: {
           'div',
           { class: 'results__side' },
           personal ? xpPanel() : o.offline ? h('div', { class: 'muted' }, o.offlineNote ?? t('Practice doesn’t count towards the online profile, XP or talons.')) : h('div', { class: 'muted' }, me ? t('Filing the results…') : ''),
-          h('div', { class: 'row results__buttons' }, h('button', { class: 'btn btn--red grow', onclick: o.onRematch }, o.offline ? t('Again') : t('Rematch')), h('button', { class: 'btn grow', onclick: o.onMenu }, t('To menu'))),
+          h('div', { class: 'row results__buttons' }, h('button', { class: 'btn btn--red grow', onclick: o.onRematch }, o.offline ? t('Again') : t('Rematch')), h('button', { class: 'btn grow', 'data-testid': 'results-menu', onclick: o.onMenu }, o.menuLabel ?? t('To menu'))),
           o.chat ?? null,
         ),
       ),

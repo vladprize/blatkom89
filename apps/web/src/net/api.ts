@@ -3,12 +3,11 @@ import type {
   AuthResponse,
   FirstTouch,
   TelegramLinkCodeResponse,
-  BlatResponse,
-  BlatDropInfo,
   KonFormat,
   KonResponse,
   KonTopResponse,
   QuickMatchResponse,
+  ReferralResponse,
   StoryProgressResponse,
   StoryStartResponse,
   StoryReward,
@@ -23,6 +22,7 @@ import type {
   AchievementsResponse,
   Inventory,
   ShopConfig,
+  FinishId,
   SiteConfig,
   CaseResult,
   SkinCaseResult,
@@ -105,15 +105,11 @@ export class Api {
   authGuest(name: string, deviceId: string, visitorId?: string, ref?: string, source?: FirstTouch) {
     return this.req<AuthResponse>('POST', '/api/auth/guest', { name, deviceId, platform: platform(), clientVersion: VERSION, ...(visitorId ? { visitorId } : {}), ...(ref ? { ref } : {}), ...(source ? { source } : {}) });
   }
-  /** V2.0: $BLAT — balance, history, level rewards, the referral programme. */
-  blat() {
-    return this.req<BlatResponse>('GET', '/api/blat');
+  /** The player's invitation link and what the invitations brought (talons since v0.2.18). */
+  referrals() {
+    return this.req<ReferralResponse>('GET', '/api/referrals');
   }
-  /** V2.0 part C: the BLAT DROP announcement date and the server's clock. */
-  blatDrop() {
-    return this.req<BlatDropInfo>('GET', '/api/blat/drop');
-  }
-  /** v0.2.17: the menu's X and Telegram links, stakes in the $BLAT Tournament. */
+  /** v0.2.17: the menu's X and Telegram links. */
   site() {
     return this.req<SiteConfig>('GET', '/api/site');
   }
@@ -159,14 +155,18 @@ export class Api {
   openCase() {
     return this.req<CaseResult>('POST', '/api/shop/case', { confirmAge: true });
   }
-  /** The skin case (v0.23): a weapon skin not owned yet. */
+  /** v0.2.18: one weapon's skin for BLATS (the server puts it on that weapon). */
+  buySkin(weapon: WeaponId, finish: FinishId) {
+    return this.req<Inventory>('POST', '/api/shop/skin', { weapon, finish });
+  }
+  /** The skin case (v0.23; v0.2.18: for BLATS): a weapon skin not owned yet. */
   openSkinCase() {
     return this.req<SkinCaseResult>('POST', '/api/shop/skin-case', { confirmAge: true });
   }
   setLoadout(l: Loadout) {
     return this.req<Inventory>('POST', '/api/me/loadout', { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods, skins: l.skins ?? {} });
   }
-  checkout(packId: string, method: 'card' | 'crypto') {
+  checkout(packId: string, method: 'card') {
     return this.req<CheckoutResponse>('POST', '/api/pay/checkout', { packId, method });
   }
   paymentStatus(id: string) {
@@ -190,20 +190,19 @@ export class Api {
   deleteAccount() {
     return this.req<void>('DELETE', '/api/me');
   }
-  /** `stake` (v0.2.17): a $BLAT Tournament room's stake (0: none). */
-  createRoom(mapId: MapId, isPrivate: boolean, mode: GameMode = 'ffa', kon?: KonFormat, stake = 0) {
-    return this.req<CreateRoomResponse>('POST', '/api/rooms', { mapId, isPrivate, mode, ...(kon ? { kon } : {}), ...(kon && stake > 0 ? { stake } : {}) });
+  createRoom(mapId: MapId, isPrivate: boolean, mode: GameMode = 'ffa', kon?: KonFormat) {
+    return this.req<CreateRoomResponse>('POST', '/api/rooms', { mapId, isPrivate, mode, ...(kon ? { kon } : {}) });
   }
-  quickMatch(mapId?: MapId, mode: GameMode = 'ffa', kon?: KonFormat, stake = 0) {
-    return this.req<QuickMatchResponse>('POST', '/api/rooms/quick', { ...(mapId ? { mapId } : {}), mode, ...(kon ? { kon } : {}), ...(kon && stake > 0 ? { stake } : {}) });
+  quickMatch(mapId?: MapId, mode: GameMode = 'ffa', kon?: KonFormat) {
+    return this.req<QuickMatchResponse>('POST', '/api/rooms/quick', { ...(mapId ? { mapId } : {}), mode, ...(kon ? { kon } : {}) });
   }
   /** v0.2.17: the caller's gang calls the gang `clubId` out to a tournament battle (a room of the two gangs). */
   gangBattle(clubId: string, kon: GangBattleFormat, mapId?: MapId) {
     return this.req<GangBattleResponse>('POST', `/api/clubs/${encodeURIComponent(clubId)}/battle`, { kon, ...(mapId ? { mapId } : {}) });
   }
-  /** A room's public facts (v0.2.17: the client learns a room's stake before coming in). */
+  /** A room's public facts. */
   room(roomId: string) {
-    return this.req<{ id: string; kon: KonFormat | null; stake?: number; joinable: boolean }>('GET', `/api/rooms/${encodeURIComponent(roomId)}`);
+    return this.req<{ id: string; kon: KonFormat | null; joinable: boolean }>('GET', `/api/rooms/${encodeURIComponent(roomId)}`);
   }
   /** V2.0 part D: «Блатной кон» — the player's numbers, history, people waiting; the tables. */
   kon() {

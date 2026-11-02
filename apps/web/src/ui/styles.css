@@ -41,13 +41,6 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .boot__bar { width: min(320px, 70vw); height: 8px; background: #241e19; border: 1px solid var(--line); }
 .boot__bar i { display: block; height: 100%; width: 0; background: var(--red); transition: width .2s; }
 .boot__hint { font-family: Caveat, cursive; font-size: 22px; color: var(--muted); text-align: center; padding: 0 16px; }
-/* start screen (main.ts): the browser wants a tap before the soundtrack can play */
-.boot--start { cursor: pointer; }
-.boot__play { font-family: Oswald, sans-serif; font-weight: 700; font-size: 30px; letter-spacing: .12em; text-transform: uppercase; color: #fff4e4; background: var(--red); border: 0; padding: 14px 40px 15px; cursor: pointer; box-shadow: 0 5px 0 #6d1712, 0 0 0 2px rgba(0,0,0,.4); animation: boot-pulse 1.6s ease-in-out infinite; }
-.boot__play:focus-visible { outline: 3px solid var(--tape); outline-offset: 4px; }
-.boot__play:active { transform: translateY(3px); box-shadow: 0 2px 0 #6d1712; }
-@keyframes boot-pulse { 50% { filter: brightness(1.15); } }
-@media (prefers-reduced-motion: reduce) { .boot__play { animation: none; } }
 
 /* UI root */
 .ui { position: fixed; inset: 0; z-index: 10; pointer-events: none; font-family: 'PT Sans Narrow', sans-serif; }
@@ -2171,3 +2164,110 @@ button.chatline__name:hover { text-decoration: underline; }
   .lobby__gang span { display: none; }
 }
 
+
+/* ── v0.2.18: grades (regular / rare / epic / legendary — grey / red / purple / gold), BLATS, the compact shop ── */
+:root { --g-common: #a7a49c; --g-rare: #e2463b; --g-epic: #a85ee6; --g-legendary: #f2b632; }
+.grade { display: inline-flex; align-items: center; font-family: Oswald, sans-serif; font-size: 11.5px; font-weight: 600; line-height: 1; letter-spacing: .06em; text-transform: uppercase; padding: 3px 6px 2px; border: 1px solid currentColor; background: rgba(0,0,0,.35); white-space: nowrap; vertical-align: middle; }
+.grade--common { color: var(--g-common); }
+.grade--rare { color: var(--g-rare); }
+.grade--epic { color: var(--g-epic); }
+.grade--legendary { color: var(--g-legendary); box-shadow: 0 0 8px rgba(242,182,50,.35); }
+.rar--common { color: var(--g-common); }
+.rar--rare { color: var(--g-rare); }
+.rar--epic { color: var(--g-epic); }
+.rar--legendary { color: var(--g-legendary); }
+.reveal--common { border-color: var(--g-common); }
+.reveal--rare { border-color: var(--g-rare); box-shadow: 0 0 14px rgba(226,70,59,.3); }
+.reveal--epic { border-color: var(--g-epic); box-shadow: 0 0 18px rgba(168,94,230,.35); }
+.reveal--legendary { border-color: var(--g-legendary); box-shadow: 0 0 24px rgba(242,182,50,.45); }
+.skinchip--common { color: #d7d3c8; }
+.skinchip--rare { color: #ff8a80; }
+.skinchip--epic { color: #d3a8f5; }
+.skinchip--legendary { color: #f6cf66; }
+.skinchip--mine.skinchip--rare, .skinchip--mine.skinchip--epic, .skinchip--mine.skinchip--legendary { border-color: currentColor; }
+.skinpick__buy { flex-basis: 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.skinpick__buy .btn { min-height: 34px; }
+/* the character grid: the grade as a coloured bottom edge */
+.chars button[class*='chargrade--'] { border-bottom-width: 3px; }
+.chars button.chargrade--common { border-bottom-color: var(--g-common); }
+.chars button.chargrade--rare { border-bottom-color: var(--g-rare); }
+.chars button.chargrade--epic { border-bottom-color: var(--g-epic); }
+.chars button.chargrade--legendary { border-bottom-color: var(--g-legendary); }
+.dossier__grade { line-height: 1; }
+.charsum__name .grade { font-size: 10px; padding: 2px 4px 1px; vertical-align: 2px; }
+.charsheet__tags, .itemsheet__tags { gap: 6px; flex-wrap: wrap; align-items: center; }
+/* BLATS: the red coin as the currency's icon, the wallet, the menu's tile, the tab */
+.cur--diamonds, .cell .cur--diamonds, .cell--char img.cur--diamonds, .arsenal:not(.arsenal--phone) .cell--char img.cur--diamonds { width: 1.05em; height: 1.05em; aspect-ratio: auto; display: inline-block; background: none; clip-path: none; border: 0; vertical-align: -0.18em; }
+.coin--blats b { color: #ffd3cc; }
+.stile--blats .stile__txt small { color: #ff8a7a; font-variant-numeric: tabular-nums; }
+.blats__big { display: flex; align-items: center; gap: 12px; margin: 6px 0 2px; }
+.blats__big b { font-family: Oswald, sans-serif; font-size: 40px; line-height: 1; color: var(--beige); font-variant-numeric: tabular-nums; }
+.blats-gain { gap: 8px; align-items: center; }
+/* the shop's tabs on wide screens: compact grids (the owner: everything on one screen) */
+.shoptab--wide { display: flex; flex-direction: column; gap: 10px; }
+.shoptab--wide .arsnote { font-size: 13.5px; line-height: 1.3; }
+.shopgroup { gap: 6px; }
+.shopgroup__head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.shopgroup__title { font-family: Oswald, sans-serif; font-size: 16px; letter-spacing: .05em; text-transform: uppercase; }
+.shopgroup__head .muted { font-size: 13px; }
+.shopgroup__more { align-self: flex-start; }
+.shopgrid--wide { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 6px; }
+.arsenal:not(.arsenal--phone) .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 84px; padding: 8px 4px 6px; background: var(--panel-2); border: 1px solid var(--line); color: var(--beige); font: inherit; text-align: center; cursor: pointer; }
+.arsenal:not(.arsenal--phone) .cell:hover { border-color: var(--tape); }
+.arsenal:not(.arsenal--phone) .cell:active { transform: translateY(1px); }
+.arsenal:not(.arsenal--phone) .cell .wimg--small { width: 100%; max-width: 84px; }
+.arsenal:not(.arsenal--phone) .cell__name { font-family: Oswald, sans-serif; font-size: 12px; line-height: 1.1; text-transform: uppercase; letter-spacing: .02em; max-width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.arsenal:not(.arsenal--phone) .cell__own { font-family: Oswald, sans-serif; font-size: 11px; color: #9fd08a; text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.arsenal:not(.arsenal--phone) .cell .wbtn__price { font-size: 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.arsenal:not(.arsenal--phone) .cell--mine { border-color: #4e6a3e; }
+.arsenal:not(.arsenal--phone) .cell--char { justify-content: flex-start; padding: 5px 4px 6px; }
+.arsenal:not(.arsenal--phone) .cell--char img { width: 72px; height: 72px; image-rendering: pixelated; display: block; }
+.arsenal:not(.arsenal--phone) .shopgrid--wide:has(.cell--char) { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+.cell .grade { font-size: 9.5px; padding: 2px 4px 1px; }
+.cell--grade-rare { border-bottom: 2px solid var(--g-rare) !important; }
+.cell--grade-epic { border-bottom: 2px solid var(--g-epic) !important; }
+.cell--grade-legendary { border-bottom: 2px solid var(--g-legendary) !important; }
+.cell--grade-common { border-bottom: 2px solid var(--g-common) !important; }
+@media (max-width: 560px) {
+  .cell--char .grade { font-size: 8px; padding: 1px 3px 0; letter-spacing: .02em; }
+}
+/* invite friends (talons) */
+.screen--invite .wrap { max-width: 760px; }
+.invite { gap: 12px; }
+.invite__offer { margin-top: 6px; line-height: 1.35; }
+.invite__reward { white-space: nowrap; }
+.invite__link .input { width: 100%; font-size: 14px; user-select: text; -webkit-user-select: text; }
+.invite__actions { gap: 8px; }
+.invstats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 4px 0; }
+.invstats__item { display: flex; flex-direction: column; align-items: center; padding: 6px 4px; background: var(--panel-2); border: 1px solid var(--line); }
+.invstats__item b { font-family: Oswald, sans-serif; font-size: 22px; line-height: 1.1; }
+.invstats__item small { font-size: 12px; color: var(--muted); text-align: center; }
+.invrecent { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow: auto; overscroll-behavior: contain; }
+.invrecent__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.invrecent__row[data-status='confirmed'] .muted { color: #8fd18f; }
+.gradeprices { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.gradeprices__item { display: inline-flex; align-items: center; gap: 6px; font-family: Oswald, sans-serif; font-size: 14px; }
+.gradeprices__item .amt small { font-size: 12px; color: var(--muted); }
+.invite { gap: 20px; }
+@media (max-width: 560px) {
+  .gradeprices { gap: 4px 8px; }
+  .gradeprices__item { font-size: 12px; gap: 4px; }
+  .gradeprices__item .amt small { display: none; }
+}
+/* v0.2.18: full screen — the corner's button, the one over a match, the iPhone's note */
+.fsbtn--match { position: fixed; z-index: 21; display: grid; place-items: center; padding: 0; color: #e8dcc0; background: rgba(26,22,18,.72); border: 1px solid rgba(217,199,163,.5); cursor: pointer; }
+.fsbtn--match svg { width: 60%; height: 60%; }
+.fsbtn--match:active { transform: translateY(1px); }
+.fshint { gap: 10px; line-height: 1.35; }
+.fshint__steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+/* v0.2.18 (the owner): in the story the speaker's portrait and line come up in the middle of the screen —
+   on a computer and on a phone — not along the bottom; the picture darkens around them */
+.comic--scene .comic__stage { align-items: center; }
+.comic--scene .comic__panel { align-items: center; }
+.comic--scene:not(.comic--captionpage) .comic__shade { background: radial-gradient(ellipse 78% 46% at 50% 50%, rgba(8, 6, 5, .66) 0%, rgba(8, 6, 5, .34) 58%, transparent 100%), linear-gradient(to top, rgba(8, 6, 5, .62) 0%, transparent 15%), linear-gradient(to bottom, rgba(8, 6, 5, .45) 0%, transparent 13%); }
+.comic--scene .comic__bubble::after { top: 50%; bottom: auto; transform: translateY(-50%); }
+@media (max-width: 640px) and (orientation: portrait) {
+  .comic--scene .comic__panel, .comic--scene .comic__panel--right { align-items: center; }
+  .comic--scene .comic__bubble::after, .comic--scene .comic__panel--left .comic__bubble::after, .comic--scene .comic__panel--right .comic__bubble::after { top: 50%; bottom: auto; transform: translateY(-50%); }
+  .comic--scene:not(.comic--captionpage) .comic__shade { background: radial-gradient(ellipse 95% 40% at 50% 50%, rgba(8, 6, 5, .72) 0%, rgba(8, 6, 5, .38) 60%, transparent 100%), linear-gradient(to top, rgba(8, 6, 5, .6) 0%, transparent 14%), linear-gradient(to bottom, rgba(8, 6, 5, .45) 0%, transparent 12%); }
+}

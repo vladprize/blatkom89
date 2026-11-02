@@ -83,7 +83,7 @@ export function localBackend(o: { profile: () => LocalProfile | null; saveProfil
       } else done.push({ id: m.id, at, bestMs: Math.round(ms), completions: 1 });
       store.set(LOCAL_KEY, JSON.stringify({ v: 1, done }));
       const p = o.profile();
-      const reward: StoryReward = { mission: m.id, first, talons: 0, xp: 0, blatGained: 0, achievement: null, characters: [], skins: [], compensated: [], tokens: 0, xpTotal: p?.xp ?? 0, level: levelForXp(p?.xp ?? 0).level, done };
+      const reward: StoryReward = { mission: m.id, first, talons: 0, xp: 0, blatsGained: 0, achievement: null, characters: [], skins: [], compensated: [], tokens: 0, xpTotal: p?.xp ?? 0, level: levelForXp(p?.xp ?? 0).level, done };
       if (first) {
         const ch = storyChapter(m.campaign, m.chapter);
         const chapterDone = !!ch?.achievement && isChapterDone(m.campaign, m.chapter, new Set(done.map((d) => d.id)));

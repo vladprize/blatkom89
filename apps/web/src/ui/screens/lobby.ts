@@ -9,8 +9,7 @@ import { mapField, mapPicker } from '../maps.js';
 import { openSheet } from '../sheet.js';
 import { avatarImg } from '../avatars.js';
 import { MODE_ORDER, modeIcon, modeName, modeRules, modeShort, modeSub } from '../modes.js';
-import { konLabel, konRules, konPool, tourneyIcon } from './kon.js';
-import { blatCoin, fmtBlat } from './blat.js';
+import { konLabel, konRules, tourneyIcon } from './kon.js';
 import { KON_RULES } from '@blatkom/shared';
 import { clubFlag } from '../clubFlag.js';
 
@@ -162,7 +161,7 @@ export function renderLobby(o: {
         'div',
         { class: 'topbar' },
         h('button', { class: 'back', onclick: o.onLeave }, t('← Leave')),
-        h('h1', { class: 'h1' }, s.battle && kon ? t('Gang battle {f}', { f: konLabel(kon) }) : kon ? t('$BLAT Tournament {f}', { f: konLabel(kon) }) : s.isPrivate ? t('Room') : t('Quick game')),
+        h('h1', { class: 'h1' }, s.battle && kon ? t('Gang battle {f}', { f: konLabel(kon) }) : kon ? t('District Tournament {f}', { f: konLabel(kon) }) : s.isPrivate ? t('Room') : t('Quick game')),
         // phones: the room code with Share and Copy right in the top bar
         s.isPrivate && invite
           ? h(
@@ -195,8 +194,8 @@ export function renderLobby(o: {
         ? h(
             'div',
             { class: 'panel col lobby__mode lobby__kon', 'data-testid': 'lobby-kon' },
-            h('span', { class: 'tag' }, s.battle ? t('Gang battle') : t('$BLAT Tournament')),
-            h('div', { class: 'konbadge' }, tourneyIcon(28), h('b', null, konLabel(kon)), h('span', null, s.battle ? t('gang against gang · people only · no stake') : s.stake > 0 ? t('team deathmatch · people only') : t('team deathmatch · people only · no stake'))),
+            h('span', { class: 'tag' }, s.battle ? t('Gang battle') : t('District Tournament')),
+            h('div', { class: 'konbadge' }, tourneyIcon(28), h('b', null, konLabel(kon)), h('span', null, s.battle ? t('gang against gang · people only') : t('team deathmatch · people only'))),
             // v0.2.17: a gang battle — the two gangs, their flags; each side is its gang's people
             s.battle
               ? h(
@@ -205,17 +204,6 @@ export function renderLobby(o: {
                   h('span', { class: 'lobby__gang lobby__gang--red' }, clubFlag(s.battle.red.flag, s.battle.red.emblem, { size: 30 }), h('b', null, `[${s.battle.red.tag}]`), h('span', null, s.battle.red.name)),
                   h('span', { class: 'lobby__vs' }, t('vs')),
                   h('span', { class: 'lobby__gang lobby__gang--blue' }, clubFlag(s.battle.blue.flag, s.battle.blue.emblem, { size: 30 }), h('b', null, `[${s.battle.blue.tag}]`), h('span', null, s.battle.blue.name)),
-                )
-              : null,
-            // v0.2.17: the stake and the pool; while they are reserved, a word that the match is starting
-            s.stake > 0
-              ? h(
-                  'div',
-                  { class: 'lobby__stake', 'data-testid': 'lobby-stake', 'data-staking': String(s.staking) },
-                  blatCoin(16, ''),
-                  h('b', null, t('Stake {n} $BLAT each', { n: fmtBlat(s.stake) })),
-                  h('span', null, t('pool {n} $BLAT — the winners share it', { n: fmtBlat(konPool(kon, s.stake)) })),
-                  s.staking ? h('span', { class: 'lobby__staking' }, t('The stakes are being taken — the match starts in a moment…')) : null,
                 )
               : null,
             h('div', { class: 'muted lobby__rules', 'data-testid': 'mode-rules' }, konRules(kon, s.durationMs)),

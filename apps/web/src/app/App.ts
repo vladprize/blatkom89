@@ -2,8 +2,8 @@
  * App shell: screen navigation (HTML/CSS over the canvas), offline practice flow, online flow
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
-import { CHARACTER_IDS, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, REAL_MONEY, isCharacterId, isGameMode, isKonFormat, isKonStake, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
-import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonStake, KonTopResponse, SiteConfig, GangBattle, GangBattleFormat } from '@blatkom/shared';
+import { CHARACTERS, CHARACTER_IDS, CHARACTER_PRICES, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, REAL_MONEY, buyRefusal, isCharacterId, isGameMode, isKonFormat, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonTopResponse, SiteConfig, GangBattle, GangBattleFormat } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
@@ -31,7 +31,7 @@ import { mapField } from '../ui/maps.js';
 import { fitAlias, whenSized } from '../ui/fit.js';
 import { avatarButton, openAvatarPicker } from '../ui/avatars.js';
 import { MODE_ORDER, modeIcon, modeName, modeRules, modeSub } from '../ui/modes.js';
-import { renderArsenal, characterPriceNote, amount, heroImg } from '../ui/screens/shop.js';
+import { renderArsenal, characterPriceNote, amount, heroImg, gradeTag, priceLabel } from '../ui/screens/shop.js';
 import type { ArsenalTab, TryOn } from '../ui/screens/shop.js';
 import { renderAccountPanel, openEmailLogin, openPasswordReset, telegramLinkText } from '../ui/screens/account.js';
 import { renderFriends, renderTop, friendsInvitePanel, showInviteCard, friendsSub, openFriendBattleSheet } from '../ui/screens/social.js';
@@ -41,14 +41,15 @@ import { needsTelegramWelcome, needsWelcome, openTelegramWelcome, openWelcome } 
 import { sfx } from '../game/audio/Sfx.js';
 import { music } from '../game/audio/Music.js';
 import { t, count, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
-import { charText, finishName, gadgetName, modText, weaponName } from '../i18n/content.js';
+import { charText, finishName, gadgetName, modText, refusalText, weaponName } from '../i18n/content.js';
 import { apiErrorText } from '../net/errors.js';
 import { watchForUpdates } from './updates.js';
 import { renderClubs, renderClub, renderClubEditor, clubLabel } from '../ui/screens/clubs.js';
-import { renderBlat, blatCoin, blatAmount, fmtBlat } from '../ui/screens/blat.js';
-import { dropBanner } from '../ui/dropBanner.js';
-import { renderBlatDrop } from '../ui/screens/blatDrop.js';
-import { renderKon, konLabel, confirmStake, playableStake, tourneyIcon } from '../ui/screens/kon.js';
+import { renderInvite } from '../ui/screens/invite.js';
+import { blatsCoin, fmtNum } from '../ui/coin.js';
+import { MatchFullscreenButton, fullscreenAction, fullscreenButton } from '../ui/fullscreenButton.js';
+import { fullscreenWay, isFullscreen } from './fullscreen.js';
+import { renderKon, konLabel, tourneyIcon } from '../ui/screens/kon.js';
 import { PROVIDER_NAME, loginErrorText } from '../ui/screens/signin.js';
 import type { LoginProvider } from '../net/oauth.js';
 import { clubFlag } from '../ui/clubFlag.js';
@@ -64,16 +65,14 @@ import { showLoadScreen } from '../ui/loadscreen.js';
 /** Room capacity shown in the menu. */
 const MAX_ROOM_PLAYERS = DEFAULT_MATCH_CONFIG.maxPlayers;
 
-type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'social' | 'top' | 'clubs' | 'club' | 'clubEdit' | 'blat' | 'kon' | 'story' | 'storyEnd' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
+type Screen = 'menu' | 'characters' | 'practice' | 'friends' | 'social' | 'top' | 'clubs' | 'club' | 'clubEdit' | 'invite' | 'kon' | 'story' | 'storyEnd' | 'lobby' | 'join' | 'game' | 'results' | 'profile' | 'settings' | 'arsenal' | 'error' | 'loading';
 
 /** Profile id whose nickname has been confirmed in the first-launch dialog (online build). */
 const NICK_CONFIRMED_KEY = 'blatkom89.nick-confirmed.v1';
 /** Last game mode picked for a quick match / a new room. */
 const QUICK_MODE_KEY = 'blatkom89.quick-mode';
-/** V2.0 part D: the «Блатной кон» format last chosen. */
+/** The District Tournament's format last chosen. */
 const KON_FORMAT_KEY = 'blatkom89.kon-format';
-/** v0.2.17: the $BLAT Tournament stake last chosen. */
-const KON_STAKE_KEY = 'blatkom89.kon-stake';
 
 
 /** Speaker with sound waves (music on) or a cross (muted), drawn as inline SVG. */
@@ -187,16 +186,19 @@ export class App {
   private online: OnlineClient | null = null;
   private pauseEl: HTMLElement | null = null;
   private lastPractice: { mapId: MapId; bots: number; difficulty: BotDifficulty; gameMode: GameMode } = { mapId: 'factory', bots: 3, difficulty: 'normal', gameMode: 'ffa' };
+  /**
+   * v0.2.18 (the owner): «Try in practice» from the Arsenal or the character screen — leaving the practice
+   * leads back there, not to the main menu.
+   */
+  private practiceReturn: { screen: 'arsenal'; tab?: ArsenalTab } | { screen: 'characters'; character: CharacterId } | null = null;
   private resultsShown = false;
   /** Demo build only: the browser-only profile (nickname, XP, stats). Online, the server owns it. */
   private localProfile: LocalProfile | null = null;
   private lastLocalResult: { matchId: string; personal: PersonalResult } | null = null;
   private nickClose: (() => void) | null = null;
   private stripEl: HTMLElement | null = null;
-  /** V2.0: «+300 $BLAT …» waiting to be shown on the menu. */
-  private blatNote: string | null = null;
-  /** V2.0: the $BLAT screen's open tab (the balance or BLAT DROP). */
-  private blatTab: 'balance' | 'drop' = 'balance';
+  /** v0.2.18: «+40 BLATS for the levels you reached» waiting to be shown on the menu. */
+  private blatsNote: string | null = null;
   /** V2.0 part D: the Kon table shown (players or gangs). */
   private konTopBy: 'players' | 'gangs' = 'players';
   /** Last lobby state and results (to redraw them after a language switch). */
@@ -209,17 +211,15 @@ export class App {
   /** The Top-100 tab last looked at. */
   private topBy: LeaderboardBy = 'rating';
   private socialTiles: HTMLElement | null = null;
-  /** v0.2.17: the BLAT DROP date for the banners (by the server's clock), the project's wallet. */
-  private dropInfo: { announceAt: string; serverNow: string; fetchedAt: number; wallet: string | null } | null = null;
-  /** v0.2.17: the menu's X and Telegram links, stakes in the $BLAT Tournament. */
+  /** v0.2.17: the menu's X and Telegram links. */
   private site: SiteConfig | null = null;
-  /** v0.2.17: where the menu's BLAT DROP banner goes (filled when the date is known). */
-  private dropHost: HTMLElement | null = null;
   private inviteCards = new Map<string, () => void>();
   /** Room chat: the panel of the lobby/results (one per room) and the overlay over the match. */
   private chatPanel: ChatPanel | null = null;
   private chatPanelRoom: string | null = null;
   private chatOverlay: ChatOverlay | null = null;
+  /** v0.2.18: the full-screen button over a match. */
+  private matchFs: MatchFullscreenButton | null = null;
   /** A newer release on the server: reload in the main menu (app/updates.ts). */
   private updates: UpdateWatch | null = null;
   /** The club page on screen (v0.3). */
@@ -271,7 +271,7 @@ export class App {
       case 'friends':
       case 'social':
       case 'top':
-      case 'blat':
+      case 'invite':
       case 'kon':
       case 'story':
       case 'profile':
@@ -312,7 +312,7 @@ export class App {
     const online = this.online;
     if (online?.profile) {
       online.profile = { ...online.profile, tokens: r.tokens, xp: r.xpTotal, level: r.level };
-      // $BLAT and the rest of the profile as the server now has them
+      // BLATS and the rest of the profile as the server now has them
       void online
         .refreshProfile()
         .then(() => this.refreshStrip())
@@ -360,10 +360,10 @@ export class App {
       });
       this.online.onEmailSessionExpired = (email) =>
         openEmailLogin(this.root, this.online!, { email, note: t('This account’s session has expired — please sign in again.'), onDone: () => this.afterAccountSwitch() });
-      // V2.0: $BLAT paid on sign-in (the level-1 welcome, levels reached before $BLAT) — said on the menu
-      this.online.onBlatCredited = (n, level) => {
-        this.blatNote = level <= 1 ? t('+{n} $BLAT — welcome to the district', { n: fmtBlat(n) }) : t('+{n} $BLAT for the levels you reached', { n: fmtBlat(n) });
-        if (this.screen === 'menu') this.flushBlatNote();
+      // v0.2.18: BLATS paid on sign-in for the levels reached before BLATS existed — said on the menu
+      this.online.onBlatsCredited = (n) => {
+        this.blatsNote = t('+{n} BLATS for the levels you reached', { n: fmtNum(n) });
+        if (this.screen === 'menu') this.flushBlatsNote();
       };
       this.online.pingVisit();
       void this.loadSiteInfo();
@@ -415,12 +415,7 @@ export class App {
       this.go('loading');
       this.render(this.loading(t('Connecting to the room…')));
       const online = this.online;
-      void (async () => {
-        // v0.2.17: a staked tournament room asks for the stake first
-        const stake = await this.askRoomStake(room);
-        if (stake === null) return this.goMenu();
-        await online.joinRoom(room, this.onlineCharacter(), stake);
-      })().catch((e: Error) => this.showError(apiErrorText(e)));
+      void online.joinRoom(room, this.onlineCharacter()).catch((e: Error) => this.showError(apiErrorText(e)));
       return;
     }
     this.goMenu();
@@ -533,8 +528,8 @@ export class App {
         return this.showSocial(push);
       case 'top':
         return this.showTop(push);
-      case 'blat':
-        return this.showBlat(push);
+      case 'invite':
+        return this.showInviteFriends(push);
       case 'kon':
         return this.showKon(push);
       case 'story':
@@ -568,31 +563,15 @@ export class App {
     return h('div', { class: 'screen screen--dim center' }, h('div', { class: 'col center' }, h('div', { class: 'spinner' }), h('div', { class: 'hand' }, text)));
   }
 
-  /** v0.2.17: the BLAT DROP date (by the server's clock) and the menu's links — fetched once, no sign-in. */
+  /** v0.2.17: the menu's links — fetched once, no sign-in. */
   private async loadSiteInfo(): Promise<void> {
     const online = this.online;
     if (!online) return;
-    try {
-      const sent = Date.now();
-      const d = await online.api.blatDrop();
-      this.dropInfo = d.announceAt ? { announceAt: d.announceAt, serverNow: d.serverNow, fetchedAt: (sent + Date.now()) / 2, wallet: d.wallet ?? null } : null;
-    } catch {
-      this.dropInfo = null;
-    }
     try {
       this.site = await online.api.site();
     } catch {
       this.site = null;
     }
-    this.paintDropBanner();
-  }
-
-  /** The menu's BLAT DROP banner (v0.2.17): under the Dossier and the Arsenal; opens BLAT DROP. */
-  private paintDropBanner() {
-    const host = this.dropHost;
-    if (!host || !host.isConnected || !this.dropInfo || !this.online) return;
-    host.replaceChildren(dropBanner('menu', this.dropInfo, () => this.showBlat(true, 'drop')));
-    host.hidden = false;
   }
 
   // ── menu ────────────────────────────────────────────────────────────────
@@ -604,7 +583,7 @@ export class App {
     music.setWanted(true);
     // a newer release found while playing: now is the moment (after the menu is on screen)
     setTimeout(() => this.updates?.atMenu(), 0);
-    setTimeout(() => this.flushBlatNote(), 0);
+    setTimeout(() => this.flushBlatsNote(), 0);
     const onlineNote = ONLINE_AVAILABLE ? null : h('div', { class: 'muted', style: 'font-size:14px' }, t('This version plays without a server: the story and practice against bots. Online matches work on the website and in Telegram.'));
     this.stripEl = this.profileTile();
     const menu = h(
@@ -630,14 +609,13 @@ export class App {
               // offline (no server): the story is the main thing to play
               h('button', { class: ONLINE_AVAILABLE ? 'btn menu__story' : 'btn btn--red menu__story', 'data-testid': 'menu-story', onclick: () => this.story.show() }, t('Story'), h('span', { class: 'sub' }, t('two campaigns · 2089 → 1989'))),
               h('button', { class: 'btn', onclick: () => this.showFriends(), disabled: !ONLINE_AVAILABLE }, t('Play with Friends'), h('span', { class: 'sub' }, t('a room by invitation'))),
-              // V2.0 part D: ranked matches with fixed sides
-              // v0.2.17: the $BLAT Tournament (was «Блатной кон») — highlighted, the cup with the coin
+              // V2.0 part D: ranked matches with fixed sides — v0.2.18: the District Tournament (no stakes)
               this.online
                 ? h(
                     'button',
                     { class: 'btn menu__kon menu__kon--hot', 'data-testid': 'menu-kon', onclick: () => this.showKon() },
                     tourneyIcon(28),
-                    h('span', { class: 'menu__kontxt' }, t('$BLAT Tournament'), h('span', { class: 'sub' }, t('stakes in $BLAT · 1×1 … 5×5'))),
+                    h('span', { class: 'menu__kontxt' }, t('District Tournament'), h('span', { class: 'sub' }, t('rating · 1×1 … 5×5'))),
                   )
                 : null,
               h('button', { class: 'btn', onclick: () => this.showPractice() }, t('Practice'), h('span', { class: 'sub' }, t('against bots, no internet needed'))),
@@ -661,8 +639,6 @@ export class App {
                 h('button', { class: 'btn btn--small menu__charbtn', onclick: () => this.showCharacters() }, t('Change character')),
               ),
               h('div', { class: 'tiles' }, this.stripEl, this.arsenalTile()),
-              // v0.2.17: the BLAT DROP banner (online)
-              (this.dropHost = h('div', { class: 'menu__drop', hidden: true })),
             ),
           ),
         ),
@@ -672,7 +648,6 @@ export class App {
       ),
     );
     this.render(menu);
-    this.paintDropBanner();
     this.maybeWelcome();
     this.showPendingInvites();
   }
@@ -701,6 +676,9 @@ export class App {
       paint();
       box.append(btn);
     }
+    // v0.2.18: full screen — in the browser on a computer and on a phone, in Telegram (an iPhone: how to add to the home screen)
+    const fs = fullscreenButton(this.root, 'iconbtn corner__fs', 'corner-fullscreen');
+    if (fs) box.append(fs);
     // phones: Settings lives here instead of a fourth big button
     if (this.screen === 'menu') box.append(h('button', { class: 'iconbtn corner__gear', 'aria-label': t('Settings'), title: t('Settings'), 'data-testid': 'corner-settings', onclick: () => this.showSettings() }, gearIcon()));
     if (this.screen === 'menu' && ONLINE_AVAILABLE) {
@@ -770,8 +748,8 @@ export class App {
         nick,
         h('div', { class: 'xpbar' }, h('i', { style: `width:${pct}%` })),
         h('div', { class: 'xp' }, lvl.nextLevelCost > 0 ? `${lvl.intoLevel} / ${lvl.nextLevelCost} XP` : t('max level')),
-        // v0.2.17: the talons and the $BLAT side by side
-        inv ? h('div', { class: 'tile__wallet' }, amount(inv.tokens, 'tokens'), this.online ? h('span', { class: 'tile__blat', 'data-testid': 'dossier-blat' }, blatAmount(this.online.profile?.blat ?? 0, 16)) : null, REAL_MONEY ? amount(inv.diamonds, 'diamonds') : null) : null,
+        // v0.2.18: the talons and the BLATS side by side
+        inv ? h('div', { class: 'tile__wallet' }, amount(inv.tokens, 'tokens'), REAL_MONEY ? h('span', { 'data-testid': 'dossier-blats' }, amount(inv.diamonds, 'diamonds')) : null) : null,
       ),
       h('button', { class: 'edit', 'aria-label': t('Change alias'), title: t('Change alias'), onclick: () => this.editNickname() }, '✎'),
     );
@@ -805,77 +783,46 @@ export class App {
       ),
       this.clubTile(),
       h('button', { class: 'stile', 'data-testid': 'menu-top', onclick: () => this.showTop() }, socialIcon('top'), h('span', { class: 'stile__txt' }, h('b', null, t('Top-100')), h('small', null, t('rating · level · eliminations')))),
-      // V2.0: $BLAT — the coin, the balance
+      // v0.2.18: BLATS — the red coin, the balance; opens the Arsenal's BLATS tab
       h(
         'button',
-        { class: 'stile stile--blat', 'data-testid': 'menu-blat', onclick: () => this.showBlat(true, 'balance') },
-        h('span', { class: 'stile__coin' }, blatCoin(32, '')),
-        h('span', { class: 'stile__txt' }, h('b', null, '$BLAT'), h('small', { 'data-testid': 'menu-blat-balance' }, fmtBlat(this.online?.profile?.blat ?? 0))),
+        { class: 'stile stile--blats', 'data-testid': 'menu-blats', onclick: () => this.showArsenal(true, 'diamonds') },
+        h('span', { class: 'stile__coin' }, blatsCoin(32, '')),
+        h('span', { class: 'stile__txt' }, h('b', null, 'BLATS'), h('small', { 'data-testid': 'menu-blats-balance' }, fmtNum(this.online?.inventory?.diamonds ?? this.online?.profile?.diamonds ?? 0))),
       ),
     );
   }
 
-  /** V2.0: $BLAT — balance, history, level rewards, invitations; part C: the BLAT DROP tab. */
-  private showBlat(push = true, tab: 'balance' | 'drop' = this.blatTab) {
+  /** Invite friends (talons for every friend who plays a whole online match). */
+  private showInviteFriends(push = true) {
     const online = this.online;
     if (!online) return;
-    this.blatTab = tab;
-    this.go('blat', push);
-    const tabBtn = (id: 'balance' | 'drop', label: string) =>
-      h('button', { type: 'button', role: 'tab', 'aria-pressed': String(tab === id), 'aria-selected': String(tab === id), 'data-testid': `blat-tab-${id}`, onclick: () => tab !== id && this.showBlat(false, id) }, label);
-    const tabs = h('div', { class: 'seg blat__tabs', role: 'tablist' }, tabBtn('balance', '$BLAT'), tabBtn('drop', 'BLAT DROP'));
+    this.go('invite', push);
     const body = h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
-    const wrap = h('div', { class: 'wrap wrap--wide' }, this.topbar('$BLAT'), tabs, body);
-    this.render(h('div', { class: `screen screen--dim screen--fit screen--blat screen--blat-${tab}` }, wrap));
-    const fail = (e: unknown) => {
-      if (this.screen === 'blat' && this.blatTab === tab) body.replaceWith(h('div', { class: 'panel' }, apiErrorText(e)));
-    };
-    if (tab === 'drop') {
-      // the server's clock against this device's: the middle of the request is the best guess of «now»
-      const sent = Date.now();
-      const drop = online.api.blatDrop().then((d) => ({ d, at: (sent + Date.now()) / 2 }));
-      // the player's own numbers on the same tab (the date still shows if they don't come)
-      const mine = online.api
-        .blat()
-        .then((b) => ({ balance: b.balance, confirmed: b.referral.confirmed }))
-        .catch(() => null);
-      void Promise.all([drop, mine])
-        .then(([{ d, at }, m]) => {
-          if (this.screen === 'blat' && this.blatTab === 'drop') body.replaceWith(renderBlatDrop(d, at, m));
-        })
-        .catch(fail);
-      return;
-    }
+    this.render(h('div', { class: 'screen screen--dim screen--fit screen--invite' }, h('div', { class: 'wrap wrap--vcenter' }, this.topbar(t('Invite friends')), body)));
     void online.api
-      .blat()
+      .referrals()
       .then((d) => {
-        if (this.screen !== 'blat' || this.blatTab !== 'balance') return;
-        if (online.profile) online.profile = { ...online.profile, blat: d.balance };
-        body.replaceWith(renderBlat(d, this.dropInfo ? dropBanner('section', this.dropInfo, () => this.showBlat(false, 'drop')) : null));
-        if (d.justCredited > 0) toast(t('+{n} $BLAT for the levels you reached', { n: fmtBlat(d.justCredited) }));
+        if (this.screen === 'invite') body.replaceWith(renderInvite(d));
       })
-      .catch(fail);
+      .catch((e: unknown) => {
+        if (this.screen === 'invite') body.replaceWith(h('div', { class: 'panel' }, apiErrorText(e)));
+      });
   }
 
-  /** The «Блатной кон» format last chosen (2×2 the first time). */
+  /** The District Tournament's format last chosen (2×2 the first time). */
   private konFormat(): KonFormat {
     const v = storageGet(KON_FORMAT_KEY);
     return isKonFormat(v) ? v : '2x2';
   }
 
-  /** v0.2.17: the $BLAT Tournament stake last chosen (100 the first time). */
-  private konStake(): KonStake {
-    const v = Number(storageGet(KON_STAKE_KEY) ?? 100);
-    return isKonStake(v) ? v : 100;
-  }
-
-  /** V2.0 part D: «Блатной кон» — the player's Kon numbers, the format, the search, a room, the tables. */
+  /** The District Tournament (V2.0 part D «Блатной кон»): the player's numbers, the format, the search, a room, the tables. */
   private showKon(push = true) {
     const online = this.online;
     if (!online) return;
     this.go('kon', push);
     const body = h('div', { class: 'col center' }, h('div', { class: 'spinner' }));
-    const wrap = h('div', { class: 'wrap' }, this.topbar(t('$BLAT Tournament')), body);
+    const wrap = h('div', { class: 'wrap' }, this.topbar(t('District Tournament')), body);
     this.render(h('div', { class: 'screen screen--dim screen--fit screen--kon' }, wrap));
     let top: KonTopResponse | null = null;
     let busy = false;
@@ -889,13 +836,8 @@ export class App {
           storageSet(KON_FORMAT_KEY, f);
           draw();
         },
-        stake: this.konStake(),
-        onStake: (s) => {
-          storageSet(KON_STAKE_KEY, String(s));
-          draw();
-        },
-        onFind: () => ask('find'),
-        onCreate: () => ask('create'),
+        onFind: () => void go('find'),
+        onCreate: () => void go('create'),
         top,
         topBy: this.konTopBy,
         onTop: (by) => {
@@ -917,23 +859,16 @@ export class App {
           draw();
         })
         .catch((e) => toast(apiErrorText(e)));
-    // v0.2.17: a stake is confirmed first (the stake, the pool, the rules)
-    const ask = (how: 'find' | 'create') => {
+    const go = async (how: 'find' | 'create') => {
       if (busy || !data) return;
-      const stake = playableStake(data, this.konStake());
-      if (stake <= 0) return void go(how, 0);
-      confirmStake(this.root, { format: this.konFormat(), stake, onYes: () => void go(how, stake) });
-    };
-    const go = async (how: 'find' | 'create', stake: number) => {
-      if (busy) return;
       busy = true;
       draw();
       const f = this.konFormat();
       this.go('loading');
       this.render(this.loading(how === 'find' ? t('Looking for opponents…') : t('Creating the room…')));
       try {
-        if (how === 'find') await online.konQuick(this.onlineCharacter(), f, undefined, stake);
-        else await online.createRoom('factory', this.onlineCharacter(), 'teams', f, stake);
+        if (how === 'find') await online.konQuick(this.onlineCharacter(), f);
+        else await online.createRoom('factory', this.onlineCharacter(), 'teams', f);
       } catch (e) {
         this.showError(apiErrorText(e));
       }
@@ -1095,17 +1030,17 @@ export class App {
     });
   }
 
-  /** V2.0: the $BLAT note waiting for the menu (see `onBlatCredited`). */
-  private flushBlatNote() {
-    if (!this.blatNote) return;
-    toast(this.blatNote);
-    this.blatNote = null;
+  /** v0.2.18: the BLATS note waiting for the menu (see `onBlatsCredited`). */
+  private flushBlatsNote() {
+    if (!this.blatsNote) return;
+    toast(this.blatsNote);
+    this.blatsNote = null;
   }
 
   private refreshStrip() {
-    // V2.0: the menu's $BLAT tile follows the balance
-    const bal = this.root.querySelector<HTMLElement>('[data-testid="menu-blat-balance"]');
-    if (bal) bal.textContent = fmtBlat(this.online?.profile?.blat ?? 0);
+    // v0.2.18: the menu's BLATS tile follows the balance
+    const bal = this.root.querySelector<HTMLElement>('[data-testid="menu-blats-balance"]');
+    if (bal) bal.textContent = fmtNum(this.online?.inventory?.diamonds ?? this.online?.profile?.diamonds ?? 0);
     // v0.2.17: the founder's ★ in the corner follows the profile (it may come after the menu is drawn)
     const corner = this.root.querySelector<HTMLElement>('.wrap--menu > .corner');
     if (corner && this.screen === 'menu' && !!this.online?.profile?.founder !== !!corner.querySelector('[data-testid=corner-hq]')) corner.replaceWith(this.cornerControls());
@@ -1230,6 +1165,7 @@ export class App {
           'div',
           { class: 'col dossier__text' },
           h('div', { class: 'h1' }, c.name, ' ', h('span', { style: 'color:var(--red)' }, `«${c.nickname}»`)),
+          h('div', { class: 'dossier__grade' }, gradeTag(CHARACTERS[id].grade)),
           h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, t('Role:'), ' '), c.role),
           h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, t('Temper:'), ' '), c.personality),
           h('div', { class: 'quote' }, `«${c.quote}»`),
@@ -1253,9 +1189,56 @@ export class App {
         ),
       ];
     };
+    /** v0.2.18 (the owner): a locked character is bought right here — talons or BLATS, the server decides. */
+    let buying = false;
+    const buy = async (id: CharacterId) => {
+      const online = this.online;
+      const price = CHARACTER_PRICES[id];
+      if (!online || !price || buying) return;
+      buying = true;
+      try {
+        const inv = online.inventory ?? (await online.loadInventory());
+        const why = buyRefusal(inv, 'character', id);
+        if (why === 'funds') {
+          sfx.play('dry');
+          toast(price.currency === 'tokens' ? t('Not enough talons — you earn them in online matches') : t('Not enough BLATS'));
+          if (price.currency === 'diamonds') {
+            root.querySelector('.sheetlay')?.dispatchEvent(new Event('sheet-close'));
+            this.showArsenal(true, 'diamonds');
+          }
+          return;
+        }
+        if (why) return void toast(refusalText(why));
+        await online.buy('character', id);
+        sfx.play('buy');
+        haptic('notify-success');
+        toast(t('{name} joins the business', { name: charText(id).name }));
+        this.refreshStrip();
+        root.querySelector('.sheetlay')?.dispatchEvent(new Event('sheet-close'));
+        if (this.screen === 'characters') draw();
+      } catch (e) {
+        sfx.play('dry');
+        toast(apiErrorText(e));
+      } finally {
+        buying = false;
+      }
+    };
+    const tryIt = () => this.startPractice({ ...this.lastPractice, character: selected, returnTo: { screen: 'characters', character: selected } });
+    const buyButton = (id: CharacterId): HTMLElement | null => {
+      const price = CHARACTER_PRICES[id];
+      if (!price) return null;
+      const inv = this.online?.inventory ?? null;
+      if (!this.online) return h('button', { class: 'btn grow', disabled: true }, t('Unlocks in the online version'));
+      const lowLevel = !!inv && inv.level < price.level;
+      return h(
+        'button',
+        { class: 'btn btn--red grow', 'data-testid': 'char-buy', disabled: lowLevel, onclick: () => void buy(id) },
+        lowLevel ? t('From level {n}', { n: price.level }) : h('span', { class: 'amt buyfor' }, h('span', null, t('Buy for')), priceLabel(price)),
+      );
+    };
     const buttons = (locked: boolean): HTMLElement[] =>
       locked
-        ? [h('button', { class: 'btn btn--red grow', onclick: () => this.showArsenal(true, 'characters') }, t('Unlock in the Arsenal')), h('button', { class: 'btn grow', onclick: () => this.startPractice({ ...this.lastPractice, character: selected }) }, t('Try in practice'))]
+        ? [buyButton(selected), h('button', { class: 'btn grow', 'data-testid': 'char-try', onclick: tryIt }, t('Try in practice'))].filter((x): x is HTMLElement => x !== null)
         : [h('button', { class: 'btn btn--red grow', onclick: confirm }, t('Choose'))];
     const draw = () => {
       grid.replaceChildren(
@@ -1265,7 +1248,7 @@ export class App {
             {
               'aria-pressed': String(id === selected),
               role: 'radio',
-              class: this.ownsCharacter(id) ? '' : 'locked',
+              class: `chargrade--${CHARACTERS[id].grade} ${this.ownsCharacter(id) ? '' : 'locked'}`,
               onclick: () => {
                 selected = id;
                 this.host.previewScene()?.setFocus(id);
@@ -1297,7 +1280,7 @@ export class App {
         h(
           'div',
           { class: 'charsum__text' },
-          h('div', { class: 'charsum__name' }, c.name, ' ', h('span', { class: 'nick' }, `«${c.nickname}»`)),
+          h('div', { class: 'charsum__name' }, c.name, ' ', h('span', { class: 'nick' }, `«${c.nickname}»`), ' ', gradeTag(CHARACTERS[selected].grade)),
           h('div', { class: 'charsum__role muted' }, c.role),
           h('div', { class: 'quote charsum__quote' }, `«${c.quote}»`),
           h('div', { class: 'row', style: 'gap:6px;margin-top:auto' }, price ? h('span', { class: 'badge badge--host' }, price) : h('span', { class: 'badge badge--ok' }, t('IN THE CREW')), h('button', { class: 'btn btn--small charsum__more', 'data-testid': 'dossier-open', onclick: openFile }, t('Personal File'), ' ›')),
@@ -1329,7 +1312,7 @@ export class App {
       character: this.character,
       textures: this.host.game.textures,
       ...(tab ? { tab } : {}),
-      onTry: (tryOn) => this.startPractice({ ...this.lastPractice, tryOn }),
+      onTry: (tryOn, at) => this.startPractice({ ...this.lastPractice, tryOn, returnTo: { screen: 'arsenal', tab: at } }),
       onWallet: () => this.refreshStrip(),
       onCharacter: (c) => this.showCharacters(true, c),
     });
@@ -1425,7 +1408,8 @@ export class App {
     return parts.join(t(' and '));
   }
 
-  private startPractice(opts: { mapId: MapId; bots: number; difficulty: BotDifficulty; gameMode?: GameMode; tryOn?: TryOn; character?: CharacterId }) {
+  private startPractice(opts: { mapId: MapId; bots: number; difficulty: BotDifficulty; gameMode?: GameMode; tryOn?: TryOn; character?: CharacterId; returnTo?: App['practiceReturn'] }) {
+    this.practiceReturn = opts.returnTo ?? null;
     this.lastPractice = { mapId: opts.mapId, difficulty: opts.difficulty, bots: Math.max(1, Math.min(MAX_PRACTICE_BOTS, opts.bots || 3)), gameMode: opts.gameMode ?? 'ffa' };
     const name = this.playerName() ?? charText(this.character).name;
     const session = new OfflineSession({
@@ -1458,6 +1442,8 @@ export class App {
     // a story mission has just shown its place in the comic
     if (!(session instanceof StorySession)) this.closeLoad = showLoadScreen(this.root, session);
     if (session.mode === 'online') this.mountChatOverlay();
+    this.matchFs?.destroy();
+    this.matchFs = new MatchFullscreenButton(this.root, () => this.host.game.canvas);
   }
 
   private endSession(showPreview = true) {
@@ -1469,6 +1455,8 @@ export class App {
       this.chatOverlay.destroy();
       this.chatOverlay = null;
     }
+    this.matchFs?.destroy();
+    this.matchFs = null;
     if (this.session) {
       this.host.stopGame();
       this.session.destroy();
@@ -1500,7 +1488,11 @@ export class App {
         h('div', { class: 'muted', style: 'margin-top:6px' }, story ? t('The mission is paused.') : offline ? t('Practice is paused.') : t('The match goes on — you take control again when you come back.')),
         h('button', { class: 'btn btn--red', onclick: () => this.togglePause() }, t('Resume')),
         h('button', { class: 'btn', onclick: () => (this.togglePause(), this.showSettingsOverlay()) }, t('Settings')),
-        h('button', { class: 'btn', onclick: () => this.leaveMatch() }, story ? t('Back to the story') : offline ? t('Back to menu') : t('Leave the match')),
+        // v0.2.18: full screen from the pause menu (an iPhone's browser: how to add the game to the home screen)
+        fullscreenWay() !== 'none'
+          ? h('button', { class: 'btn', 'data-testid': 'pause-fullscreen', onclick: () => (this.togglePause(), fullscreenAction(this.root)) }, isFullscreen() ? t('Exit full screen') : t('Full screen'))
+          : null,
+        h('button', { class: 'btn', 'data-testid': 'pause-leave', onclick: () => this.leaveMatch() }, story ? t('Back to the story') : offline ? this.practiceBackLabel() : t('Leave the match')),
       ),
     );
     this.root.append(this.pauseEl);
@@ -1519,7 +1511,22 @@ export class App {
       return this.story.leave();
     }
     if (this.session?.mode === 'online') void this.online?.leave();
+    // v0.2.18: «Try in practice» from the Arsenal or the character screen goes back there
+    const back = this.session?.mode !== 'online' ? this.practiceReturn : null;
+    this.practiceReturn = null;
+    if (back) {
+      this.endSession();
+      music.setWanted(true);
+      if (back.screen === 'arsenal') return this.showArsenal(false, back.tab);
+      return this.showCharacters(false, back.character);
+    }
     this.goMenu();
+  }
+
+  /** The practice's way out: back to where «Try in practice» was pressed, or to the menu. */
+  private practiceBackLabel(): string {
+    const back = this.practiceReturn;
+    return back?.screen === 'arsenal' ? t('Back to the Arsenal') : back?.screen === 'characters' ? t('Back to the characters') : t('Back to menu');
   }
 
   // ── results ─────────────────────────────────────────────────────────────
@@ -1575,6 +1582,7 @@ export class App {
         }
       },
       onMenu: () => this.leaveMatch(),
+      ...(offline && this.practiceReturn ? { menuLabel: this.practiceBackLabel() } : {}),
     });
     this.redraw(same, chat, make);
   }
@@ -1685,7 +1693,7 @@ export class App {
       h(
         'div',
         { class: 'screen screen--dim' },
-        h('div', { class: 'wrap' }, this.topbar(t('Friends')), renderFriends({ online, root: this.root, onPlayWith: (f) => void this.playWith(f), onTop: () => this.showTop() })),
+        h('div', { class: 'wrap' }, this.topbar(t('Friends')), renderFriends({ online, root: this.root, onPlayWith: (f) => void this.playWith(f), onTop: () => this.showTop(), onInvite: () => this.showInviteFriends() })),
       ),
     );
   }
@@ -1714,7 +1722,7 @@ export class App {
     this.render(this.loading(t('Creating the room…')));
     try {
       await this.ensureNicknameBeforeJoin();
-      if (b.kind === 'duel') await online.createRoom('factory', this.onlineCharacter(), 'teams', '1x1', 0);
+      if (b.kind === 'duel') await online.createRoom('factory', this.onlineCharacter(), 'teams', '1x1');
       else {
         storageSet(QUICK_MODE_KEY, b.mode);
         await online.createRoom('factory', this.onlineCharacter(), b.mode);
@@ -1825,11 +1833,14 @@ export class App {
         if (!inGame) toast(t('You are the gang’s boss now'));
         this.afterClubChange();
         return;
-      // V2.0: an invitation counted (or waits for a check)
+      // an invitation counted (v0.2.18: talons) or waits for a check
       case 'referral':
-        if (!inGame) toast(e.held ? t('An invitation of yours is being checked — the reward comes after the check') : t('{name} played their first match through your link: +{n} $BLAT', { name: e.name, n: fmtBlat(e.reward) }));
-        if (this.online.profile && e.balance >= 0) this.online.profile = { ...this.online.profile, blat: e.balance };
-        if (this.screen === 'blat' && this.blatTab === 'balance') this.showBlat(false);
+        if (!inGame) toast(e.held ? t('An invitation of yours is being checked — the reward comes after the check') : t('{name} played their first match through your link: +{n} talons', { name: e.name, n: e.reward }));
+        if (e.balance >= 0) {
+          if (this.online.profile) this.online.profile = { ...this.online.profile, tokens: e.balance };
+          if (this.online.inventory) this.online.inventory = { ...this.online.inventory, tokens: e.balance };
+        }
+        if (this.screen === 'invite') this.showInviteFriends(false);
         else this.refreshSocialTiles();
         return;
       case 'dm': {
@@ -1893,33 +1904,10 @@ export class App {
     this.render(this.loading(t('Entering the room…')));
     try {
       await this.ensureNicknameBeforeJoin();
-      const stake = await this.askRoomStake(roomId);
-      if (stake === null) return this.goMenu();
-      await online.joinRoom(roomId, this.onlineCharacter(), stake);
+      await online.joinRoom(roomId, this.onlineCharacter());
     } catch (e) {
       this.showError(apiErrorText(e));
     }
-  }
-
-  /**
-   * v0.2.17: a $BLAT Tournament room with a stake — the player sees the stake, the pool and the rules and
-   * agrees (the stake to join with), or not (null). A room without a stake: 0 at once.
-   */
-  private askStake(kon: KonFormat | null | undefined, stake: number | undefined): Promise<number | null> {
-    const s = stake ?? 0;
-    if (!kon || s <= 0) return Promise.resolve(0);
-    return new Promise((resolve) => confirmStake(this.root, { format: kon, stake: s, onYes: () => resolve(s), onNo: () => resolve(null) }));
-  }
-
-  /** The same for a room known only by its id (a link, a friend's invitation): its stake is asked first. */
-  private async askRoomStake(roomId: string): Promise<number | null> {
-    let info: { kon: KonFormat | null; stake?: number } | null = null;
-    try {
-      info = await this.online!.api.room(roomId);
-    } catch {
-      info = null;
-    }
-    return this.askStake(info?.kon, info?.stake);
   }
 
   /** Whether the player's gang is one of a battle's sides (the profile is looked up again once if not). */
@@ -1949,15 +1937,12 @@ export class App {
           const into = info.battle
             ? t('Entering the gang battle: [{red}] against [{blue}]…', { red: info.battle.red.tag, blue: info.battle.blue.tag })
             : info.kon
-              ? t('Entering the $BLAT Tournament {f} room ({host})…', { f: konLabel(info.kon), host: info.hostName ?? '—' })
+              ? t('Entering the District Tournament {f} room ({host})…', { f: konLabel(info.kon), host: info.hostName ?? '—' })
               : info.hostName
                 ? t('Entering the room ({host})…', { host: info.hostName })
                 : t('Entering the room…');
           this.render(this.loading(into));
-          // v0.2.17: a staked room — the stake, the pool and the rules first
-          const stake = await this.askStake(info.kon, info.stake);
-          if (stake === null) return this.goMenu();
-          await this.online!.joinRoom(info.roomId!, this.onlineCharacter(), stake);
+          await this.online!.joinRoom(info.roomId!, this.onlineCharacter());
           return;
         }
         const msg: Record<string, string> = {
