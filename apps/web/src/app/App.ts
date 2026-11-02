@@ -3,7 +3,7 @@
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
 import { CHARACTERS, CHARACTER_IDS, CHARACTER_PRICES, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, REAL_MONEY, buyRefusal, isCharacterId, isGameMode, isKonFormat, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
-import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonTopResponse, SiteConfig, GangBattle, GangBattleFormat } from '@blatkom/shared';
+import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonTopResponse, SiteConfig, GangBattle, GangBattleFormat, ShopConfig } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
@@ -47,6 +47,7 @@ import { watchForUpdates } from './updates.js';
 import { renderClubs, renderClub, renderClubEditor, clubLabel } from '../ui/screens/clubs.js';
 import { renderInvite } from '../ui/screens/invite.js';
 import { blatsCoin, fmtNum } from '../ui/coin.js';
+import { blatsBanner, blatsSale, setBannerSale } from '../ui/blats.js';
 import { MatchFullscreenButton, fullscreenAction, fullscreenButton } from '../ui/fullscreenButton.js';
 import { fullscreenWay, isFullscreen } from './fullscreen.js';
 import { renderKon, konLabel, tourneyIcon } from '../ui/screens/kon.js';
@@ -199,6 +200,9 @@ export class App {
   private stripEl: HTMLElement | null = null;
   /** v0.2.18: «+40 BLATS for the levels you reached» waiting to be shown on the menu. */
   private blatsNote: string | null = null;
+  /** v0.2.18: the shop's configuration (is a payment provider connected?) for the menu's BLATS banner. */
+  private shopCfg: ShopConfig | null = null;
+  private blatsAd: HTMLElement | null = null;
   /** V2.0 part D: the Kon table shown (players or gangs). */
   private konTopBy: 'players' | 'gangs' = 'players';
   /** Last lobby state and results (to redraw them after a language switch). */
@@ -639,6 +643,8 @@ export class App {
                 h('button', { class: 'btn btn--small menu__charbtn', onclick: () => this.showCharacters() }, t('Change character')),
               ),
               h('div', { class: 'tiles' }, this.stripEl, this.arsenalTile()),
+              // v0.2.18 (the owner): the BLATS banner — opens the Arsenal's «Buy BLATS» section
+              this.online ? h('div', { class: 'menu__ad' }, (this.blatsAd = blatsBanner({ kind: 'menu', sale: blatsSale(this.shopCfg, inTelegram()), onClick: () => this.showArsenal(true, 'diamonds') }))) : null,
             ),
           ),
         ),
@@ -650,6 +656,20 @@ export class App {
     this.render(menu);
     this.maybeWelcome();
     this.showPendingInvites();
+    this.loadShopConfig();
+  }
+
+  /** v0.2.18: the shop's configuration once — the menu's BLATS banner says «Buy» only when a payment provider is connected. */
+  private loadShopConfig() {
+    const online = this.online;
+    if (!online || this.shopCfg) return;
+    void online.api
+      .shopConfig()
+      .then((c) => {
+        this.shopCfg = c;
+        if (this.blatsAd?.isConnected) setBannerSale(this.blatsAd, blatsSale(c, inTelegram()));
+      })
+      .catch(() => {});
   }
 
   /** Top-right corner of the menu: language and music switches. */
@@ -788,7 +808,7 @@ export class App {
         'button',
         { class: 'stile stile--blats', 'data-testid': 'menu-blats', onclick: () => this.showArsenal(true, 'diamonds') },
         h('span', { class: 'stile__coin' }, blatsCoin(32, '')),
-        h('span', { class: 'stile__txt' }, h('b', null, 'BLATS'), h('small', { 'data-testid': 'menu-blats-balance' }, fmtNum(this.online?.inventory?.diamonds ?? this.online?.profile?.diamonds ?? 0))),
+        h('span', { class: 'stile__txt' }, h('b', null, t('BLATS')), h('small', { 'data-testid': 'menu-blats-balance' }, fmtNum(this.online?.inventory?.diamonds ?? this.online?.profile?.diamonds ?? 0))),
       ),
     );
   }

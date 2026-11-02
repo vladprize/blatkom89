@@ -250,6 +250,7 @@ registry (real gun names included), the full test run and docs.
 | The score must make sense: FFA showed red/blue | free-for-all: «YOU» and «LEADER» («2ND» when you lead), your bar green, everyone else's red; teams: red and blue | ✅ |
 | The tournament: «Турнир района», no stakes | renamed everywhere (menu, screen, lobby, results); stakes removed | ✅ |
 | Invitations | 150 talons for every friend who plays a whole online match (Friends → «Invite to the game») | ✅ |
+| (2 Nov, after part 1) skin prices «как в сообщении»; «в арсенале раздел для покупки БЛАТ» and «рекламный баннер, что их можно купить» | prices stay 99 / 199 / 299 / 499; the Arsenal's «Buy BLATS» tab marked with the coin — a banner with the balance and rules, six packs with coin piles, prices and what each is enough for; the menu's BLATS banner under the Dossier and the Arsenal opens it (desktop and phones, one screen) and says «Buy →» only when a payment provider is connected, «on sale soon» until then | ✅ |
 
 ## 3. Open risks / next steps
 

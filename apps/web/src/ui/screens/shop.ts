@@ -69,7 +69,8 @@ import { Doll } from '../doll.js';
 import { openSheet } from '../sheet.js';
 import type { Sheet } from '../sheet.js';
 import { skinIconUrl } from '../../game/render/skins.js';
-import { blatsCoin } from '../coin.js';
+import { blatsCoin, fmtNum } from '../coin.js';
+import { blatsBanner, blatsSale, coinPile, packHint } from '../blats.js';
 
 export type ArsenalTab = 'loadout' | 'weapons' | 'gear' | 'characters' | 'case' | 'diamonds';
 type ShopTab = Exclude<ArsenalTab, 'loadout'>;
@@ -533,9 +534,19 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       ['gear', t('Equipment')],
       ['characters', t('Characters')],
       ['case', t('Cases')],
-      ...(REAL_MONEY ? [['diamonds', t('BLATS')] as [ArsenalTab, string]] : []),
+      ...(REAL_MONEY ? [['diamonds', t('Buy BLATS')] as [ArsenalTab, string]] : []),
     ];
-    tabsEl.replaceChildren(...tabs.map(([id, label]) => h('button', { role: 'tab', 'aria-pressed': String(tab === id), onclick: () => ((tab = id), sfx.play('click'), draw()) }, label)));
+    // v0.2.18 (the owner): the BLATS section stands out — the red coin and «Buy BLATS»
+    tabsEl.replaceChildren(
+      ...tabs.map(([id, label]) =>
+        h(
+          'button',
+          { role: 'tab', 'aria-pressed': String(tab === id), ...(id === 'diamonds' ? { class: 'tab--blats', 'data-testid': 'tab-blats' } : {}), onclick: () => ((tab = id), sfx.play('click'), draw()) },
+          ...(id === 'diamonds' ? [blatsCoin(16, ''), ' '] : []),
+          label,
+        ),
+      ),
+    );
   };
 
   // ── loadout: four equal slot columns + modifications of the focused weapon ─────────
@@ -1035,36 +1046,41 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     });
   const blatsIntro = () =>
     t('1 BLATS = 1 cent. BLATS buy characters, weapon skins and the skin case; every new level gives 10 BLATS. Talons are never sold for money — you earn them in matches.');
-  const diamondsTab = (): HTMLElement => {
-    if (!online) return h('div', { class: 'panel' }, t('Buying BLATS works in the online version of the game.'));
-    if (o.inTelegram) return h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('BLATS')), h('div', { style: 'margin-top:8px' }, t('Buying BLATS inside Telegram is coming soon (via Telegram Stars).')));
-    const methods = payMethods();
+  /** A pack: the coins (more for a bigger pack), BLATS, the price, what it is enough for, how to pay. */
+  const packCard = (p: { id: string; diamonds: number; usdCents: number }, i: number, methods: Array<['card', string]>): HTMLElement => {
+    const hint = packHint(p.diamonds);
     return h(
       'div',
-      { class: 'col', 'data-testid': 'blats-tab' },
-      h(
-        'div',
-        { class: 'panel col blats__intro' },
-        h('span', { class: 'tag' }, t('BLATS')),
-        h('div', { class: 'blats__big' }, blatsCoin(48, ''), h('b', { 'data-testid': 'blats-balance' }, inv ? String(inv.diamonds) : '…'), h('span', { class: 'muted' }, t('on your account'))),
-        h('div', null, blatsIntro()),
-        methods.length === 0
-          ? h('div', { class: 'badge', style: 'align-self:flex-start', 'data-testid': 'pay-soon' }, t('Payments are being connected — coming soon'))
-          : h('div', { class: 'muted' }, t('You pay on the payment provider’s secure page. The BLATS are credited automatically once the payment is confirmed.')),
-      ),
-      h(
-        'div',
-        { class: 'packs' },
-        ...(cfg?.packs ?? []).map((p) =>
-          h(
-            'div',
-            { class: 'panel col pack', 'data-pack': p.id },
-            h('div', { class: 'h1' }, amount(p.diamonds, 'diamonds')),
-            h('div', { class: 'h2' }, usd(p.usdCents)),
-            ...(methods.length ? methods.map(([m, label]) => h('button', { class: 'btn btn--small btn--red', onclick: () => buyPack(p.id, m) }, label)) : [h('button', { class: 'btn btn--small', disabled: true }, t('Soon'))]),
-          ),
-        ),
-      ),
+      { class: 'panel col pack', 'data-pack': p.id },
+      h('div', { class: 'pack__coins' }, coinPile(i + 1, 26)),
+      h('div', { class: 'pack__amt' }, fmtNum(p.diamonds), ' ', h('small', null, t('BLATS'))),
+      h('div', { class: 'pack__usd' }, usd(p.usdCents)),
+      hint ? h('div', { class: 'pack__hint', 'data-testid': 'pack-hint' }, h('span', null, t('Enough for:')), ' ', hint) : null,
+      ...(methods.length ? methods.map(([m, label]) => h('button', { class: 'btn btn--small btn--red', onclick: () => buyPack(p.id, m) }, label)) : [h('button', { class: 'btn btn--small', disabled: true }, t('Soon'))]),
+    );
+  };
+  const diamondsTab = (): HTMLElement => {
+    if (!online) return h('div', { class: 'panel' }, t('Buying BLATS works in the online version of the game.'));
+    // inside Telegram the packs are shown, but they will be sold for Telegram Stars
+    const methods = o.inTelegram ? [] : payMethods();
+    const head = blatsBanner({
+      kind: 'section',
+      sale: blatsSale(cfg, o.inTelegram),
+      line: blatsIntro(),
+      note: o.inTelegram
+        ? t('Buying BLATS inside Telegram is coming soon (via Telegram Stars).')
+        : methods.length === 0
+          ? t('Payments are being connected — coming soon')
+          : t('You pay on the payment provider’s secure page. The BLATS are credited automatically once the payment is confirmed.'),
+      right: h('span', { class: 'blatsban__bal' }, h('small', null, t('on your account')), h('b', null, blatsCoin(24, ''), h('span', { 'data-testid': 'blats-balance' }, inv ? String(inv.diamonds) : '…'))),
+    });
+    // nothing can be bought yet: the banner's note says so
+    if (o.inTelegram || methods.length === 0) head.querySelector('.blatsban__from')?.setAttribute('data-testid', 'pay-soon');
+    return h(
+      'div',
+      { class: 'col blatsshop', 'data-testid': 'blats-tab' },
+      head,
+      h('div', { class: 'packs' }, ...(cfg?.packs ?? []).map((p, i) => packCard(p, i, methods))),
       h('div', { class: 'muted', style: 'font-size:13px' }, t('Purchases belong to your account. To keep them when you change devices, link an email in your profile.')),
     );
   };
@@ -1141,7 +1157,11 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     );
     chipsEl.hidden = kit;
     chipsEl.classList.toggle('arschips--5', shopTabs().length > 4);
-    chipsEl.replaceChildren(...shopTabs().map(([id, label]) => h('button', { role: 'tab', 'aria-pressed': String(tab === id), 'data-tab': id, onclick: () => tab !== id && go(id) }, label)));
+    chipsEl.replaceChildren(
+      ...shopTabs().map(([id, label]) =>
+        h('button', { role: 'tab', 'aria-pressed': String(tab === id), 'data-tab': id, ...(id === 'diamonds' ? { class: 'tab--blats' } : {}), onclick: () => tab !== id && go(id) }, ...(id === 'diamonds' ? [blatsCoin(16, ''), ' '] : []), label),
+      ),
+    );
   };
   const slotWeapon = (l: Loadout, slot: 1 | 2 | 3): WeaponId | null => (slot === 1 ? l.sidearm : slot === 2 ? l.melee : l.primary);
   const withSlot = (l: Loadout, slot: 1 | 2 | 3, w: WeaponId | null): Loadout => (slot === 1 ? (w ? { ...l, sidearm: w } : l) : slot === 2 ? (w ? { ...l, melee: w } : l) : { ...l, primary: w });
@@ -1459,25 +1479,29 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   };
   const diamondsPhone = (): HTMLElement => {
     if (!online) return h('div', { class: 'panel' }, t('Buying BLATS works in the online version of the game.'));
-    if (o.inTelegram) return h('div', { class: 'panel col' }, h('span', { class: 'tag' }, t('BLATS')), h('div', { style: 'margin-top:8px' }, t('Buying BLATS inside Telegram is coming soon (via Telegram Stars).')));
-    const methods = payMethods();
+    const methods = o.inTelegram ? [] : payMethods();
     return h(
       'div',
       { class: 'col arsdiamonds', 'data-testid': 'blats-tab' },
       h('div', { class: 'muted arsnote' }, blatsIntro()),
-      methods.length === 0 ? h('span', { class: 'badge', style: 'align-self:flex-start', 'data-testid': 'pay-soon' }, t('Payments are being connected — coming soon')) : null,
+      o.inTelegram
+        ? h('span', { class: 'badge', style: 'align-self:flex-start', 'data-testid': 'pay-soon' }, t('Buying BLATS inside Telegram is coming soon (via Telegram Stars).'))
+        : methods.length === 0
+          ? h('span', { class: 'badge', style: 'align-self:flex-start', 'data-testid': 'pay-soon' }, t('Payments are being connected — coming soon'))
+          : null,
       h(
         'div',
         { class: 'packrows' },
-        ...(cfg?.packs ?? []).map((p) =>
-          h(
+        ...(cfg?.packs ?? []).map((p) => {
+          const hint = packHint(p.diamonds);
+          return h(
             'div',
-            { class: 'packrow' },
+            { class: 'packrow', 'data-pack': p.id },
             h('b', { class: 'packrow__amt' }, amount(p.diamonds, 'diamonds')),
-            h('span', { class: 'packrow__usd' }, usd(p.usdCents)),
+            h('span', { class: 'packrow__mid' }, h('span', { class: 'packrow__usd' }, usd(p.usdCents)), hint ? h('small', { class: 'packrow__hint' }, hint) : null),
             ...(methods.length ? methods.map(([m, label]) => h('button', { class: 'btn btn--small btn--red', onclick: () => buyPack(p.id, m) }, label)) : [h('button', { class: 'btn btn--small', disabled: true }, t('Soon'))]),
-          ),
-        ),
+          );
+        }),
       ),
       h('div', { class: 'muted arsnote' }, t('Purchases belong to your account. To keep them when you change devices, link an email in your profile.')),
     );

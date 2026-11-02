@@ -124,8 +124,23 @@ currency (`case_openings`).
 ## 5. Buying BLATS
 
 `DIAMOND_PACKS`: **99 / 199 / 499 / 999 / 1 999 / 4 999 BLATS for $0.99 / $1.99 / $4.99 / $9.99 /
-$19.99 / $49.99** (1 BLATS = 1 cent). The BLATS tab of the Arsenal (also the menu's BLATS tile and
-«Top up») shows the balance, the packs and how to pay.
+$19.99 / $49.99** (1 BLATS = 1 cent).
+
+Where they are sold (the owner, 2 Nov: «раздел для покупки БЛАТ и рекламный баннер»):
+
+* **The Arsenal's «Buy BLATS» section** (`apps/web/src/ui/screens/shop.ts`) — the last tab, marked with
+  the red coin: a banner with the balance and the rules (1 BLATS = 1 cent, 10 a level, talons never for
+  money), then the six packs — a pile of coins growing with the pack, the amount, the price and **what it
+  is enough for** (`packHint` in `apps/web/src/ui/blats.ts`, from the price tables: a regular skin, a
+  regular character, a legendary skin, an epic character, a legendary and an epic character, 4 ×
+  legendary character) — and how to pay. Also reached from the menu's BLATS tile and the wallet's
+  «Top up».
+* **The menu's BLATS banner** under the Dossier and the Arsenal (desktop and phones; the menu stays one
+  screen): the coins, «BLATS», what they buy, «Packs from 99 · $0.99» — it opens the section. It says
+  «Buy →» only when a payment provider is connected and outside Telegram (`blatsSale`), otherwise
+  «… · on sale soon».
+* The demo (no server) shows the section with «Buying BLATS works in the online version of the game»
+  and no banner.
 
 | Method | Provider | Server keys | State |
 |---|---|---|---|

@@ -231,7 +231,7 @@ try {
     tabs: [...document.querySelectorAll('.tabs button')].map((b) => b.textContent),
     two: !!document.querySelector('.dressing__grid--two'),
   }));
-  check(!free.banner && !free.topup && free.tabs.includes('BLATS') && !free.tabs.includes('Diamonds') && free.tabs.length === 6 && free.two, `the demo sells nothing: no case banner, no top-up; a BLATS tab (${JSON.stringify(free)})`);
+  check(!free.banner && !free.topup && free.tabs.some((x) => /Buy BLATS/.test(x)) && !free.tabs.some((x) => /Diamonds/.test(x)) && free.tabs.length === 6 && free.two, `the demo sells nothing: no case banner, no top-up; a «Buy BLATS» tab (${JSON.stringify(free)})`);
   await page.locator('.tabs button', { hasText: 'BLATS' }).click();
   const blatsDemo = (await page.locator('.screen--arsenal').innerText()).replace(/\s+/g, ' ');
   check(/Buying BLATS works in the online version of the game/.test(blatsDemo), 'the demo’s BLATS tab: «Buying BLATS works in the online version of the game.»');

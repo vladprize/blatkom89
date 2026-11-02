@@ -5,8 +5,9 @@
 //  • full screen: the corner's button on a computer and on a phone (on, then off); over a match and in the
 //    pause menu; an iPhone's browser (no Fullscreen API) gets the «Add to Home Screen» note;
 //  • BLATS for levels: a player at level 3 gets 2 × 10 BLATS once (told on the menu), never twice;
-//  • the BLATS tab: the balance, «1 BLATS = 1 cent», six packs from 99 ($0.99), «coming soon» while no
-//    payment provider is set; on the phone in Russian («БЛАТ») on one screen;
+//  • the menu's BLATS banner (desktop and phone, the menu still one screen; «on sale soon» while no payment
+//    provider is set) opens the Arsenal's «Buy BLATS» section: its banner, the balance, «1 BLATS = 1 cent»,
+//    six packs from 99 ($0.99), each with what it is enough for; on the phone in Russian on one screen;
 //  • a weapon skin bought right in the dressing room for its grade's price (regular 99); the free finishes
 //    are the player's without buying;
 //  • a character bought right on the character screen (rare 399); «Try in practice» on a locked one plays
@@ -180,9 +181,30 @@ try {
   check(lv.map((r) => `${r.ref}:${r.delta}`).join(',') === 'level:2:10,level:3:10' && (await blats(A.id)) === 20, `each level paid once (${lv.map((r) => `${r.ref}:${r.delta}`).join(', ')}; balance ${await blats(A.id)})`);
   check((await A.page.getByTestId('dossier-blats').innerText()).includes('20'), `the Dossier shows the BLATS («${(await A.page.getByTestId('dossier-blats').innerText()).trim()}»)`);
 
-  // ── the BLATS tab ────────────────────────────────────────────────────────
-  await A.page.getByTestId('menu-blats').click();
+  // ── the BLATS banner on the menu (the owner: «рекламный баннер, что их можно купить») ──
+  for (const P of [A, B]) {
+    const ban = P.page.getByTestId('blats-banner-menu');
+    await ban.waitFor({ timeout: 15000 });
+    await P.page.waitForFunction(() => /99/.test(document.querySelector('[data-testid=blats-banner-menu] .blatsban__from')?.textContent ?? ''), null, { timeout: 15000 }).catch(() => {});
+    const info = await P.page.evaluate(() => {
+      const b = document.querySelector('[data-testid=blats-banner-menu]');
+      const r = b.getBoundingClientRect();
+      return { sale: b.dataset.sale, text: b.textContent.replace(/\s+/g, ' ').trim(), coins: b.querySelectorAll('.coinpile img').length, inView: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth };
+    });
+    const ru = P === B;
+    check(info.sale === 'soon' && info.coins === 3 && info.inView && (ru ? /БЛАТ/.test(info.text) && /Наборы от 99 · \$0\.99 · скоро в продаже/.test(info.text) : /BLATS/.test(info.text) && /Packs from 99 · \$0\.99 · on sale soon/.test(info.text)), `${P.name}: the menu's BLATS banner — the coins, the packs from 99 ($0.99), «on sale soon» while no payment provider is connected, in view («${info.text}»)`);
+    const fit = await fits(P.page);
+    check(fit.v <= 0 && fit.h <= 0, `${P.name}: the menu with the banner still fits one screen (${JSON.stringify(fit)})`);
+  }
+  await A.page.screenshot({ path: `${outDir}/menu_banner_A.png` });
+  await B.page.screenshot({ path: `${outDir}/menu_banner_B_phone.png` });
+
+  // ── the BLATS tab («Buy BLATS») — A comes from the banner ─────────────────
+  await A.page.getByTestId('blats-banner-menu').click();
   await A.page.getByTestId('blats-tab').waitFor({ timeout: 20000 });
+  const tabBtn = A.page.getByTestId('tab-blats');
+  check((await tabBtn.getAttribute('aria-pressed')) === 'true' && /Buy BLATS/i.test(await tabBtn.innerText()) && (await tabBtn.locator('img.blatcoin').count()) === 1, `the banner opens the Arsenal's «Buy BLATS» section (the tab with the coin: «${(await tabBtn.innerText()).trim()}»)`);
+  check((await A.page.getByTestId('blats-banner-section').count()) === 1, 'the section opens with its own BLATS banner');
   const tabA = await A.page.getByTestId('blats-tab').innerText();
   check((await A.page.getByTestId('blats-balance').innerText()).trim() === '20', 'the BLATS tab: 20 on the account');
   check(/1 BLATS = 1 cent/.test(tabA) && /every new level gives 10 BLATS/.test(tabA), 'the BLATS tab explains: 1 BLATS = 1 cent, 10 BLATS a level');
@@ -191,6 +213,8 @@ try {
   const packs = await A.page.locator('[data-testid=blats-tab] .pack').evaluateAll((els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
   check(packs.length === 6 && /99/.test(packs[0]) && /\$0\.99/.test(packs[0]) && /4,999|4999/.test(packs[5]) && /\$49\.99/.test(packs[5]), `six packs from 99 ($0.99) to 4,999 ($49.99) (${packs.join(' / ')})`);
   check(!NO_CRYPTO.test(tabA) && !/diamond/i.test(tabA), 'the tab says nothing about diamonds, $BLAT or tokens');
+  const hints = await A.page.locator('[data-testid=blats-tab] [data-testid=pack-hint]').allInnerTexts();
+  check(hints.length === 6 && /regular skin/i.test(hints[0]) && /epic character/i.test(hints[3]) && /4 × legendary character/i.test(hints[5]), `every pack says what it is enough for (${hints.map((x) => x.replace(/\s+/g, ' ')).join(' / ')})`);
   await A.page.screenshot({ path: `${outDir}/blats_tab_A.png` });
   await B.page.getByTestId('menu-blats').click();
   await B.page.getByTestId('blats-tab').waitFor({ timeout: 20000 });
