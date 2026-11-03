@@ -42,6 +42,23 @@ async function booted(page) {
   if (await page.getByTestId('boot-play').count()) await page.getByTestId('boot-play').click();
 }
 
+/**
+ * Back to the menu after the match: «To menu» on the results — or «← Leave» in the room's lobby, which the
+ * room goes back to 15 s after the match (`finishedMs`); with two browsers on software rendering the
+ * second player can get there after that. The results may turn into the lobby under the click: try again.
+ */
+async function toMenu(p) {
+  for (let i = 0; ; i++) {
+    try {
+      await p.page.getByRole('button', { name: /^(To menu|В меню|← Leave|← Выйти)$/ }).first().click({ timeout: 15000 });
+      break;
+    } catch (e) {
+      if (i >= 2) throw e;
+    }
+  }
+  await p.page.getByTestId('menu-nick').waitFor({ timeout: 30000 });
+}
+
 async function player(name, lang, viewport = { width: 1280, height: 720 }) {
   const phone = viewport.width < 600;
   const ctx = await browser.newContext({ viewport, locale: lang === 'ru' ? 'ru-RU' : 'en-GB', ...(phone ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {}) });
@@ -221,10 +238,7 @@ try {
   check(after.length === 2 && after.every((r) => r.kon_matches === (before.find((b) => b.id === r.id)?.kon_matches ?? 0) + 1), `both gangs' tournament records count the battle (${after.map((r) => r.kon_matches).join(', ')})`);
   B.room?.close();
   C.room?.close();
-  for (const p of [A, D]) {
-    await p.page.getByRole('button', { name: /To menu|В меню/ }).click();
-    await p.page.getByTestId('menu-nick').waitFor({ timeout: 30000 });
-  }
+  for (const p of [A, D]) await toMenu(p);
 
   // ── a friend's «To battle»: D calls A to a tournament duel ─────────────
   await api(D.token, 'POST', '/api/friends/request', { name: `Warlord ${RUN}` });
