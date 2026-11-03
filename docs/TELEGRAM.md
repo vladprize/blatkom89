@@ -14,9 +14,11 @@ The simplest bot: the player presses **Start** (or writes anything) and gets the
 2. Render → the `blatkom89` service → **Environment** → add `TELEGRAM_BOT_TOKEN` = the token and
    `TELEGRAM_BOT_USERNAME` = the username without `@` → **Save** (the service redeploys).
 3. Nothing else: on start-up the server registers its webhook
-   (`https://<service>.onrender.com/api/telegram/webhook`), the commands `/start` and `/play`, the
-   bot's descriptions (Russian and English) and the **Play** button next to the message field. The log
-   shows `telegram webhook registered`; on later starts `telegram bot {"setup":"unchanged"}`.
+   (`https://<service>.onrender.com/api/telegram/webhook`, updates `message` and `pre_checkout_query`),
+   the commands `/start`, `/play`, `/paysupport` and `/terms`, the bot's descriptions (Russian and
+   English) and the **Play** button next to the message field. The log shows `telegram webhook
+   registered`; on later starts `telegram bot {"setup":"unchanged"}` (until `BOT_SETTINGS_VERSION`
+   changes — v0.2.18 part 3 made it 2, so the first start after the release registers everything again).
 4. Open `t.me/<username>` → **Start**.
 
 How «warm» works: the free Render service sleeps after 15 minutes without visitors. Telegram's call to
@@ -179,7 +181,12 @@ sign-in inside Telegram, fullscreen / orientation / safe areas / minimise and ba
 - [ ] A Telegram account with Russian as the app language opens the game in Russian, an English one in
       English; the EN/RU switch works and is remembered after closing and reopening the Mini App.
 - [ ] A team match (red vs blue, capture the flag or base capture) with players on both phones.
-- [ ] v0.2.18: the BLATS tab inside Telegram says «Buying BLATS inside Telegram is coming soon (via Telegram Stars)» (no card buttons); on the website it shows the packs. The menu's full-screen button switches Telegram's own fullscreen on and off (Bot API 8.0+).
+- [ ] v0.2.18: the menu's full-screen button switches Telegram's own fullscreen on and off (Bot API 8.0+).
+- [ ] v0.2.18 part 3: the BLATS tab inside Telegram shows the packs in Stars (⭐ 75 … 3 750, no card
+      buttons); «Buy» opens Telegram's payment window; a purchase of the smallest pack credits 99 BLATS
+      once and the bot writes «✅ +99 BLATS»; `/paysupport` and `/terms` answer. `/admin` → the player →
+      «Платежи» shows the payment in ⭐ and «Вернуть звёзды» gives the Stars back (a test purchase the
+      owner refunds himself). On the website the packs are in dollars.
 - [ ] `/admin` shows the two players and the match.
 - [ ] V2.0 part E: on the website (a guest with some XP) Profile → «Link Telegram» → «Open Telegram» →
       **Start** → «🔗 Link and play» → the game opens in Telegram with the same alias and XP; the website
@@ -197,11 +204,23 @@ played by the test).
 ## Payments inside Telegram
 
 Telegram requires digital goods sold inside a Mini App to be paid with Telegram Stars (`XTR`).
-v0.2.18: BLATS are sold for money on the website (card, Stripe — not connected on the live server yet;
-[ECONOMY.md](ECONOMY.md) §5); inside the Mini App the BLATS tab says Stars are coming soon and sessions
-opened through Telegram are refused at checkout (`403 telegram_stars_only`). Implementing Stars (part 3)
-means: an invoice
-link from the bot (`createInvoiceLink`, currency `XTR`, price in Stars), answering
-`pre_checkout_query`, crediting BLATS once on `successful_payment` (idempotent by
-`telegram_payment_charge_id`, `payments.provider = 'telegram'` is already allowed by the schema) and
-handling refunds (`refundStarPayment`). See [ECONOMY.md](ECONOMY.md) §5.
+v0.2.18 part 3 sells BLATS for Stars inside the Mini App — the full description is in
+[PAYMENTS.md](PAYMENTS.md) §1:
+
+* the packs cost 75 / 150 / 375 / 750 / 1 500 / 3 750 ⭐ (`STARS_PER_USD` = 75); on as soon as the bot is
+  set up (`STARS_ENABLED=false` hides them);
+* `POST /api/pay/stars` (Telegram sessions only) → the bot's invoice link (`createInvoiceLink`, `XTR`,
+  one price, the payment's id as the payload) → `Telegram.WebApp.openInvoice`;
+* the webhook answers Telegram's `pre_checkout_query` in its own response (`answerPreCheckoutQuery`:
+  yes only for an open invoice of that price, made out to that player, at most a day old);
+* `successful_payment` credits the BLATS once (Telegram's `telegram_payment_charge_id` kept, unique per
+  provider) and the bot thanks the player; `refunded_payment` and the admin's «Вернуть звёзды»
+  (`refundStarPayment`) take the unspent BLATS back;
+* `/paysupport` (the contact in `PAY_SUPPORT`) and `/terms` (`/terms.html`, `/terms-ru.html`), as
+  Telegram asks of bots that sell digital goods;
+* the website's card checkout refuses Telegram sessions (`403 telegram_stars_only`), and Stars are not
+  sold on the website (`403 stars_in_telegram`).
+
+Tested with a stand-in for the Bot API (`apps/server/src/payments/payments.test.ts`,
+`tests/e2e/v0218c.mjs`); a real purchase with real Stars has **not** been made — it is on the launch
+checklist above.

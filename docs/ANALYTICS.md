@@ -229,7 +229,7 @@ All amounts come from `currency_ledger`, `user_items`, `weapon_mods`, `case_open
 | Waiting / failed | checkouts created in range still `created` / `failed` or `expired` |
 | Arsenal purchases | `user_items` with `acquired_at ∈ [from, to]` bought for talons or BLATS (case drops and grants are listed separately by source) |
 | Modifications, cases | `weapon_mods.acquired_at` / `case_openings.created_at` in range; cases by rarity and BLATS spent |
-| Daily chart | the same ledger sums and paid revenue per UTC day |
+| Daily chart | the same ledger sums and paid revenue per UTC day (US dollars only: Telegram Stars payments, v0.2.18 part 3, are counted in Stars in the revenue table, not added to the dollars) |
 
 ## 7a. Invitations (dashboard «Приглашения», v0.2.18; «$BLAT» before)
 

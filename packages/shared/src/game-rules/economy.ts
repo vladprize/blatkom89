@@ -11,7 +11,7 @@
  *    (99 / 199 / 299 / 499, skins.ts) and the skin case (299). Nothing sold for BLATS changes a number in
  *    combat: characters are equal by design, skins only change looks.
  *  - Free for everyone: two characters (the rooster and the panther), a full kit of three weapons
- *    (Makarov, crowbar, AK-47), the F-1 grenade and two skin finishes on every weapon.
+ *    (Makarov, crowbar, the Druzhba rifle), the F-1 grenade and two skin finishes on every weapon.
  *  - Shop weapons are sidegrades (see weapons.ts). Rare weapons come from the weapon case (talons, never
  *    a duplicate, the odds shown).
  *  - Until v0.23 the wolf, the bear and the sawn-off were free: accounts made before then keep them

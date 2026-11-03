@@ -16,6 +16,9 @@ are still the `diamonds` columns and currency id: no data was renamed or moved.
 line — twenty finishes on sale, a welcome gift of two for early players, the first line retired (§4a),
 and the character case for BLATS (§4c).
 
+**v0.2.18 part 3:** BLATS are sold through Xsolla on the website and for Telegram Stars inside Telegram
+(§5, [PAYMENTS.md](PAYMENTS.md)).
+
 ## 1. Currencies
 
 | | Talons (`tokens` in code) | BLATS (`diamonds` in code) |
@@ -38,7 +41,7 @@ winning team (25 to both teams on a draw); +20 for a match with friends by invit
 ## 2. What is free
 
 Two characters (Petya the rooster and Valuta the panther), a full kit of three weapons (Makarov,
-crowbar, AK-47) and the F-1 grenade. A new player spawns with a working loadout and can play every map
+crowbar, the Druzhba rifle) and the F-1 grenade. A new player spawns with a working loadout and can play every map
 and mode without spending anything. While the welcome gift lasts (§4a), every player also gets two skin
 finishes on every weapon («Shark», «Blatkom ’89»).
 
@@ -48,9 +51,9 @@ Prices (`WEAPON_PRICES`, `GADGET_PRICES`, `MOD_PRICES`):
 
 | Item | Price, talons |
 |---|---|
-| Sawn-off / Knife / TT / Uzi | 100 / 120 / 150 / 200 |
-| P92 (lvl 3) / Deagle (4) / Bat (5) / Axe (6) / AKS-74U (7) / MP5 (8) / S-12K (9) / PPSh-41 (10) | 250 / 300 / 300 / 350 / 400 / 450 / 500 / 500 |
-| M4A1 (lvl 11) / G36 (12) / M24 (13) / M249 (14) / SVD (15) / AWM (17) / RPG-7 (19) | 550 / 600 / 650 / 700 / 800 / 900 / 1000 |
+| Sawn-off / Knife / TT / Rattler | 100 / 120 / 150 / 200 |
+| P92 (lvl 3) / Barkhan Hand Cannon (4) / Bat (5) / Axe (6) / AKS-74U (7) / Tochka SMG (8) / S-12K (9) / PPSh-41 (10) | 250 / 300 / 300 / 350 / 400 / 450 / 500 / 500 |
+| M4A1 (lvl 11) / Import Rifle (12) / M24 (13) / M249 (14) / SVD (15) / Long Shot (17) / RPG-7 (19) | 550 / 600 / 650 / 700 / 800 / 900 / 1000 |
 | Equipment: smoke / flashbang (lvl 2) / Molotov (lvl 4) / mine (lvl 6) / C4 (lvl 8) / turret (lvl 12) | 100 / 150 / 250 / 300 / 350 / 450 |
 | Modifications, per weapon: red dot, laser / grip / silencer, extended mag / scope | 100 / 120 / 150 / 200 |
 | The rare-weapon case | 600 |
@@ -94,13 +97,13 @@ with the same character, or the Arsenal's tab). Characters bought before v0.2.18
 
 600 talons for one of ten rare weapons (Commissar's Mauser, Udarnik sledgehammer, engraved Tulka, the
 beat cop's crossbow, Stroyka nail gun — 12 % each; Tommy gun, Plamya-84 flamethrower, Mukha RPG — 10 %
-each; Golden Kalash, GM-94 grenade launcher — 5 % each). **No duplicates:** owned weapons never drop
+each; Golden Druzhba, GM-94 grenade launcher — 5 % each). **No duplicates:** owned weapons never drop
 and the odds of the rest are renormalised (`caseOdds`); the odds are shown before the purchase. When
 the collection is complete the case is no longer sold. Draws use the OS CSPRNG (`crypto.randomInt`).
 
 ## 4a. Weapon skins
 
-A skin is a **finish on one particular weapon** («АК-47 · Хохлома») and changes only how it looks
+A skin is a **finish on one particular weapon** («Автомат „Дружба“ · Хохлома») and changes only how it looks
 (`game-rules/skins.ts`). Every weapon can wear every finish.
 
 **v0.2.18 part 2 — the owner's line** (references/64-skins-lineup.png): twenty finishes on sale, two
@@ -186,36 +189,52 @@ Where they are sold (the owner, 2 Nov: «раздел для покупки БЛ
   «Top up».
 * **The menu's BLATS banner** under the Dossier and the Arsenal (desktop and phones; the menu stays one
   screen): the coins, «BLATS», what they buy, «Packs from 99 · $0.99» — it opens the section. It says
-  «Buy →» only when a payment provider is connected and outside Telegram (`blatsSale`), otherwise
-  «… · on sale soon».
+  «Buy →» when the packs can be bought where the player is (`blatsSale`): on the website with a provider
+  connected, inside Telegram with Stars on — then the price is in Stars, «Packs from 99 · ⭐ 75»;
+  otherwise «… · on sale soon».
 * The demo (no server) shows the section with «Buying BLATS works in the online version of the game»
   and no banner.
 
-| Method | Provider | Server keys | State |
+v0.2.18 part 3 connects the two providers the owner chose — the details, the setup and the tests are in
+[PAYMENTS.md](PAYMENTS.md):
+
+| Where | Provider | Server keys | State |
 |---|---|---|---|
-| Card | Stripe Checkout (hosted page) | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | code ready; not configured on the live server |
-| Telegram Stars | the bot's invoices (`XTR`) | — | not implemented yet (part 3) |
-| Xsolla | — | — | planned (part 3; waiting for the owner's keys) |
+| The website | **Xsolla** Pay Station (cards and local methods) | `XSOLLA_MERCHANT_ID`, `XSOLLA_PROJECT_ID`, `XSOLLA_API_KEY`, `XSOLLA_WEBHOOK_SECRET` | code ready and tested; waiting for the owner's keys |
+| The website, without Xsolla | Stripe Checkout (cards) | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | code ready; not configured on the live server |
+| Inside Telegram | **Telegram Stars** (`XTR`): 75 / 150 / 375 / 750 / 1 500 / 3 750 ⭐ (`STARS_PER_USD` = 75) | the bot's token | code ready and tested with a stand-in for the Bot API; on as soon as the bot is set up |
 
 Without a configured provider the tab says «Payments are being connected — coming soon», the packs
 show «Soon», and `POST /api/pay/checkout` answers `503 payments_not_configured` — there is no simulated
 purchase anywhere. The crypto method (NOWPayments) was removed in v0.2.18.
 
-Flow: `POST /api/pay/checkout {packId, method: 'card'}` creates a `payments` row (`created`, price from
-`DIAMOND_PACKS`, never from the client) and returns the provider's hosted page URL; the provider calls
-`POST /api/pay/stripe/webhook` (signature header `stripe-signature`, 5-minute tolerance). A verified
-«paid» event marks the payment `paid` and credits the BLATS **once** (row lock + unique ledger index on
-the payment id); a session not in USD or underpaid credits nothing. A refund (`charge.refunded`) marks
-the payment `refunded` and takes back the BLATS that are still unspent (ledger reason `refund`). The
-browser returns to `/?pay=success|cancel&pid=…` and polls `GET /api/pay/:id`. Stripe dashboard: webhook
-endpoint `https://<domain>/api/pay/stripe/webhook` with `checkout.session.completed`,
-`checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`,
-`checkout.session.expired`, `charge.refunded`.
+**On the website:** `POST /api/pay/checkout {packId, method: 'card'}` creates a `payments` row
+(`created`, price from `DIAMOND_PACKS`, never from the client; provider `xsolla` when Xsolla is set up,
+else `stripe`) and returns the provider's hosted page URL. The provider tells the server:
+`POST /api/pay/xsolla/webhook` (`order_paid`, `order_canceled`, `user_validation`; signature
+`sha1(body + secret)`) or `POST /api/pay/stripe/webhook` (signature header `stripe-signature`, 5-minute
+tolerance). A verified «paid» notification marks the payment `paid` and credits the BLATS **once** (row
+lock + unique ledger index on the payment id); an order for another pack or player, a Stripe session not
+in USD or underpaid credits nothing. A refund (Xsolla's `order_canceled` of a paid order, Stripe's
+`charge.refunded`) marks the payment `refunded` and takes back the BLATS that are still unspent (ledger
+reason `refund`). The browser returns to `/?pay=success|cancel&pid=…` and polls `GET /api/pay/:id`.
+Stripe dashboard: webhook endpoint `https://<domain>/api/pay/stripe/webhook` with
+`checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+`checkout.session.async_payment_failed`, `checkout.session.expired`, `charge.refunded`.
 
-**Inside Telegram** digital goods must be paid with Telegram Stars, so card purchases are hidden in the
-Mini App and the server refuses checkouts from Telegram sessions (`403 telegram_stars_only` — «Inside
-Telegram, BLATS will be sold for Telegram Stars — coming soon»). Players who also registered an email
-can buy on the website; the BLATS appear in the same account.
+**Inside Telegram** digital goods must be paid with Telegram Stars: the Mini App shows the packs in
+Stars and the server refuses the website's checkout from Telegram sessions (`403 telegram_stars_only` —
+«Inside Telegram, BLATS are sold for Telegram Stars»). A tap: `POST /api/pay/stars {packId}` → a
+`payments` row in Stars (`provider 'telegram'`, `currency 'xtr'`) and the bot's invoice link →
+`Telegram.WebApp.openInvoice`; the bot says yes to Telegram's `pre_checkout_query` only for an open
+invoice of that price made out to that player, and `successful_payment` credits the BLATS once. Stars
+are refunded from `/admin` (the player → «Платежи» → «Вернуть звёзды»), which takes back the unspent
+BLATS; the bot answers `/paysupport` and `/terms`. The website doesn't sell for Stars
+(`403 stars_in_telegram`). A player with Telegram linked to a website account has the same BLATS in both
+places.
+
+The game's terms of purchase are `/terms.html` and `/terms-ru.html` (linked under the packs and by the
+bot's `/terms`); the operator's name and contact in them are placeholders to fill in.
 
 ## 5a. BLATS for levels
 
@@ -275,4 +294,6 @@ exhaustion, free finishes) and `apps/web/src/game/render/finish.test.ts`; browse
 (`economy.test.ts`, `skins.test.ts`, server `economy.test.ts`: the gift from the first sign-in and none
 after `WELCOME_GIFT_UNTIL`), the character case (shared odds and draws; server: 18+, funds, only the 31 for
 BLATS, the collection completes, `CASES_ENABLED`), a friend's collection (`social.test.ts`); browser:
-`tests/e2e/v0218b.mjs`.
+`tests/e2e/v0218b.mjs`. v0.2.18 part 3: `apps/server/src/payments/payments.test.ts` (Telegram Stars and
+Xsolla, [PAYMENTS.md](PAYMENTS.md) §5); browser: `tests/e2e/v0218c.mjs` (a pack bought for Stars in the
+Mini App end to end).

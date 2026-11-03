@@ -36,7 +36,7 @@ test('balance: classic shooter hit counts at 100 HP', () => {
   assert.equal(hitsToKill('montirovka'), 2);
   assert.equal(hitsToKill('svd'), 2);
   assert.equal(hitsToKill('m24'), 2);
-  assert.equal(hitsToKill('awm'), 2, 'AWM finishes a wounded target with one shot, never a healthy one');
+  assert.equal(hitsToKill('awm'), 2, 'the Long Shot (awm) finishes a wounded target with one shot, never a healthy one');
   assert.equal(hitsToKill('deagle'), 2);
   assert.equal(hitsToKill('tt'), 3);
   for (const id of ['uzi', 'ppsh', 'mp5', 'ksyuha', 'm4', 'm249', 'tommy', 'gvozdomet', 'p92'] as const) assert.ok(hitsToKill(id) >= 4 && hitsToKill(id) <= 8, `${id} trades damage for rate`);

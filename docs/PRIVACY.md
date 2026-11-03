@@ -12,10 +12,10 @@
 
 ## Part 1 — Privacy policy (player-facing text)
 
-**BLATKOM ’89 — privacy policy.** Revised 2 November 2026 (v0.2.18; the public pages `apps/web/public/privacy.html` / `privacy-ru.html` are the published text).
+**BLATKOM ’89 — privacy policy.** Revised 3 November 2026 (v0.2.18 part 3; the public pages `apps/web/public/privacy.html` / `privacy-ru.html` are the published text).
 
-**In short.** The game is free to play and has no ads; BLATS, the in-game currency, will also be sold for
-money (optional — not open yet). We keep only what the game, your profile and its statistics need. We
+**In short.** The game is free to play and has no ads; BLATS, the in-game currency, can also be bought
+(optional): on the website through Xsolla (or Stripe), inside Telegram for Telegram Stars. We keep only what the game, your profile and its statistics need. We
 never get your phone number, and we don’t keep your Telegram @username or photo. Card details are
 entered on the payment provider’s page and never reach us. Nothing in the game is a cryptocurrency. Data is not sold or used for advertising. You can delete your
 profile at any time: **Settings → “Delete my data”**.
@@ -51,9 +51,11 @@ Game operator: **[operator name]**. Contact: **[email or Telegram contact]**.
    time), XP, level, achievements, streaks, time in game, match history; the District Tournament («Турнир района») rating, wins, losses, draws and streaks (shown
    in the tournament tables with your in-game name); the story missions you finished, when and your best time; talon and BLATS balances and
    every change to them, owned weapons, characters, equipment, modifications and weapon skins, loadout, case openings.
-5. **Purchases (optional; not open yet):** pack, price, currency, payment provider, the provider’s payment
-   reference, status and time. You pay on the provider’s page (card; the provider is named in the public
-   policy before payments open); we pass it only an internal payment number. Talons are never sold.
+5. **Purchases (optional):** pack, price, currency, payment provider, the provider’s order or payment
+   reference (for Telegram Stars, Telegram’s charge id), status and time. On the website you pay on
+   Xsolla’s (or Stripe’s) own page, which gets from us your account’s internal id, your in-game alias and
+   the pack; inside Telegram you pay in Telegram Stars, processed by Telegram. The game never sees card
+   details. Terms of purchase: `terms.html` / `terms-ru.html`. Talons are never sold.
 6. **Technical data:** platform type, game version, sign-in times, the days you played, session lengths,
    app events (launch, connection errors, reconnects) and error reports (passwords, tokens, email
    addresses and long identifiers are removed before saving).
@@ -91,8 +93,8 @@ listed in the public Top-100 (name, avatar, level, rating, eliminations, wins). 
 flag, rating and people (name, avatar, level, role) are public; join requests are seen by the gang's boss
 only. Administrators work with the statistics
 panel; every sign-in, look at a player’s card, balance adjustment, password-reset link and export is
-audited. Data is shared only with the hosting provider, the payment provider you choose when you buy,
-and the email provider when you ask for a password reset. Telegram processes data under its own rules; so do
+audited. Data is shared only with the hosting provider, the payment provider when you buy (Xsolla or Stripe on
+the website, Telegram for Stars), and the email provider when you ask for a password reset. Telegram processes data under its own rules; so do
 Google, Discord, Facebook and Reddit when you sign in with them (on their page).
 
 ### 5. How long we keep it
@@ -142,7 +144,7 @@ When this policy changes, we update the revision date.
 | `blat_snapshots`, `blat_snapshot_rows` (V2.0 part C) | a snapshot's moment, admin, note, totals, rules; per account: `user_id` (cascade), the alias at that moment, balance, earned, sums by source, the ledger's sum, the flag, eligibility | the retired $BLAT balance snapshots (V2.0 – v0.2.17, unused since v0.2.18, [BLAT.md](BLAT.md)) | until deleted; an account's rows go with the account |
 | `app_settings` (V2.0 part C) | none (e.g. the retired BLAT DROP date) and the admin who changed it | central settings | kept |
 | `referrals` (V2.0) | invited player (`referee_id`, cascade), inviter (`referrer_id`, SET NULL on deletion), the code used, attach/decision times, status, number, reward, an admin's note | invitations ([ECONOMY.md](ECONOMY.md) §6) | until the invited player's account is deleted |
-| `payments` | `user_id` (SET NULL on deletion), provider and its reference, pack, amount, status, times | accounting, crediting BLATS once | **[accounting retention period]** — not purged automatically |
+| `payments` | `user_id` (SET NULL on deletion), provider and its reference, pack, amount, status, times; for Telegram Stars the price in Stars and Telegram's charge id (`stars`, `charge_ref`, v0.2.18 part 3) | accounting, crediting BLATS once | **[accounting retention period]** — not purged automatically |
 | `user_identities` (v0.3) | provider (`google`/`facebook`/`discord`/`reddit`), the provider's id for the player (`provider_uid`), user id, first/last use | sign-in with a provider | until account deletion (cascade) |
 | `auth_handoffs` (v0.3) | SHA-256 of a one-time code, user id, provider, whether the account is new/linked | handing a provider sign-in back to the page | valid 5 minutes; deleted on use, by the next sign-in once 10 minutes old, by the daily retention job after 1 day; immediately on account deletion (cascade) |
 | `password_resets` | HMAC of the one-time token, user id, who created it (`email`/`admin`) | password reset | 7 days after expiry; immediately on account deletion |
@@ -169,7 +171,7 @@ Never collected or stored: Telegram `username`, `photo_url`, phone number, `is_p
 or its hash/signature, session tokens or reset tokens in plain text, plain-text passwords, card numbers
 or wallet credentials (payments happen on the providers' hosted pages; we send them only an internal
 payment id). Admins see emails only masked. Client error messages are sanitised (ANALYTICS.md §2.3).
-Processors: hosting provider; the card payment provider (Stripe) only for players who buy BLATS, once payments open; Resend only for
+Processors: hosting provider; Xsolla (or Stripe) only for players who buy BLATS on the website, Telegram for purchases in Telegram Stars; Resend only for
 players who request a password-reset letter. Google / Discord / Facebook / Reddit / Telegram act as
 sign-in providers only for players who choose them (the server sends them the code it got back and its
 own client secret; it asks for the basic profile only and keeps the id; provider access tokens are used
@@ -232,8 +234,10 @@ copy for a specific player can be assembled by an administrator from the player 
 
 - [ ] Fill in operator name and contact (Part 1 §1), the email provider, the payment-record and backup
       retention periods (Part 1 §5) — in `privacy.html` too.
-- [ ] Payments (before switching them on): name the provider in the public policy (Stripe; later Xsolla /
-      Telegram Stars), check its terms, consumer law for digital goods in your markets (refunds,
+- [ ] Payments (before switching them on): the public policy and the terms of purchase name Xsolla,
+      Stripe and Telegram Stars (v0.2.18 part 3) — fill in the operator's name and contact in
+      `terms.html` / `terms-ru.html` too and set `PAY_SUPPORT`; check the providers' terms (Xsolla may act
+      as the seller of record), consumer law for digital goods in your markets (refunds,
       withdrawal right, prices with taxes), and whether paid random cases (the skin case for BLATS, 18+)
       are allowed there (`CASES_ENABLED`).
 - [ ] Decide the age rating and whether the policy needs a section on minors.

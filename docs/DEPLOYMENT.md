@@ -64,7 +64,11 @@ Copy `.env.example` to `.env` and set at least:
 | `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD` | optional first admin, created on start only when no admin exists — remove after first start (or use the CLI below) |
 | `MATCH_DURATION_SEC`, `MATCH_SCORE_LIMIT`, `MATCH_MIN_PLAYERS`, `MATCH_MAX_PLAYERS` | match rules (defaults 240 s, 50 points, 2, 10; at most 10 players per room) |
 | `MATCH_TEAM_SCORE_LIMIT`, `MATCH_CAPTURE_LIMIT`, `MATCH_BASE_SCORE_LIMIT` | team modes: eliminations in «red vs blue» (40), flags in capture the flag (3), points in base capture (250) |
-| `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` | optional (v0.2.18): BLATS packs by card (Stripe Checkout); webhook `https://$DOMAIN/api/pay/stripe/webhook` — events in [ECONOMY.md](ECONOMY.md) §5. Without them the BLATS tab says «Payments are being connected — coming soon» and checkout answers `503`. (The crypto method and its `NOWPAYMENTS_*` keys were removed in v0.2.18.) |
+| `XSOLLA_MERCHANT_ID`, `XSOLLA_PROJECT_ID`, `XSOLLA_API_KEY`, `XSOLLA_WEBHOOK_SECRET` | optional (v0.2.18 part 3): BLATS packs on the website through Xsolla Pay Station — all four switch it on, and it then replaces Stripe; webhook `https://$DOMAIN/api/pay/xsolla/webhook`; store items with the SKUs `blats_99` … `blats_4999` (`XSOLLA_SKU_PREFIX`). `XSOLLA_SANDBOX` (default `true`) keeps it in Xsolla's sandbox until set to `false`. Setup: [PAYMENTS.md](PAYMENTS.md) §2 |
+| `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` | optional (v0.2.18): BLATS packs by card (Stripe Checkout) when Xsolla isn't set up; webhook `https://$DOMAIN/api/pay/stripe/webhook` — events in [ECONOMY.md](ECONOMY.md) §5. With neither provider the BLATS tab says «Payments are being connected — coming soon» and checkout answers `503`. (The crypto method and its `NOWPAYMENTS_*` keys were removed in v0.2.18.) |
+| `STARS_ENABLED`, `STARS_PER_USD` | v0.2.18 part 3: BLATS for Telegram Stars inside the Mini App — on (`true`) whenever the bot's token is set; a pack's price in Stars = its dollar price × `STARS_PER_USD` (default 75), rounded to 5 ([PAYMENTS.md](PAYMENTS.md) §1) |
+| `PAY_SUPPORT` | v0.2.18 part 3: the contact for payment problems the bot's `/paysupport` gives (an email or a @username); unset: the contact on the terms page |
+| `COPYRIGHT_HOLDER` | v0.2.18 part 3: the name after «©» in the credits (e.g. the owner's legal name; unset: the game's name) — [ASSETS.md](ASSETS.md) |
 | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`, `DISCORD_CLIENT_ID` + `DISCORD_CLIENT_SECRET`, `FACEBOOK_APP_ID` + `FACEBOOK_APP_SECRET`, `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` | optional: «sign in with …» for that provider; redirect URI `https://$DOMAIN/api/auth/oauth/<provider>/callback` ([SIGN_IN.md](SIGN_IN.md)). `FACEBOOK_GRAPH_VERSION` (default `v23.0`) |
 | `TELEGRAM_WEB_LOGIN` | `true`: «sign in with Telegram» on the website (needs the bot token and the bot's `/setdomain`); the Mini App signs in by itself either way |
 | `RESEND_API_KEY` + `MAIL_FROM` | optional: password-reset letters (Resend; the sender domain must be verified there). Without them admins issue one-time reset links in `/admin` |
@@ -140,9 +144,14 @@ proxy_read_timeout 1h;`) and set `TRUST_PROXY=true` so rate limits see real clie
 - [ ] `/admin` is protected by server-side sessions, CSRF tokens, roles, rate limits and an audit log —
       optionally also restrict it by IP at the proxy.
 - [ ] Monitor `/api/ready`, disk space for PostgreSQL and the backups directory.
-- [ ] Menu music: confirm the rights holders' terms for «Hurt» (Infraction & Emerel Gray) for use in
-      the game and the attribution they require (credited in the menu and `THIRD_PARTY_LICENSES.txt`),
-      or replace `apps/web/public/assets/audio/theme.mp3` before public launch.
+- [x] Menu music: «Hurt» was replaced in v0.2.18 part 3 by the game's own «Районные дела»
+      (`tools/music/compose.py`, [ASSETS.md](ASSETS.md)) — nothing to license.
+- [ ] Before selling: the operator's name and contact in `apps/web/public/privacy*.html` and
+      `terms*.html` (placeholders), `PAY_SUPPORT`, `COPYRIGHT_HOLDER`.
+- [ ] Xsolla: the project, six store items, the webhook and the four keys ([PAYMENTS.md](PAYMENTS.md) §2);
+      a sandbox purchase with a test card credits the BLATS once; then `XSOLLA_SANDBOX=false`.
+- [ ] Telegram Stars: a real purchase of the smallest pack (75 ⭐) in the Mini App and its refund from
+      `/admin` (TELEGRAM.md §5).
 
 ## v0.2.18: variables no longer read
 
@@ -150,4 +159,15 @@ proxy_read_timeout 1h;`) and set `TRUST_PROXY=true` so rate limits see real clie
 `NOWPAYMENTS_IPN_SECRET`, `NOWPAYMENTS_SANDBOX` — the crypto theme is gone ([BLAT.md](BLAT.md)). The
 server ignores them; delete them from the host's environment (Render → Environment) when convenient.
 Migration `023_blats.sql` only adds (a column and two unique indexes) and runs by itself on start.
+
+## v0.2.18 part 3: what the update changes on the server
+
+* Migration `025_stars_xsolla.sql` only adds: `payments.provider` also accepts `xsolla`, the columns
+  `payments.stars` and `payments.charge_ref` and a unique index on `(provider, charge_ref)`. It runs by
+  itself on start; no data is changed.
+* The bot's settings version is 2: the first start re-registers the webhook (now also for
+  `pre_checkout_query`) and the commands (`/paysupport`, `/terms` added).
+* The protocol version is 9 (two new maps): clients still open on the old version are told to reload.
+* New optional variables: `XSOLLA_*`, `STARS_ENABLED`, `STARS_PER_USD`, `PAY_SUPPORT`,
+  `COPYRIGHT_HOLDER` (§2). Nothing has to be set for the update itself.
 

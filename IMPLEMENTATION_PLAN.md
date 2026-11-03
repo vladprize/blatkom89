@@ -265,21 +265,35 @@ registry (real gun names included), the full test run and docs.
 | Grades in the lobby and in a friend's inventory | the lobby: each player's character with its grade's mark and colour; Friends: a friend's avatar opens their collection — every character (theirs in colour with the grade) and skins by grade (friends only, read only) | ✅ |
 | A starter pack | proposed to the owner (composition and price) — not built before the answer | ⏳ waiting for the owner |
 
+**Part 3 (2026-11-03; the owner: «давай следующую часть сегодня запилим»):**
+
+| Request (owner) | Implementation (part 3) | Status |
+|---|---|---|
+| «Черкизон» — symmetric, one screen | `maps/cherkizon.ts`: a compact 1500 × 1000 arena mirrored left ↔ right (`mirrorHelpers`): the market's arch, rows of stalls with clothes rails and trestle tables, signs of what is sold, the pavilion «ТОРГОВЫЙ РЯД № 1», the shawarma stall under parasols, the carpet hall, containers, Volgas and minibuses; 14 spawns, flags and bases A / B / C; new props (`tools/art/props4.ts`), its loading picture rendered from the map | ✅ |
+| «Воркута» — a mining town (2 Nov: instead of Magadan), nothing of the camps | `maps/vorkuta.ts`: the mine with the headframe and chimneys, rails with coal wagons, the House of Culture with a generic miners' monument, five-storey blocks, the store and the canteen, heating mains that stop a player but not a bullet, garages; snow tiles and falling snow (`weather: 'snow'`); 16 spawns, flags, bases; no barbed wire, watchtowers or prison symbols | ✅ |
+| No Lenin or real people, no Lee / adidas, no camps (the references carry them) | none on either map: the market's signs name goods, not makers; the monument is a generic miner; the loading pictures are rendered from the maps rather than cut from the references | ✅ |
+| Telegram Stars inside the Mini App | packs for 75 … 3 750 ⭐ (`STARS_PER_USD`), `POST /api/pay/stars` → the bot's invoice → `openInvoice`; `pre_checkout_query` checked (price, player, age) and answered in the webhook's response; `successful_payment` credits once; refunds from `/admin` («Вернуть звёзды») and Telegram's own; `/paysupport`, `/terms`; migration 025 (adds only) — [docs/PAYMENTS.md](docs/PAYMENTS.md) §1 | ✅ code and tests with a stand-in for the Bot API; ⛔ no real Stars purchase made |
+| Xsolla on the website | Pay Station token (Basic auth, SKU `blats_<n>`, the player, sandbox), webhooks `user_validation` / `order_paid` / `order_canceled` with the SHA-1 signature, credit once, refunds take back unspent BLATS; replaces Stripe when its four keys are set — [docs/PAYMENTS.md](docs/PAYMENTS.md) §2 | ✅ code and tests with signed fixtures; ⏳ the owner's keys; ⛔ no real purchase |
+| Own music instead of «Hurt» | «Районные дела»: composed and synthesised by `tools/music/compose.py` (no samples or recordings), 128 BPM, 2:00, looped | ✅ (⏳ the owner's ear — sent to him) |
+| © and a register of assets | the credits' «© 2026 <holder>. All rights reserved.» (`COPYRIGHT_HOLDER`), the footer's ©, terms of purchase (`terms.html`, `terms-ru.html`), [docs/ASSETS.md](docs/ASSETS.md) — every asset, its origin and rights, the fonts' and libraries' licences | ✅ (the holder's name, the operator's contact — the owner's) |
+| Real gun names | the owner said yes (3 Nov) to the proposed names: «Дружба» (AK-47), «Золотая Дружба», «Бархан», «Трещотка», ПП «Точка», «Импортная», «Дальнобой», «Чикагская машинка», «Пистолет комиссара»; ids, balance and purchases unchanged; a test keeps the marks out of the names | ✅ |
+| Arkadich's «Montana» | «джинсы „под фирму“» / «jeans that pass for imported» | ✅ |
+| The full test run and the docs | unit and integration tests, the full browser run on the release bundle, the docs updated (PAYMENTS, ASSETS, ECONOMY, TELEGRAM, DEPLOYMENT, ART_DIRECTION, ARCHITECTURE, PRIVACY, README, TESTING) | see [docs/TESTING.md](docs/TESTING.md) |
+
 
 ## 3. Open risks / next steps
 
-- v0.2.18 part 3 (above, §2j): the maps Черкизон and Воркута; Xsolla + Telegram Stars (waiting for the owner's keys), own music, the © and asset registry (also: Arkadich's lore mentions «Montana» jeans — a real brand name, to be reworded there); the starter pack once the owner picks one; the welcome gift's end date (`WELCOME_GIFT_UNTIL`) when the owner sets it. Invitations: watch the held queue in `/admin → Приглашения` — several guest accounts from different browsers can still farm talons slowly.
+- After v0.2.18 part 3 (above, §2j), the owner's: the Xsolla keys and its store items, then a sandbox purchase and `XSOLLA_SANDBOX=false`; a real Telegram Stars purchase and refund; `COPYRIGHT_HOLDER`, `PAY_SUPPORT` and the operator's name and contact in the privacy and terms pages; his verdict on the music; the starter pack once he picks one; the welcome gift's end date (`WELCOME_GIFT_UNTIL`); the grades of the twelve new characters. Invitations: watch the held queue in `/admin → Приглашения` — several guest accounts from different browsers can still farm talons slowly.
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).
 - Build and run the Docker stack on the target host; test a backup restore.
 - Live Telegram verification on iOS/Android/Desktop/Web (checklist in `docs/TELEGRAM.md` §4), including the v0.3 bot (/start, invitations through `?start=`, the first answer after a sleep).
 - Real-device performance pass (only software-GL headless Chromium was available; JS cost per frame measured at ~6 ms there).
 - Fill the operator placeholders in `apps/web/public/privacy.html` (operator, contact, email provider, payment-record and backup retention).
-- Payments: BLATS are on sale since v0.2.18 (`REAL_MONEY = true`) but no provider is connected on the live server — the game says «coming soon». Next: Xsolla for the website and Telegram Stars inside the Mini App (part 3); the Stripe code stays as an alternative. Name the provider in the privacy policy before switching payments on., real test purchases and refunds, the privacy-policy paragraph about payments, consumer-law and loot-box rules for the target markets.
+- Payments: BLATS are on sale since v0.2.18 (`REAL_MONEY = true`); part 3 added Xsolla on the website and Telegram Stars inside the Mini App (the Stripe code stays as an alternative), but no provider key is set on the live server — the website says «coming soon» until then; Stars switch on with the bot. Still to do by the owner: real test purchases and refunds, consumer-law and loot-box rules for the target markets.
 - Retention ideas discussed with the owner (not built): daily tasks, a first-win bonus, a 7-day login calendar, opt-in bot reminders, seasons, ranked ranks, districts for crews.
 - Resend (or another mail provider) with a verified sender domain for password-reset letters.
 - Content growth (more maps/characters) fits the existing map format and atlas conventions.
-- Confirm the menu music licence («Hurt», Infraction & Emerel Gray) for use in the game, or replace it.
 - Balance of the new modes with real players (capture limit 3, base limit 250, 15 s flag return, 6 s base capture are first guesses tuned with bots).
 - Filled lineups: tune `FILL_RULES` (lineup sizes, the 5 s head start, pacing) and the AI's difficulty by level once real traffic shows how often people play alone; watch the host's CPU (≈ 0.1 ms per filled player per tick).
 
@@ -292,8 +306,8 @@ registry (real gun names included), the full test run and docs.
 | PostgreSQL works | ✅ | migrations 001–011 applied; DB-backed integration tests (incl. economy, payments, email, admin funnel/economy) on PostgreSQL 16 |
 | Strict top-down 2D camera; not isometric / first-person | ✅ | orthographic camera, top-down sprites; screenshots in all modes |
 | Flagship factory map fully playable | ✅ | offline E2E + online two-browser E2E on «Заводская проходная» |
-| Four characters playable | ✅ | now 14 (4 free + 10 from the Arsenal) with sprites, portraits and animations; locked ones are refused by the server unless owned |
-| Three maps functional | ✅ | now 7 maps; spawn/pickup/medkit/supply reachability tests and bot matches with eliminations on every map |
+| Four characters playable | ✅ | now 36 (2 free, 3 for talons, 31 for BLATS by grade) with sprites, portraits and animations; locked ones are refused by the server unless owned |
+| Three maps functional | ✅ | now 12 maps (v0.2.18 part 3: «Черкизон», «Воркута»); spawn/pickup/medkit/supply reachability tests and bot matches with eliminations on every map |
 | Four weapon categories work | ✅ | 32 weapons: pistols, melee, SMGs, shotguns, rifles, snipers, LMG, launchers; 7 equipment types; balance and gadget tests |
 | Two or more independent clients can play together | ✅ | `rooms/realtime.test.ts` (WS clients) and `tests/e2e/online.mjs` (two browsers) |
 | Movement and combat are synchronized | ✅ | identical per-tick snapshot state on both clients; kill/damage events identical |
@@ -315,11 +329,11 @@ registry (real gun names included), the full test run and docs.
 | No real secrets are exposed | ✅ | `.env*` ignored; bot token/DB/session secrets server-only; logger redaction |
 | Deployment instructions match the actual project | 🟡 | non-Docker path executed locally; Docker/compose/Caddy not executed |
 | The first release is completely free | 🟡 changed by the owner (v0.2.18) | free to play: every map and mode, two characters and a full kit are free, weapons and equipment come with talons and levels; BLATS (characters by grade, skins, the skin case) are sold for money — on sale in the game, payments not connected yet («coming soon») |
-| Real payments work end-to-end | ⛔ | the Stripe code, signatures and credit-once are tested with fixtures; no live provider account, so no real purchase has been made (the crypto method was removed in v0.2.18; Xsolla and Telegram Stars — part 3) |
-| Diamonds inside Telegram (Stars, `XTR`) | ⛔ | not implemented; card/crypto disabled inside Telegram (UI + server) |
+| Real payments work end-to-end | ⛔ | Xsolla (v0.2.18 part 3) and Stripe: the code, signatures and credit-once are tested with signed fixtures; no live provider account, so no real purchase has been made (the crypto method was removed in v0.2.18) |
+| BLATS inside Telegram (Stars, `XTR`) | 🟡 | implemented in v0.2.18 part 3: invoices, the pre-checkout check, credit-once, refunds, `/paysupport`, `/terms`; tested end to end against a stand-in for the Bot API (`payments.test.ts`, `tests/e2e/v0218c.mjs`); no real Stars purchase made here |
 | Password-reset letters | 🟡 | Resend integration written; not sent live (no key). Admin one-time reset links work (tested) |
 | Whole game in English with Soviet flavour | ✅ | all player-facing texts; E2E drive the English UI; signage on maps stays Cyrillic by design; `/admin` Russian |
 | English and Russian | ✅ | every player-facing string in both languages (test); switch in the menu; E2E with a Russian browser |
 | Up to 10 players, team modes, capture the flag, base capture | ✅ | shared, realtime and E2E tests (see 2c) |
-| Menu music licence | ⛔ | not verifiable here — operator to confirm before launch |
+| Menu music licence | ✅ | v0.2.18 part 3: the game's own «Районные дела» (synthesised, no samples) replaced «Hurt» — nothing to license ([docs/ASSETS.md](docs/ASSETS.md)) |
 | Lint/format clean | ⛔ | ESLint/Prettier unavailable in the build sandbox (tsc strict with unused-code checks passes) |

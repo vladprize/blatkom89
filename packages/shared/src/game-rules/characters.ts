@@ -229,7 +229,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     quote: 'The smell of blood is the best plan.',
     district: 'River / Port',
     business: 'Muscle, cargo protection',
-    weaponsNote: 'Uzi, shotguns, knives, mines',
+    weaponsNote: 'SMGs, shotguns, knives, mines',
     lore: 'They found Vityok on a river barge, where he had single-handedly chased off a whole gang of dockers from the next district. Since then he gets called when the talking is over. He never has a plan — just a red bandana, a mouth full of teeth and the firm conviction that fish have a say too. His own people are a bit scared of him; strangers even more so.',
     tier: 'premium',
     grade: 'common',

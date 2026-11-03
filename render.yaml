@@ -48,6 +48,21 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      # v0.2.18 part 3 (docs/PAYMENTS.md): Xsolla on the website — the four keys switch it on (sandbox
+      # until XSOLLA_SANDBOX=false); Telegram Stars need only the bot. PAY_SUPPORT: the payment contact;
+      # COPYRIGHT_HOLDER: the name after «©».
+      - key: XSOLLA_MERCHANT_ID
+        sync: false
+      - key: XSOLLA_PROJECT_ID
+        sync: false
+      - key: XSOLLA_API_KEY
+        sync: false
+      - key: XSOLLA_WEBHOOK_SECRET
+        sync: false
+      - key: PAY_SUPPORT
+        sync: false
+      - key: COPYRIGHT_HOLDER
+        sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: MAIL_FROM

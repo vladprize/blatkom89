@@ -62,16 +62,16 @@ Two files are someone else's marks and are **not shipped**: `62-solana-logo.png`
 | Camps and prison symbols | none: «Воркута» is a mining town — no barbed wire, no watchtowers, no prison tattoos anywhere |
 | Places | real place names used as settings: Red Square, the Cherkizon market (closed in 2009), Vorkuta |
 | Soviet vehicles in the art | generic top-down models (a saloon, an estate, a bus, a minibus, a lorry); the internal prop ids `car_zhiguli`, `car_volga`, `bus_paz` are not shown to players |
-| Real gun names | see below — **the owner's decision is pending** |
+| Real gun names | renamed in v0.2.18 part 3 (the owner's decision, 2026-11-03) — see below |
 
 ### Real gun names
 
-Some weapons carry the model names of guns that are registered trademarks of living companies. Earlier
-releases already avoided a few (Desert Eagle → «Deagle», Beretta → «P92», Saiga → «S-12K»). Military
-designations (PM, TT, PPSh-41, SVD, RPG-7, M24, M249, M4A1, AKS-74U, «Mukha», GM-94) are generally treated
-as generic. Proposed in-world names for the rest (sent to the owner on 2026-11-03):
+Some weapons carried the model names of guns that are registered trademarks of living companies. Earlier
+releases already avoided a few (Beretta → «P92», Saiga → «S-12K»). Military designations (PM, TT,
+PPSh-41, SVD, RPG-7, M24, M249, M4A1, AKS-74U, «Mukha», GM-94) are generally treated as generic and stay;
+the SVD's description no longer says «Dragunov». The owner agreed (2026-11-03) to rename the rest:
 
-| Now | Proposed (RU / EN) | Whose mark |
+| Before | Now (RU / EN) | Whose mark |
 |---|---|---|
 | АК-47 / AK-47 | Автомат «Дружба» / Druzhba Rifle | Kalashnikov Concern |
 | Золотой Калаш / Golden Kalash | Золотая «Дружба» / Golden Druzhba | Kalashnikov Concern |
@@ -83,8 +83,11 @@ as generic. Proposed in-world names for the rest (sent to the owner on 2026-11-0
 | Томми-ган «Чикаго» / Chicago Tommy Gun | «Чикагская машинка» / Chicago Typewriter | Kahr Arms / Auto-Ordnance (Tommy Gun, Thompson) |
 | Маузер комиссара / Commissar’s Mauser | Пистолет комиссара / Commissar’s Pistol | Mauser |
 
-Renaming changes only the names players read (`WEAPONS[].name`, `RU_WEAPONS`, the admin's names, a few
-blurbs and one character's «weapons» note); weapon ids, balance, saves and purchases stay as they are.
+Only the names players read changed (`WEAPONS[].name`, `RU_WEAPONS`, the dashboard's names, a few blurbs,
+Vityok's «weapons» note — «SMGs» instead of «Uzi»); weapon ids, balance, saves and purchases stay as they
+were. `apps/web/src/i18n/names.test.ts` keeps these marks out of the names, blurbs, the characters' notes
+and lore, in English and Russian, and out of the dashboard's names. The internal ids (`avtomat`, `uzi`,
+`deagle`, `mp5`, `g36`, `awm`, `tommy`, `mauser`) are never shown to players.
 
 ## 5. Payments and the rights to sell
 
