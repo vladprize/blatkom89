@@ -143,7 +143,7 @@ export async function economy(sql: Sql, r: AdminRange, now = new Date()): Promis
     WITH l AS (
       SELECT (created_at AT TIME ZONE 'UTC')::date AS d, currency, delta FROM currency_ledger WHERE created_at BETWEEN ${from} AND ${to}
     ), p AS (
-      SELECT (paid_at AT TIME ZONE 'UTC')::date AS d, amount_cents FROM payments WHERE status IN ('paid', 'refunded') AND paid_at BETWEEN ${from} AND ${to}
+      SELECT (paid_at AT TIME ZONE 'UTC')::date AS d, amount_cents FROM payments WHERE status IN ('paid', 'refunded') AND currency = 'usd' AND paid_at BETWEEN ${from} AND ${to}
     )
     SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
       COALESCE((SELECT sum(delta) FROM l WHERE l.d = g.day::date AND currency = 'tokens' AND delta > 0), 0)::int AS ti,

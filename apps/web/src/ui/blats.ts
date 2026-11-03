@@ -3,9 +3,9 @@
  * the BLATS banner — on the menu under the Dossier and the Arsenal, and as the head of the Arsenal's
  * «Buy BLATS» section — and the packs' «enough for» hints.
  *
- * The banner never promises what the server can't do: «Buy» only when a payment provider is connected
- * (`ShopConfig.card`) and outside Telegram; otherwise «On sale soon» (inside Telegram BLATS will be sold
- * for Telegram Stars).
+ * The banner never promises what the server can't do: «Buy» only when a payment provider is connected —
+ * on the website `ShopConfig.card` (Xsolla or Stripe), inside Telegram Telegram Stars (`ShopConfig.stars`,
+ * v0.2.18 part 3); otherwise «On sale soon».
  */
 import { CHARACTER_GRADE_PRICES, DIAMOND_PACKS, SKIN_PRICES } from '@blatkom/shared';
 import type { ShopConfig } from '@blatkom/shared';
@@ -13,12 +13,22 @@ import { h } from './dom.js';
 import { t } from '../i18n/index.js';
 import { blatsCoin, fmtNum } from './coin.js';
 
-/** What a purchase can do right now: buy by card, wait for the provider, or wait for Telegram Stars. */
-export type BlatsSale = 'buy' | 'soon' | 'stars';
+/**
+ * What a purchase can do right now: buy on the website, buy for Telegram Stars inside Telegram, or wait
+ * («soon» on the website, «stars-soon» inside Telegram while Stars are not on sale).
+ */
+export type BlatsSale = 'buy' | 'soon' | 'stars' | 'stars-soon';
 
-export function blatsSale(cfg: ShopConfig | null, inTelegram: boolean): BlatsSale {
-  if (inTelegram) return 'stars';
+export function blatsSale(cfg: Pick<ShopConfig, 'card'> & Partial<Pick<ShopConfig, 'stars'>> | null, inTelegram: boolean): BlatsSale {
+  if (inTelegram) return cfg?.stars ? 'stars' : 'stars-soon';
   return cfg?.card ? 'buy' : 'soon';
+}
+
+/** The smallest pack's price in Stars (inside Telegram), for the banner's line. */
+let firstStars: number | null = null;
+export function setBannerStars(stars: Record<string, number> | null | undefined): void {
+  const first = DIAMOND_PACKS[0];
+  firstStars = (first && stars?.[first.id]) || null;
 }
 
 /** $0.99 */
@@ -93,11 +103,12 @@ export function blatsBanner(o: { kind: 'menu' | 'section'; sale: BlatsSale; onCl
 export function setBannerSale(el: HTMLElement, sale: BlatsSale): void {
   el.dataset.sale = sale;
   const cta = el.querySelector<HTMLElement>('.blatsban__cta');
-  if (cta) cta.textContent = sale === 'buy' ? t('Buy →') : '→';
+  if (cta) cta.textContent = sale === 'buy' || sale === 'stars' ? t('Buy →') : '→';
   const from = el.querySelector<HTMLElement>('.blatsban__from');
   const first = DIAMOND_PACKS[0];
   if (from && !el.dataset.fixedNote && first) {
-    const packs = t('Packs from {n} · {usd}', { n: fmtNum(first.diamonds), usd: usdOf(first.usdCents) });
-    from.textContent = sale === 'buy' ? packs : `${packs} · ${t('on sale soon')}`;
+    const price = sale === 'stars' && firstStars ? `⭐ ${fmtNum(firstStars)}` : usdOf(first.usdCents);
+    const packs = t('Packs from {n} · {usd}', { n: fmtNum(first.diamonds), usd: price });
+    from.textContent = sale === 'buy' || sale === 'stars' ? packs : `${packs} · ${t('on sale soon')}`;
   }
 }

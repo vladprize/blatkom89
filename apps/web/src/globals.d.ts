@@ -52,6 +52,8 @@ interface TelegramWebApp {
   lockOrientation?(): void;
   unlockOrientation?(): void;
   showConfirm?(message: string, cb: (ok: boolean) => void): void;
+  /** Bot API 6.1: opens an invoice (a Telegram Stars payment); the status comes to the callback. */
+  openInvoice?(url: string, cb?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void): void;
   openTelegramLink(url: string): void;
   openLink(url: string): void;
   onEvent(event: string, cb: (...args: unknown[]) => void): void;

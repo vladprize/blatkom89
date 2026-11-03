@@ -1066,6 +1066,11 @@ export const RU: Record<string, string> = {
   '{name}’s collection': 'Коллекция: {name}',
   'Characters: {n} of {total}': 'Персонажи: {n} из {total}',
   'Weapon skins: {n}': 'Скины на оружие: {n}',
+  // ── v0.2.18 part 3: Telegram Stars, Xsolla, the terms of purchase
+  'Update Telegram to pay with Stars': 'Обновите Telegram, чтобы платить звёздами',
+  'Terms of purchase': 'Условия покупки',
+  'Paid with Telegram Stars in Telegram’s own window. The BLATS are credited as soon as the payment goes through.': 'Оплата звёздами Telegram — в окне самого Telegram. БЛАТ зачисляются сразу после оплаты.',
+  'Paid with Telegram Stars in Telegram’s own window.': 'Оплата звёздами Telegram — в окне самого Telegram.',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)
@@ -1150,10 +1155,11 @@ export const RU: Record<string, string> = {
   'That was too quick to be true — play the mission through': 'Слишком быстро, чтобы быть правдой — пройди миссию до конца',
   'In a gang battle the sides are the gangs': 'В битве ОПГ стороны — это сами ОПГ',
   'A tournament room’s format is fixed': 'Формат комнаты турнира не меняется',
-  'Inside Telegram, BLATS will be sold for Telegram Stars — coming soon': 'Внутри Telegram БЛАТ будут продаваться за Telegram Stars — скоро',
   'No such BLATS pack': 'Такого набора БЛАТ нет',
   'Only friends see each other’s collection': 'Коллекцию видят только друзья',
   'No such player': 'Такого игрока нет',
+  'Inside Telegram, BLATS are sold for Telegram Stars': 'В Telegram БЛАТ продаются за звёзды Telegram',
+  'Telegram Stars are paid inside Telegram — open the game there': 'Звёздами платят в Telegram — откройте игру там',
 };
 
 /** Russian plural forms [one, few, many] keyed by the English singular passed to plural() / count(). */

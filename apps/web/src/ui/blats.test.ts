@@ -26,10 +26,13 @@ test('v0.2.18 BLATS packs: every pack says what it is enough for, and it really 
   assert.deepEqual(DIAMOND_PACKS.map((p) => usdOf(p.usdCents)), ['$0.99', '$1.99', '$4.99', '$9.99', '$19.99', '$49.99']);
 });
 
-test('v0.2.18 the banner says «Buy» only with a payment provider and outside Telegram', () => {
-  const cfg = (card: boolean) => ({ card, casesEnabled: true, packs: [...DIAMOND_PACKS] });
+test('v0.2.18 the banner says «Buy» only with a payment provider: on the website the card, inside Telegram the Stars', () => {
+  const cfg = (card: boolean, stars: Record<string, number> | null = null) => ({ card, stars, provider: card ? ('xsolla' as const) : null, casesEnabled: true, packs: [...DIAMOND_PACKS] });
   assert.equal(blatsSale(null, false), 'soon');
   assert.equal(blatsSale(cfg(false), false), 'soon');
   assert.equal(blatsSale(cfg(true), false), 'buy');
-  assert.equal(blatsSale(cfg(true), true), 'stars');
+  // part 3: inside Telegram only Telegram Stars sell (Telegram's rule), a card provider changes nothing there
+  assert.equal(blatsSale(cfg(true), true), 'stars-soon');
+  assert.equal(blatsSale(cfg(false, { b99: 75 }), true), 'stars');
+  assert.equal(blatsSale(cfg(true, { b99: 75 }), false), 'buy', 'Stars are not sold on the website');
 });

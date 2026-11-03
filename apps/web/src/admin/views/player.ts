@@ -131,6 +131,24 @@ function storyCard(d: AdminPlayerDetail, me: AdminMe | null | undefined, onChang
   );
 }
 
+/** v0.2.18 part 3: «Вернуть звёзды» for a paid Telegram Stars payment (role admin). */
+function refundButton(x: AdminPlayerDetail['payments'][number], who: string, canRefund: boolean, onDone: () => void): string | HTMLElement {
+  if (x.provider !== 'telegram' || x.status !== 'paid' || !canRefund) return '';
+  const btn = h('button', { class: 'chip', type: 'button', 'data-testid': `refund-${x.id}` }, 'Вернуть звёзды') as HTMLButtonElement;
+  btn.addEventListener('click', () => {
+    if (!confirm(`Вернуть игроку «${who}» ${money(x.amountCents, x.currency)} за ${num(x.diamonds)} BLATS? Неизрасходованные BLATS спишутся.`)) return;
+    btn.disabled = true;
+    apiFetch<{ refunded: boolean }>(`/api/admin/payments/${encodeURIComponent(x.id)}/refund`, { method: 'POST', body: {} })
+      .then(() => {
+        toast('Звёзды возвращены', 'ok');
+        onDone();
+      })
+      .catch((err: Error) => toast(err.message))
+      .finally(() => (btn.disabled = false));
+  });
+  return btn;
+}
+
 function table(head: string[], rows: Array<Array<string | HTMLElement>>, numeric: number[], empty: string): HTMLElement {
   if (rows.length === 0) return h('div', { class: 'chart-empty' }, empty);
   return h(
@@ -326,11 +344,12 @@ export async function renderPlayer(root: HTMLElement, id: string, me?: AdminMe |
       { class: 'card' },
       h('h3', {}, 'Платежи'),
       table(
-        ['Создан', 'Оплачен', 'Способ', 'Набор', 'BLATS', 'Сумма', 'Статус'],
-        d.payments.map((x) => [dateTime(x.createdAt), x.paidAt ? dateTime(x.paidAt) : '—', PAYMENT_PROVIDERS[x.provider] ?? x.provider, x.packId, num(x.diamonds), money(x.amountCents, x.currency), PAYMENT_STATUSES[x.status] ?? x.status]),
+        ['Создан', 'Оплачен', 'Способ', 'Набор', 'BLATS', 'Сумма', 'Статус', ''],
+        d.payments.map((x) => [dateTime(x.createdAt), x.paidAt ? dateTime(x.paidAt) : '—', PAYMENT_PROVIDERS[x.provider] ?? x.provider, x.packId, num(x.diamonds), money(x.amountCents, x.currency), PAYMENT_STATUSES[x.status] ?? x.status, refundButton(x, d.player.displayName, me?.role === 'admin', () => void renderPlayer(root, id, me))]),
         [4, 5],
         'Платежей не было',
       ),
+      h('p', { class: 'note' }, 'Звёзды Telegram возвращает только бот, которому заплатили, — кнопкой «Вернуть звёзды». Платежи на сайте возвращаются в кабинете платёжной системы; её уведомление спишет неизрасходованные BLATS.'),
     ),
     h(
       'section',

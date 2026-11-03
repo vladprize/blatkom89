@@ -293,6 +293,22 @@ export const registerAdminRoutes: RouteModule = (router, deps) => {
     ctx.json(200, { flag: body.flag });
   });
 
+  /**
+   * v0.2.18 part 3: «Вернуть звёзды» — a Telegram Stars payment given back through the bot (only the bot
+   * that was paid can); the unspent BLATS are taken back. Other providers refund in their own dashboards
+   * (their webhook then takes the BLATS back). Admin only, audited.
+   */
+  router.post('/api/admin/payments/:id/refund', admin, async (ctx) => {
+    const id = ctx.params.id ?? '';
+    if (!UUID_RE.test(id)) throw new HttpError(400, 'bad_id', 'Неверный идентификатор');
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, 'rate_limited', 'Слишком много операций подряд, подождите', { 'retry-after': '60' });
+    const p = pg();
+    const res = await p.payments.refundStars(id);
+    await audit(p.sql, deps.log, { adminId: a.id, action: 'stars_refund', target: id, details: res, ip: ctx.ip });
+    ctx.json(200, res);
+  });
+
   /** Audited balance adjustment (support compensation, corrections). Never below zero. */
   router.post('/api/admin/players/:id/grant', admin, async (ctx) => {
     const id = ctx.params.id ?? '';

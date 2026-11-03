@@ -29,6 +29,7 @@ import type {
   FriendCollection,
   CharacterCaseResult,
   CheckoutResponse,
+  StarsInvoiceResponse,
   PaymentStatusResponse,
   LedgerEntry,
   Loadout,
@@ -171,6 +172,10 @@ export class Api {
   }
   setLoadout(l: Loadout) {
     return this.req<Inventory>('POST', '/api/me/loadout', { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods, skins: l.skins ?? {} });
+  }
+  /** v0.2.18 part 3: a Telegram Stars invoice for a pack (inside the Mini App). */
+  starsInvoice(packId: string) {
+    return this.req<StarsInvoiceResponse>('POST', '/api/pay/stars', { packId });
   }
   checkout(packId: string, method: 'card') {
     return this.req<CheckoutResponse>('POST', '/api/pay/checkout', { packId, method });

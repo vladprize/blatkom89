@@ -45,6 +45,22 @@ export function platform(): Platform {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ? 'browser_mobile' : 'browser_desktop';
 }
 
+/**
+ * v0.2.18 part 3: pays an invoice in Telegram Stars (Telegram's own payment sheet over the Mini App);
+ * resolves to Telegram's status. 'unsupported': this Telegram is too old to pay inside the Mini App.
+ */
+export function openInvoice(url: string): Promise<'paid' | 'cancelled' | 'failed' | 'pending' | 'unsupported'> {
+  const t = tg();
+  if (!t?.openInvoice || !t.isVersionAtLeast('6.1')) return Promise.resolve('unsupported');
+  return new Promise((resolve) => {
+    try {
+      t.openInvoice!(url, (status) => resolve(status));
+    } catch {
+      resolve('failed');
+    }
+  });
+}
+
 /** Native Telegram confirm dialog when available (browser `confirm()` is unreliable inside Mini Apps). */
 export function confirmAsync(message: string): Promise<boolean> {
   const t = tg();

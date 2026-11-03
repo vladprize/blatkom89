@@ -78,6 +78,32 @@ const EnvSchema = z.object({
   /** Card payments for BLATS (Stripe Checkout). Both keys are required to enable them. */
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  /**
+   * v0.2.18 part 3: Xsolla Pay Station for BLATS on the website (cards and local methods). All four are
+   * required to switch it on; with them Xsolla takes the website's purchases instead of Stripe. Each pack
+   * is an In-Game Store item whose SKU is `XSOLLA_SKU_PREFIX` + the pack's BLATS (blats_99 … blats_4999).
+   * Payments stay in Xsolla's sandbox until XSOLLA_SANDBOX=false. docs/PAYMENTS.md.
+   */
+  XSOLLA_MERCHANT_ID: z.string().regex(/^\d{1,12}$/).optional(),
+  XSOLLA_PROJECT_ID: z.string().regex(/^\d{1,12}$/).optional(),
+  XSOLLA_API_KEY: z.string().optional(),
+  XSOLLA_WEBHOOK_SECRET: z.string().optional(),
+  XSOLLA_SANDBOX: bool.default('true'),
+  XSOLLA_SKU_PREFIX: z.string().regex(/^[A-Za-z0-9._-]{0,32}$/).default('blats_'),
+  /**
+   * v0.2.18 part 3: BLATS for Telegram Stars (XTR) inside the Mini App — on whenever the bot is
+   * (TELEGRAM_BOT_TOKEN), unless STARS_ENABLED=false. A pack's price in Stars is its dollar price × this,
+   * rounded to 5 (Telegram pays developers about $0.013 per Star; 75 keeps the website's price).
+   */
+  STARS_ENABLED: bool.default('true'),
+  STARS_PER_USD: z.coerce.number().min(10).max(500).default(75),
+  /** Where players go with payment problems (the bot's /paysupport and the terms): an email or a @username. */
+  PAY_SUPPORT: z.string().max(200).optional(),
+  /** Tests only: a stand-in for https://api.telegram.org (the Bot API) on this machine — nothing else is accepted. */
+  TELEGRAM_API_BASE: z
+    .string()
+    .regex(/^http:\/\/(127\.0\.0\.1|localhost)(:\d{2,5})?$/, 'a local test address only')
+    .optional(),
   /** v0.2.17: the main menu's X and Telegram buttons (left empty: «coming soon»). */
   SOCIAL_X_URL: z.string().url().optional(),
   SOCIAL_TELEGRAM_URL: z.string().url().optional(),

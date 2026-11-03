@@ -148,7 +148,7 @@ export const LEDGER_REASONS: Record<string, string> = {
   story: 'Сюжет',
 };
 export const PAYMENT_STATUSES: Record<string, string> = { created: 'ожидает', paid: 'оплачен', failed: 'ошибка', expired: 'истёк', refunded: 'возврат' };
-export const PAYMENT_PROVIDERS: Record<string, string> = { stripe: 'Карта (Stripe)', nowpayments: 'NOWPayments (до v0.2.18)', telegram: 'Telegram Stars' };
+export const PAYMENT_PROVIDERS: Record<string, string> = { stripe: 'Карта (Stripe)', xsolla: 'Xsolla (сайт)', nowpayments: 'NOWPayments (до v0.2.18)', telegram: 'Telegram Stars' };
 export const SIGN_IN_METHODS: Record<string, string> = { telegram: 'Telegram', guest: 'браузер (гость)', email: 'почта', dev: 'разработка' };
 export const RARITIES: Record<string, string> = { common: 'Обычный', rare: 'Редкий', epic: 'Эпический', legendary: 'Легендарный' };
 /** Weapon skins' finishes (v0.23 and the owner's line of v0.2.18 part 2), as in the game's Russian texts. */
@@ -198,6 +198,8 @@ export function itemName(kind: string, id: string): string {
 /** Cents in a payment currency → «4,99 $». Unknown codes fall back to a plain number. */
 export function money(cents: number | null | undefined, currency = 'usd'): string {
   if (cents === null || cents === undefined) return NO_DATA;
+  // v0.2.18 part 3: Telegram Stars have no smaller unit — the amount is the Stars themselves
+  if (currency.toLowerCase() === 'xtr') return `${new Intl.NumberFormat('ru-RU').format(cents)} ⭐`;
   try {
     return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: currency.toUpperCase() }).format(cents / 100);
   } catch {

@@ -47,7 +47,7 @@ import { watchForUpdates } from './updates.js';
 import { renderClubs, renderClub, renderClubEditor, clubLabel } from '../ui/screens/clubs.js';
 import { renderInvite } from '../ui/screens/invite.js';
 import { blatsCoin, fmtNum } from '../ui/coin.js';
-import { blatsBanner, blatsSale, setBannerSale } from '../ui/blats.js';
+import { blatsBanner, blatsSale, setBannerSale, setBannerStars } from '../ui/blats.js';
 import { MatchFullscreenButton, fullscreenAction, fullscreenButton } from '../ui/fullscreenButton.js';
 import { fullscreenWay, isFullscreen } from './fullscreen.js';
 import { renderKon, konLabel, tourneyIcon } from '../ui/screens/kon.js';
@@ -686,6 +686,7 @@ export class App {
       .shopConfig()
       .then((c) => {
         this.shopCfg = c;
+        setBannerStars(c.stars);
         if (this.blatsAd?.isConnected) setBannerSale(this.blatsAd, blatsSale(c, inTelegram()));
       })
       .catch(() => {});

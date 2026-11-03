@@ -153,6 +153,14 @@ export const CaseOpenRequest = z.object({ confirmAge: z.literal(true).optional()
 /** v0.2.18: one weapon's skin for BLATS (the free finishes are everyone's already). */
 export const SkinBuyRequest = z.object({ weapon: z.enum(WEAPON_IDS), finish: z.enum(FINISH_IDS) }).strict();
 export const CheckoutRequest = z.object({ packId: z.string().regex(/^[a-z0-9]{2,16}$/), method: z.enum(['card']) }).strict();
+/** v0.2.18 part 3: POST /api/pay/stars — a Telegram Stars invoice for a BLATS pack (inside the Mini App). */
+export const StarsInvoiceRequest = z.object({ packId: z.string().regex(/^[a-z0-9]{2,16}$/) }).strict();
+export interface StarsInvoiceResponse {
+  paymentId: string;
+  /** Telegram's invoice link: the Mini App opens it with `Telegram.WebApp.openInvoice`. */
+  invoiceUrl: string;
+  stars: number;
+}
 
 /** v0.2.17: GET /api/site — the menu's X and Telegram links (null: «coming soon»). */
 export interface SiteConfig {
@@ -162,7 +170,12 @@ export interface SiteConfig {
 
 /** GET /api/shop/config — which payment methods are configured on this server (v0.2.18: crypto is gone). */
 export interface ShopConfig {
+  /** The website can take payments (Xsolla, or Stripe where Xsolla isn't set up). */
   card: boolean;
+  /** v0.2.18 part 3: who takes the website's payments — named on the purchase button and in the terms. */
+  provider: 'xsolla' | 'stripe' | null;
+  /** v0.2.18 part 3: inside Telegram, each pack's price in Telegram Stars (null: Stars are not on sale). */
+  stars: Record<string, number> | null;
   casesEnabled: boolean;
   packs: DiamondPack[];
 }

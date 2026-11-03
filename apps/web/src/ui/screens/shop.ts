@@ -68,8 +68,8 @@ import { h, toast, asset, portrait } from '../dom.js';
 import type { OnlineClient } from '../../net/OnlineClient.js';
 import { apiErrorText } from '../../net/errors.js';
 import { sfx } from '../../game/audio/Sfx.js';
-import { haptic } from '../../telegram/tg.js';
-import { t, plural, count, num } from '../../i18n/index.js';
+import { haptic, openInvoice } from '../../telegram/tg.js';
+import { t, plural, count, num, getLang } from '../../i18n/index.js';
 import { charText, finishName, gadgetBlurb, gadgetName, modText, rarityLabel, refusalText, weaponBlurb, weaponName } from '../../i18n/content.js';
 import { Doll } from '../doll.js';
 import { openSheet } from '../sheet.js';
@@ -1145,6 +1145,37 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
 
   // ── BLATS (real money, v0.2.18) ───────────────────────────────────────
   const payMethods = (): Array<['card', string]> => (cfg?.card ? [['card', t('By card')]] : []);
+  /** v0.2.18 part 3: inside Telegram each pack's price in Stars (null: not on sale there yet). */
+  const starsPrices = (): Record<string, number> | null => (o.inTelegram ? (cfg?.stars ?? null) : null);
+  /** Waits for the server to hear of the payment from Telegram (a few seconds), then shows the BLATS. */
+  const waitCredited = async (paymentId: string) => {
+    for (let i = 0; i < 24; i++) {
+      await new Promise((r) => setTimeout(r, i < 4 ? 800 : 1500));
+      const st = await online!.api.paymentStatus(paymentId).catch(() => null);
+      if (st?.status === 'paid') {
+        inv = (await online!.loadInventory().catch(() => null)) ?? inv;
+        sfx.play('buy');
+        haptic('notify-success');
+        toast(t('{n} credited', { n: count(st.diamonds, 'diamond') }));
+        return;
+      }
+      if (st?.status === 'failed' || st?.status === 'expired') return void toast(t('The payment did not go through'));
+    }
+    toast(t('The payment is still being processed — the diamonds will arrive automatically'));
+  };
+  const buyStars = (packId: string) =>
+    void act(async () => {
+      const r = await online!.api.starsInvoice(packId);
+      const status = await openInvoice(r.invoiceUrl);
+      if (status === 'paid' || status === 'pending') await waitCredited(r.paymentId);
+      else if (status === 'failed') toast(t('The payment did not go through'));
+      else if (status === 'unsupported') toast(t('Update Telegram to pay with Stars'));
+    });
+  /** «⭐ 75» — the Stars button of a pack inside Telegram. */
+  const starsButton = (packId: string, stars: number) =>
+    h('button', { class: 'btn btn--small btn--red', 'data-testid': `stars-${packId}`, onclick: () => buyStars(packId) }, `⭐ ${fmtNum(stars)}`);
+  /** The terms of purchase (Telegram asks a seller to show them before the payment). */
+  const termsLink = () => h('a', { class: 'termslink', href: asset(getLang() === 'ru' ? 'terms-ru.html' : 'terms.html'), target: '_blank', rel: 'noopener', 'data-testid': 'terms-link' }, t('Terms of purchase'));
   const buyPack = (packId: string, method: 'card') =>
     void act(async () => {
       const r = await online!.api.checkout(packId, method);
@@ -1160,39 +1191,43 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   /** A pack: the coins (more for a bigger pack), BLATS, the price, what it is enough for, how to pay. */
   const packCard = (p: { id: string; diamonds: number; usdCents: number }, i: number, methods: Array<['card', string]>): HTMLElement => {
     const hint = packHint(p.diamonds);
+    const stars = starsPrices()?.[p.id];
     return h(
       'div',
       { class: 'panel col pack', 'data-pack': p.id },
       h('div', { class: 'pack__coins' }, coinPile(i + 1, 26)),
       h('div', { class: 'pack__amt' }, fmtNum(p.diamonds), ' ', h('small', null, t('BLATS'))),
-      h('div', { class: 'pack__usd' }, usd(p.usdCents)),
+      h('div', { class: 'pack__usd' }, stars ? `⭐ ${fmtNum(stars)}` : usd(p.usdCents)),
       hint ? h('div', { class: 'pack__hint', 'data-testid': 'pack-hint' }, h('span', null, t('Enough for:')), ' ', hint) : null,
-      ...(methods.length ? methods.map(([m, label]) => h('button', { class: 'btn btn--small btn--red', onclick: () => buyPack(p.id, m) }, label)) : [h('button', { class: 'btn btn--small', disabled: true }, t('Soon'))]),
+      ...(stars ? [starsButton(p.id, stars)] : methods.length ? methods.map(([m, label]) => h('button', { class: 'btn btn--small btn--red', onclick: () => buyPack(p.id, m) }, label)) : [h('button', { class: 'btn btn--small', disabled: true }, t('Soon'))]),
     );
   };
   const diamondsTab = (): HTMLElement => {
     if (!online) return h('div', { class: 'panel' }, t('Buying BLATS works in the online version of the game.'));
-    // inside Telegram the packs are shown, but they will be sold for Telegram Stars
+    // inside Telegram the packs are sold for Telegram Stars (Telegram's rule for digital goods)
     const methods = o.inTelegram ? [] : payMethods();
+    const stars = starsPrices();
     const head = blatsBanner({
       kind: 'section',
       sale: blatsSale(cfg, o.inTelegram),
       line: blatsIntro(),
       note: o.inTelegram
-        ? t('Buying BLATS inside Telegram is coming soon (via Telegram Stars).')
+        ? stars
+          ? t('Paid with Telegram Stars in Telegram’s own window. The BLATS are credited as soon as the payment goes through.')
+          : t('Buying BLATS inside Telegram is coming soon (via Telegram Stars).')
         : methods.length === 0
           ? t('Payments are being connected — coming soon')
           : t('You pay on the payment provider’s secure page. The BLATS are credited automatically once the payment is confirmed.'),
       right: h('span', { class: 'blatsban__bal' }, h('small', null, t('on your account')), h('b', null, blatsCoin(24, ''), h('span', { 'data-testid': 'blats-balance' }, inv ? String(inv.diamonds) : '…'))),
     });
     // nothing can be bought yet: the banner's note says so
-    if (o.inTelegram || methods.length === 0) head.querySelector('.blatsban__from')?.setAttribute('data-testid', 'pay-soon');
+    if ((o.inTelegram && !stars) || (!o.inTelegram && methods.length === 0)) head.querySelector('.blatsban__from')?.setAttribute('data-testid', 'pay-soon');
     return h(
       'div',
       { class: 'col blatsshop', 'data-testid': 'blats-tab' },
       head,
       h('div', { class: 'packs' }, ...(cfg?.packs ?? []).map((p, i) => packCard(p, i, methods))),
-      h('div', { class: 'muted', style: 'font-size:13px' }, t('Purchases belong to your account. To keep them when you change devices, link an email in your profile.')),
+      h('div', { class: 'muted', style: 'font-size:13px' }, t('Purchases belong to your account. To keep them when you change devices, link an email in your profile.'), ' ', stars || methods.length ? termsLink() : null),
     );
   };
 
@@ -1606,12 +1641,15 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   const diamondsPhone = (): HTMLElement => {
     if (!online) return h('div', { class: 'panel' }, t('Buying BLATS works in the online version of the game.'));
     const methods = o.inTelegram ? [] : payMethods();
+    const stars = starsPrices();
     return h(
       'div',
       { class: 'col arsdiamonds', 'data-testid': 'blats-tab' },
       h('div', { class: 'muted arsnote' }, blatsIntro()),
       o.inTelegram
-        ? h('span', { class: 'badge', style: 'align-self:flex-start', 'data-testid': 'pay-soon' }, t('Buying BLATS inside Telegram is coming soon (via Telegram Stars).'))
+        ? stars
+          ? h('span', { class: 'muted arsnote', 'data-testid': 'pay-stars' }, t('Paid with Telegram Stars in Telegram’s own window.'), ' ', termsLink())
+          : h('span', { class: 'badge', style: 'align-self:flex-start', 'data-testid': 'pay-soon' }, t('Buying BLATS inside Telegram is coming soon (via Telegram Stars).'))
         : methods.length === 0
           ? h('span', { class: 'badge', style: 'align-self:flex-start', 'data-testid': 'pay-soon' }, t('Payments are being connected — coming soon'))
           : null,
@@ -1624,12 +1662,12 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
             'div',
             { class: 'packrow', 'data-pack': p.id },
             h('b', { class: 'packrow__amt' }, amount(p.diamonds, 'diamonds')),
-            h('span', { class: 'packrow__mid' }, h('span', { class: 'packrow__usd' }, usd(p.usdCents)), hint ? h('small', { class: 'packrow__hint' }, hint) : null),
-            ...(methods.length ? methods.map(([m, label]) => h('button', { class: 'btn btn--small btn--red', onclick: () => buyPack(p.id, m) }, label)) : [h('button', { class: 'btn btn--small', disabled: true }, t('Soon'))]),
+            h('span', { class: 'packrow__mid' }, h('span', { class: 'packrow__usd' }, stars?.[p.id] ? `⭐ ${fmtNum(stars[p.id]!)}` : usd(p.usdCents)), hint ? h('small', { class: 'packrow__hint' }, hint) : null),
+            ...(stars?.[p.id] ? [starsButton(p.id, stars[p.id]!)] : methods.length ? methods.map(([m, label]) => h('button', { class: 'btn btn--small btn--red', onclick: () => buyPack(p.id, m) }, label)) : [h('button', { class: 'btn btn--small', disabled: true }, t('Soon'))]),
           );
         }),
       ),
-      h('div', { class: 'muted arsnote' }, t('Purchases belong to your account. To keep them when you change devices, link an email in your profile.')),
+      h('div', { class: 'muted arsnote' }, t('Purchases belong to your account. To keep them when you change devices, link an email in your profile.'), ' ', !o.inTelegram && methods.length ? termsLink() : null),
     );
   };
   /** An item's card: the in-game view (weapons), what it does, and buy / take / test. */

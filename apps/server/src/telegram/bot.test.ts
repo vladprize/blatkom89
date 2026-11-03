@@ -122,7 +122,8 @@ test('bot: set-up registers the webhook with its secret and the bot’s texts on
   assert.equal(set.body.url, webhookUrl(URL_));
   assert.equal(set.body.url, `${URL_}/api/telegram/webhook?v=${BOT_SETTINGS_VERSION}`);
   assert.equal(set.body.secret_token, webhookSecret(TEST_BOT_TOKEN));
-  assert.deepEqual(set.body.allowed_updates, ['message']);
+  // v0.2.18 part 3: Telegram Stars — Telegram's pre-checkout questions too
+  assert.deepEqual(set.body.allowed_updates, ['message', 'pre_checkout_query']);
   const names = calls.map((c) => c.method);
   for (const m of ['setMyCommands', 'setMyShortDescription', 'setMyDescription', 'setChatMenuButton']) assert.ok(names.includes(m), m);
   assert.ok(calls.some((c) => c.method === 'setMyCommands' && c.body.language_code === 'ru'), 'Russian commands');

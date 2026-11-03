@@ -19,7 +19,8 @@ import { scheduleRetention } from '../analytics/retention.js';
 import { EconomyRepo } from '../economy/repo.js';
 import { EmailAuth } from '../auth/email.js';
 import { PaymentService } from '../payments/service.js';
-import { StripeProvider } from '../payments/providers.js';
+import { StripeProvider, XsollaProvider } from '../payments/providers.js';
+import { StarsProvider } from '../payments/stars.js';
 import { ClubRepo } from '../clubs/repo.js';
 
 export interface Persistence {
@@ -115,6 +116,15 @@ export function pgContext(sql: Sql, env: Env, log: Logger): PgContext {
       analytics,
       env.PUBLIC_URL,
       env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET ? new StripeProvider(env.STRIPE_SECRET_KEY, env.STRIPE_WEBHOOK_SECRET) : null,
+      {
+        // v0.2.18 part 3: Xsolla takes the website's payments once its four keys are set
+        xsolla:
+          env.XSOLLA_MERCHANT_ID && env.XSOLLA_PROJECT_ID && env.XSOLLA_API_KEY && env.XSOLLA_WEBHOOK_SECRET
+            ? new XsollaProvider({ merchantId: env.XSOLLA_MERCHANT_ID, projectId: env.XSOLLA_PROJECT_ID, apiKey: env.XSOLLA_API_KEY, webhookSecret: env.XSOLLA_WEBHOOK_SECRET, sandbox: env.XSOLLA_SANDBOX, skuPrefix: env.XSOLLA_SKU_PREFIX })
+            : null,
+        // …and Telegram Stars the Mini App's, whenever the bot is on
+        stars: env.TELEGRAM_BOT_TOKEN && env.STARS_ENABLED ? new StarsProvider(env.TELEGRAM_BOT_TOKEN, env.STARS_PER_USD, fetch, env.TELEGRAM_API_BASE ?? 'https://api.telegram.org') : null,
+      },
     ),
   };
   contexts.set(sql as unknown as object, ctx);

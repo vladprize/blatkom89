@@ -4,7 +4,7 @@
  * All prices and rules come from packages/shared/src/game-rules/economy.ts; the server never trusts
  * client-side ownership, balances or prices.
  */
-import { BuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, CHARACTER_CASE_PRICE, REAL_MONEY, SKIN_CASE_PRICE, SkinBuyRequest, priceOf, skinPrice } from '@blatkom/shared';
+import { BuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, CHARACTER_CASE_PRICE, REAL_MONEY, SKIN_CASE_PRICE, SkinBuyRequest, StarsInvoiceRequest, priceOf, skinPrice } from '@blatkom/shared';
 import type { CaseResult, CharacterCaseResult, Loadout, ShopConfig, ShopPrice, SkinCaseResult } from '@blatkom/shared';
 import type { RouteModule } from '../app.js';
 import { HttpError, readBody } from '../http/router.js';
@@ -41,7 +41,9 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
   router.get('/api/shop/config', (ctx) => {
     const p = deps.sql ? pg().payments : null;
     // v0.2.18: BLATS are on sale (REAL_MONEY); the packs show whether a payment method is connected or not
-    const res: ShopConfig = { card: REAL_MONEY && !!p?.card, casesEnabled: deps.env.CASES_ENABLED, packs: REAL_MONEY ? [...DIAMOND_PACKS] : [] };
+    // v0.2.18 part 3: Xsolla (or Stripe) on the website, Telegram Stars inside the Mini App
+    const web = REAL_MONEY ? (p?.webProvider ?? null) : null;
+    const res: ShopConfig = { card: !!web, provider: web, stars: REAL_MONEY ? (p?.starsPrices() ?? null) : null, casesEnabled: deps.env.CASES_ENABLED, packs: REAL_MONEY ? [...DIAMOND_PACKS] : [] };
     ctx.json(200, res);
   });
 
@@ -124,9 +126,41 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
     if (!REAL_MONEY) throw new HttpError(403, 'payments_off', 'Nothing is sold for money: the game is free');
     const user = currentUser(ctx);
     // Telegram requires digital goods inside Mini Apps to be sold for Telegram Stars (XTR) only
-    if (user.method === 'telegram') throw new HttpError(403, 'telegram_stars_only', 'Inside Telegram, BLATS will be sold for Telegram Stars — coming soon');
+    if (user.method === 'telegram') throw new HttpError(403, 'telegram_stars_only', 'Inside Telegram, BLATS are sold for Telegram Stars');
     const body = await ctx.body(CheckoutRequest, 1024);
-    ctx.json(200, await pg().payments.checkout(user.userId, body.packId, body.method));
+    const lang = /^ru\b/i.test(String(ctx.req.headers['accept-language'] ?? '')) ? 'ru' : 'en';
+    ctx.json(200, await pg().payments.checkout(user.userId, body.packId, body.method, { ip: ctx.ip, lang, alias: user.displayName }));
+  });
+
+  // v0.2.18 part 3: inside Telegram — an invoice in Telegram Stars (the Mini App opens it)
+  router.post('/api/pay/stars', auth, rateLimit(payLimiter, byUser), async (ctx) => {
+    if (!REAL_MONEY) throw new HttpError(403, 'payments_off', 'Nothing is sold for money: the game is free');
+    const user = currentUser(ctx);
+    if (user.method !== 'telegram') throw new HttpError(403, 'stars_in_telegram', 'Telegram Stars are paid inside Telegram — open the game there');
+    const body = await ctx.body(StarsInvoiceRequest, 1024);
+    const lang = /^ru\b/i.test(String(ctx.req.headers['accept-language'] ?? '')) ? 'ru' : 'en';
+    ctx.json(200, await pg().payments.starsInvoice(user.userId, body.packId, lang));
+  });
+
+  // v0.2.18 part 3: Xsolla's webhooks (signed with the project's secret key)
+  router.post('/api/pay/xsolla/webhook', rateLimit(hookLimiter), async (ctx) => {
+    const payments = pg().payments;
+    if (!payments.xsolla) throw new HttpError(404, 'not_found', 'Not found');
+    const raw = await readBody(ctx.req, 256 * 1024);
+    if (!payments.xsolla.verifyWebhook(raw, ctx.req.headers['authorization'] as string | undefined)) {
+      deps.log.warn('xsolla webhook: bad signature', { ip: ctx.ip });
+      return ctx.json(400, { error: { code: 'INVALID_SIGNATURE', message: 'Bad signature' } });
+    }
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(raw.toString('utf8'));
+    } catch {
+      return ctx.json(400, { error: { code: 'INVALID_PARAMETER', message: 'Malformed JSON' } });
+    }
+    const r = await payments.onXsollaWebhook(body);
+    if (r.status === 204) return ctx.json(204, null);
+    deps.log.warn('xsolla webhook refused', { type: String(body.notification_type ?? ''), code: r.code });
+    ctx.json(400, { error: { code: r.code, message: r.message } });
   });
 
   router.get('/api/pay/:id', auth, async (ctx) => {
