@@ -186,13 +186,16 @@ try {
     const ban = P.page.getByTestId('blats-banner-menu');
     await ban.waitFor({ timeout: 15000 });
     await P.page.waitForFunction(() => /99/.test(document.querySelector('[data-testid=blats-banner-menu] .blatsban__from')?.textContent ?? ''), null, { timeout: 15000 }).catch(() => {});
+    // v0.2.19: the banner is the owner's art (the coins and the title in the picture) in the page's language
+    await P.page.waitForFunction(() => { const i = document.querySelector('[data-testid=blats-banner-menu] .blatsart__img'); return !!i && i.complete && i.naturalWidth > 0; }, null, { timeout: 15000 }).catch(() => {});
     const info = await P.page.evaluate(() => {
       const b = document.querySelector('[data-testid=blats-banner-menu]');
       const r = b.getBoundingClientRect();
-      return { sale: b.dataset.sale, text: b.textContent.replace(/\s+/g, ' ').trim(), coins: b.querySelectorAll('.coinpile img').length, inView: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth };
+      const img = b.querySelector('.blatsart__img');
+      return { sale: b.dataset.sale, text: b.textContent.replace(/\s+/g, ' ').trim(), art: img && img.complete && img.naturalWidth > 0 ? img.getAttribute('src') : null, inView: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth };
     });
     const ru = P === B;
-    check(info.sale === 'soon' && info.coins === 3 && info.inView && (ru ? /БЛАТ/.test(info.text) && /Наборы от 99 · \$0\.99 · скоро в продаже/.test(info.text) : /BLATS/.test(info.text) && /Packs from 99 · \$0\.99 · on sale soon/.test(info.text)), `${P.name}: the menu's BLATS banner — the coins, the packs from 99 ($0.99), «on sale soon» while no payment provider is connected, in view («${info.text}»)`);
+    check(info.sale === 'soon' && !!info.art && (ru ? /blats_banner_ru/ : /blats_banner_en/).test(info.art) && info.inView && (ru ? /Наборы от 99 · \$0\.99 · скоро в продаже/.test(info.text) : /Packs from 99 · \$0\.99 · on sale soon/.test(info.text)), `${P.name}: the menu's BLATS banner — the owner's art, the packs from 99 ($0.99), «on sale soon» while no payment provider is connected, in view («${info.text}», ${info.art?.replace(/^.*\//, '')})`);
     const fit = await fits(P.page);
     check(fit.v <= 0 && fit.h <= 0, `${P.name}: the menu with the banner still fits one screen (${JSON.stringify(fit)})`);
   }

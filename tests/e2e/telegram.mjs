@@ -203,7 +203,8 @@ try {
   const W = await website('Website');
   const nick = W.page.getByRole('textbox', { name: 'Alias' });
   await nick.waitFor({ timeout: 60000 });
-  const aliasW = `Linker ${RUN}`;
+  // v0.2.19: aliases are one word of small Latin letters, digits and _ . -
+  const aliasW = `linker_${RUN}`;
   await nick.fill(aliasW);
   await W.page.getByRole('button', { name: 'Done' }).click();
   await W.page.getByTestId('menu-nick').waitFor({ timeout: 20000 });

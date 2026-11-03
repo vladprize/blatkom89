@@ -183,8 +183,8 @@ try {
   await sql`UPDATE profiles SET diamonds = 500 WHERE user_id = ${B.id}`;
   await toMenu(B.page);
   await B.page.getByTestId('arsenal-tile').click();
-  await B.page.locator('.arsmodes button').nth(1).click();
-  await B.page.locator('.arschips button', { hasText: /кейс/i }).click();
+  // v0.2.19: the cases have their own bright button in the Arsenal's top row
+  await B.page.getByTestId('ars-case').click();
   await B.page.getByTestId('char-case').waitFor({ timeout: 15000 });
   const bCase = (await B.page.getByTestId('char-case').innerText()).replace(/\s+/g, ' ');
   const bFit2 = await fits(B.page);

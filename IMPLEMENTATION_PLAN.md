@@ -318,7 +318,7 @@ about the admin panel. My defaults, announced back: aliases `a–z 0–9 _ . -`,
 
 ## 3. Open risks / next steps
 
-- After v0.2.19 (above, §2k): the owner's final edits; an Instagram address (`SOCIAL_INSTAGRAM_URL`); a look at the 19 new skins and the four live ones on a real phone.
+- After v0.2.19 (above, §2k; unit 333 / 333, every browser stage passes on the release bundle): the owner's final edits; an Instagram address (`SOCIAL_INSTAGRAM_URL`); a look at the 19 new skins and the four live ones on a real phone.
 - After v0.2.18 part 3 (above, §2j), the owner's: the Xsolla keys and its store items, then a sandbox purchase and `XSOLLA_SANDBOX=false`; a real Telegram Stars purchase and refund; `COPYRIGHT_HOLDER`, `PAY_SUPPORT` and the operator's name and contact in the privacy and terms pages; his verdict on the music; the starter pack once he picks one; the welcome gift's end date (`WELCOME_GIFT_UNTIL`); the grades of the twelve new characters. Invitations: watch the held queue in `/admin → Приглашения` — several guest accounts from different browsers can still farm talons slowly.
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).
