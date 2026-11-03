@@ -119,12 +119,19 @@ for (const [w, hgt, lang] of [
   await page.getByTestId('ars-shop').click();
   await page.waitForTimeout(300);
   const tabs = await page.locator('.arschips button').allTextContents();
-  check(tabs.length === 5 && tabs.some((x) => (ru ? /БЛАТ/ : /BLATS/).test(x)), `${size}: the shop has five departments, BLATS the last (${tabs.join(' · ')})`);
-  for (const tab of ['weapons', 'gear', 'characters', 'case', 'diamonds']) {
+  check(tabs.length === 4 && (ru ? /БЛАТ/ : /BLATS/).test(tabs[3]), `${size}: the shop has four departments, BLATS the last (${tabs.join(' · ')})`);
+  for (const tab of ['weapons', 'gear', 'characters', 'diamonds']) {
     await page.locator(`.arschips [data-tab="${tab}"]`).click();
     await page.waitForTimeout(400);
     await screen(`the shop: ${tab}`);
   }
+  // v0.2.19: the cases have their own bright button next to «Loadout» and «Shop»
+  await page.getByTestId('ars-case').click();
+  await page.getByTestId('skin-case').waitFor({ timeout: 10000 });
+  check((await page.locator('.arschips').isHidden()) && (await page.getByTestId('ars-case').getAttribute('aria-pressed')) === 'true', `${size}: «Cases» opens the cases from the Arsenal's top row`);
+  await screen('the shop: case');
+  await page.getByTestId('ars-shop').click();
+  await page.waitForTimeout(300);
   await page.locator('.arschips [data-tab="weapons"]').click();
   await page.locator('[data-item="uzi"]').click();
   await page.getByTestId('item-sheet').waitFor({ timeout: 5000 });

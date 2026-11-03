@@ -164,6 +164,8 @@ export interface StarsInvoiceResponse {
 
 /** v0.2.17: GET /api/site — the menu's X and Telegram links (null: «coming soon»). */
 export interface SiteConfig {
+  /** v0.2.19: the project's Instagram (SOCIAL_INSTAGRAM_URL; null: «coming soon»). */
+  instagram?: string | null;
   x: string | null;
   telegram: string | null;
   /** v0.2.18 part 3: who holds the rights, after «©» in the credits (COPYRIGHT_HOLDER; the game's name until set). */

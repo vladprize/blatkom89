@@ -615,10 +615,11 @@ const bogomol: Rig = {
     for (const s of [-1, 1]) {
       p.push({ k: 'ell', c: [hc[0] + 0.6, hc[1] + s * 3.5, hc[2] + 0.5], r: [2.1, 1.8, 1.9], mat: COMPOUND, group: 'eye' });
       p.push({ k: 'cap', a: [hc[0] + 4.2, hc[1] + s * 0.9, hc[2] - 1.4], b: [hc[0] + 5.4, hc[1] + s * 0.3, hc[2] - 1.8], r: 0.45, r2: 0.15, mat: { ramp: H('#2a1a08', '#4a3010', '#6a4a1c') }, group: 'mandible' });
-      // long thin antennae, forward then sweeping back
-      const m: Material = { ramp: H('#2e3c14', '#4a5e22', '#6a8030') };
-      p.push({ k: 'cap', a: [hc[0] + 1.6, hc[1] + s * 0.8, hc[2] + 2.0], b: [hc[0] + 5.6, hc[1] + s * 3.8, hc[2] + 5.0], r: 0.3, r2: 0.24, mat: m, group: 'antenna' });
-      p.push({ k: 'cap', a: [hc[0] + 5.6, hc[1] + s * 3.8, hc[2] + 5.0], b: [hc[0] - 1.6, hc[1] + s * 10.4 + o.sway * 0.4, hc[2] + 5.6], r: 0.24, r2: 0.14, mat: m, group: 'antenna' });
+      // long antennae, forward then sweeping back — v0.2.19 (the owner: «нет куска уса»): thick enough to be
+      // drawn whole at the game's scale, tan like the sheet's
+      const m: Material = { ramp: H('#3a2e10', '#7a6428', '#b89a4a') };
+      p.push({ k: 'cap', a: [hc[0] + 1.6, hc[1] + s * 0.8, hc[2] + 2.0], b: [hc[0] + 5.6, hc[1] + s * 3.8, hc[2] + 5.0], r: 0.62, r2: 0.52, mat: m, group: 'antenna' });
+      p.push({ k: 'cap', a: [hc[0] + 5.6, hc[1] + s * 3.8, hc[2] + 5.0], b: [hc[0] - 1.6, hc[1] + s * 10.4 + o.sway * 0.4, hc[2] + 5.6], r: 0.52, r2: 0.36, mat: m, group: 'antenna' });
     }
     // three little simple eyes on the crown
     for (const [x, y] of [

@@ -20,6 +20,22 @@ const MUSIC_GAIN = 0.55;
 const QUIET_LEVEL = 0.22;
 const QUIET_FADE_MS = 600;
 
+/**
+ * v0.2.19 (the owner: «музыка может сама регулироваться по громкости»): iOS — Safari and the apps' web views,
+ * Telegram's included — ignores HTMLMediaElement.volume, so a track that started there before the first tap
+ * played at full loudness and dropped to the set level when the tap moved it onto WebAudio. Where the
+ * element's volume is not honoured the music waits for the first tap and starts on WebAudio, quietly.
+ */
+function elementVolumeWorks(): boolean {
+  try {
+    const probe = new Audio();
+    probe.volume = 0.5;
+    return Math.abs(probe.volume - 0.5) < 0.01;
+  } catch {
+    return false;
+  }
+}
+
 class MusicPlayer {
   private el: HTMLAudioElement | null = null;
   private gain: GainNode | null = null;
@@ -68,6 +84,8 @@ class MusicPlayer {
   async tryAutoplay(): Promise<boolean> {
     if (!this.wantsSound()) return true;
     if (this.unlocked) return this.playing();
+    // no volume control before the tap here (iOS): no loud start that drops when the player first taps
+    if (!elementVolumeWorks()) return false;
     const el = this.element();
     this.level = 0;
     this.apply();

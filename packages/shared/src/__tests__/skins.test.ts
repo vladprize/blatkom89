@@ -3,14 +3,19 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_LOADOUT,
   FINISHES,
+  CASE_FINISHES,
   FINISH_IDS,
   FREE_FINISHES,
   LINE_FINISHES,
+  LIVE_FINISHES,
+  SHOP_FINISHES,
   SKIN_RARITIES,
   SKIN_RARITY_CHANCE,
   WEAPON_IDS,
   allSkins,
+  byGrade,
   drawSkin,
+  isLiveFinish,
   fillPersona,
   isSkinId,
   parseSkin,
@@ -18,6 +23,7 @@ import {
   sanitizeSkins,
   skinCaseOdds,
   skinId,
+  skinPrice,
 } from '../index.js';
 import type { FinishId, SkinRarity, WeaponId } from '../index.js';
 
@@ -30,9 +36,9 @@ function rng(seed: number): () => number {
   };
 }
 
-test('v0.2.18 part 2: the owner\'s line (22) and the retired first line (9) over four grades; every weapon wears every finish; ids round-trip', () => {
-  assert.equal(FINISH_IDS.length, 31);
-  assert.equal(LINE_FINISHES.length, 22);
+test('v0.2.19: the owner\'s line (22 + the AK sheet\'s 19) and the retired first line (9) over four grades; every weapon wears every finish; ids round-trip', () => {
+  assert.equal(FINISH_IDS.length, 50);
+  assert.equal(LINE_FINISHES.length, 41);
   assert.equal(FINISH_IDS.filter((f) => FINISHES[f].retired).length, 9);
   assert.deepEqual(new Set(LINE_FINISHES.map((f) => FINISHES[f].rarity)), new Set(SKIN_RARITIES));
   assert.equal(SKIN_RARITIES.reduce((s, r) => s + SKIN_RARITY_CHANCE[r], 0), 100);
@@ -40,6 +46,33 @@ test('v0.2.18 part 2: the owner\'s line (22) and the retired first line (9) over
   assert.deepEqual(parseSkin(skinId('avtomat', 'hohloma')), { weapon: 'avtomat', finish: 'hohloma' });
   for (const bad of ['avtomat', 'avtomat.', '.hohloma', 'avtomat.gold', 'laser.hohloma', 'avtomat.hohloma.x', 42, null]) assert.equal(isSkinId(bad), false, String(bad));
   for (const id of allSkins()) assert.match(id, /^[a-z0-9_]{2,24}\.[a-z0-9_]{2,24}$/, 'fits the database check');
+});
+
+test('v0.2.19: the AK sheet — no «Absurd» grade (rare, epic, legendary), four live finishes (a tenth of the line) sold and dropped like any other', () => {
+  const sheet = ['bratok', 'korol', 'neon', 'shashlyk', 'graffiti', 'peklo', 'kilka', 'krovavy', 'kosti', 'kazino', 'hrom', 'pensioner', 'almaz', 'ametist', 'othody', 'biohazard', 'obsidian', 'borsch', 'unitaz'] as const;
+  const grades = { rare: 0, epic: 0, legendary: 0, common: 0 };
+  for (const f of sheet) {
+    const fin = FINISHES[f];
+    grades[fin.rarity]++;
+    assert.ok(SHOP_FINISHES.includes(f) && CASE_FINISHES.includes(f), `${f} is on sale and in the case`);
+    assert.ok(!fin.gift && !fin.retired);
+  }
+  assert.deepEqual(grades, { rare: 5, epic: 8, legendary: 6, common: 0 });
+  assert.equal(SHOP_FINISHES.length, 39);
+  assert.deepEqual([...LIVE_FINISHES].sort(), ['almaz', 'bratok', 'krovavy', 'obsidian']);
+  assert.equal(Math.round(LINE_FINISHES.length / 10), LIVE_FINISHES.length, 'about a tenth of the line');
+  for (const f of LIVE_FINISHES) {
+    assert.ok(isLiveFinish(f));
+    assert.equal(skinPrice(f)?.amount, 499, 'a live skin costs its grade\'s price, nothing more');
+  }
+  assert.equal(isLiveFinish('haki'), false);
+  assert.equal(isLiveFinish(null), false);
+  // the Arsenal's order: by grade, the line's order within a grade
+  const order = byGrade(LINE_FINISHES);
+  const rank = (f: FinishId) => SKIN_RARITIES.indexOf(FINISHES[f].rarity);
+  for (let i = 1; i < order.length; i++) assert.ok(rank(order[i - 1]!) <= rank(order[i]!), `${order[i - 1]} before ${order[i]}`);
+  assert.deepEqual(order.slice(0, 4), ['haki', 'iznos', 'akulka', 'blatkom']);
+  assert.equal(order.length, LINE_FINISHES.length);
 });
 
 test('the skin case never repeats a skin, never gives a free one, follows the grade odds and ends when the collection is complete', () => {

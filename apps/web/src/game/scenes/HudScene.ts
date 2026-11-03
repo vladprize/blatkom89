@@ -14,13 +14,11 @@ import { INSETS_EVENT } from '../../telegram/tg.js';
 import type { KillFeedEntry, ObjectiveEntry, PointsEntry, SupplyEntry } from './hudBus.js';
 import { touchState, isTouchDevice } from '../input/TouchState.js';
 import { setWeaponTexture } from '../render/skins.js';
-import { getSettings, storageGet, storageSet } from '../../app/settings.js';
-import { analytics } from '../../analytics/client.js';
+import { getSettings } from '../../app/settings.js';
 import { sfx } from '../audio/Sfx.js';
 import { t, plural, getLang } from '../../i18n/index.js';
 import { charName, mapName, weaponName } from '../../i18n/content.js';
 
-const TUTORIAL_KEY = 'blatkom89.tutorial.v1';
 /** Team colours: names / text and fills (red 0, blue 1). */
 const TEAM_TEXT = ['#ff8a7a', '#8cc8f6'] as const;
 const TEAM_FILL = [0xd8392e, 0x4a9be0] as const;
@@ -141,8 +139,6 @@ export class HudScene extends Phaser.Scene {
   private modeSig = '';
   private sbSig = '';
   private feedY0 = 14;
-  private tutorial: Phaser.GameObjects.Container | null = null;
-  private tutorialState: { moved: boolean; fired: boolean; startX: number; startY: number; startMag: number; shownAt: number } | null = null;
   private hpText!: Phaser.GameObjects.Text;
   private hpBar!: Phaser.GameObjects.Graphics;
   // weapon
@@ -184,6 +180,8 @@ export class HudScene extends Phaser.Scene {
   private inset: Insets = { ...NO_INSETS };
   /** How much the touch buttons' column is pressed together on a short screen (1: not at all). */
   private btnScaleY = 1;
+  /** Where the move and aim sticks rest (layout()). */
+  private stickRest: Array<{ x: number; y: number }> = [];
 
   constructor() {
     super('hud');
@@ -227,7 +225,6 @@ export class HudScene extends Phaser.Scene {
     this.buildScoreboard();
     this.buildPause();
     if (this.touch) this.buildTouch();
-    this.buildTutorial();
     // flashbang: the screen goes white and fades back (under the touch controls, over everything else)
     this.flashOverlay = this.add.rectangle(0, 0, 10, 10, 0xffffff, 1).setOrigin(0, 0).setDepth(35).setVisible(false);
     if (getSettings().showFps) this.fpsText = txt(this, 6, 0, '', 11, '#9a9080', '400').setDepth(100);
@@ -366,55 +363,6 @@ export class HudScene extends Phaser.Scene {
     this.promptText = txt(this, 0, 0, '', 14, BEIGE, '600').setOrigin(0.5).setDepth(20);
     this.statusText = txt(this, 0, 0, '', 11, '#9a9080', '500').setOrigin(1, 0).setDepth(20);
     this.hitMarker = this.add.graphics().setDepth(21);
-  }
-
-  /** First match ever: a short controls card until the player has moved and fired (then never again). */
-  private buildTutorial() {
-    this.tutorial = null;
-    this.tutorialState = null;
-    if (storageGet(TUTORIAL_KEY)) return;
-    const lines = this.touch
-      ? [t('Left stick — move'), t('Right stick — aim and fire'), t('⟳ — reload · ⇄ — switch weapon'), t('Grenade button — equipment'), t('Weapons and medkits are picked up on the move')]
-      : [t('WASD — move · Shift — walk quietly'), t('Mouse — aim · Left click — fire'), t('R — reload · 1/2/3, Q — weapons'), t('G — grenade / equipment'), t('E — pick up · Tab — score · Esc — pause')];
-    const title = txt(this, 0, 0, t('HOW BUSINESS IS DONE'), 13, '#1a1410', '700').setStroke('#000', 0).setOrigin(0.5, 0);
-    const body = txt(this, 0, 0, lines.join('\n'), this.touch ? 12 : 14, BEIGE, '500').setOrigin(0.5, 0).setAlign('center').setLineSpacing(4);
-    const w = Math.max(title.width, body.width) + 32;
-    const h = title.height + body.height + 26;
-    const g = this.add.graphics();
-    this.panel(g, -w / 2, 0, w, h, 0.86);
-    g.fillStyle(0xd9c7a3, 0.95).fillRect(-title.width / 2 - 8, -6, title.width + 16, title.height + 4);
-    title.setY(-4);
-    body.setY(title.height + 8);
-    this.tutorial = this.add.container(0, 0, [g, title, body]).setDepth(19);
-    this.tutorialState = { moved: false, fired: false, startX: NaN, startY: NaN, startMag: -1, shownAt: 0 };
-  }
-
-  private updateTutorial(me: RenderPlayer | undefined, mag: number, weapon: WeaponId, phase: string, time: number) {
-    const t = this.tutorial;
-    const st = this.tutorialState;
-    if (!t || !st) return;
-    const W = this.scale.width;
-    const H = this.scale.height;
-    t.setPosition(W / 2, this.touch ? H * 0.2 : H * 0.18);
-    // stays out of the way of the countdown and the «go» flash in the centre of the screen
-    t.setVisible(phase === 'active' && time > this.goUntil);
-    if (phase !== 'active' || !me || !me.alive) return;
-    if (!st.shownAt) st.shownAt = time;
-    if (Number.isNaN(st.startX)) {
-      st.startX = me.x;
-      st.startY = me.y;
-    }
-    if (st.startMag < 0 || weapon !== 'pistol') st.startMag = Math.max(st.startMag, mag);
-    if (Math.hypot(me.x - st.startX, me.y - st.startY) > 40) st.moved = true;
-    if (mag < st.startMag) st.fired = true;
-    const done = st.moved && st.fired;
-    if (done || time - st.shownAt > 30_000) {
-      storageSet(TUTORIAL_KEY, '1');
-      if (done) analytics.track('tutorial_completed', { step: 'controls' });
-      this.tweens.add({ targets: t, alpha: 0, duration: 500, onComplete: () => t.destroy() });
-      this.tutorial = null;
-      this.tutorialState = null;
-    }
   }
 
   private buildScoreboard() {
@@ -577,19 +525,15 @@ export class HudScene extends Phaser.Scene {
     if (!active) this.restSticks();
   }
 
+  /** The sticks at rest: their corners (layout()), drawn as big as the room around their buttons allows. */
   private restSticks() {
-    const W = this.scale.width;
-    const H = this.scale.height;
-    const lh = getSettings().leftHanded;
-    const { left: il, right: ir, bottom: ib } = this.inset;
-    const rest = [
-      { x: lh ? W - ir - 150 : il + 150, y: H - ib - 130 * this.btnScaleY },
-      { x: lh ? il + 150 : W - ir - 150, y: H - ib - 130 * this.btnScaleY },
-    ];
+    const rest = this.stickRest;
+    const k = getSettings().stickScale * Math.min(1, this.btnScaleY);
     this.sticks.forEach((s, i) => {
       if (s.id !== null) return;
-      s.base.setPosition(rest[i]!.x, rest[i]!.y).setScale(getSettings().stickScale).setAlpha(0.28);
-      s.knob.setPosition(rest[i]!.x, rest[i]!.y).setScale(getSettings().stickScale).setAlpha(0.35);
+      const p = rest[i] ?? { x: 0, y: 0 };
+      s.base.setPosition(p.x, p.y).setScale(k).setAlpha(0.28);
+      s.knob.setPosition(p.x, p.y).setScale(k).setAlpha(0.35);
     });
   }
 
@@ -647,21 +591,44 @@ export class HudScene extends Phaser.Scene {
       this.weaponBg.clear();
       this.slotGfx.clear();
       for (const o of [...this.slotIcons, ...this.slotNums]) o.setVisible(false);
-      // buttons: measured from the button side's edge and the bottom, inside the safe area; on a short
-      // screen whose top edge is pushed down (Telegram's buttons over a fullscreen app) the column is
-      // pressed together so its top button stays under the minimap and its status line
+      // v0.2.19 (the owner: «джойстики стоят близко с другими кнопками — размести их симметричнее»): the two
+      // sticks mirrored in the bottom corners, each with its own buttons on an arc around it — fire, pick up
+      // and reload by the aiming thumb, equipment and the weapon switch by the moving one (mirrored) — with
+      // room between everything. Offsets from a stick's centre: u towards the middle of the screen, v up. On a
+      // short screen whose top edge is pushed down (Telegram's buttons over a fullscreen app) the whole set is
+      // drawn together so its top button stays under the minimap and its status line; upright, the buttons
+      // stand above the sticks so the two sets never meet in the middle.
       const lh = getSettings().leftHanded;
-      const bx = (d: number) => (lh ? ins.left + d : W - ins.right - d);
+      const portrait = H > W;
       const ceiling = mmy + this.mmH + 4 + 22;
       const room = H - ins.bottom - ceiling;
-      this.btnScaleY = room >= 330 + 32 ? 1 : Math.max(0.6, (room - 32) / 330);
-      const by = (d: number) => H - ins.bottom - d * this.btnScaleY;
+      const side = portrait ? Math.min(150, Math.round(W * 0.25)) : 150;
+      const lift = portrait ? 120 : 96;
+      type Spot = readonly [u: number, v: number, r: number];
+      // the aiming thumb: fire, reload, pick up; the moving thumb: equipment, the weapon switch
+      const AIM: readonly Spot[] = portrait ? [[-40, 120, 44], [50, 96, 32], [5, 215, 36]] : [[-62, 108, 44], [112, -26, 32], [100, 80, 36]];
+      const MOVE: readonly Spot[] = portrait ? [[-40, 120, 34], [50, 96, 32]] : [[-62, 108, 34], [112, -26, 32]];
+      const spots = [...AIM, ...MOVE];
+      const fit = (rs: number) => Math.min(1, Math.min(...spots.map(([, v, r]) => (room - r * rs) / (lift + v))));
+      const rs = Math.max(0.78, Math.min(1, fit(1)));
+      const k2 = Math.max(0.5, fit(rs));
+      this.btnScaleY = k2;
+      const aimSide = lh ? 'left' : 'right';
+      const moveSide = lh ? 'right' : 'left';
+      const at = (where: 'left' | 'right', u: number, v: number) => ({
+        x: where === 'right' ? W - ins.right - side - u * k2 : ins.left + side + u * k2,
+        y: H - ins.bottom - (lift + v) * k2,
+      });
+      this.stickRest = [at(moveSide, 0, 0), at(aimSide, 0, 0)];
       const [fire, reload, swap, interact, gadget] = this.buttons;
-      if (fire) Object.assign(fire, { x: bx(88), y: by(236) });
-      if (reload) Object.assign(reload, { x: bx(236), y: by(52) });
-      if (swap) Object.assign(swap, { x: bx(58), y: by(330) });
-      if (interact) Object.assign(interact, { x: bx(196), y: by(300) });
-      if (gadget) Object.assign(gadget, { x: bx(268), y: by(186) });
+      const place = (b: Btn | undefined, where: 'left' | 'right', [u, v, r]: Spot) => {
+        if (b) Object.assign(b, at(where, u, v), { r: r * rs });
+      };
+      place(fire, aimSide, AIM[0]!);
+      place(reload, aimSide, AIM[1]!);
+      place(interact, aimSide, AIM[2]!);
+      place(gadget, moveSide, MOVE[0]!);
+      place(swap, moveSide, MOVE[1]!);
       for (const b of this.buttons) {
         b.ring.setPosition(b.x, b.y).setScale((b.r * 2) / 112);
         b.icon.setPosition(b.x, b.y);
@@ -820,9 +787,8 @@ export class HudScene extends Phaser.Scene {
         this.banner.destroy();
         this.banner = null;
       } else {
-        // below the first-match controls card if it is still up, otherwise under the score box
-        const tut = this.tutorial?.visible ? this.tutorial.getBounds().bottom + 24 : 0;
-        const y = Math.max(tut, this.touch ? 138 + this.extraTop + this.inset.top : Math.max(H * 0.2, 96 + this.extraTop + this.inset.top));
+        // under the score box (v0.2.19: the first-match controls card is gone — the owner)
+        const y = this.touch ? 138 + this.extraTop + this.inset.top : Math.max(H * 0.2, 96 + this.extraTop + this.inset.top);
         this.banner.setPosition(W / 2, y).setAlpha(left < 400 ? left / 400 : Math.min(1, (this.bannerMs - left) / 150));
       }
     }
@@ -1029,7 +995,6 @@ export class HudScene extends Phaser.Scene {
     this.updateTransient(time);
     this.drawSupplyArrows(time, teams ? hud.myTeam : null, me?.slot ?? -1);
     this.drawObjectiveStrip(time, hud.myTeam);
-    this.updateTutorial(me, hud.mag, hud.weapon, hud.phase, time);
     // health
     const hp = Math.max(0, hud.hp);
     this.hpText.setText(`${hp}/100`);

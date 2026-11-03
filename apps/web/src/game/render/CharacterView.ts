@@ -4,7 +4,7 @@
  * Animation states are driven by session state and events, not random frames.
  */
 import * as Phaser from 'phaser';
-import { angleDiff, WEAPONS } from '@blatkom/shared';
+import { angleDiff, isLiveFinish, WEAPONS } from '@blatkom/shared';
 import type { CharacterId, FinishId, WeaponId } from '@blatkom/shared';
 import type { RenderPlayer } from '../session/types.js';
 import { D } from './depth.js';
@@ -182,7 +182,7 @@ export class CharacterView {
       // only the finish changed (a roster update): repaint, keep the animation
       this.skin = p.skin;
       setWeaponTexture(this.gun, `w_${this.weapon}`, p.skin);
-    }
+    } else if (isLiveFinish(this.skin)) setWeaponTexture(this.gun, `w_${this.weapon}`, this.skin); // a live skin: its frame of now
     // reload state
     if (p.reloading && !this.reloading && WEAPONS[p.weapon].kind !== 'melee') {
       this.reloading = true;

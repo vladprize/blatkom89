@@ -15,6 +15,12 @@
  * emblem («Контора», the owner's «КГБ»), no prison tattoos («Тату»), no maker's logo («Электроника»).
  * The finishes of the first line are retired, not deleted: whoever owns one keeps it and can wear it;
  * they are no longer sold or dropped.
+ *
+ * v0.2.19 — the owner's AK sheet (references/83-skins-ak-sheet.png): nineteen more finishes on sale, graded
+ * rare, epic and legendary (the owner: «Новый класс Абсурд не надо добавлять, распредели их по эпик и
+ * легендари»); four of them (about a tenth of the line) are live — each with its own light, looping
+ * animation (a gold glint, sparks on the facets, lava veins pulsing, a red shimmer) wherever the weapon is
+ * drawn. Still only the look: a live skin is sold at its grade's price like any other.
  */
 import { WEAPON_IDS, isWeaponId } from './weapons.js';
 import type { WeaponId } from './weapons.js';
@@ -46,6 +52,26 @@ export const FINISH_IDS = [
   'carsky',
   'kontora',
   'yadernaya',
+  // v0.2.19: the owner's AK sheet, in its order
+  'bratok',
+  'korol',
+  'neon',
+  'shashlyk',
+  'graffiti',
+  'peklo',
+  'kilka',
+  'krovavy',
+  'kosti',
+  'kazino',
+  'hrom',
+  'pensioner',
+  'almaz',
+  'ametist',
+  'othody',
+  'biohazard',
+  'obsidian',
+  'borsch',
+  'unitaz',
   // the first line (v0.23), retired: kept by those who own them, no longer sold or dropped
   'berezka',
   'rzhavchina',
@@ -72,6 +98,8 @@ export interface Finish {
   gift?: true;
   /** The first line's finish, retired: whoever owns it keeps it; not sold, not dropped. */
   retired?: true;
+  /** v0.2.19: a live finish — drawn with its own light looping animation (the look only). */
+  live?: true;
 }
 
 export const FINISHES: Readonly<Record<FinishId, Finish>> = Object.freeze({
@@ -97,6 +125,25 @@ export const FINISHES: Readonly<Record<FinishId, Finish>> = Object.freeze({
   carsky: { id: 'carsky', name: 'Tsar’s', rarity: 'legendary' },
   kontora: { id: 'kontora', name: 'The Office', rarity: 'legendary' },
   yadernaya: { id: 'yadernaya', name: 'Nuclear Winter', rarity: 'legendary' },
+  bratok: { id: 'bratok', name: 'Golden Mobster', rarity: 'legendary', live: true },
+  korol: { id: 'korol', name: 'Rust King', rarity: 'rare' },
+  neon: { id: 'neon', name: 'Neon District', rarity: 'epic' },
+  shashlyk: { id: 'shashlyk', name: 'Shashlik Master', rarity: 'legendary' },
+  graffiti: { id: 'graffiti', name: 'Street Graffiti', rarity: 'rare' },
+  peklo: { id: 'peklo', name: 'Hellfire', rarity: 'epic' },
+  kilka: { id: 'kilka', name: 'Canned Fish', rarity: 'epic' },
+  krovavy: { id: 'krovavy', name: 'Blood Reaper', rarity: 'legendary', live: true },
+  kosti: { id: 'kosti', name: 'Bone Collector', rarity: 'rare' },
+  kazino: { id: 'kazino', name: 'Casino Boss', rarity: 'epic' },
+  hrom: { id: 'hrom', name: 'Blue Chrome', rarity: 'rare' },
+  pensioner: { id: 'pensioner', name: 'Pensioner Deluxe', rarity: 'epic' },
+  almaz: { id: 'almaz', name: 'Red Diamond', rarity: 'legendary', live: true },
+  ametist: { id: 'ametist', name: 'Amethyst', rarity: 'epic' },
+  othody: { id: 'othody', name: 'Toxic Waste', rarity: 'rare' },
+  biohazard: { id: 'biohazard', name: 'Biohazard X', rarity: 'epic' },
+  obsidian: { id: 'obsidian', name: 'Obsidian Emperor', rarity: 'legendary', live: true },
+  borsch: { id: 'borsch', name: 'Borscht Edition', rarity: 'epic' },
+  unitaz: { id: 'unitaz', name: 'Golden Toilet', rarity: 'legendary' },
   berezka: { id: 'berezka', name: 'Birch Camo', rarity: 'common', retired: true },
   rzhavchina: { id: 'rzhavchina', name: 'Rust', rarity: 'common', retired: true },
   zima: { id: 'zima', name: 'Winter', rarity: 'common', retired: true },
@@ -122,6 +169,21 @@ export const SHOP_FINISHES: readonly FinishId[] = FINISH_IDS.filter((f) => !FINI
 
 /** The current line as the Arsenal lists it: what is on sale and the gifts. */
 export const LINE_FINISHES: readonly FinishId[] = FINISH_IDS.filter((f) => !FINISHES[f].retired);
+
+/** v0.2.19: the live finishes — each drawn with its own light looping animation. */
+export const LIVE_FINISHES: readonly FinishId[] = FINISH_IDS.filter((f) => FINISHES[f].live);
+
+export function isLiveFinish(f: FinishId | null | undefined): boolean {
+  return !!f && !!FINISHES[f]?.live;
+}
+
+/**
+ * v0.2.19: the line in the order the Arsenal shows it — by grade (common → legendary), the line's own order
+ * within a grade.
+ */
+export function byGrade(list: readonly FinishId[]): FinishId[] {
+  return [...list].sort((a, b) => GRADES.indexOf(FINISHES[a].rarity) - GRADES.indexOf(FINISHES[b].rarity) || FINISH_IDS.indexOf(a) - FINISH_IDS.indexOf(b));
+}
 
 export function isFreeFinish(f: FinishId): boolean {
   return FREE_FINISHES.includes(f);

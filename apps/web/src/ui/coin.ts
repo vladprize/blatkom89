@@ -1,7 +1,9 @@
 /**
- * BLATS — the premium currency's red coin (v0.2.18; the pixel coin of the retired $BLAT points, the same
- * art). 16 px art (the bigger files are exact 2×/4×/8× copies): the largest file whose size divides the
- * shown size is scaled by a whole number, so every pixel stays square (48 → the 16 px file ×3, 96 → 32 ×3).
+ * BLATS — the premium currency's coin. v0.2.19 (the owner: «токен BLAT меняем на такой, который на новом
+ * баннере»): the red octagonal gem-coin of the owner's banner, drawn as pixel art by tools/make-blat-coin.py —
+ * a 16 px drawing and a 32 px one (the 64 and 128 px files are exact 2× / 4× copies of it): the largest file
+ * whose size divides the shown size is scaled by a whole number, so every pixel stays square (48 → the 16 px
+ * file ×3, 96 → the 32 px one ×3).
  */
 import { asset, h } from './dom.js';
 import { getLang } from '../i18n/index.js';

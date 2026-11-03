@@ -9,8 +9,8 @@
  */
 import { CHARACTER_GRADE_PRICES, DIAMOND_PACKS, SKIN_PRICES } from '@blatkom/shared';
 import type { ShopConfig } from '@blatkom/shared';
-import { h } from './dom.js';
-import { t } from '../i18n/index.js';
+import { asset, h } from './dom.js';
+import { getLang, t } from '../i18n/index.js';
 import { blatsCoin, fmtNum } from './coin.js';
 
 /**
@@ -95,6 +95,23 @@ export function blatsBanner(o: { kind: 'menu' | 'section'; sale: BlatsSale; onCl
     ? h('button', { class: `blatsban blatsban--${o.kind}`, type: 'button', 'data-testid': `blats-banner-${o.kind}`, 'aria-label': t('Open the BLATS section'), onclick: o.onClick }, ...body)
     : h('div', { class: `blatsban blatsban--${o.kind}`, 'data-testid': `blats-banner-${o.kind}` }, ...body);
   if (o.note !== undefined) el.dataset.fixedNote = '1';
+  setBannerSale(el, o.sale);
+  return el;
+}
+
+/**
+ * v0.2.19 (the owner: «замени на главной странице баннер BLAT на тот, который я тебе прикрепил»): the menu's
+ * banner is the owner's art (laid out 4:1 by tools/make-menu-art.py, in the player's language) with the packs'
+ * line and the arrow over its skyline; the same «Buy» rules as the drawn banner.
+ */
+export function blatsArtBanner(o: { sale: BlatsSale; onClick: () => void }): HTMLElement {
+  const lang = getLang() === 'ru' ? 'ru' : 'en';
+  const el = h(
+    'button',
+    { class: 'blatsart', type: 'button', 'data-testid': 'blats-banner-menu', 'aria-label': t('Open the BLATS section'), onclick: o.onClick },
+    h('img', { class: 'blatsart__img', 'data-testid': 'blats-banner-art', src: asset(`assets/ui/blats_banner_${lang}.jpg`), alt: t('Buy BLATS'), width: '1600', height: '400', draggable: 'false' }),
+    h('span', { class: 'blatsart__foot' }, h('small', { class: 'blatsban__from' }), h('span', { class: 'blatsban__cta', 'data-testid': 'blats-banner-menu-cta' })),
+  );
   setBannerSale(el, o.sale);
   return el;
 }

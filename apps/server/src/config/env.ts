@@ -109,6 +109,8 @@ const EnvSchema = z.object({
   /** v0.2.17: the main menu's X and Telegram buttons (left empty: «coming soon»). */
   SOCIAL_X_URL: z.string().url().optional(),
   SOCIAL_TELEGRAM_URL: z.string().url().optional(),
+  /** v0.2.19: the menu's Instagram button (left of X; left empty: «coming soon»). */
+  SOCIAL_INSTAGRAM_URL: z.string().url().optional(),
   /** Password-reset emails through Resend (https://resend.com); without a key the admin issues reset links. */
   RESEND_API_KEY: z.string().optional(),
   MAIL_FROM: z.string().optional(),

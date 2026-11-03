@@ -65,13 +65,17 @@ test('v0.2.18 grades: four, coloured grey / red / purple / gold', () => {
   assert.equal(new Set(Object.values(GRADE_COLORS)).size, 4);
 });
 
-test('v0.2.18 part 2 skins: the owner\'s line — 20 on sale by grade (99 / 199 / 299 / 499 BLATS), 2 welcome gifts, the first line retired', () => {
-  // the line, in the owner's order: 2 regular on sale + the 2 gifts, 10 rare, 5 epic, 3 legendary
-  assert.deepEqual([...LINE_FINISHES], ['haki', 'iznos', 'akulka', 'blatkom', 'sparta', 'sport', 'devyanostye', 'malina', 'video', 'cherkizon', 'radiaciya', 'afgan', 'tatu', 'plenka', 'kosmos', 'zakat', 'hohloma', 'elektronika', 'led', 'carsky', 'kontora', 'yadernaya']);
+test('v0.2.19 skins: the owner\'s line — 39 on sale by grade (99 / 199 / 299 / 499 BLATS), 2 welcome gifts, the first line retired', () => {
+  // the line, in the owner's order: 2 regular on sale + the 2 gifts, 10 rare, 5 epic, 3 legendary; then the
+  // AK sheet of v0.2.19 (5 rare, 8 epic, 6 legendary)
+  assert.deepEqual([...LINE_FINISHES], [
+    'haki', 'iznos', 'akulka', 'blatkom', 'sparta', 'sport', 'devyanostye', 'malina', 'video', 'cherkizon', 'radiaciya', 'afgan', 'tatu', 'plenka', 'kosmos', 'zakat', 'hohloma', 'elektronika', 'led', 'carsky', 'kontora', 'yadernaya',
+    'bratok', 'korol', 'neon', 'shashlyk', 'graffiti', 'peklo', 'kilka', 'krovavy', 'kosti', 'kazino', 'hrom', 'pensioner', 'almaz', 'ametist', 'othody', 'biohazard', 'obsidian', 'borsch', 'unitaz',
+  ]);
   assert.deepEqual([...WELCOME_FINISHES], ['akulka', 'blatkom']);
-  assert.equal(SHOP_FINISHES.length, 20);
+  assert.equal(SHOP_FINISHES.length, 39);
   const byGrade = (g: string) => SHOP_FINISHES.filter((f) => FINISHES[f].rarity === g).length;
-  assert.deepEqual([byGrade('common'), byGrade('rare'), byGrade('epic'), byGrade('legendary')], [2, 10, 5, 3]);
+  assert.deepEqual([byGrade('common'), byGrade('rare'), byGrade('epic'), byGrade('legendary')], [2, 15, 13, 9]);
   assert.deepEqual([...CASE_FINISHES], [...SHOP_FINISHES], 'the case gives only what is on sale');
   // the first line is retired, not deleted: its ids stay valid (owned rows keep working), nothing of it is sold
   for (const f of ['berezka', 'rzhavchina', 'zima', 'flora', 'gzhel', 'pioner', 'malahit', 'zoloto', 'yantar'] as const) {
@@ -92,9 +96,9 @@ test('v0.2.18 part 2 skins: the owner\'s line — 20 on sale by grade (99 / 199 
   assert.equal(skinBuyRefusal(inv, 'pistol', 'kosmos'), 'funds');
   assert.equal(skinBuyRefusal(inv, 'pistol', 'gzhel'), 'not_for_sale', 'retired');
   assert.equal(skinBuyRefusal(inv, 'pistol', 'akulka'), 'not_for_sale', 'the gift');
-  // the gift's skins: every weapon in both finishes; the line's skins: every weapon in the 22
+  // the gift's skins: every weapon in both finishes; the line's skins: every weapon in the 41
   assert.equal(welcomeSkins().length, SKINNABLE_WEAPONS.length * 2);
-  assert.equal(lineSkins().length, SKINNABLE_WEAPONS.length * 22);
+  assert.equal(lineSkins().length, SKINNABLE_WEAPONS.length * 41);
   // the case never gives a gift or a retired finish
   const r = () => 0.5;
   for (let i = 0; i < 50; i++) {

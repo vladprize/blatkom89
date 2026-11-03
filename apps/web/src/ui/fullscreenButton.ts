@@ -41,17 +41,18 @@ export function fullscreenAction(root: HTMLElement): void {
 }
 
 /** A button that toggles full screen and follows the state (hidden where there is no way to do it). */
-export function fullscreenButton(root: HTMLElement, cls = 'iconbtn', testid = 'fullscreen'): HTMLButtonElement | null {
+export function fullscreenButton(root: HTMLElement, cls = 'iconbtn', testid = 'fullscreen', o: { label?: boolean } = {}): HTMLButtonElement | null {
   const way = fullscreenWay();
   if (way === 'none') return null;
-  const btn = h('button', { class: `${cls} fsbtn`, 'data-testid': testid }) as HTMLButtonElement;
+  const btn = h('button', { class: `${cls} fsbtn${o.label ? ' fsbtn--label' : ''}`, 'data-testid': testid }) as HTMLButtonElement;
   const paint = () => {
     const on = isFullscreen();
     const label = on ? t('Exit full screen') : t('Full screen');
     btn.setAttribute('aria-label', label);
     btn.setAttribute('aria-pressed', String(on));
     btn.title = label;
-    btn.replaceChildren(fullscreenIcon(on));
+    // v0.2.19 (the owner: «полный экран на компе вообще не обнаружил»): on a computer the icon says what it does
+    btn.replaceChildren(fullscreenIcon(on), ...(o.label ? [h('span', { class: 'fsbtn__label' }, label)] : []));
   };
   btn.addEventListener('click', () => fullscreenAction(root));
   const off = onFullscreenChange(() => {

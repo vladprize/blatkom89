@@ -299,17 +299,6 @@ export const RU: Record<string, string> = {
   'Shown': 'Показывать',
   'Enter — say something to everybody, T — to your team, Tab — switch. Lines go to the players in the room and aren’t stored.': 'Enter — написать всем, T — своим, Tab — переключить. Сообщения видят только игроки комнаты, нигде они не хранятся.',
   // ── HUD, connection, nickname, modes
-  'Left stick — move': 'Левый стик — движение',
-  'Right stick — aim and fire': 'Правый стик — прицел и огонь',
-  '⟳ — reload · ⇄ — switch weapon': '⟳ — перезарядка · ⇄ — смена оружия',
-  'Grenade button — equipment': 'Кнопка с гранатой — снаряжение',
-  'Weapons and medkits are picked up on the move': 'Оружие и аптечки подбираются на ходу',
-  'WASD — move · Shift — walk quietly': 'WASD — движение · Shift — тихий шаг',
-  'Mouse — aim · Left click — fire': 'Мышь — прицел · ЛКМ — огонь',
-  'R — reload · 1/2/3, Q — weapons': 'R — перезарядка · 1/2/3, Q — оружие',
-  'G — grenade / equipment': 'G — граната / снаряжение',
-  'E — pick up · Tab — score · Esc — pause': 'E — подобрать · Tab — счёт · Esc — пауза',
-  'HOW BUSINESS IS DONE': 'КАК ВЕСТИ ДЕЛА',
   'DEFICIT GOODS: {name}': 'ДЕФИЦИТ: {name}',
   'DEFICIT GOODS DELIVERED!': 'ДЕФИЦИТ ЗАВЕЗЛИ!',
   'In the crate: {name} with a full load of ammo — look for the marker on the map': 'В ящике: {name} с полным боекомплектом — ищи метку на карте',
@@ -1075,6 +1064,13 @@ export const RU: Record<string, string> = {
   'Paid with Telegram Stars in Telegram’s own window. The BLATS are credited as soon as the payment goes through.': 'Оплата звёздами Telegram — в окне самого Telegram. БЛАТ зачисляются сразу после оплаты.',
   'Paid with Telegram Stars in Telegram’s own window.': 'Оплата звёздами Telegram — в окне самого Telegram.',
   'The payment is still being processed — the BLATS will arrive automatically': 'Платёж ещё обрабатывается — БЛАТ придут сами',
+  // ── v0.2.19: the owner’s pre-final edits
+  'Our Instagram — coming soon': 'Наш Instagram — скоро',
+  'Worn': 'Надет',
+  'Yours: {n} of {total}': 'Твоих: {n} из {total}',
+  'All skins': 'Все скины',
+  'Live': 'Живой',
+  'A live skin: it shimmers in the game': 'Живой скин: переливается в игре',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)

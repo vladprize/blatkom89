@@ -54,7 +54,9 @@ import {
   GRADES,
   blatsToUsd,
   characterCaseOdds,
+  byGrade,
   isFreeFinish,
+  isLiveFinish,
   ownsSkin as ownsSkinIn,
   parseSkin,
   skinId,
@@ -74,7 +76,7 @@ import { charText, finishName, gadgetBlurb, gadgetName, modText, rarityLabel, re
 import { Doll } from '../doll.js';
 import { openSheet } from '../sheet.js';
 import type { Sheet } from '../sheet.js';
-import { skinIconUrl } from '../../game/render/skins.js';
+import { animateLiveIcon, skinIconReady, skinIconUrl } from '../../game/render/skins.js';
 import { blatsCoin, fmtNum } from '../coin.js';
 import { blatsBanner, blatsSale, coinPile, packHint } from '../blats.js';
 
@@ -139,6 +141,29 @@ export function priceLabel(p: ShopPrice): HTMLElement {
   return h('span', { class: 'amt' }, cur('diamonds'), String(p.amount), h('small', null, ` ${usd(p.amount)}`));
 }
 
+/** v0.2.19: the cases' chest (the owner: «раздел CASES нужно сделать более заметным»). */
+function caseIcon(size = 16): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('class', 'caseico');
+  for (const [d, fill] of [
+    ['M3 10h18v10H3z', '#7a4a1c'],
+    ['M4 5.5C4 4.1 5.1 3 6.5 3h11C18.9 3 20 4.1 20 5.5V10H4z', '#a8642a'],
+    ['M3 10h18v2H3zM10.5 3h3v17h-3z', '#f2b632'],
+    ['M10 9h4v5h-4z', '#fff0b0'],
+  ] as const) {
+    const el = document.createElementNS(NS, 'path');
+    el.setAttribute('d', d);
+    el.setAttribute('fill', fill);
+    svg.append(el);
+  }
+  return svg;
+}
+
 /** v0.2.18: a grade's coloured label («Rare» in red, …). */
 export function gradeTag(g: Grade, cls = ''): HTMLElement {
   return h('span', { class: `grade grade--${g} ${cls}`.trim(), 'data-grade': g }, rarityLabel(g));
@@ -168,13 +193,18 @@ function icon(kind: 'weapon' | 'gadget' | 'mod', id: string, size: IconSize, cls
 export function weaponImg(w: WeaponId, size: IconSize = 'big', finish: FinishId | null = null): HTMLImageElement {
   const img = icon('weapon', w, size, `wimg wimg--${size}`);
   if (finish) {
-    // the painted icon replaces the plain one as soon as it is ready
+    // the painted icon replaces the plain one as soon as it is ready (at once when it was painted before);
+    // a live finish then loops (v0.2.19)
     img.dataset.finish = finish;
-    void skinIconUrl(w, finish, size === 'small')
-      .then((url) => {
-        if (img.dataset.finish === finish) img.src = url;
-      })
-      .catch(() => {});
+    const now = skinIconReady(w, finish, size === 'small');
+    if (now) img.src = now;
+    else
+      void skinIconUrl(w, finish, size === 'small')
+        .then((url) => {
+          if (img.dataset.finish === finish) img.src = url;
+        })
+        .catch(() => {});
+    animateLiveIcon(img, w, finish, size === 'small');
   }
   return img;
 }
@@ -447,7 +477,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
    * are worn with a tap (the server keeps the choice); the others are tried on here and bought right away
    * for BLATS (v0.2.18), or come from the skin case.
    */
-  const skinRow = (w: WeaponId, current: FinishId | null): HTMLElement => {
+  const skinRow = (w: WeaponId, current: FinishId | null, where: 'room' | 'sheet' = 'room'): HTMLElement => {
     const pick = (f: FinishId | null) => {
       trying = { ...trying, weapon: w, finish: f };
       const wearable = !!online && !!inv && (f === null || ownsSkin(w, f));
@@ -472,27 +502,41 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       void act(() => online.buySkin(w, f), t('Skin on: {name}', { name: `${weaponName(w)} · ${finishName(f)}` }));
     };
     const price = current ? skinPrice(current) : null;
+    // v0.2.19 (the owner: «меню со скинами — более красочное и масштабное по картинкам»): every skin is a card
+    // with the weapon painted in it, big, its grade's colour and ribbon, its name and whether it's yours or its
+    // price — a strip in the dressing room, a grid in the skins' sheet (the «Skins» button)
+    const card = (f: FinishId | null) => {
+      const g = f ? FINISHES[f].rarity : null;
+      const mine = f === null || ownsSkin(w, f);
+      const cost = f && !mine ? skinPrice(f) : null;
+      return h(
+        'button',
+        {
+          class: `skinchip skincard ${g ? `skinchip--${g} skincard--${g}` : 'skincard--std'}${f && mine ? ' skinchip--mine' : ''}${f && FINISHES[f].gift ? ' skinchip--gift' : ''}${f && isLiveFinish(f) ? ' skincard--live' : ''}`,
+          'aria-pressed': String(current === f),
+          'data-finish': f ?? '',
+          title: f ? `${rarityLabel(FINISHES[f].rarity)} · ${skinTitle(w, f)}` : t('Standard paint'),
+          onclick: () => pick(f),
+        },
+        g ? gradeTag(g, 'skincard__grade') : h('span', { class: 'grade grade--std skincard__grade' }, t('Standard')),
+        h('span', { class: 'skincard__pic' }, weaponImg(w, 'big', f)),
+        h('span', { class: 'skincard__name' }, f ? finishName(f) : t('Standard'), f && FINISHES[f].gift ? ' 🎁' : ''),
+        h('span', { class: 'skincard__state' }, mine ? `✓ ${current === f ? t('Worn') : t('Owned')}` : cost ? priceLabel(cost) : ''),
+        f && isLiveFinish(f) ? h('span', { class: 'skincard__live', title: t('A live skin: it shimmers in the game') }, t('Live')) : null,
+      );
+    };
+    const list = byGrade(finishesFor(w));
     return h(
       'div',
-      { class: 'skinpick', 'data-testid': 'skin-pick' },
-      h('span', { class: 'chiplabel' }, t('Skin')),
-      h('button', { class: 'skinchip', 'aria-pressed': String(current === null), 'data-finish': '', onclick: () => pick(null) }, t('Standard')),
-      ...finishesFor(w).map((f) =>
-        h(
-          'button',
-          {
-            class: `skinchip skinchip--${FINISHES[f].rarity}${ownsSkin(w, f) ? ' skinchip--mine' : ''}${FINISHES[f].gift ? ' skinchip--gift' : ''}`,
-            'aria-pressed': String(current === f),
-            'data-finish': f,
-            title: `${rarityLabel(FINISHES[f].rarity)} · ${skinTitle(w, f)}`,
-            onclick: () => pick(f),
-          },
-          h('i', { class: `swatch swatch--${f}`, 'aria-hidden': 'true' }),
-          finishName(f),
-          FINISHES[f].gift ? ' 🎁' : '',
-          ownsSkin(w, f) ? ' ✓' : '',
-        ),
+      { class: `skinpick skinpick--cards skinpick--${where}`, 'data-testid': 'skin-pick' },
+      h(
+        'div',
+        { class: 'skinpick__head' },
+        h('span', { class: 'chiplabel' }, t('Skins')),
+        h('span', { class: 'skinpick__count' }, t('Yours: {n} of {total}', { n: list.filter((f) => ownsSkin(w, f)).length, total: list.length })),
+        where === 'room' ? h('button', { class: 'btn btn--small skinsbtn', 'data-testid': 'skins-all', onclick: () => openSkins(w) }, h('i', { 'aria-hidden': 'true' }, '✦'), t('All skins')) : null,
       ),
+      h('div', { class: 'skingrid' }, card(null), ...list.map((f) => card(f))),
       current && !ownsSkin(w, current) && price
         ? h(
             'div',
@@ -566,8 +610,8 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       ...tabs.map(([id, label]) =>
         h(
           'button',
-          { role: 'tab', 'aria-pressed': String(tab === id), ...(id === 'diamonds' ? { class: 'tab--blats', 'data-testid': 'tab-blats' } : {}), onclick: () => ((tab = id), sfx.play('click'), draw()) },
-          ...(id === 'diamonds' ? [blatsCoin(16, ''), ' '] : []),
+          { role: 'tab', 'aria-pressed': String(tab === id), ...(id === 'diamonds' ? { class: 'tab--blats', 'data-testid': 'tab-blats' } : id === 'case' ? { class: 'tab--case', 'data-testid': 'tab-case' } : {}), onclick: () => ((tab = id), sfx.play('click'), draw()) },
+          ...(id === 'diamonds' ? [blatsCoin(16, ''), ' '] : id === 'case' ? [caseIcon(16)] : []),
           label,
         ),
       ),
@@ -1283,26 +1327,31 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   /** The skin picker's preview: the dressing room on wide screens, the kit (and its sheet) on phones. */
   function refreshPreview() {
     if (phone) draw();
-    else drawRoom();
+    else {
+      drawRoom();
+      refreshSheet();
+    }
   }
   const go = (next: ArsenalTab) => {
     sfx.play('click');
     toTab(next);
   };
+  // the shop's departments (v0.2.19: the cases have their own button next to «Loadout» and «Shop»)
   const shopTabs = (): Array<[ShopTab, string]> => [
     ['weapons', t('Weapons')],
     ['gear', t('Equipment')],
     ['characters', t('Characters')],
-    ['case', t('Cases')],
     ...(REAL_MONEY ? [['diamonds', t('BLATS')] as [ShopTab, string]] : []),
   ];
   const drawPhoneTabs = () => {
     const kit = tab === 'loadout';
+    // v0.2.19: the cases one tap away from anywhere in the Arsenal (the owner: «более заметным»)
     modeEl.replaceChildren(
       h('button', { role: 'tab', 'aria-pressed': String(kit), 'data-tab': 'loadout', 'data-testid': 'ars-kit', onclick: () => !kit && go('loadout') }, t('Loadout')),
-      h('button', { role: 'tab', 'aria-pressed': String(!kit), 'data-tab': 'shop', 'data-testid': 'ars-shop', onclick: () => kit && go(lastShop) }, t('Shop')),
+      h('button', { role: 'tab', 'aria-pressed': String(!kit && tab !== 'case'), 'data-tab': 'shop', 'data-testid': 'ars-shop', onclick: () => (kit || tab === 'case') && go(lastShop === 'case' ? 'weapons' : lastShop) }, t('Shop')),
+      h('button', { role: 'tab', class: 'tab--case', 'aria-pressed': String(tab === 'case'), 'data-tab': 'case', 'data-testid': 'ars-case', title: t('Cases'), onclick: () => tab !== 'case' && go('case') }, caseIcon(18), h('span', null, t('Cases'))),
     );
-    chipsEl.hidden = kit;
+    chipsEl.hidden = kit || tab === 'case';
     chipsEl.classList.toggle('arschips--5', shopTabs().length > 4);
     chipsEl.replaceChildren(
       ...shopTabs().map(([id, label]) =>
@@ -1366,7 +1415,13 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         : h(
             'div',
             { class: 'kitcard__acts' },
-            h('button', { class: 'btn btn--small', 'data-testid': 'kit-skins', onclick: () => openSkins(w) }, t('Skins')),
+            h(
+              'button',
+              { class: 'btn btn--small btn--skins', 'data-testid': 'kit-skins', onclick: () => openSkins(w) },
+              h('i', { 'aria-hidden': 'true' }, '✦'),
+              h('span', null, t('Skins')),
+              h('small', { class: 'btn--skins__n' }, `${byGrade(finishesFor(w)).filter((f) => ownsSkin(w, f)).length}/${finishesFor(w).length}`),
+            ),
             h('button', { class: 'btn btn--small', 'data-testid': 'kit-mods', onclick: () => openMods(w) }, fit.length ? t('Modifications') : t('Stats')),
           ),
     );
@@ -1464,7 +1519,12 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       'skin-sheet',
       () => {
         const finish = trying.weapon === w && trying.finish !== undefined ? trying.finish : worn(w);
-        return h('div', { class: 'col skinsheet' }, h('div', { class: 'wpic skinsheet__pic' }, weaponImg(w, 'big', finish)), skinRow(w, finish));
+        return h(
+          'div',
+          { class: 'col skinsheet' },
+          h('div', { class: `wpic skinsheet__pic${finish ? ` skinsheet__pic--${FINISHES[finish].rarity}` : ''}` }, weaponImg(w, 'big', finish), finish ? h('span', { class: 'skinsheet__name' }, gradeTag(FINISHES[finish].rarity), finishName(finish)) : null),
+          skinRow(w, finish, 'sheet'),
+        );
       },
       null,
       () => {
@@ -1838,6 +1898,8 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     drawTabs();
     const content = tab === 'loadout' ? loadoutTab() : tab === 'weapons' ? weaponsTab() : tab === 'gear' ? gearTab() : tab === 'characters' ? charactersTab() : tab === 'case' ? caseTab() : diamondsTab();
     body.replaceChildren(content);
+    // a sheet open over the Arsenal (the skins' dialog) shows the new state too
+    refreshSheet();
   };
 
   draw();

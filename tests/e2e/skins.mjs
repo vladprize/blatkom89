@@ -61,7 +61,7 @@ try {
   await page.locator('.tabs button', { hasText: 'Case' }).click();
   await page.getByTestId('skin-case').waitFor({ timeout: 15000 });
   const owned0 = await page.getByTestId('skins-owned').innerText();
-  check(/0 of 640/.test(owned0), `the skin case is on the case tab next to the weapon case: 640 skins — the 20 finishes on sale on 32 weapons (the welcome gift and the retired first line aren't in it) («${owned0}»)`);
+  check(/0 of 1248/.test(owned0), `the skin case is on the case tab next to the weapon case: 1248 skins — the 39 finishes on sale on 32 weapons (the welcome gift and the retired first line aren't in it) («${owned0}»)`);
   await page.getByTestId('skin-odds-open').click();
   await page.getByTestId('skin-odds').waitFor({ timeout: 5000 });
   const odds = (await page.getByTestId('skin-odds').innerText()).replace(/\s+/g, ' ');
@@ -101,9 +101,22 @@ try {
   await page.getByTestId('skin-buy-row').waitFor({ timeout: 5000 });
   const note = (await page.getByTestId('skin-buy-row').innerText()).replace(/\s+/g, ' ');
   check(other === 'yadernaya' ? /Legendary/i.test(note) && /499/.test(note) : /Epic/i.test(note) && /299/.test(note), `an unowned finish can be tried on and offers its grade and price («${note}»)`);
-  // the line in the picker: the 20 on sale and the 2 gifts (the retired first line only to those who have it)
+  // the line in the picker: the 39 on sale and the 2 gifts (the retired first line only to those who have it),
+  // each a card with the weapon painted in it; the four live ones say so (v0.2.19)
   const chips = await page.locator('[data-testid=skin-pick] .skinchip[data-finish]:not([data-finish=""])').evaluateAll((els) => els.map((e) => e.getAttribute('data-finish')));
-  check(chips.length === 22 && chips.includes('akulka') && chips.includes('blatkom') && !chips.includes('zima') && !chips.includes('berezka'), `the dressing room offers the owner's line: 22 finishes, the gifts among them, no retired ones (${chips.length}: ${chips.join(', ')})`);
+  check(chips.length === 41 && chips.includes('akulka') && chips.includes('blatkom') && chips.includes('bratok') && !chips.includes('zima') && !chips.includes('berezka'), `the dressing room offers the owner's line: 41 finishes, the gifts and the AK sheet's among them, no retired ones (${chips.length}: ${chips.join(', ')})`);
+  const cards = await page.locator('[data-testid=skin-pick] .skincard').evaluateAll((els) => ({ n: els.length, pics: els.filter((e) => e.querySelector('.skincard__pic img')).length, live: els.filter((e) => e.querySelector('.skincard__live')).map((e) => e.getAttribute('data-finish')).sort() }));
+  check(cards.n === 42 && cards.pics === 42 && JSON.stringify(cards.live) === JSON.stringify(['almaz', 'bratok', 'krovavy', 'obsidian']), `every skin is a card with its picture, the standard paint first; the live four are marked (${JSON.stringify(cards)})`);
+  // a live skin's picture moves: its card's picture changes frames
+  const liveSrc = () => page.locator('[data-testid=skin-pick] .skincard[data-finish=almaz] img').getAttribute('src');
+  await page.locator('[data-testid=skin-pick] .skincard[data-finish=almaz]').scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => document.querySelector('[data-testid=skin-pick] .skincard[data-finish=almaz] img')?.getAttribute('src')?.startsWith('data:'), null, { timeout: 10000 }).catch(() => {});
+  const seen = new Set();
+  for (let i = 0; i < 8; i++) {
+    seen.add(await liveSrc());
+    await page.waitForTimeout(140);
+  }
+  check(seen.size >= 3, `a live skin's card loops through its frames (${seen.size} different pictures in about a second)`);
   await page.locator(`[data-testid=skin-pick] [data-finish="${finish}"]`).click();
   await page.getByTestId('dressing-room').screenshot({ path: `${outDir}/skins_dressing.png` });
 
@@ -124,8 +137,10 @@ try {
     const hud = window.__blatkom.game.scene.getScene('hud');
     return { weapon: me.weapon, skin: me.skin, gun: v?.gun.texture.key, hud: hud.weaponIcon.texture.key };
   });
-  check(inHand.weapon === weapon && inHand.skin === finish && inHand.gun === `skin~w_${weapon}~${finish}`, `in practice the ${weapon} in hand wears ${finish} (${inHand.gun})`);
-  check(inHand.hud === `skin~ico_${weapon}~${finish}`, 'the HUD icon wears it too');
+  // (a live finish's texture carries its frame: skin~w_avtomat~almaz~7)
+  const wears = (key, frame) => key === `skin~${frame}~${finish}` || key?.startsWith(`skin~${frame}~${finish}~`);
+  check(inHand.weapon === weapon && inHand.skin === finish && wears(inHand.gun, `w_${weapon}`), `in practice the ${weapon} in hand wears ${finish} (${inHand.gun})`);
+  check(wears(inHand.hud, `ico_${weapon}`), 'the HUD icon wears it too');
   await page.screenshot({ path: `${outDir}/skins_practice.png` });
 } catch (e) {
   check(false, `flow failed: ${e.message.split('\n')[0]}`);

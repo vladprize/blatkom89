@@ -58,9 +58,9 @@ const mix = (a: RGB | [number, number, number], b: RGB | [number, number, number
  * The colour of one pixel: u, v in the weapon's units (u 0…64 along it), l the original lightness, hv the
  * height in units; ly where the pixel is in its own column of the weapon (0 top … 1 bottom) and th that
  * column's thickness in units — for designs that follow the body (a mouth on the handguard, flames along
- * the bottom edge).
+ * the bottom edge); ph the phase (0…1) of a live finish's loop (v0.2.19; the others ignore it).
  */
-type Painter = (u: number, v: number, l: number, hv: number, ly: number, th: number) => [number, number, number];
+type Painter = (u: number, v: number, l: number, hv: number, ly: number, th: number, ph: number) => [number, number, number];
 
 const C = {
   olive: hex('#8f9d5c'),
@@ -113,6 +113,98 @@ function trefoil(u: number, v: number, cx: number, cy: number, R: number): boole
   const a = ((((Math.atan2(dy, dx) + Math.PI / 2 + Math.PI / 6) % third) + third) % third);
   return a < Math.PI / 3;
 }
+
+/**
+ * The nearest and the second-nearest point of a jittered grid (cells of `s` units): d2 − d1 is small on
+ * the borders between cells (cracks, a gem's facet edges); id (0…1) tells the cells apart; fx, fy is the
+ * nearest point.
+ */
+function cells(u: number, v: number, s: number, seed: number): { d1: number; d2: number; id: number; fx: number; fy: number } {
+  const gx = Math.floor(u / s);
+  const gy = Math.floor(v / s);
+  let d1 = 1e9;
+  let d2 = 1e9;
+  let id = 0;
+  let fx = 0;
+  let fy = 0;
+  for (let j = -1; j <= 1; j++) {
+    for (let i = -1; i <= 1; i++) {
+      const cx = gx + i;
+      const cy = gy + j;
+      const px = (cx + 0.15 + 0.7 * hash(cx, cy, seed)) * s;
+      const py = (cy + 0.15 + 0.7 * hash(cx, cy, seed + 1)) * s;
+      const d = Math.hypot(u - px, v - py);
+      if (d < d1) {
+        d2 = d1;
+        d1 = d;
+        id = hash(cx, cy, seed + 2);
+        fx = px;
+        fy = py;
+      } else if (d < d2) d2 = d;
+    }
+  }
+  return { d1, d2, id, fx, fy };
+}
+
+/** A gem cut into facets: each a flat tone, lighter on its side towards the light, with a bright edge. */
+function gem(u: number, v: number, l: number, stops: Stops, seed: number, s = 3.4) {
+  const c = cells(u, v, s, seed);
+  const e = c.d2 - c.d1;
+  const tilt = (-(u - c.fx) * 0.5 - (v - c.fy) * 0.7) / s;
+  let col = ramp(stops, 0.16 + c.id * 0.5 + tilt * 0.35 + l * 0.25);
+  if (e < 0.24) col = mix(col, [255, 255, 255], 0.5 * (1 - e / 0.24));
+  return { col, c };
+}
+
+/** A spade (♠) of size s round (cx, cy), point up. */
+function spade(u: number, v: number, cx: number, cy: number, s: number): boolean {
+  const x = (u - cx) / s;
+  const y = (v - cy) / s;
+  if (Math.hypot(x + 0.42, y - 0.2) < 0.46 || Math.hypot(x - 0.42, y - 0.2) < 0.46) return true;
+  if (y < 0.22 && y > -0.95 && Math.abs(x) < (y + 0.95) * 0.74) return true;
+  return y > 0.2 && y < 0.95 && Math.abs(x) < 0.12 + (y - 0.2) * 0.4;
+}
+
+/** The biohazard sign: three crescents round a ring, radius R round (cx, cy). */
+function bioSign(u: number, v: number, cx: number, cy: number, R: number): boolean {
+  const dx = u - cx;
+  const dy = v - cy;
+  const r = Math.hypot(dx, dy);
+  if (r > R || r < R * 0.13) return false;
+  if (Math.abs(r - R * 0.44) < R * 0.07) return true;
+  for (let k = 0; k < 3; k++) {
+    const a = -Math.PI / 2 + (k * 2 * Math.PI) / 3;
+    const ox = Math.cos(a);
+    const oy = Math.sin(a);
+    if (Math.hypot(dx - ox * R * 0.5, dy - oy * R * 0.5) < R * 0.5 && Math.hypot(dx - ox * R * 0.64, dy - oy * R * 0.64) >= R * 0.36) return true;
+  }
+  return false;
+}
+
+/** A 4×5 Cyrillic font for the word on the tin («КИЛЬКА»). */
+const CYR: Record<string, readonly number[]> = { К: [9, 10, 12, 10, 9], И: [9, 11, 13, 9, 9], Л: [7, 5, 5, 5, 13], Ь: [8, 8, 14, 9, 14], А: [6, 9, 15, 9, 9] };
+function word(s: string, u: number, v: number, u0: number, v0: number, cell: number): boolean {
+  const cx = Math.floor((u - u0) / cell);
+  const cy = Math.floor((v - v0) / cell);
+  if (cy < 0 || cy > 4 || cx < 0) return false;
+  const i = Math.floor(cx / 5);
+  const col = cx % 5;
+  if (i >= s.length || col === 4) return false;
+  return ((CYR[s[i]!]![cy]! >> (3 - col)) & 1) === 1;
+}
+
+/** A sprat on its side, nose forward, `s` long, round (cx, cy). */
+function fish(u: number, v: number, cx: number, cy: number, s: number): boolean {
+  const x = (u - cx) / s;
+  const y = (v - cy) / s;
+  if (x * x + (y / 0.42) ** 2 < 1) return true;
+  return x < -0.85 && x > -1.5 && Math.abs(y) < (-0.85 - x) * 0.85;
+}
+
+const RED_GEM: Stops = [[0, hex('#3a0208')], [0.35, hex('#8a0a1c')], [0.62, hex('#d81c34')], [0.85, hex('#ff5a6a')], [1, hex('#ffc8d0')]];
+const VIOLET_GEM: Stops = [[0, hex('#1e0a3a')], [0.35, hex('#4a1e8a')], [0.62, hex('#8a4ad8')], [0.85, hex('#c08af4')], [1, hex('#f0dcff')]];
+/** A narrow bump (0…1) when the loop's phase `ph` passes `at`, `w` wide (it wraps round). */
+const pulse = (ph: number, at: number, w: number) => Math.max(0, 1 - Math.abs(((((ph - at) % 1) + 1.5) % 1) - 0.5) / w);
 
 const PAINTERS: Record<FinishId, Painter> = {
   // ── v0.2.18 part 2: the owner's line (references/64-skins-lineup.png) ──
@@ -269,6 +361,201 @@ const PAINTERS: Record<FinishId, Painter> = {
     if (Math.abs(noise(u / 2.5, v / 2.5, 521) - 0.5) < 0.03) return shade(hex('#4a7ab0'), l, 0.75, 0.4);
     return shade(mix(hex('#cfe2f2'), hex('#ffffff'), noise(u / 1.2, v / 1.2, 522)), l, 0.72, 0.35);
   },
+  // ── v0.2.19: the owner's AK sheet (references/83-skins-ak-sheet.png); the live four take the loop's phase ──
+  // «Золотой браток» (live): polished gold, engraved scrolls and white stones; a glint sweeps along it
+  bratok: (u, v, l, _hv, ly, _th, ph) => {
+    let c = ramp([[0, hex('#5a3404')], [0.3, hex('#a8700c')], [0.6, hex('#e8b42a')], [0.82, hex('#ffd860')], [1, hex('#fff4c4')]], 0.36 + l * 0.32 + (0.5 - ly) * 0.5);
+    if (Math.abs(Math.sin(u * 0.7 + 2.2 * Math.sin(v * 0.6 + u * 0.1)) * Math.cos(v * 0.8 - u * 0.2)) < 0.075) c = shade(c, 0.25, 0.52, 0.4);
+    const st = cells(u, v, 7, 721);
+    if (st.id > 0.8 && st.d1 < 0.62) c = mix(hex('#ffffff'), hex('#a8dcff'), st.d1 / 0.62);
+    const d = u + v * 0.6 - (-16 + ph * 152);
+    return mix(c, [255, 253, 240], Math.min(0.92, Math.exp(-(d * d) / 14) * 0.55 + Math.exp(-((d + 5) ** 2) / 1.4) * 0.55));
+  },
+  // «Король ржавчины»: dark gunmetal eaten by crusts of orange rust, pitted
+  korol: (u, v, l) => {
+    const n = noise(u / 3.4, v / 3.4, 601) * 0.65 + noise(u / 1.2, v / 1.2, 602) * 0.35;
+    if (n > 0.56) {
+      const c = ramp([[0, hex('#3a1606')], [0.45, hex('#8a3410')], [0.75, hex('#c45a1c')], [1, hex('#f09040')]], l * 0.8 + (n - 0.56) * 1.3);
+      return noise(u / 0.6, v / 0.6, 603) > 0.8 ? shade(c, 0.3) : c;
+    }
+    if (n > 0.5) return shade(hex('#5a2a14'), l, 0.6, 0.5);
+    return ramp([[0, hex('#14161a')], [0.5, hex('#3c4048')], [1, hex('#8a909a')]], l);
+  },
+  // «Неоновый район»: night-violet with glowing tubes — pink along the top, cyan along the bottom, a cyan zigzag
+  neon: (u, _v, l, _hv, ly, th) => {
+    const top = Math.abs(ly * th - 1.1);
+    const bottom = Math.abs((1 - ly) * th - 1.1);
+    const zig = th > 3 ? Math.abs(ly - (0.3 + 0.4 * Math.abs(((u / 6) % 1) - 0.5) * 2)) : 9;
+    if (top < 0.42) return [255, 128, 240];
+    if (bottom < 0.42) return [128, 250, 255];
+    if (zig < 0.05) return [160, 255, 255];
+    const base = shade(hex('#1a0a2c'), l, 0.8, 0.7);
+    return mix(mix(mix(base, hex('#c020c0'), Math.max(0, 1 - top / 1.7) * 0.62), hex('#18b0d8'), Math.max(0, 1 - bottom / 1.7) * 0.56), hex('#20c4e8'), Math.max(0, 1 - zig / 0.17) * 0.5);
+  },
+  // «Мастер шашлыка»: chunks of grilled meat and rings of onion on a skewer, the length of the weapon
+  shashlyk: (u, v, l, _hv, ly, th) => {
+    const dc = (ly - 0.5) * th;
+    const p = u % 8;
+    if (p < 5.8) {
+      const grill = (u + v * 1.1) % 2.4 < 0.45;
+      const end = Math.min(p, 5.8 - p) < 0.45;
+      const c = ramp([[0, hex('#3a1006')], [0.4, hex('#8a2a10')], [0.7, hex('#b84a1e')], [1, hex('#e88a4a')]], l * 0.7 + noise(u / 1.2, v / 1.2, 681) * 0.35 - (end ? 0.25 : 0));
+      return grill ? shade(c, 0.25) : c;
+    }
+    if (p < 6.4 || p > 7.6) return Math.abs(dc) < 0.55 ? shade(hex('#c0c4c8'), l, 0.75, 0.4) : shade(hex('#161210'), l, 0.9, 0.6);
+    return shade(Math.abs(p - 7) < 0.24 ? hex('#e8b0cc') : hex('#f8f0e6'), l, 0.85, 0.2);
+  },
+  // «Граффити»: black with red tags outlined in white sprayed over it, a white crown on the body, the red running down
+  graffiti: (u, v, l, _hv, ly, th) => {
+    const dc = (ly - 0.5) * th;
+    if (th > 4) {
+      const s = Math.min(3.4, th * 0.3);
+      const x = (u - 45) / s;
+      const y = dc / s;
+      if (Math.abs(x) <= 1 && y < 0.6 && y > 0.3 - 1.1 * Math.abs(((x + 1) % 1) - 0.5) * 2) return shade(hex('#f6f2ea'), l, 0.85, 0.2);
+    }
+    const s1 = Math.abs(Math.sin(u * 0.42 + Math.sin(v * 0.55 + u * 0.13) * 2.4));
+    const k = Math.floor(u / 2.2);
+    const drip = u / 2.2 - k < 0.45 && hash(k, 0, 611) > 0.55 && ly > 0.5 && ly < 0.55 + 0.45 * hash(k, 1, 611);
+    if (s1 < 0.28 || drip) return shade(mix(hex('#c0141a'), hex('#ff3a2a'), noise(u / 1.5, v / 1.5, 612)), l, 0.75, 0.45);
+    if (s1 < 0.4) return shade(hex('#f2eee6'), l, 0.8, 0.25);
+    if (noise(u / 0.7, v / 0.7, 613) > 0.9) return shade(hex('#e8e4dc'), l, 0.7, 0.3);
+    return shade(hex('#141214'), l, 0.9, 0.9);
+  },
+  // «Пекло»: charcoal split by a net of glowing lava cracks
+  peklo: (u, v, l) => {
+    const c = cells(u, v, 4.2, 621);
+    const e = c.d2 - c.d1;
+    if (e < 0.36) return ramp([[0, hex('#fff0a0')], [0.5, hex('#ffa020')], [1, hex('#e04010')]], e / 0.36);
+    if (e < 0.85) return mix(shade(hex('#1a0c08'), l, 0.9, 0.7), hex('#b02008'), ((0.85 - e) / 0.49) * 0.7);
+    return shade(mix(hex('#120a0a'), hex('#2c1610'), noise(u / 2, v / 2, 622)), l, 0.85, 0.8);
+  },
+  // «Килька в томате»: a tin — gold with ribs, a red band with «КИЛЬКА» on a blue label, a sprat on the stock
+  kilka: (u, v, l, _hv, ly, th) => {
+    const dt = ly * th;
+    if (u > 20 && u < 47) {
+      if (dt < 0.6 || (dt > 5.5 && dt < 6.1)) return shade(hex('#f2eee4'), l, 0.8, 0.25);
+      if (dt <= 5.5) return word('КИЛЬКА', u, dt, 21.6, 1.0, 0.82) ? shade(hex('#fbf8ee'), l, 0.85, 0.2) : shade(hex('#c8201c'), l, 0.7, 0.45);
+      return shade(hex('#1c4a9c'), l, 0.65, 0.5);
+    }
+    if (th > 4 && fish(u, (ly - 0.5) * th, 10, 0, Math.min(4, th * 0.34))) return Math.hypot(u - 12, (ly - 0.5) * th + 0.4) < 0.5 ? [20, 20, 30] : shade(hex('#2a5ab0'), l, 0.75, 0.4);
+    return shade(Math.abs(((v / 1.3) % 1) - 0.5) < 0.12 ? hex('#a87818') : mix(hex('#c89a2c'), hex('#f0cc5a'), l), l, 0.7, 0.45);
+  },
+  // «Кровавый жнец» (live): blackened steel with crimson blades curving forward; a red shimmer runs along them
+  krovavy: (u, v, l, _hv, ly, _th, ph) => {
+    const top = 0.38 * (1 - ((u / 7.5) % 1)) ** 1.4 + 0.04;
+    const bottom = 0.32 * (1 - ((u / 7.5 + 0.5) % 1)) ** 1.4 + 0.03;
+    const wave = Math.max(0, Math.sin(2 * Math.PI * (u / 40 - ph))) ** 2;
+    if (ly < top || 1 - ly < bottom) {
+      const edge = Math.min(Math.abs(ly - top), Math.abs(1 - ly - bottom)) < 0.05;
+      const c = ramp([[0, hex('#4a0208')], [0.5, hex('#b8121e')], [1, hex('#ff4a3a')]], l * 0.55 + 0.38 + (edge ? 0.25 : 0));
+      return mix(c, hex('#ffc0b0'), wave * 0.72);
+    }
+    if (Math.abs(noise(u / 3.5, v / 3.5, 711) - 0.5) < 0.03) return mix(shade(hex('#8a0a14'), l, 0.8, 0.5), hex('#ff5a4a'), wave * 0.6);
+    return shade(mix(hex('#100809'), hex('#2e1416'), l), l, 0.85, 0.8);
+  },
+  // «Коллекционер костей»: ivory bone, porous, cracked brown-red, jointed like a spine; a skull on the stock
+  kosti: (u, v, l, _hv, ly, th) => {
+    const dc = (ly - 0.5) * th;
+    if (th > 4 && ((u - 10) / 3.2) ** 2 + (dc / Math.min(2.8, th * 0.4)) ** 2 < 1) {
+      if (Math.hypot(u - 9, dc + 0.6) < 0.8 || Math.hypot(u - 11.3, dc + 0.6) < 0.8) return [34, 22, 16];
+      if (Math.abs(u - 10.15) < 0.35 && Math.abs(dc - 0.8) < 0.45) return [44, 28, 20];
+      return shade(hex('#f6ecd4'), l, 0.82, 0.25);
+    }
+    if (Math.abs(noise(u / 3, v / 3, 631) - 0.5) < 0.03) return shade(hex('#6a2a1a'), l, 0.75, 0.4);
+    const joint = Math.abs(((u / 5.5) % 1) - 0.5) > 0.44;
+    return ramp([[0, hex('#8a7a5a')], [0.5, hex('#d8caa4')], [1, hex('#fbf4e0')]], l * 0.7 + 0.3 - (joint ? 0.25 : 0) - noise(u / 0.8, v / 0.8, 632) * 0.15);
+  },
+  // «Хозяин казино»: red lacquer edged in gold, a black band of red diamonds, the ace of spades on the stock
+  kazino: (u, _v, l, _hv, ly, th) => {
+    const dc = (ly - 0.5) * th;
+    if (th > 4 && u > 3 && u < 14 && Math.abs(dc) < Math.min(th * 0.38, 3.6)) return spade(u, dc, 8.5, 0, Math.min(th * 0.3, 2.7)) ? shade(hex('#141014'), l, 1, 0.4) : shade(hex('#f6f2ea'), l, 0.85, 0.2);
+    if (ly < 0.12 || ly > 0.88) return shade(C.gold, l, 0.75, 0.5);
+    if (Math.abs(dc) < 1.8) return Math.abs((u % 4.4) - 2.2) / 1.5 + Math.abs(dc) / 1.5 < 1 ? shade(hex('#ec2a34'), l, 0.8, 0.4) : shade(hex('#121014'), l, 0.9, 0.6);
+    return shade(mix(hex('#8a0a16'), hex('#d0202e'), l), l, 0.62, 0.5);
+  },
+  // «Синий хром»: blue chrome — a bright sky above the horizon line, deep blue below; white streaks on the stock
+  hrom: (u, v, l, _hv, ly) => {
+    const t = ly + Math.sin(u * 0.15) * 0.06;
+    let c = t < 0.42 ? ramp([[0, hex('#e8f6ff')], [1, hex('#5aa8f0')]], t / 0.42) : ramp([[0, hex('#0a2a7a')], [1, hex('#3a78d8')]], (t - 0.42) / 0.58);
+    if (u < 18 && ((u + v * 1.2) / 2.6) % 2 < 0.55) c = mix(c, [255, 255, 255], 0.65);
+    return shade(c, l, 0.7, 0.45);
+  },
+  // «Пенсионер Делюкс»: grandma's cream knit with red roses and green leaves
+  pensioner: (u, v, l) => {
+    const c = cells(u, v, 6.5, 661);
+    const dx = u - c.fx;
+    const dy = v - c.fy;
+    const r = Math.hypot(dx, dy);
+    if (c.id > 0.25 && r < 2.1) return shade(Math.sin(r * 3.2 - Math.atan2(dy, dx)) > 0.3 ? hex('#e03040') : hex('#9a1020'), l, 0.75, 0.45);
+    if (c.id > 0.25 && r < 3.3 && Math.cos(Math.atan2(dy, dx) * 2 + c.id * 6) > 0.55) return shade(mix(hex('#2a6a2a'), hex('#5aa04a'), l), l, 0.75, 0.4);
+    const kx = u * 1.6;
+    const ky = v * 1.6;
+    return shade(Math.abs(((kx + Math.abs((ky % 2) - 1)) % 2) - 1) < 0.25 ? hex('#d8ccb0') : hex('#f4ecd8'), l, 0.75, 0.3);
+  },
+  // «Красный алмаз» (live): cut into red facets; the facets catch the light in turn and a star glints on a few
+  almaz: (u, v, l, _hv, _ly, _th, ph) => {
+    const { col, c } = gem(u, v, l, RED_GEM, 691);
+    const b = pulse(ph, c.id, 0.12);
+    let out = mix(col, hex('#ffd6dc'), b * 0.6);
+    if (c.id > 0.72) {
+      const dx = Math.abs(u - c.fx);
+      const dy = Math.abs(v - c.fy);
+      const size = 2.2 * b;
+      if ((dx < 0.3 && dy < size) || (dy < 0.3 && dx < size)) out = mix(out, [255, 255, 255], 0.88 * b);
+    }
+    return out;
+  },
+  // «Аметист»: violet crystal facets
+  ametist: (u, v, l) => gem(u, v, l, VIOLET_GEM, 731).col,
+  // «Токсичные отходы»: black with acid-green slime running down from the top, splashes of it
+  othody: (u, v, l, _hv, ly) => {
+    const k = Math.floor(u / 1.8);
+    const inDrip = u / 1.8 - k < 0.62 && hash(k, 0, 641) > 0.45;
+    const edge = Math.max(0.2 + 0.04 * Math.sin(u * 1.3), inDrip ? 0.22 + 0.62 * hash(k, 1, 641) : 0);
+    if (ly < edge || noise(u / 1.6, v / 1.6, 642) > 0.8) return ly < edge - 0.1 && hash(Math.floor(u * 2), Math.floor(v * 2), 643) > 0.9 ? [235, 255, 170] : shade(mix(hex('#5cc010'), hex('#b8f030'), l), l, 0.75, 0.4);
+    if (ly < edge + 0.06) return shade(hex('#2a5a08'), l, 0.8, 0.4);
+    return shade(hex('#16181a'), l, 0.9, 0.9);
+  },
+  // «Биоугроза X»: crimson with green tendrils grown over it and a yellow biohazard sign on the body
+  biohazard: (u, v, l, _hv, ly, th) => {
+    const R = Math.min(4.2, th * 0.46);
+    if (th > 3 && bioSign(u, (ly - 0.5) * th, 40, 0, R)) return shade(hex('#f0c418'), l, 0.85, 0.3);
+    const s = Math.sin(u * 0.42 + Math.sin(v * 0.6 + u * 0.07) * 2.4 + noise(u / 4, v / 4, 651) * 2);
+    if (Math.abs(s) < 0.13) return shade(mix(hex('#3a6a1a'), hex('#8ab830'), l), l, 0.75, 0.45);
+    if (Math.abs(s) < 0.22) return shade(hex('#1a2a0a'), l, 0.8, 0.4);
+    return shade(mix(hex('#5a0610'), hex('#a01828'), l + noise(u / 2, v / 2, 652) * 0.2), l, 0.62, 0.55);
+  },
+  // «Обсидиановый император» (live): glossy black glass with a gold line along the top; veins of lava in it pulse along
+  obsidian: (u, v, l, _hv, ly, th, ph) => {
+    if (th > 2 && ly * th < 0.7) return shade(C.gold, l, 0.85, 0.45);
+    const vein = Math.min(Math.abs(noise(u / 5, v / 5, 701) - 0.5), Math.abs(noise(u / 2.2, v / 2.2, 702) - 0.5) + 0.015);
+    const b = 0.5 + 0.5 * Math.sin(2 * Math.PI * ph - u * 0.16);
+    if (vein < 0.04) return ramp([[0, hex('#5a1a02')], [0.45, hex('#d05a0a')], [1, hex('#ffe080')]], 0.12 + 0.88 * b * (1 - (vein / 0.04) * 0.4));
+    const sheen = Math.max(0, Math.sin(u * 0.09 + v * 0.3 - 0.6)) ** 6;
+    const base = mix(ramp([[0, hex('#040405')], [0.6, hex('#16141c')], [1, hex('#3a3646')]], l), hex('#8a8aa8'), sheen * 0.35);
+    return vein < 0.085 ? mix(base, hex('#c04008'), (1 - (vein - 0.04) / 0.045) * 0.4 * b) : base;
+  },
+  // «Борщ»: beet-red soup with drops of fat and dill, a white swirl of smetana on the stock
+  borsch: (u, v, l, _hv, ly, th) => {
+    const dc = (ly - 0.5) * th;
+    const r = Math.hypot(u - 9, dc);
+    if (th > 4 && r < Math.min(3, th * 0.4)) return Math.sin(r * 3.4 + Math.atan2(dc, u - 9)) > -0.2 ? shade(hex('#fbf6ec'), l, 0.85, 0.2) : shade(hex('#e8d4cc'), l, 0.8, 0.25);
+    if (hash(Math.floor(u * 1.3), Math.floor(v * 1.3), 671) > 0.93) return shade(hex('#4a8a2a'), l, 0.8, 0.4);
+    const c = cells(u, v, 3.2, 672);
+    if (c.d1 < 0.55 && c.id > 0.5) return shade(hex('#f07040'), l, 0.8, 0.35);
+    return shade(mix(hex('#7a0a20'), hex('#c4203a'), noise(u / 2.5, v / 2.5, 673) * 0.6 + l * 0.4), l, 0.62, 0.5);
+  },
+  // «Золотой унитаз»: mirror gold with the horizon in it, a roll of paper wound round the front
+  unitaz: (u, v, l, _hv, ly) => {
+    if (u > 49 && u < 57) {
+      if (Math.abs(u - 53) > 3.4) return shade(hex('#d8d4cc'), l, 0.8, 0.25);
+      return Math.abs(((u - 49) % 2.6) - 1.3) < 0.14 && (v * 2) % 1 < 0.5 ? shade(hex('#c8c4bc'), l, 0.8, 0.25) : shade(hex('#fbfaf6'), l, 0.85, 0.2);
+    }
+    const t = ly + Math.sin(u * 0.2) * 0.05;
+    const c = t < 0.45 ? ramp([[0, hex('#fffbe0')], [1, hex('#f0c43a')]], t / 0.45) : ramp([[0, hex('#6a4206')], [0.6, hex('#c08a14')], [1, hex('#e8b83a')]], (t - 0.45) / 0.55);
+    return shade(c, l, 0.72, 0.42);
+  },
   // ── the first line (v0.23), retired: drawn for those who own them ──
   // «Берёзка»: the light Soviet summer camo — pale olive with dark leaf blotches
   berezka: (u, v, l) => {
@@ -346,10 +633,12 @@ const PAINTERS: Record<FinishId, Painter> = {
 /**
  * Paints `finish` over an RGBA image in place. The weapon's units: u runs 0…64 along the weapon's own
  * opaque width (so a padded icon and a trimmed in-hand sprite carry the same design), v uses the same
- * scale down its height.
+ * scale down its height. `phase` (0…1): where a live finish's loop is (one image per frame of it).
  */
-export function paintFinish(px: Uint8ClampedArray, w: number, h: number, finish: FinishId): void {
+export function paintFinish(px: Uint8ClampedArray, w: number, h: number, finish: FinishId, phase = 0): void {
   const paint = PAINTERS[finish];
+  // a finish this build doesn't know (a newer server's): the plain weapon
+  if (!paint) return;
   let minX = w;
   let maxX = -1;
   let minY = h;
@@ -393,11 +682,11 @@ export function paintFinish(px: Uint8ClampedArray, w: number, h: number, finish:
       let c: [number, number, number];
       if (l < 0.11) {
         // the outline stays an outline: the finish's own tone, darkened to the outline's depth
-        const tone = paint(u, v, 0.1, hv, ly, th);
+        const tone = paint(u, v, 0.1, hv, ly, th, phase);
         const tl = (0.299 * tone[0] + 0.587 * tone[1] + 0.114 * tone[2]) / 255;
         c = shade(tone, 0, Math.min(0.35, 0.1 / Math.max(0.01, tl)), 0);
       } else {
-        c = paint(u, v, l, hv, ly, th);
+        c = paint(u, v, l, hv, ly, th, phase);
         if (l > 0.86) c = mix(c, [255, 255, 255], (l - 0.86) * 2.5);
       }
       px[i] = Math.max(0, Math.min(255, Math.round(c[0])));

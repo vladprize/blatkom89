@@ -35,7 +35,8 @@ SIZE = (360, 480)
 
 # sheet; crop box (x0, y0, x1, y1) in the 1536×1024 sheet, 3:4; where the sheet's text starts:
 # the title with its subtitle (left x, last row), the label boxes (left x), the КАРТОЧКА paper (left x, first row);
-# optionally the tagline's last row, when the crop starts above it (it is painted over around the character)
+# optionally the tagline's last row, when the crop starts above it (it is painted over around the character),
+# and boxes where the sheet stays as it is (a thin antenna over the text's rows, where there are no letters)
 SHEETS = {
     'petya': ('03-petya-komendant.png', (95, 142, 365, 502), (361, 278), 379, (358, 535)),
     'valuta': ('04-valuta-farcovshik.png', (69, 143, 339, 503), (324, 278), 381, (386, 508)),
@@ -72,7 +73,9 @@ SHEETS = {
     'pingvin': ('73-pingvin-brodyaga.png', (123, 120, 393, 480), (353, 237), 387, (360, 497), 136),
     'tigr': ('71-tigr-zver.png', (123, 120, 393, 480), (438, 218), 425, (356, 471), 136),
     'pauk': ('75-pauk-arah.png', (135, 120, 405, 480), (423, 232), 410, (352, 478), 136),
-    'bogomol': ('68-bogomol-zhnec.png', (165, 120, 435, 480), (398, 232), 428, (347, 474), 136),
+    # v0.2.19 (the owner: «у богомола нет куска уса»): the right antenna's arc runs through the title's rows
+    # just left of the subtitle — kept as it is there (no letters in that box)
+    'bogomol': ('68-bogomol-zhnec.png', (165, 120, 435, 480), (398, 232), 428, (347, 474), 136, [(384, 176, 426, 254)]),
     'ezh': ('72-ezh-igla.png', (135, 120, 405, 480), (363, 228), 431, (352, 474), 136),
     'kasatka': ('74-kasatka-kasatik.png', (80, 120, 350, 480), (363, 237), 415, (375, 490), 136),
     'zvezda': ('65-zvezda-pyatak.png', (115, 120, 385, 480), (375, 232), 413, (350, 474), 136),
@@ -107,7 +110,7 @@ def text_edge(title: tuple, boxes: int, card: tuple, y: int) -> int:
     return edge
 
 
-def card_of(sheet: Image.Image, box: tuple, title: tuple, boxes: int, card: tuple, sess, tagline: int | None = None) -> Image.Image:
+def card_of(sheet: Image.Image, box: tuple, title: tuple, boxes: int, card: tuple, sess, tagline: int | None = None, keep: list | None = None) -> Image.Image:
     a = np.asarray(sheet).astype(np.float32)
     h, w = a.shape[:2]
     fig = np.clip((figure_mask(sheet, sess) - 0.3) / 0.4, 0, 1)
@@ -121,6 +124,12 @@ def card_of(sheet: Image.Image, box: tuple, title: tuple, boxes: int, card: tupl
         hard[y] = (xs >= e - 4).astype(np.float32)
     if tagline is not None:  # the tagline over the art (down to this row): only the character stays
         soft[: tagline + 1, TAGLINE_X[0] : TAGLINE_X[1]] = 1
+    for kx0, ky0, kx1, ky1 in keep or []:
+        # only what is lighter than the dark panel there (the antenna), so the box leaves no edge
+        bright = (a[ky0:ky1, kx0:kx1].max(axis=2) > 64).astype(np.uint8) * 255
+        m = np.asarray(Image.fromarray(bright).filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(0.8))).astype(np.float32) / 255
+        soft[ky0:ky1, kx0:kx1] *= 1 - m
+        hard[ky0:ky1, kx0:kx1] *= 1 - m
     soft = np.asarray(Image.fromarray((soft * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(2))).astype(np.float32) / 255
     hard = np.asarray(Image.fromarray((hard * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1))).astype(np.float32) / 255
     k = np.maximum(soft * (1 - fig), hard)[..., None]
@@ -145,11 +154,12 @@ def main() -> None:
         if only and cid not in only:
             continue
         tagline = rest[0] if rest else None
+        keep = rest[1] if len(rest) > 1 else None
         sheet = Image.open(ROOT / 'references' / name).convert('RGB')
         assert sheet.size == (1536, 1024), f'unexpected sheet size {sheet.size} for {name}'
         x0, y0, x1, y1 = box
         assert abs((x1 - x0) * 4 - (y1 - y0) * 3) <= 4, f'{cid}: crop is not 3:4'
-        card_of(sheet, box, title, boxes, card, sess, tagline).save(OUT / f'{cid}.jpg', quality=86, optimize=True, progressive=True)
+        card_of(sheet, box, title, boxes, card, sess, tagline, keep).save(OUT / f'{cid}.jpg', quality=86, optimize=True, progressive=True)
         print('hero', cid, box)
 
 

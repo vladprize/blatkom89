@@ -1077,6 +1077,25 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
 .swatch--carsky { background: linear-gradient(180deg, #f0c040 0 40%, #7a0a14 40% 60%, #f0c040 60%); }
 .swatch--kontora { background: radial-gradient(circle at 50% 50%, #e0a92e 0 18%, transparent 20%), #6a0a0a; }
 .swatch--yadernaya { background: radial-gradient(circle at 50% 50%, #f0d020 0 26%, transparent 28%), linear-gradient(135deg, #eef6fc, #cfe2f2 50%, #ffffff); }
+.swatch--bratok { background: linear-gradient(120deg, #a8740e, #ffe070 45%, #fff6c8 50%, #e6b42c 56%, #a8740e); }
+.swatch--korol { background: radial-gradient(circle at 30% 40%, #c45a1c 0 30%, transparent 32%), radial-gradient(circle at 75% 70%, #f09040 0 22%, transparent 24%), #3c4048; }
+.swatch--neon { background: linear-gradient(180deg, #ff80f0 0 18%, #1a0a2c 18% 82%, #80faff 82%); }
+.swatch--shashlyk { background: repeating-linear-gradient(90deg, #8a2a10 0 55%, #c0c4c8 55% 62%, #f8f0e6 62% 92%, #c0c4c8 92% 100%); background-size: 8px 100%; }
+.swatch--graffiti { background: linear-gradient(35deg, transparent 40%, #ff3a2a 40% 55%, transparent 55%), linear-gradient(-20deg, transparent 55%, #f2eee6 55% 62%, transparent 62%), #141214; }
+.swatch--peklo { background: linear-gradient(60deg, transparent 46%, #ffa020 46% 54%, transparent 54%), linear-gradient(-40deg, transparent 46%, #ff7010 46% 52%, transparent 52%), #1a0c08; }
+.swatch--kilka { background: linear-gradient(180deg, #f0cc5a 0 22%, #c8201c 22% 62%, #1c4a9c 62%); }
+.swatch--krovavy { background: linear-gradient(135deg, #ff3a32 0 22%, #0e0809 22% 56%, #a0101c 56% 70%, #0e0809 70%); }
+.swatch--kosti { background: radial-gradient(circle at 50% 50%, #3a2216 0 12%, transparent 14%), linear-gradient(135deg, #d8caa4, #fbf4e0); }
+.swatch--kazino { background: linear-gradient(180deg, #e0a92e 0 12%, #d0202e 12% 88%, #e0a92e 88%); }
+.swatch--hrom { background: linear-gradient(180deg, #e8f6ff, #5aa8f0 42%, #0a2a7a 44%, #3a78d8); }
+.swatch--pensioner { background: radial-gradient(circle at 35% 45%, #e03040 0 24%, transparent 26%), radial-gradient(circle at 70% 60%, #5aa04a 0 14%, transparent 16%), #f4ecd8; }
+.swatch--almaz { background: conic-gradient(from 30deg, #8a0a1c, #ff5a6a, #d81c34, #ffc8d0, #8a0a1c, #d81c34); }
+.swatch--ametist { background: conic-gradient(from 30deg, #4a1e8a, #c08af4, #8a4ad8, #f0dcff, #4a1e8a, #8a4ad8); }
+.swatch--othody { background: linear-gradient(180deg, #b8f030 0 30%, transparent 30%), linear-gradient(90deg, transparent 30%, #5cc010 30% 44%, transparent 44% 66%, #5cc010 66% 76%, transparent 76%), #16181a; }
+.swatch--biohazard { background: radial-gradient(circle at 50% 50%, #f0c418 0 30%, transparent 32%), #a01828; }
+.swatch--obsidian { background: linear-gradient(180deg, #e0a92e 0 12%, transparent 12% 88%, #e0a92e 88%), linear-gradient(50deg, #16141c 46%, #ff9a20 46% 52%, #16141c 52%); }
+.swatch--borsch { background: radial-gradient(circle at 40% 45%, #fbf6ec 0 22%, transparent 24%), #a0182e; }
+.swatch--unitaz { background: linear-gradient(90deg, #f0c43a 0 70%, #fbfaf6 70% 92%, #f0c43a 92%); }
 .swatch--berezka { background: radial-gradient(circle at 30% 40%, #4a5323 0 22%, transparent 24%), radial-gradient(circle at 75% 65%, #6b5232 0 18%, transparent 20%), #9fab6f; }
 .swatch--rzhavchina { background: linear-gradient(135deg, #3a1d0e, #9a4a20 45%, #c9783a 70%, #6b3215); }
 .swatch--zima { background: radial-gradient(circle at 35% 45%, #8d959f 0 25%, transparent 27%), #e6e9ed; }
@@ -1732,7 +1751,8 @@ button.chatline__name:hover { text-decoration: underline; }
 .comic__caption { position: relative; max-width: 700px; background: var(--tape); color: #1a1410; font-family: Oswald, sans-serif; font-size: clamp(18px, 2.6vw, 26px); line-height: 1.3; padding: 16px 22px; transform: rotate(-.6deg); box-shadow: 0 4px 0 rgba(0, 0, 0, .45); }
 .comic--vhs .comic__caption::before { content: '▶ PLAY'; position: absolute; top: -26px; left: 2px; font-size: 14px; letter-spacing: .14em; color: #f4ead2; text-shadow: 2px 0 rgba(255, 0, 60, .6), -2px 0 rgba(255, 154, 60, .4); }
 .comic--neon .comic__caption { background: rgba(28, 6, 6, .9); color: #ffe2d6; border: 1px solid #ff3b2f; box-shadow: 0 0 18px rgba(255, 59, 47, .45), inset 0 0 12px rgba(255, 59, 47, .18); text-shadow: 0 0 6px rgba(255, 59, 47, .55); transform: none; }
-.comic--neon .comic__art { filter: grayscale(1) sepia(1) saturate(6) hue-rotate(-40deg) brightness(.85) contrast(1.25); outline-color: #ff3b2f; box-shadow: 0 0 22px rgba(255, 59, 47, .5); }
+/* v0.2.19 (the owner): the characters keep their own colours in 2089 too — only the neon frame */
+.comic--neon .comic__art { outline-color: #ff3b2f; box-shadow: 0 0 22px rgba(255, 59, 47, .5); }
 .comic--neon .comic__bubble { background: #1a0807; color: #ffe6dc; border: 1px solid #ff3b2f; box-shadow: 0 0 14px rgba(255, 59, 47, .35); }
 .comic--neon .comic__panel--left .comic__bubble::after { border-right-color: #ff3b2f; }
 .comic--neon .comic__panel--right .comic__bubble::after { border-left-color: #ff3b2f; }
@@ -1766,8 +1786,6 @@ button.chatline__name:hover { text-decoration: underline; }
 .comic--scene .comic__hint { color: var(--beige); opacity: .8; }
 @keyframes scene-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes scene-push { from { transform: scale(1.02); } to { transform: scale(1.1); } }
-/* an upright phone: the picture at the screen's height, travelling across it (transform only — no repaints) */
-@keyframes scene-pan { from { transform: translateX(calc(-16% + 16vw)); } to { transform: translateX(calc(-84% + 84vw)); } }
 @keyframes comic-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .comic__panel { animation: none; } .comic__scene, .loadscr img { animation: scene-in .3s ease-out both; } }
 /* phones held upright: the picture over the bubble */
@@ -1778,8 +1796,9 @@ button.chatline__name:hover { text-decoration: underline; }
   .comic__bubble { width: 100%; font-size: 18px; }
   .comic__bubble::after, .comic__panel--left .comic__bubble::after, .comic__panel--right .comic__bubble::after { top: -23px; left: 50%; right: auto; border-color: transparent; border-bottom-color: #f4ead2; transform: translateX(-50%); }
   .comic--neon .comic__bubble::after { border-bottom-color: #ff3b2f; }
-  /* the scene: the picture's full height, the camera travelling across it; a small portrait beside the bubble */
-  .comic--scene .comic__scene { inset: 0 auto 0 0; width: auto; height: 100%; max-width: none; object-fit: fill; animation: scene-in .6s ease-out both, scene-pan 18s ease-in-out infinite alternate; }
+  /* the scene covers the whole screen around its focus, with the same slow push as on a computer (v0.2.19,
+     the owner: the picture that travelled across the screen at its full height — a layer four screens wide —
+     was left half-drawn or blank by iPhones); a small portrait beside the bubble */
   .comic--scene .comic__panel, .comic--scene .comic__panel--right { grid-template-columns: auto minmax(0, 1fr); justify-items: stretch; align-items: end; gap: 10px; }
   .comic--scene .comic__panel--right .comic__art { order: 0; }
   .comic--scene .comic__art { width: 74px; max-height: none; }
@@ -2153,3 +2172,126 @@ button.blatsban:focus-visible { outline: 2px solid var(--tape); outline-offset: 
 /* v0.2.18 part 3: the terms of purchase beside the packs */
 .termslink { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
 .termslink:hover { color: var(--beige); }
+
+/* ── v0.2.19: the owner's pre-final edits ───────────────────────────────────────────────────────── */
+/* the menu's BLATS banner is the owner's art (tools/make-menu-art.py): 4:1, the packs' line and the arrow
+   over its skyline */
+.blatsart { position: relative; display: block; width: 100%; min-width: 0; aspect-ratio: 4 / 1; padding: 0; color: var(--beige); font: inherit; background: #0b0303; border: 2px solid #c8312a; box-shadow: 0 0 0 1px #000, 0 0 16px rgba(200, 49, 42, .32), 0 8px 22px rgba(0, 0, 0, .45); overflow: hidden; cursor: pointer; transition: transform .12s ease, box-shadow .12s ease; }
+.blatsart::before { content: ''; position: absolute; inset: 3px; z-index: 1; border: 1px dashed rgba(255, 86, 66, .42); pointer-events: none; }
+.blatsart:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px #000, 0 0 24px rgba(224, 55, 45, .5), 0 10px 24px rgba(0, 0, 0, .5); }
+.blatsart:active { transform: translateY(1px); }
+.blatsart:focus-visible { outline: 2px solid var(--tape); outline-offset: 2px; }
+.blatsart__img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.blatsart__foot { position: absolute; right: 9px; bottom: 7px; z-index: 2; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 18px); }
+.blatsart .blatsban__from { font-family: Oswald, sans-serif; font-size: 12.5px; letter-spacing: .04em; color: #ffd9b0; background: rgba(11, 3, 3, .8); border: 1px solid rgba(255, 86, 66, .35); padding: 2px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.blatsart .blatsban__cta { padding: 4px 11px; font-size: 13px; }
+.blatsart[data-sale='soon'] .blatsban__cta, .blatsart[data-sale='stars-soon'] .blatsban__cta { color: #e8d6b0; background: #2a2018; border-color: #6a5238; box-shadow: 0 3px 0 #000; }
+@media (max-width: 760px) {
+  .blatsart .blatsban__from { font-size: 11px; padding: 1px 6px; }
+  .blatsart .blatsban__cta { padding: 2px 8px; font-size: 12px; }
+  .blatsart__foot { right: 6px; bottom: 5px; gap: 6px; }
+}
+/* the Arsenal tile is the owner's card (its own frame and lettering in the player's language) */
+.tile--arsenal-art { padding: 0; overflow: hidden; background: #0b0303; border-color: #c8312a; }
+.tile--arsenal-art::before { content: none; }
+.tile--arsenal-art .tile__art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 56%; }
+@media (max-width: 760px) {
+  .menu__side .tile--arsenal-art { padding: 0; min-height: 112px; }
+  .tile--arsenal-art .tile__art { object-position: 50% 64%; }
+}
+/* the District Tournament button (the owner: «бесит несимметричный текст»): its name starts where the other
+   buttons' names start — the cup goes to the right end on a computer; on a phone the name sits in the middle
+   like its neighbours', the cup a faint emblem behind it */
+.menu__kon--hot .tourney-icon { order: 2; }
+.menu__kon--hot .menu__kontxt { order: 1; }
+@media (max-width: 760px) {
+  .menu__play > .menu__kon--hot { position: relative; justify-content: center !important; gap: 0; }
+  .menu__kon--hot .tourney-icon { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 40px !important; height: 40px !important; opacity: .24; pointer-events: none; }
+  .menu__kon--hot .menu__kontxt { position: relative; z-index: 1; flex: 0 1 auto; justify-content: center; text-align: center; }
+}
+/* no header is cut (the owner: «на некоторых экранах обрезались заголовки»): the labels that sit on a panel's
+   top edge get room at the top of a scrolling box; the gangs' names keep the top of their letters; a screen's
+   title shrinks to fit its line (App.topbar) */
+@media (max-width: 760px) {
+  .arsenal--phone > .arsenal__body { padding-top: 14px; }
+}
+.clubrow__txt .clublabel { line-height: 1.3; padding-top: 1px; }
+.topbar .h1 { min-width: 0; white-space: nowrap; overflow: hidden; }
+/* full screen on a computer: the corner's button with its words (the owner did not find the bare icon) */
+.corner .fsbtn--label { width: auto; display: inline-flex; align-items: center; gap: 7px; padding: 0 11px; }
+.fsbtn--label .fsbtn__label { font-family: Oswald, sans-serif; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+@media (max-width: 760px), (pointer: coarse) {
+  .corner .fsbtn--label { width: 34px; padding: 0; justify-content: center; }
+  .fsbtn--label .fsbtn__label { display: none; }
+}
+/* the skins (the owner: «меню со скинами — более красочное и масштабное по картинкам»): every skin is a card in
+   its grade's colours — the weapon painted big on a glow, a slanted grade ribbon, the name, yours or the price;
+   a strip in the dressing room, a grid in the skins' sheet; a live skin's card shimmers and says so */
+.skinpick--cards { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 6px; min-width: 0; max-width: 100%; }
+.skinpick__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.skinpick__count { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.skinpick__head .skinsbtn { margin-left: auto; }
+.skingrid { display: grid; gap: 8px; min-width: 0; }
+/* the strip scrolls inside the dressing room: its own width never widens the panel */
+.skinpick--room { contain: inline-size; width: 100%; }
+.skinpick--room .skingrid { grid-auto-flow: column; grid-auto-columns: 132px; overflow-x: auto; overscroll-behavior-x: contain; padding: 2px 2px 8px; scrollbar-width: thin; scrollbar-color: #5a4c3e transparent; scroll-snap-type: x proximity; }
+.skinpick--room .skincard { scroll-snap-align: start; }
+/* explicit columns: an auto-fill grid in the dialog was sized at one column first and kept rows that tall */
+.skinpick--sheet .skingrid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) { .skinpick--sheet .skingrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.skincard { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-width: 0; padding: 6px 6px 7px; font: inherit; text-align: center; color: var(--beige); cursor: pointer;
+  background: radial-gradient(120% 78% at 50% 44%, var(--sk-glow, rgba(255, 244, 228, .05)), transparent 64%), linear-gradient(180deg, #241c16, #14100d);
+  border: 1px solid var(--sk-edge, #4a4038); box-shadow: 0 0 12px var(--sk-shadow, transparent), inset 0 0 0 1px rgba(0, 0, 0, .45); transition: transform .12s ease, border-color .12s ease; }
+.skincard--common { --sk-edge: #5c584f; --sk-glow: rgba(190, 186, 176, .14); }
+.skincard--rare { --sk-edge: #9a2c24; --sk-glow: rgba(226, 70, 59, .26); --sk-shadow: rgba(226, 70, 59, .16); }
+.skincard--epic { --sk-edge: #7a3eb4; --sk-glow: rgba(168, 94, 230, .32); --sk-shadow: rgba(168, 94, 230, .24); }
+.skincard--legendary { --sk-edge: #c08a1e; --sk-glow: rgba(242, 182, 50, .34); --sk-shadow: rgba(242, 182, 50, .3); }
+.skincard:hover { transform: translateY(-1px); border-color: #e8d8bc; }
+.skincard[aria-pressed='true'] { border-color: #fff4e4; box-shadow: 0 0 0 2px var(--red), 0 0 16px var(--sk-shadow, rgba(255, 244, 228, .12)); }
+.skincard__grade { align-self: flex-start; font-size: 10px; padding: 2px 6px 1px; transform: skewX(-12deg); }
+.skincard__pic { display: flex; align-items: center; justify-content: center; height: 54px; }
+.skincard__pic .wimg { width: 100%; max-width: 156px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, .6)); }
+.skincard__name { display: flex; align-items: center; justify-content: center; min-height: 2.3em; font-family: Oswald, sans-serif; font-size: 13.5px; line-height: 1.15; color: #fff4e4; overflow-wrap: anywhere; }
+.skincard__state { min-height: 1.25em; font-size: 12px; color: var(--muted); }
+.skincard.skinchip--mine .skincard__state, .skincard--std .skincard__state { color: #a8d88a; }
+.skincard__state .amt { justify-content: center; }
+.skincard__live { position: absolute; top: 6px; right: 6px; font-family: Oswald, sans-serif; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; line-height: 1; padding: 3px 5px 2px; color: #241400; background: linear-gradient(100deg, #f2b632, #fff2b8 45%, #f2b632 70%); background-size: 220% 100%; animation: skin-live-badge 2.4s linear infinite; }
+.skincard--live { box-shadow: 0 0 14px var(--sk-shadow), inset 0 0 0 1px rgba(0, 0, 0, .45); animation: skin-live-glow 2.8s ease-in-out infinite; }
+.skincard--live::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 38%, rgba(255, 240, 200, .14) 50%, transparent 62%); background-size: 300% 100%; animation: skin-live-sweep 3.6s ease-in-out infinite; }
+@keyframes skin-live-badge { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@keyframes skin-live-glow { 50% { box-shadow: 0 0 22px var(--sk-shadow), inset 0 0 0 1px rgba(0, 0, 0, .45); } }
+@keyframes skin-live-sweep { 0% { background-position: 120% 0; } 60%, 100% { background-position: -120% 0; } }
+@media (prefers-reduced-motion: reduce) { .skincard--live, .skincard--live::after, .skincard__live { animation: none; } }
+/* the skins' sheet: the chosen skin big on top; on a computer the sheet is wide enough for four columns */
+.skinsheet { gap: 10px; }
+.skinsheet__pic { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: auto !important; min-height: 112px; margin: 0; padding: 10px 8px 8px; background: radial-gradient(70% 80% at 50% 40%, var(--sk-glow, rgba(255, 244, 228, .07)), transparent 70%), #120e0b; border: 1px solid var(--sk-edge, var(--line)); }
+.skinsheet__pic--rare { --sk-edge: #9a2c24; --sk-glow: rgba(226, 70, 59, .3); }
+.skinsheet__pic--epic { --sk-edge: #7a3eb4; --sk-glow: rgba(168, 94, 230, .36); }
+.skinsheet__pic--legendary { --sk-edge: #c08a1e; --sk-glow: rgba(242, 182, 50, .38); }
+.skinsheet__pic .wimg--big { width: min(300px, 88%) !important; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, .6)); }
+.skinsheet__name { display: inline-flex; align-items: center; gap: 8px; font-family: Oswald, sans-serif; font-size: 16px; color: #fff4e4; }
+@media (min-width: 761px) { .sheet[data-testid='skin-sheet'] { width: min(760px, 100%); } }
+@media (max-width: 560px) {
+  .skinpick--sheet .skingrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .skinpick--sheet .skincard__pic { height: 50px; }
+  .skinsheet__pic { min-height: 96px; }
+}
+/* the bright SKINS button (the owner: «кнопка SKINS в арсенале должна быть ярко выражена») */
+.btn--skins, .skinsbtn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #241400 !important; font-weight: 700; letter-spacing: .07em; border-color: #f2b632 !important; background: linear-gradient(100deg, #c8205a, #a85ee6 34%, #f2b632 68%, #ffe27a) !important; background-size: 180% 100% !important; box-shadow: 0 0 12px rgba(242, 182, 50, .45), inset 0 0 0 1px rgba(255, 255, 255, .25); text-shadow: 0 1px 0 rgba(255, 255, 255, .35); animation: skins-btn 3.2s ease-in-out infinite; }
+.btn--skins i, .skinsbtn i { font-style: normal; color: #fff8dc; text-shadow: 0 0 6px #fff; }
+.btn--skins__n { font-size: 11px; font-weight: 600; padding: 1px 5px; background: rgba(20, 10, 0, .55); color: #fff2c8; letter-spacing: .02em; }
+@keyframes skins-btn { 50% { background-position: 100% 0; box-shadow: 0 0 18px rgba(242, 182, 50, .6), inset 0 0 0 1px rgba(255, 255, 255, .25); } }
+@media (prefers-reduced-motion: reduce) { .btn--skins, .skinsbtn { animation: none; } }
+/* the cases stand out (the owner: «раздел CASES нужно сделать более заметным»): gold and violet, the chest */
+.tabs button.tab--case, .arschips button.tab--case, .arsmodes button.tab--case { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.tabs button.tab--case[aria-pressed='false'], .arschips button.tab--case[aria-pressed='false'], .arsmodes button.tab--case[aria-pressed='false'] { color: #ffe08a; border-color: #8a6a1e; background: linear-gradient(180deg, rgba(122, 62, 180, .45), rgba(60, 30, 10, .7)); box-shadow: 0 0 10px rgba(242, 182, 50, .28); animation: case-tab 2.6s ease-in-out infinite; }
+.tabs button.tab--case[aria-pressed='true'], .arschips button.tab--case[aria-pressed='true'], .arsmodes button.tab--case[aria-pressed='true'] { border-color: #f2b632; color: #fff4e4; }
+.caseico { flex: none; filter: drop-shadow(0 0 3px rgba(242, 182, 50, .6)); }
+@keyframes case-tab { 50% { box-shadow: 0 0 16px rgba(242, 182, 50, .5); } }
+@media (prefers-reduced-motion: reduce) { .tab--case { animation: none !important; } }
+@media (max-width: 560px) {
+  .arsmodes { grid-template-columns: 1fr 1fr auto; }
+  .arsmodes button.tab--case { padding: 6px 10px; font-size: 14px; letter-spacing: .05em; }
+}
+/* in the skins' sheet the «Buy» row of a tried-on skin stays in sight at the bottom while the grid scrolls */
+.skinpick--sheet .skinpick__buy { position: sticky; bottom: 0; z-index: 2; margin: 2px -2px 0; padding: 10px 8px; background: linear-gradient(180deg, rgba(20, 16, 13, .94), #14100d); border-top: 1px solid var(--line); box-shadow: 0 -10px 18px rgba(0, 0, 0, .55); }

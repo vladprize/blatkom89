@@ -28,7 +28,7 @@ import { openNicknameDialog, randomNickname } from '../profile/nickname.js';
 import { renderResults } from '../ui/screens/results.js';
 import { renderLobby, modeSwitch } from '../ui/screens/lobby.js';
 import { mapField } from '../ui/maps.js';
-import { fitAlias, whenSized } from '../ui/fit.js';
+import { fitAlias, fitTextGroup, whenSized } from '../ui/fit.js';
 import { avatarButton, openAvatarPicker } from '../ui/avatars.js';
 import { MODE_ORDER, modeIcon, modeName, modeRules, modeSub } from '../ui/modes.js';
 import { renderArsenal, characterPriceNote, amount, heroImg, gradeTag, priceLabel } from '../ui/screens/shop.js';
@@ -47,7 +47,7 @@ import { watchForUpdates } from './updates.js';
 import { renderClubs, renderClub, renderClubEditor, clubLabel } from '../ui/screens/clubs.js';
 import { renderInvite } from '../ui/screens/invite.js';
 import { blatsCoin, fmtNum } from '../ui/coin.js';
-import { blatsBanner, blatsSale, setBannerSale, setBannerStars } from '../ui/blats.js';
+import { blatsArtBanner, blatsSale, setBannerSale, setBannerStars } from '../ui/blats.js';
 import { MatchFullscreenButton, fullscreenAction, fullscreenButton } from '../ui/fullscreenButton.js';
 import { fullscreenWay, isFullscreen } from './fullscreen.js';
 import { renderKon, konLabel, tourneyIcon } from '../ui/screens/kon.js';
@@ -116,20 +116,33 @@ function gearIcon(): SVGSVGElement {
   p.setAttribute('fill-rule', 'evenodd');
   p.setAttribute(
     'd',
-    'M10.3 2h3.4l.5 2.6c.6.2 1.2.5 1.7.9l2.5-.9 1.7 2.9-2 1.7c.1.6.1 1.2 0 1.8l2 1.7-1.7 2.9-2.5-.9c-.5.4-1.1.7-1.7.9l-.5 2.6h-3.4l-.5-2.6c-.6-.2-1.2-.5-1.7-.9l-2.5.9-1.7-2.9 2-1.7a6 6 0 0 1 0-1.8l-2-1.7 1.7-2.9 2.5.9c.5-.4 1.1-.7 1.7-.9zM12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8z',
+    // v0.2.19 (the owner: «режется значок настроек»): eight teeth all round — the six-tooth cog read as cut at its sides
+    'M9.32 4.89L9.97 2.00L14.03 2.00L14.68 4.89L15.14 5.08L17.64 3.50L20.50 6.36L18.92 8.86L19.11 9.32L22.00 9.97L22.00 14.03L19.11 14.68L18.92 15.14L20.50 17.64L17.64 20.50L15.14 18.92L14.68 19.11L14.03 22.00L9.97 22.00L9.32 19.11L8.86 18.92L6.36 20.50L3.50 17.64L5.08 15.14L4.89 14.68L2.00 14.03L2.00 9.97L4.89 9.32L5.08 8.86L3.50 6.36L6.36 3.50L8.86 5.08ZM15.3 12A3.3 3.3 0 1 0 8.7 12A3.3 3.3 0 1 0 15.3 12Z',
   );
   svg.append(p);
   return svg;
 }
 
-/** v0.2.17: X and Telegram, inline SVG (the menu's corner). */
-function brandIcon(kind: 'x' | 'telegram'): SVGSVGElement {
+/** v0.2.17: X and Telegram, inline SVG (the menu's corner); v0.2.19: Instagram's glyph (a link to the project's page). */
+function brandIcon(kind: 'x' | 'telegram' | 'instagram'): SVGSVGElement {
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('width', '17');
   svg.setAttribute('height', '17');
   svg.setAttribute('aria-hidden', 'true');
+  if (kind === 'instagram') {
+    // the camera glyph: a rounded square, the lens and the flash
+    const mk = (tag: string, attrs: Record<string, string>) => {
+      const el = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+      svg.append(el);
+    };
+    mk('rect', { x: '3', y: '3', width: '18', height: '18', rx: '5.2', fill: 'none', stroke: 'currentColor', 'stroke-width': '2' });
+    mk('circle', { cx: '12', cy: '12', r: '4.1', fill: 'none', stroke: 'currentColor', 'stroke-width': '2' });
+    mk('circle', { cx: '17.3', cy: '6.7', r: '1.25', fill: 'currentColor' });
+    return svg;
+  }
   const p = document.createElementNS(NS, 'path');
   p.setAttribute('fill', 'currentColor');
   p.setAttribute(
@@ -581,7 +594,14 @@ export class App {
   }
 
   private topbar(title: string): HTMLElement {
-    return h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: () => this.back(), 'aria-label': t('Back') }, t('← Back')), h('h1', { class: 'h1' }, title));
+    const head = h('h1', { class: 'h1' }, title);
+    // v0.2.19 (the owner: «обрезались заголовки»): a long title («DISTRICT TOURNAMENT» on a phone) shrinks to its line
+    whenSized(head, () => {
+      head.style.fontSize = '';
+      const max = parseFloat(getComputedStyle(head).fontSize) || 26;
+      fitTextGroup([head], { max, min: Math.min(15, max), margin: 2 });
+    });
+    return h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: () => this.back(), 'aria-label': t('Back') }, t('← Back')), head);
   }
 
   private loading(text: string): HTMLElement {
@@ -664,8 +684,8 @@ export class App {
                 h('button', { class: 'btn btn--small menu__charbtn', onclick: () => this.showCharacters() }, t('Change character')),
               ),
               h('div', { class: 'tiles' }, this.stripEl, this.arsenalTile()),
-              // v0.2.18 (the owner): the BLATS banner — opens the Arsenal's «Buy BLATS» section
-              this.online ? h('div', { class: 'menu__ad' }, (this.blatsAd = blatsBanner({ kind: 'menu', sale: blatsSale(this.shopCfg, inTelegram()), onClick: () => this.showArsenal(true, 'diamonds') }))) : null,
+              // v0.2.18 (the owner): the BLATS banner — opens the Arsenal's «Buy BLATS» section; v0.2.19: the owner's art
+              this.online ? h('div', { class: 'menu__ad' }, (this.blatsAd = blatsArtBanner({ sale: blatsSale(this.shopCfg, inTelegram()), onClick: () => this.showArsenal(true, 'diamonds') }))) : null,
             ),
           ),
         ),
@@ -719,18 +739,20 @@ export class App {
       box.append(btn);
     }
     // v0.2.18: full screen — in the browser on a computer and on a phone, in Telegram (an iPhone: how to add to the home screen)
-    const fs = fullscreenButton(this.root, 'iconbtn corner__fs', 'corner-fullscreen');
+    const fs = fullscreenButton(this.root, 'iconbtn corner__fs', 'corner-fullscreen', { label: true });
     if (fs) box.append(fs);
     // phones: Settings lives here instead of a fourth big button
     if (this.screen === 'menu') box.append(h('button', { class: 'iconbtn corner__gear', 'aria-label': t('Settings'), title: t('Settings'), 'data-testid': 'corner-settings', onclick: () => this.showSettings() }, gearIcon()));
     if (this.screen === 'menu' && ONLINE_AVAILABLE) {
       // v0.2.17: the project's X and Telegram (until the links are set: «coming soon»)
-      const link = (kind: 'x' | 'telegram') => {
+      const link = (kind: 'x' | 'telegram' | 'instagram') => {
         const url = this.site?.[kind] ?? null;
         if (url) window.open(url, '_blank', 'noopener');
-        else toast(kind === 'x' ? t('Our X — coming soon') : t('Our Telegram channel — coming soon'));
+        else toast(kind === 'x' ? t('Our X — coming soon') : kind === 'instagram' ? t('Our Instagram — coming soon') : t('Our Telegram channel — coming soon'));
       };
       box.prepend(
+        // v0.2.19 (the owner): Instagram first, left of X
+        h('button', { class: 'iconbtn corner__social', 'aria-label': 'Instagram', title: 'Instagram', 'data-testid': 'corner-instagram', onclick: () => link('instagram') }, brandIcon('instagram')),
         h('button', { class: 'iconbtn corner__social', 'aria-label': 'X', title: 'X', 'data-testid': 'corner-x', onclick: () => link('x') }, brandIcon('x')),
         h('button', { class: 'iconbtn corner__social', 'aria-label': 'Telegram', title: 'Telegram', 'data-testid': 'corner-telegram', onclick: () => link('telegram') }, brandIcon('telegram')),
       );
@@ -799,13 +821,13 @@ export class App {
   }
 
   /** The big Arsenal button: a pistol and the word. */
+  /** v0.2.19 (the owner: «замени иконку ARSENAL на новую, и на русском и на англ»): the owner's card (tools/make-menu-art.py). */
   private arsenalTile(): HTMLElement {
+    const lang = getLang() === 'ru' ? 'ru' : 'en';
     return h(
       'button',
-      { class: 'tile tile--arsenal', onclick: () => this.showArsenal(), 'data-testid': 'arsenal-tile' },
-      h('img', { class: 'tile__gun', src: asset('assets/ui/menu_arsenal.png'), alt: '', draggable: 'false', width: 132, height: 96 }),
-      h('span', { class: 'tile__title' }, t('Arsenal')),
-      h('span', { class: 'tile__sub' }, t('weapons · gear · characters')),
+      { class: 'tile tile--arsenal tile--arsenal-art', onclick: () => this.showArsenal(), 'data-testid': 'arsenal-tile', 'aria-label': t('Arsenal') },
+      h('img', { class: 'tile__art', src: asset(`assets/ui/arsenal_tile_${lang}.jpg`), alt: t('Arsenal'), draggable: 'false', width: 700, height: 586 }),
     );
   }
 

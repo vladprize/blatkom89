@@ -50,7 +50,7 @@ export function createApp(deps: AppDeps, modules: RouteModule[] = ROUTE_MODULES)
   router.get('/api/health', (ctx) => ctx.json(200, { ok: true, version: deps.env.SERVER_VERSION, uptimeSec: Math.round((Date.now() - startedAt) / 1000), rooms: deps.rooms.count() }));
   // v0.2.17: the menu's links
   router.get('/api/site', (ctx) => {
-    const res: SiteConfig = { x: deps.env.SOCIAL_X_URL ?? null, telegram: deps.env.SOCIAL_TELEGRAM_URL ?? null, copyright: deps.env.COPYRIGHT_HOLDER ?? 'BLATKOM ’89' };
+    const res: SiteConfig = { instagram: deps.env.SOCIAL_INSTAGRAM_URL ?? null, x: deps.env.SOCIAL_X_URL ?? null, telegram: deps.env.SOCIAL_TELEGRAM_URL ?? null, copyright: deps.env.COPYRIGHT_HOLDER ?? 'BLATKOM ’89' };
     ctx.json(200, res, { 'cache-control': 'public, max-age=300' });
   });
   router.get('/api/ready', async (ctx) => {
