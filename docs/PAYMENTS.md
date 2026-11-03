@@ -36,8 +36,8 @@ owner's step after the keys are in.
    response, never rate-limited (Telegram cancels a payment it hears nothing about within 10 s).
 3. Telegram reports the money (`message.successful_payment`): the payment is credited **once** (the
    payload names it; Telegram's `telegram_payment_charge_id` is kept — refunds need it); a short or
-   repeated report credits nothing. The bot thanks the player («✅ +199 BLATS credited»); the game, which
-   has been polling `GET /api/pay/:id`, shows the BLATS.
+   repeated report credits nothing. The bot thanks the player («✅ +199 BLATS credited»); the game, once
+   Telegram's window says «paid», polls `GET /api/pay/:id` and shows the BLATS.
 4. **Refunds**: only the bot that was paid can give Stars back — `/admin` → the player → «Платежи» →
    **«Вернуть звёзды»** (role admin, audited `stars_refund`): `refundStarPayment`, then the unspent BLATS
    are taken back (never below zero). A refund Telegram reports by itself (`message.refunded_payment`) does
