@@ -2606,7 +2606,7 @@ var CHARACTERS = {
     district: "Centre / Business Quarter",
     business: "Finance, control, supplies, exclusive orders",
     weaponsNote: "Golden rifle, pistols, grenades",
-    lore: "Officially Arkadich is the modest head of a consumer-goods workshop. Unofficially his underground workshops dress half the city: \xABMontana\xBB jeans, jackets, bobble hats. A fur coat on his shoulders, gold on his neck, a cigar in his teeth \u2014 and not a single piece of paper anyone could produce against him. Arkadich never raises his voice: why would he, when everyone listens anyway?",
+    lore: "Officially Arkadich is the modest head of a consumer-goods workshop. Unofficially his underground workshops dress half the city: jeans that pass for imported, jackets, bobble hats. A fur coat on his shoulders, gold on his neck, a cigar in his teeth \u2014 and not a single piece of paper anyone could produce against him. Arkadich never raises his voice: why would he, when everyone listens anyway?",
     tier: "premium",
     grade: "legendary",
     accent: "#d4a237",
@@ -7604,7 +7604,7 @@ var KON_RULES = Object.freeze({
 var KON_RATING = Object.freeze({ start: 1e3, floor: 100, k: 24, kNew: 40, newMatches: 10 });
 
 // packages/shared/src/maps/types.ts
-var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp"];
+var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp", "cherkizon", "vorkuta"];
 
 // packages/shared/src/game-rules/gangBattle.ts
 var GANG_BATTLE_FORMATS = ["2x2", "3x3", "5x5"];
@@ -8249,7 +8249,20 @@ var PROP_DEFS = {
   bunk_bed: P(18, 38, "rect", "low", false, "Bunk bed"),
   long_table: P(70, 26, "rect", "low", false, "Dining table", { inset: 1 }),
   bugler: P(26, 26, "rect", "high", true, "Pioneer statue"),
-  rock: P(34, 26, "circle", "low", true, "Rock", { radius: 11 })
+  rock: P(34, 26, "circle", "low", true, "Rock", { radius: 11 }),
+  // v0.2.18: the market «Черкизон» (no brand on any of it) and the mining town «Воркута»
+  stall: P(60, 44, "rect", "high", true, "Market stall", { inset: 1 }),
+  goods_table: P(34, 18, "rect", "low", false, "Trestle table"),
+  clothes_rail: P(46, 10, "rect", "high", false, "Clothes rail", { inset: 1 }),
+  carpet_stand: P(54, 18, "rect", "high", false, "Carpets", { inset: 2 }),
+  porta_toilet: P(20, 20, "rect", "high", true, "Toilet cabin"),
+  headframe: P(80, 80, "rect", "high", true, "Headframe", { inset: 14 }),
+  coal_pile: P(64, 48, "circle", "low", true, "Coal heap", { radius: 21 }),
+  snowdrift: P(46, 22, "rect", "low", true, "Snowdrift", { inset: 3 }),
+  wagon: P(40, 112, "rect", "high", true, "Coal wagon", { inset: 2 }),
+  mine_cart: P(22, 32, "rect", "low", true, "Mine cart", { inset: 1 }),
+  miner_statue: P(32, 32, "rect", "high", true, "Miners\u2019 monument"),
+  chimney: P(34, 34, "circle", "high", true, "Chimney", { radius: 15 })
 };
 var PROP_TYPES = Object.keys(PROP_DEFS);
 
@@ -8279,7 +8292,7 @@ var FILL_RULES = Object.freeze({
 });
 
 // packages/shared/src/net/protocol.ts
-var PROTOCOL_VERSION = 8;
+var PROTOCOL_VERSION = 9;
 var CHAT_RULES = Object.freeze({ maxLength: 140, maxRaw: 400, burst: 4, refillMs: 2500, repeatMs: 4e3 });
 var roomId = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 var ClientMessageSchema = external_exports.discriminatedUnion("type", [
@@ -8450,6 +8463,7 @@ var LoadoutRequest = external_exports.object({
 var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true).optional() }).strict();
 var SkinBuyRequest = external_exports.object({ weapon: external_exports.enum(WEAPON_IDS), finish: external_exports.enum(FINISH_IDS) }).strict();
 var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card"]) }).strict();
+var StarsInvoiceRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/) }).strict();
 var UpdateProfileRequest = external_exports.object({
   displayName: displayNameSchema.optional(),
   preferredCharacter: external_exports.enum(CHARACTER_IDS).optional(),

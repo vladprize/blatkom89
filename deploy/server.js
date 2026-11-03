@@ -2279,7 +2279,7 @@ var require_websocket = __commonJS({
     var http = __require("http");
     var net2 = __require("net");
     var tls2 = __require("tls");
-    var { randomBytes: randomBytes13, createHash: createHash4 } = __require("crypto");
+    var { randomBytes: randomBytes13, createHash: createHash5 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -2947,7 +2947,7 @@ var require_websocket = __commonJS({
           abortHandshake(websocket, socket, "Invalid Upgrade header");
           return;
         }
-        const digest = createHash4("sha1").update(key + GUID).digest("base64");
+        const digest = createHash5("sha1").update(key + GUID).digest("base64");
         if (res.headers["sec-websocket-accept"] !== digest) {
           abortHandshake(websocket, socket, "Invalid Sec-WebSocket-Accept header");
           return;
@@ -3316,7 +3316,7 @@ var require_websocket_server = __commonJS({
     var EventEmitter = __require("events");
     var http = __require("http");
     var { Duplex } = __require("stream");
-    var { createHash: createHash4 } = __require("crypto");
+    var { createHash: createHash5 } = __require("crypto");
     var extension2 = require_extension();
     var PerMessageDeflate2 = require_permessage_deflate();
     var subprotocol2 = require_subprotocol();
@@ -3623,7 +3623,7 @@ var require_websocket_server = __commonJS({
           );
         }
         if (this._state > RUNNING) return abortHandshake(socket, 503);
-        const digest = createHash4("sha1").update(key + GUID).digest("base64");
+        const digest = createHash5("sha1").update(key + GUID).digest("base64");
         const headers = [
           "HTTP/1.1 101 Switching Protocols",
           "Upgrade: websocket",
@@ -7829,6 +7829,31 @@ var EnvSchema = external_exports.object({
   /** Card payments for BLATS (Stripe Checkout). Both keys are required to enable them. */
   STRIPE_SECRET_KEY: external_exports.string().optional(),
   STRIPE_WEBHOOK_SECRET: external_exports.string().optional(),
+  /**
+   * v0.2.18 part 3: Xsolla Pay Station for BLATS on the website (cards and local methods). All four are
+   * required to switch it on; with them Xsolla takes the website's purchases instead of Stripe. Each pack
+   * is an In-Game Store item whose SKU is `XSOLLA_SKU_PREFIX` + the pack's BLATS (blats_99 … blats_4999).
+   * Payments stay in Xsolla's sandbox until XSOLLA_SANDBOX=false. docs/PAYMENTS.md.
+   */
+  XSOLLA_MERCHANT_ID: external_exports.string().regex(/^\d{1,12}$/).optional(),
+  XSOLLA_PROJECT_ID: external_exports.string().regex(/^\d{1,12}$/).optional(),
+  XSOLLA_API_KEY: external_exports.string().optional(),
+  XSOLLA_WEBHOOK_SECRET: external_exports.string().optional(),
+  XSOLLA_SANDBOX: bool.default("true"),
+  XSOLLA_SKU_PREFIX: external_exports.string().regex(/^[A-Za-z0-9._-]{0,32}$/).default("blats_"),
+  /**
+   * v0.2.18 part 3: BLATS for Telegram Stars (XTR) inside the Mini App — on whenever the bot is
+   * (TELEGRAM_BOT_TOKEN), unless STARS_ENABLED=false. A pack's price in Stars is its dollar price × this,
+   * rounded to 5 (Telegram pays developers about $0.013 per Star; 75 keeps the website's price).
+   */
+  STARS_ENABLED: bool.default("true"),
+  STARS_PER_USD: external_exports.coerce.number().min(10).max(500).default(75),
+  /** Where players go with payment problems (the bot's /paysupport and the terms): an email or a @username. */
+  PAY_SUPPORT: external_exports.string().max(200).optional(),
+  /** Tests only: a stand-in for https://api.telegram.org (the Bot API) on this machine — nothing else is accepted. */
+  TELEGRAM_API_BASE: external_exports.string().regex(/^http:\/\/(127\.0\.0\.1|localhost)(:\d{2,5})?$/, "a local test address only").optional(),
+  /** v0.2.18 part 3: the rights holder named after «©» in the game's credits (e.g. the owner's legal name). */
+  COPYRIGHT_HOLDER: external_exports.string().min(2).max(120).optional(),
   /** v0.2.17: the main menu's X and Telegram buttons (left empty: «coming soon»). */
   SOCIAL_X_URL: external_exports.string().url().optional(),
   SOCIAL_TELEGRAM_URL: external_exports.string().url().optional(),
@@ -10512,7 +10537,7 @@ var CHARACTERS = {
     district: "Centre / Business Quarter",
     business: "Finance, control, supplies, exclusive orders",
     weaponsNote: "Golden rifle, pistols, grenades",
-    lore: "Officially Arkadich is the modest head of a consumer-goods workshop. Unofficially his underground workshops dress half the city: \xABMontana\xBB jeans, jackets, bobble hats. A fur coat on his shoulders, gold on his neck, a cigar in his teeth \u2014 and not a single piece of paper anyone could produce against him. Arkadich never raises his voice: why would he, when everyone listens anyway?",
+    lore: "Officially Arkadich is the modest head of a consumer-goods workshop. Unofficially his underground workshops dress half the city: jeans that pass for imported, jackets, bobble hats. A fur coat on his shoulders, gold on his neck, a cigar in his teeth \u2014 and not a single piece of paper anyone could produce against him. Arkadich never raises his voice: why would he, when everyone listens anyway?",
     tier: "premium",
     grade: "legendary",
     accent: "#d4a237",
@@ -11952,7 +11977,7 @@ function konDeal(players) {
 }
 
 // packages/shared/src/maps/types.ts
-var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp"];
+var MAP_IDS = ["factory", "garages", "yard", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp", "cherkizon", "vorkuta"];
 
 // packages/shared/src/game-rules/gangBattle.ts
 var GANG_BATTLE_FORMATS = ["2x2", "3x3", "5x5"];
@@ -12559,6 +12584,11 @@ var MapBuilder = class {
     this.def.minimapFloor = color;
     return this;
   }
+  /** Falling snow over the scene (decoration only). */
+  weather(kind) {
+    this.def.weather = kind;
+    return this;
+  }
   floor(type, x, y, w, h) {
     this.def.floors.push({ type, x, y, w, h });
     return this;
@@ -12648,6 +12678,51 @@ var MapBuilder = class {
     return this.def;
   }
 };
+var MIRROR_ROT = { 0: 0, 90: 270, 180: 180, 270: 90 };
+function mirrorHelpers(b2, W) {
+  const mx = (x) => W - x;
+  return {
+    mx,
+    floor(type, x, y, w, h) {
+      b2.floor(type, x, y, w, h).floor(type, W - x - w, y, w, h);
+    },
+    wall(style, x, y, w, h, tag, tagR) {
+      b2.wall(style, x, y, w, h, tag).wall(style, W - x - w, y, w, h, tagR ?? tag);
+    },
+    prop(type, x, y, rot = 0, variant, variantR) {
+      b2.prop(type, x, y, rot, variant).prop(type, mx(x), y, MIRROR_ROT[rot], variantR ?? variant);
+    },
+    decal(d, right) {
+      b2.decal(d);
+      const m = { ...d, ...right ?? {} };
+      if ("w" in m && m.kind !== "arrow") m.x = W - d.x - d.w;
+      else m.x = mx(d.x);
+      if (m.kind === "arrow") m.angle = 180 - m.angle;
+      b2.decal(m);
+    },
+    light(x, y, radius, color, intensity, extra = {}, colorR) {
+      b2.light(x, y, radius, color, intensity, extra).light(mx(x), y, radius, colorR ?? color, intensity, extra);
+    },
+    overhead(o, right) {
+      b2.overhead(o).overhead({ ...o, ...right ?? {}, x: W - o.x - o.w });
+    },
+    tree(x, y, size2 = 40, seed = 0) {
+      b2.tree(x, y, size2, seed).tree(mx(x), y, size2, seed + 1);
+    },
+    spawn(x, y, angleDeg) {
+      b2.spawn(x, y, angleDeg).spawn(mx(x), y, 180 - angleDeg);
+    },
+    pickup(weapon, x, y, respawnMs) {
+      b2.pickup(weapon, x, y, respawnMs).pickup(weapon, mx(x), y, respawnMs);
+    },
+    medkit(x, y, respawnMs) {
+      b2.medkit(x, y, respawnMs).medkit(mx(x), y, respawnMs);
+    },
+    supply(x, y) {
+      b2.supply(x, y).supply(mx(x), y);
+    }
+  };
+}
 function splitByGaps(a0, a1, gaps) {
   const sorted = gaps.slice().sort((p, q) => p[0] - q[0]);
   const out = [];
@@ -13805,6 +13880,293 @@ function buildCampMap() {
   return b2.build();
 }
 
+// packages/shared/src/maps/cherkizon.ts
+function buildCherkizonMap() {
+  const W = 1500;
+  const H = 1e3;
+  const SODIUM = 16756810;
+  const BULB = 16765066;
+  const NEON = 14180607;
+  const GRILL = 16742954;
+  const b2 = new MapBuilder(
+    "cherkizon",
+    "Cherkizon Market",
+    "Wholesale and retail \u2014 and the rest is settled in the aisles",
+    "Rows of stalls under tarps and awnings, the covered pavilion in the middle, the shawarma stand and the carpet row. Narrow aisles, sudden corners, cover at every step.",
+    W,
+    H,
+    "paving"
+  ).ambient(2761264, 0.5).minimap("#3a342c");
+  const m = mirrorHelpers(b2, W);
+  b2.floor("asphalt_cracked", 670, 40, 160, 920);
+  m.floor("asphalt_cracked", 54, 40, 90, 920);
+  m.floor("asphalt_cracked", 54, 446, 640, 108);
+  m.floor("asphalt", 0, 960, 750, 40);
+  for (const [x, y, r, s] of [
+    [380, 300, 16, 1],
+    [250, 520, 12, 2],
+    [600, 690, 18, 3],
+    [120, 860, 14, 4],
+    [480, 905, 12, 5]
+  ]) {
+    m.decal({ kind: "stain", x, y, r, color: "#16222c", alpha: 0.6, seed: s }, { seed: s + 20 });
+  }
+  b2.decal({ kind: "manhole", x: 750, y: 500 }).decal({ kind: "manhole", x: 750, y: 760 });
+  m.decal({ kind: "manhole", x: 369, y: 714 });
+  m.wall("brick", 0, 0, 670, 36, "wall");
+  m.wall("brick", 670, 0, 30, 62, "gatepost");
+  b2.wall("fence_iron", 700, 16, 100, 8);
+  b2.overhead({ kind: "arch", x: 626, y: 28, w: 248, h: 46, text: "\u0427\u0415\u0420\u041A\u0418\u0417\u041E\u041D", sub: "\u0412\u0415\u0429\u0415\u0412\u041E\u0419 \u0420\u042B\u041D\u041E\u041A \xB7 \u041E\u041F\u0422 \xB7 \u0420\u041E\u0417\u041D\u0418\u0426\u0410", seed: 3 });
+  m.decal(
+    { kind: "text", x: 360, y: 18, text: "\u0422\u041E\u0420\u0413\u0423\u0415\u041C \u0427\u0415\u0421\u0422\u041D\u041E", size: 12, color: "#e8dcc0", alpha: 0.55, layer: "roof", font: "hand" },
+    { text: "\u041F\u0420\u0418\u0425\u041E\u0414\u0418\u0422\u0415 \u0415\u0429\u0401" }
+  );
+  m.light(685, 70, 150, SODIUM, 0.85, { fixture: "street", flicker: "soft" });
+  m.prop("porta_toilet", 80, 52, 0, 0, 1);
+  m.prop("porta_toilet", 104, 52, 0, 0, 1);
+  m.prop("truck", 252, 62, 90, 0, 1);
+  m.prop("crate_stack", 352, 56);
+  m.prop("pallet", 400, 60, 90);
+  m.prop("kiosk", 610, 82, 90);
+  for (const [y, v] of [
+    [130, 0],
+    [260, 1],
+    [740, 2],
+    [870, 3]
+  ])
+    m.prop("container", 30, y, 0, v, (v + 1) % 4);
+  m.wall("corrugated", 0, 318, 14, 364, "fence");
+  const SIGNS_L = ["\u0421\u041F\u041E\u0420\u0422\u0422\u041E\u0412\u0410\u0420\u042B", "\u0412\u0418\u0414\u0415\u041E", "\u041E\u0411\u0423\u0412\u042C", "\u0421\u0418\u0413\u0410\u0420\u0415\u0422\u042B \xB7 \u041F\u0418\u0412\u041E", "\u0414\u0416\u0418\u041D\u0421\u042B", "\u0427\u0410\u0421\u042B", "\u042D\u041B\u0415\u041A\u0422\u0420\u041E\u041D\u0418\u041A\u0410", "\u0428\u0410\u041F\u041A\u0418"];
+  const SIGNS_R = ["\u0414\u0416\u0418\u041D\u0421\u042B", "\u041A\u0410\u0421\u0421\u0415\u0422\u042B \xB7 \u0414\u0418\u0421\u041A\u0418", "\u041A\u041E\u0416\u0410", "\u0418\u0413\u0420\u0423\u0428\u041A\u0418", "\u0421\u041F\u041E\u0420\u0422\u0422\u041E\u0412\u0410\u0420\u042B", "\u041F\u041E\u0421\u0423\u0414\u0410", "\u0412\u0418\u0414\u0415\u041E", "\u0414\u0423\u0411\u041B\u0401\u041D\u041A\u0418"];
+  let signNo = 0;
+  const block = (x0, y0, cols, seed, front = { top: true, bottom: true }) => {
+    for (let i = 0; i < cols; i++) {
+      const x = x0 + 30 + i * 60;
+      const v = (seed + i) % 6;
+      m.prop("stall", x, y0 + 36, 180, v, (v + 3) % 6);
+      m.prop("stall", x, y0 + 80, 0, (v + 2) % 6, (v + 4) % 6);
+      if (front.top && (i + seed) % 2 === 0) m.prop("clothes_rail", x, y0 + 7, 0, (seed + i) % 3, (seed + i + 1) % 3);
+      if (front.bottom && (i + seed) % 2 === 1) m.prop("goods_table", x, y0 + 112, 0, (seed + i) % 4, (seed + i + 2) % 4);
+    }
+    if (seed % 2) m.light(x0 + 6, y0 + 16, 100, BULB, 0.75, { fixture: "lamp", flicker: seed % 3 === 0 ? "soft" : "none" });
+    else m.light(x0 + cols * 60 - 6, y0 + 100, 100, BULB, 0.75, { fixture: "lamp" });
+    if (front.sign === false) return;
+    const sx = x0 + cols * 30;
+    const textL = SIGNS_L[signNo % SIGNS_L.length];
+    const textR = SIGNS_R[signNo % SIGNS_R.length];
+    signNo++;
+    const bw = Math.min(cols * 60 - 16, 150);
+    m.decal({ kind: "line", x: sx - bw / 2, y: y0 + 50, w: bw, h: 16, color: seed % 2 ? "#e8dcc0" : "#2a1c14", alpha: 0.95, layer: "roof" });
+    m.decal(
+      { kind: "text", x: sx, y: y0 + 58, text: textL, size: 9, color: seed % 2 ? "#a8201a" : "#f0d890", alpha: 0.95, layer: "roof", font: "sign" },
+      { text: textR }
+    );
+  };
+  block(144, 126, 3, 0);
+  block(414, 126, 2, 1);
+  block(144, 330, 3, 2);
+  block(414, 330, 2, 3);
+  block(144, 554, 3, 4);
+  block(414, 554, 2, 5);
+  block(144, 758, 3, 1);
+  block(414, 758, 2, 2, { top: true, bottom: false });
+  m.prop("crate_stack", 640, 196);
+  m.prop("crate_wood", 612, 214);
+  m.prop("barrel_blue", 600, 270);
+  m.prop("barrel_rust", 614, 284);
+  m.prop("goods_table", 700, 296, 0, 1, 3);
+  b2.decal({ kind: "arrow", x: 750, y: 160, w: 30, h: 60, angle: 90, color: "#d8d0bc", alpha: 0.35 });
+  b2.wall("corrugated", 630, 330, 240, 116, "pavilion");
+  b2.decal({ kind: "line", x: 646, y: 344, w: 208, h: 26, color: "#2a4a6e", alpha: 0.55, layer: "roof" }).decal({ kind: "line", x: 690, y: 378, w: 120, h: 40, color: "#8a1c16", alpha: 0.95, layer: "roof" }).decal({ kind: "star", x: 712, y: 398, r: 9, color: "#e8c040", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 762, y: 398, text: "\u0422\u041E\u0420\u0413\u041E\u0412\u042B\u0419 \u0420\u042F\u0414 \u2116 1", size: 7, color: "#f0d890", alpha: 0.95, layer: "roof", font: "sign" });
+  for (const [i, x] of [660, 712].entries()) m.prop("clothes_rail", x, 322, 0, i % 3, (i + 1) % 3);
+  m.prop("goods_table", 660, 458, 0, 2, 0);
+  m.prop("goods_table", 712, 458, 0, 3, 1);
+  m.light(640, 460, 110, BULB, 0.75, { fixture: "lamp" });
+  b2.prop("stall", 720, 612, 0, 6).prop("stall", 780, 612, 0, 6);
+  b2.decal({ kind: "line", x: 700, y: 598, w: 100, h: 18, color: "#e8dcc0", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 750, y: 607, text: "\u0428\u0410\u0423\u0420\u041C\u0410", size: 10, color: "#a8201a", alpha: 0.95, layer: "roof", font: "sign" });
+  b2.light(750, 650, 150, GRILL, 0.9, { fixture: "none", flicker: "soft" });
+  m.prop("cafe_table", 646, 714, 0);
+  m.prop("cafe_table", 600, 660, 0);
+  m.overhead({ kind: "parasol", x: 624, y: 692, w: 44, h: 44, seed: 0 }, { seed: 1 });
+  m.overhead({ kind: "parasol", x: 578, y: 638, w: 44, h: 44, seed: 1 }, { seed: 0 });
+  m.prop("barrel_red", 680, 662);
+  block(630, 758, 2, 3, { top: false, bottom: false, sign: false });
+  m.prop("carpet_stand", 660, 752, 0, 0, 1);
+  m.prop("carpet_stand", 720, 752, 0, 2, 0);
+  b2.decal({ kind: "line", x: 708, y: 806, w: 84, h: 16, color: "#2a1c14", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 750, y: 814, text: "\u041A\u041E\u0412\u0420\u042B", size: 9, color: "#f0d890", alpha: 0.95, layer: "roof", font: "sign" });
+  b2.wall("fence_iron", 0, 980, W, 8);
+  for (const x of [190, 330, 470]) m.prop("carpet_stand", x, 966, 0, x / 10 % 3, (x / 10 + 1) % 3);
+  m.prop("car_volga", 254, 917, 90, 1, 2);
+  m.prop("ambulance", 470, 917, 90, 3, 2);
+  b2.decal({ kind: "text", x: 750, y: 968, text: "\u0412\u042B\u0425\u041E\u0414\u0410 \u041D\u0415\u0422", size: 7, color: "#d8d0bc", alpha: 0.35 });
+  m.prop("car_zhiguli", 99, 622, 0, 1, 2);
+  m.prop("tire_stack", 70, 404);
+  m.prop("crate_wood", 128, 392);
+  m.prop("sacks", 369, 448, 90);
+  m.prop("barrel_rust", 342, 664);
+  m.prop("crate_green", 396, 760);
+  m.prop("trash_container", 602, 548, 90);
+  for (const [x, y] of [
+    [99, 286],
+    [99, 740],
+    [369, 250],
+    [369, 714],
+    [582, 250],
+    [582, 714]
+  ]) {
+    m.light(x, y, 150, SODIUM, 0.75, { fixture: "street", flicker: y === 714 && x === 582 ? "broken" : "soft" });
+  }
+  b2.light(750, 260, 170, SODIUM, 0.75, { fixture: "street" });
+  b2.light(474, 232, 110, NEON, 0.6, { fixture: "neon", flicker: "soft" }).light(W - 234, 754, 110, 4245759, 0.6, { fixture: "neon" });
+  m.spawn(99, 500, 0);
+  m.spawn(99, 170, 60);
+  m.spawn(99, 840, -60);
+  m.spawn(369, 92, 90);
+  m.spawn(369, 918, -90);
+  m.spawn(690, 104, 90);
+  m.spawn(582, 918, -90);
+  b2.pickup("avtomat", 750, 214, 2e4).pickup("avtomat", 750, 714, 2e4);
+  m.pickup("obrez", 369, 286, 16e3);
+  m.pickup("obrez", 369, 714, 16e3);
+  m.pickup("avtomat", 99, 700, 2e4);
+  m.medkit(582, 380, 22e3);
+  m.medkit(99, 360, 22e3);
+  b2.medkit(750, 900, 2e4);
+  b2.supply(750, 500);
+  m.supply(369, 500);
+  m.supply(582, 600);
+  b2.flagStand(0, 99, 420).flagStand(1, W - 99, 420);
+  b2.base(369, 500).base(750, 520).base(W - 369, 500);
+  return b2.build();
+}
+
+// packages/shared/src/maps/vorkuta.ts
+function buildVorkutaMap() {
+  const W = 1500;
+  const H = 1e3;
+  const SODIUM = 16754752;
+  const WINDOW = 16762992;
+  const COLD = 9087231;
+  const FIRE = 16747050;
+  const b2 = new MapBuilder(
+    "vorkuta",
+    "Vorkuta",
+    "The polar night, the coal and the district\u2019s business",
+    "The mine with its headframe, the House of Culture over the square with the miners\u2019 monument, five-storey blocks, the department store and the canteen. Snowdrifts for cover, heating mains that stop you but not a bullet.",
+    W,
+    H,
+    "snow"
+  ).ambient(1713732, 0.46).minimap("#5a6474").weather("snow");
+  const m = mirrorHelpers(b2, W);
+  b2.floor("snow_trodden", 40, 104, W - 80, 90);
+  m.floor("snow_trodden", 246, 194, 60, 766);
+  m.floor("snow_trodden", 40, 596, 480, 108);
+  b2.floor("snow_trodden", 500, 360, 500, 350);
+  b2.floor("snow_trodden", 680, 700, 140, 260);
+  b2.floor("snow_trodden", 40, 840, W - 80, 120);
+  for (const x of [712, 788]) b2.decal({ kind: "line", x, y: 700, w: 6, h: 250, color: "#4a5260", alpha: 0.35 });
+  for (const y of [628, 672]) m.decal({ kind: "line", x: 60, y, w: 440, h: 5, color: "#4a5260", alpha: 0.3 });
+  b2.decal({ kind: "line", x: 60, y: 138, w: W - 120, h: 5, color: "#4a5260", alpha: 0.3 }).decal({ kind: "line", x: 60, y: 162, w: W - 120, h: 5, color: "#4a5260", alpha: 0.3 });
+  b2.wall("roof_snow", 420, 0, 660, 104, "mine");
+  b2.prop("headframe", 750, 52, 0);
+  m.prop("chimney", 520, 44, 0);
+  b2.decal({ kind: "line", x: 660, y: 86, w: 180, h: 14, color: "#2a2e36", alpha: 0.95, layer: "roof" }).decal({ kind: "text", x: 750, y: 93, text: "\u0428\u0410\u0425\u0422\u0410 \u2116 3", size: 9, color: "#f0d890", alpha: 0.95, layer: "roof", font: "sign" });
+  m.decal({ kind: "text", x: 600, y: 74, text: "\u0421\u041B\u0410\u0412\u0410 \u0428\u0410\u0425\u0422\u0401\u0420\u0421\u041A\u041E\u041C\u0423 \u0422\u0420\u0423\u0414\u0423!", size: 8, color: "#d83a2a", alpha: 0.8, layer: "roof", font: "sign" }, { text: "\u0414\u0410\u0401\u0428\u042C \u0423\u0413\u041E\u041B\u042C \u0421\u0422\u0420\u0410\u041D\u0415!" });
+  m.decal({ kind: "rails", x: 0, y: 24, w: 420, h: 30 });
+  m.prop("wagon", 110, 39, 90, 0, 1);
+  m.prop("wagon", 252, 39, 90, 1, 0);
+  m.prop("mine_cart", 384, 39, 90);
+  m.prop("coal_pile", 352, 150, 0);
+  m.prop("barrel_rust", 414, 136);
+  m.light(414, 136, 120, FIRE, 0.66, { fixture: "none", flicker: "soft" });
+  m.light(560, 112, 160, SODIUM, 0.62, { fixture: "street" });
+  b2.light(750, 112, 200, SODIUM, 0.66, { fixture: "street", flicker: "soft" });
+  b2.wall("roof_snow", 600, 210, 300, 122, "dk");
+  b2.decal({ kind: "line", x: 646, y: 246, w: 208, h: 20, color: "#e8dcc0", alpha: 0.9, layer: "roof" }).decal({ kind: "text", x: 750, y: 256, text: "\u0414\u041E\u041C \u041A\u0423\u041B\u042C\u0422\u0423\u0420\u042B", size: 10, color: "#7a1c16", alpha: 0.95, layer: "roof", font: "sign" });
+  b2.decal({ kind: "star", x: 750, y: 292, r: 10, color: "#c8261c", alpha: 0.9, layer: "roof" });
+  b2.decal({ kind: "stairs", x: 620, y: 332, w: 260, h: 26 });
+  m.prop("column", 636, 346);
+  m.prop("column", 694, 346);
+  m.light(750, 350, 180, WINDOW, 0.55, { fixture: "none" });
+  m.light(606, 240, 100, WINDOW, 0.45, { fixture: "window" });
+  b2.prop("miner_statue", 750, 470, 0);
+  b2.decal({ kind: "stain", x: 750, y: 470, r: 34, color: "#e8eef8", alpha: 0.55, seed: 3 });
+  b2.light(750, 470, 140, COLD, 0.32, { fixture: "none" });
+  m.prop("snowdrift", 620, 520, 0, 0, 1);
+  m.prop("snowdrift", 662, 652, 0, 2, 0);
+  m.prop("bench", 600, 420, 0);
+  m.prop("kiosk", 548, 560, 90);
+  for (const [x, y] of [
+    [520, 372],
+    [520, 700]
+  ]) {
+    m.prop("lamp_post", x, y);
+    m.light(x, y + 8, 170, SODIUM, 0.62, { fixture: "street", flicker: y === 700 ? "broken" : "soft" });
+  }
+  m.wall("roof_snow", 110, 200, 120, 250, "block12", "block14");
+  m.decal({ kind: "text", x: 170, y: 250, text: "12", size: 24, color: "#2a3446", alpha: 0.75, layer: "roof", font: "sign" }, { text: "14" });
+  for (const y of [226, 300, 374, 430]) m.light(236, y, 70, WINDOW, 0.42, { fixture: "window", flicker: y === 300 ? "soft" : "none" });
+  m.wall("roof_snow", 320, 470, 180, 100, "univermag", "stolovaya");
+  m.decal({ kind: "line", x: 340, y: 500, w: 140, h: 18, color: "#2a2e36", alpha: 0.95, layer: "roof" });
+  m.decal({ kind: "text", x: 410, y: 509, text: "\u0423\u041D\u0418\u0412\u0415\u0420\u041C\u0410\u0413", size: 9, color: "#f0d890", alpha: 0.95, layer: "roof", font: "sign" }, { text: "\u0421\u0422\u041E\u041B\u041E\u0412\u0410\u042F" });
+  m.light(410, 578, 130, WINDOW, 0.55, { fixture: "window" });
+  m.prop("bus_paz", 420, 420, 90, 0, 0);
+  m.prop("container", 400, 280, 90, 1, 2);
+  m.prop("crate_stack", 340, 342);
+  m.prop("snowdrift", 540, 300, 90, 1, 2);
+  m.prop("phone_booth", 286, 470);
+  m.wall("heat_pipe", 24, 104, 16, 492, "pipes");
+  m.wall("heat_pipe", 24, 704, 16, 256, "pipes");
+  m.overhead({ kind: "pipe", x: 24, y: 590, w: 16, h: 120 });
+  m.prop("snowdrift", 78, 470, 90, 1, 2);
+  m.wall("roof_snow", 300, 730, 160, 92, "dombyta", "pochta");
+  m.decal({ kind: "line", x: 320, y: 762, w: 120, h: 16, color: "#e8dcc0", alpha: 0.9, layer: "roof" });
+  m.decal({ kind: "text", x: 380, y: 770, text: "\u0414\u041E\u041C \u0411\u042B\u0422\u0410", size: 8, color: "#7a1c16", alpha: 0.95, layer: "roof", font: "sign" }, { text: "\u041F\u041E\u0427\u0422\u0410" });
+  m.light(380, 830, 110, WINDOW, 0.48, { fixture: "window" });
+  m.prop("garage", 140, 786, 0, 1, 2);
+  m.prop("garage", 208, 786, 0, 3, 0);
+  m.prop("car_zhiguli", 560, 790, 0, 3, 0);
+  m.prop("concrete_pipes", 420, 904, 0);
+  m.prop("snowdrift", 180, 560, 0, 2, 1);
+  m.prop("snowdrift", 470, 180, 0, 0, 2);
+  m.prop("trash_container", 496, 652, 90);
+  m.prop("tire_stack", 320, 650);
+  for (const [x, y] of [
+    [276, 194],
+    [276, 712],
+    [626, 840]
+  ]) {
+    m.prop("lamp_post", x, y);
+    m.light(x, y + 8, 160, SODIUM, 0.62, { fixture: "street", flicker: x === 626 ? "soft" : "none" });
+  }
+  m.wall("fence_concrete", 0, 960, 680, 16, "fence");
+  m.wall("brick", 680, 900, 30, 76, "pillar");
+  b2.wall("fence_iron", 710, 962, 80, 8);
+  b2.overhead({ kind: "arch", x: 640, y: 890, w: 220, h: 40, text: "\u0412\u041E\u0420\u041A\u0423\u0422\u0410", sub: "\u0413\u041E\u0420\u041E\u0414 \u0428\u0410\u0425\u0422\u0401\u0420\u041E\u0412", seed: 5 });
+  m.light(695, 900, 130, SODIUM, 0.62, { fixture: "lamp", flicker: "soft" });
+  m.prop("snowdrift", 600, 944, 0, 1, 0);
+  m.spawn(90, 650, 0);
+  m.spawn(90, 150, 45);
+  m.spawn(90, 900, -45);
+  m.spawn(276, 300, 90);
+  m.spawn(560, 150, 90);
+  m.spawn(520, 900, -90);
+  m.spawn(640, 760, -60);
+  m.spawn(700, 150, 90);
+  b2.pickup("avtomat", 750, 404, 2e4).pickup("avtomat", 750, 800, 2e4);
+  m.pickup("obrez", 276, 520, 16e3);
+  m.pickup("obrez", 420, 646, 16e3);
+  m.pickup("avtomat", 77, 380, 2e4);
+  m.medkit(560, 610, 22e3);
+  m.medkit(276, 860, 22e3);
+  b2.supply(750, 590);
+  m.supply(276, 650);
+  m.supply(640, 870);
+  b2.flagStand(0, 77, 280).flagStand(1, W - 77, 280);
+  b2.base(276, 650).base(750, 590).base(W - 276, 650);
+  return b2.build();
+}
+
 // packages/shared/src/maps/props.ts
 var P = (w, h, shape, layer, blocksShot, label, extra = {}) => ({ w, h, shape, layer, blocksMove: shape !== "none", blocksShot: shape !== "none" && blocksShot, label, ...extra });
 var PROP_DEFS = {
@@ -13928,7 +14290,20 @@ var PROP_DEFS = {
   bunk_bed: P(18, 38, "rect", "low", false, "Bunk bed"),
   long_table: P(70, 26, "rect", "low", false, "Dining table", { inset: 1 }),
   bugler: P(26, 26, "rect", "high", true, "Pioneer statue"),
-  rock: P(34, 26, "circle", "low", true, "Rock", { radius: 11 })
+  rock: P(34, 26, "circle", "low", true, "Rock", { radius: 11 }),
+  // v0.2.18: the market «Черкизон» (no brand on any of it) and the mining town «Воркута»
+  stall: P(60, 44, "rect", "high", true, "Market stall", { inset: 1 }),
+  goods_table: P(34, 18, "rect", "low", false, "Trestle table"),
+  clothes_rail: P(46, 10, "rect", "high", false, "Clothes rail", { inset: 1 }),
+  carpet_stand: P(54, 18, "rect", "high", false, "Carpets", { inset: 2 }),
+  porta_toilet: P(20, 20, "rect", "high", true, "Toilet cabin"),
+  headframe: P(80, 80, "rect", "high", true, "Headframe", { inset: 14 }),
+  coal_pile: P(64, 48, "circle", "low", true, "Coal heap", { radius: 21 }),
+  snowdrift: P(46, 22, "rect", "low", true, "Snowdrift", { inset: 3 }),
+  wagon: P(40, 112, "rect", "high", true, "Coal wagon", { inset: 2 }),
+  mine_cart: P(22, 32, "rect", "low", true, "Mine cart", { inset: 1 }),
+  miner_statue: P(32, 32, "rect", "high", true, "Miners\u2019 monument"),
+  chimney: P(34, 34, "circle", "high", true, "Chimney", { radius: 15 })
 };
 var PROP_TYPES = Object.keys(PROP_DEFS);
 
@@ -13951,7 +14326,7 @@ var CollisionWorld = class {
     this.width = map.width;
     this.height = map.height;
     for (const w of map.walls) {
-      const shootThrough = w.style === "fence_chain" || w.style === "fence_iron" || w.style === "water";
+      const shootThrough = w.style === "fence_chain" || w.style === "fence_iron" || w.style === "water" || w.style === "heat_pipe";
       this.addRect(w.x, w.y, w.w, w.h, true, !shootThrough, "wall");
     }
     for (const p of map.props) {
@@ -14221,7 +14596,9 @@ var builders2 = {
   hospital: buildHospitalMap,
   cemetery: buildCemeteryMap,
   square: buildSquareMap,
-  camp: buildCampMap
+  camp: buildCampMap,
+  cherkizon: buildCherkizonMap,
+  vorkuta: buildVorkutaMap
 };
 var mapCache = /* @__PURE__ */ new Map();
 var collisionCache = /* @__PURE__ */ new Map();
@@ -14244,7 +14621,7 @@ function getCollision(id) {
 function isMapId(v) {
   return typeof v === "string" && MAP_IDS.includes(v);
 }
-var MAP_ORDER = ["factory", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp", "garages", "yard"];
+var MAP_ORDER = ["factory", "cherkizon", "vorkuta", "stroyka", "dk", "gastronom", "hospital", "cemetery", "square", "camp", "garages", "yard"];
 
 // packages/shared/src/sim/math.ts
 var TAU = Math.PI * 2;
@@ -16633,7 +17010,7 @@ function encodeSnapshot(src) {
 }
 
 // packages/shared/src/net/protocol.ts
-var PROTOCOL_VERSION = 8;
+var PROTOCOL_VERSION = 9;
 var CHAT_RULES = Object.freeze({ maxLength: 140, maxRaw: 400, burst: 4, refillMs: 2500, repeatMs: 4e3 });
 function cleanChat(raw) {
   const s = raw.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ").replace(new RegExp("(\\p{M}{2})\\p{M}+", "gu"), "$1").replace(/\s+/g, " ").trim();
@@ -16825,6 +17202,7 @@ var LoadoutRequest = external_exports.object({
 var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true).optional() }).strict();
 var SkinBuyRequest = external_exports.object({ weapon: external_exports.enum(WEAPON_IDS), finish: external_exports.enum(FINISH_IDS) }).strict();
 var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card"]) }).strict();
+var StarsInvoiceRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/) }).strict();
 var UpdateProfileRequest = external_exports.object({
   displayName: displayNameSchema.optional(),
   preferredCharacter: external_exports.enum(CHARACTER_IDS).optional(),
@@ -19630,37 +20008,46 @@ If it wasn\u2019t you, just delete this letter \u2014 nothing will change.`
 }
 
 // apps/server/src/payments/service.ts
+var STARS_INVOICE_TTL_MS = 24 * 36e5;
+var UUID = /^[0-9a-f-]{36}$/i;
 var PaymentService = class {
-  constructor(sql2, log2, analytics, publicUrl, card) {
+  constructor(sql2, log2, analytics, publicUrl, card, more = {}) {
     this.sql = sql2;
     this.log = log2;
     this.analytics = analytics;
     this.publicUrl = publicUrl;
     this.card = card;
+    this.xsolla = more.xsolla ?? null;
+    this.stars = more.stars ?? null;
   }
   sql;
   log;
   analytics;
   publicUrl;
   card;
-  async checkout(userId, packId, _method) {
+  xsolla;
+  stars;
+  /** Who takes the website's payments: Xsolla when it is set up, else Stripe, else nobody yet. */
+  get webProvider() {
+    return this.xsolla ? "xsolla" : this.card ? "stripe" : null;
+  }
+  /** Each pack's price in Stars (null: Stars are not on sale here). */
+  starsPrices() {
+    if (!this.stars) return null;
+    return Object.fromEntries(DIAMOND_PACKS.map((p) => [p.id, this.stars.price(p)]));
+  }
+  async checkout(userId, packId, _method, c = {}) {
     const pack = diamondPack(packId);
     if (!pack) throw new HttpError(400, "bad_pack", "No such BLATS pack");
-    const provider = this.card;
-    if (!provider) throw new HttpError(503, "payments_not_configured", "Payments are being connected \u2014 coming soon");
-    const providerName = "stripe";
+    const providerName = this.webProvider;
+    if (!providerName) throw new HttpError(503, "payments_not_configured", "Payments are being connected \u2014 coming soon");
     const [row] = await this.sql`
       INSERT INTO payments (user_id, provider, pack_id, diamonds, amount_cents, status)
       VALUES (${userId}, ${providerName}, ${pack.id}, ${pack.diamonds}, ${pack.usdCents}, 'created') RETURNING id`;
     const id = row.id;
     const base2 = this.publicUrl.replace(/\/$/, "");
     try {
-      const s = await provider.createCheckout({
-        paymentId: id,
-        pack,
-        successUrl: `${base2}/?pay=success&pid=${id}`,
-        cancelUrl: `${base2}/?pay=cancel&pid=${id}`
-      });
+      const s = providerName === "xsolla" ? await this.xsolla.createCheckout({ paymentId: id, pack, userId, lang: c.lang ?? "en", returnUrl: `${base2}/?pay=success&pid=${id}`, ...c.ip ? { ip: c.ip } : {}, ...c.alias ? { alias: c.alias } : {} }) : await this.card.createCheckout({ paymentId: id, pack, successUrl: `${base2}/?pay=success&pid=${id}`, cancelUrl: `${base2}/?pay=cancel&pid=${id}` });
       await this.sql`UPDATE payments SET provider_ref = ${s.providerRef}, updated_at = now() WHERE id = ${id}`;
       this.log.info("checkout created", { paymentId: id, provider: providerName, pack: pack.id, userId });
       return { paymentId: id, url: s.url };
@@ -19676,21 +20063,26 @@ var PaymentService = class {
     return { status: rows[0].status, diamonds: rows[0].diamonds };
   }
   /**
-   * Marks a payment paid and credits its diamonds exactly once. `paidCents` (when the provider
-   * reports it) must cover the price. Returns true when diamonds were credited by this call.
+   * Marks a payment paid and credits its diamonds exactly once. `paid` (when the provider reports it) must
+   * cover the price — US cents, or Stars for a Stars payment; `chargeRef` is the provider's id of the money
+   * (Telegram's charge id). Returns true when diamonds were credited by this call.
    */
-  async markPaid(paymentId, provider, paidCents) {
-    if (!/^[0-9a-f-]{36}$/i.test(paymentId)) return false;
+  async markPaid(paymentId, provider, paid) {
+    if (!UUID.test(paymentId)) return false;
     return this.sql.begin(async (tx) => {
       const rows = await tx`SELECT * FROM payments WHERE id = ${paymentId} FOR UPDATE`;
       const p = rows[0];
       if (!p || p.provider !== provider || !p.user_id) return false;
       if (p.status === "paid" || p.status === "refunded") return false;
-      if (paidCents !== void 0 && paidCents + 1 < p.amount_cents) {
-        this.log.warn("underpaid payment ignored", { paymentId, paidCents, expected: p.amount_cents });
+      if (paid?.cents !== void 0 && paid.cents + 1 < p.amount_cents) {
+        this.log.warn("underpaid payment ignored", { paymentId, paidCents: paid.cents, expected: p.amount_cents });
         return false;
       }
-      await tx`UPDATE payments SET status = 'paid', paid_at = now(), updated_at = now() WHERE id = ${paymentId}`;
+      if (provider === "telegram" && (paid?.stars === void 0 || p.stars === null || paid.stars < p.stars)) {
+        this.log.warn("underpaid Stars payment ignored", { paymentId, paidStars: paid?.stars, expected: p.stars });
+        return false;
+      }
+      await tx`UPDATE payments SET status = 'paid', paid_at = now(), updated_at = now(), charge_ref = COALESCE(${paid?.chargeRef ?? null}, charge_ref) WHERE id = ${paymentId}`;
       await tx`INSERT INTO profiles (user_id) VALUES (${p.user_id}) ON CONFLICT DO NOTHING`;
       const [w] = await tx`SELECT diamonds FROM profiles WHERE user_id = ${p.user_id} FOR UPDATE`;
       const after = w.diamonds + p.diamonds;
@@ -19702,16 +20094,16 @@ var PaymentService = class {
     });
   }
   async markClosed(paymentId, provider, status) {
-    if (!/^[0-9a-f-]{36}$/i.test(paymentId)) return;
+    if (!UUID.test(paymentId)) return;
     await this.sql`UPDATE payments SET status = ${status}, updated_at = now() WHERE id = ${paymentId} AND provider = ${provider} AND status = 'created'`;
   }
   /** Refund reported by the provider: takes back the diamonds that are still unspent. */
   async markRefunded(paymentId, provider) {
-    if (!/^[0-9a-f-]{36}$/i.test(paymentId)) return;
-    await this.sql.begin(async (tx) => {
+    if (!UUID.test(paymentId)) return false;
+    return this.sql.begin(async (tx) => {
       const rows = await tx`SELECT * FROM payments WHERE id = ${paymentId} FOR UPDATE`;
       const p = rows[0];
-      if (!p || p.provider !== provider || p.status !== "paid" || !p.user_id) return;
+      if (!p || p.provider !== provider || p.status !== "paid" || !p.user_id) return false;
       await tx`UPDATE payments SET status = 'refunded', updated_at = now() WHERE id = ${paymentId}`;
       const [w] = await tx`SELECT diamonds FROM profiles WHERE user_id = ${p.user_id} FOR UPDATE`;
       const take = Math.min(w?.diamonds ?? 0, p.diamonds);
@@ -19721,6 +20113,7 @@ var PaymentService = class {
         await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${p.user_id}, 'diamonds', ${-take}, ${after}, 'refund', ${paymentId})`;
       }
       this.log.warn("payment refunded", { paymentId, provider, takenBack: take, userId: p.user_id });
+      return true;
     });
   }
   /** Stripe webhook (signature already verified). */
@@ -19731,7 +20124,7 @@ var PaymentService = class {
     switch (event.type) {
       case "checkout.session.completed":
       case "checkout.session.async_payment_succeeded":
-        if (o.payment_status === "paid" && String(o.currency ?? "usd").toLowerCase() === "usd") await this.markPaid(pid, "stripe", typeof o.amount_total === "number" ? o.amount_total : void 0);
+        if (o.payment_status === "paid" && String(o.currency ?? "usd").toLowerCase() === "usd") await this.markPaid(pid, "stripe", typeof o.amount_total === "number" ? { cents: o.amount_total } : void 0);
         return;
       case "checkout.session.async_payment_failed":
         await this.markClosed(pid, "stripe", "failed");
@@ -19746,10 +20139,121 @@ var PaymentService = class {
         return;
     }
   }
+  // ── Xsolla (v0.2.18 part 3) ───────────────────────────────────────────────
+  /**
+   * An Xsolla webhook (signature already verified). Returns the HTTP answer Xsolla expects: 204 when done
+   * (or for a type the game doesn't need), 400 with Xsolla's error code otherwise.
+   *   user_validation — the player exists; order_paid — credit the order's payment once (its id is our
+   *   provider_ref; the SKU and the player must match it); order_canceled — a refund or a cancelled order:
+   *   the unspent BLATS are taken back, an unpaid one is closed; payment / refund (older accounts send
+   *   them besides) — acknowledged, the order webhooks do the work.
+   */
+  async onXsollaWebhook(body) {
+    const x = this.xsolla;
+    if (!x) return { status: 400, code: "INVALID_PARAMETER", message: "Xsolla is not set up" };
+    const type = String(body.notification_type ?? "");
+    const user = body.user ?? {};
+    if (type === "user_validation") {
+      const uid2 = String(user.id ?? user.external_id ?? "");
+      if (!UUID.test(uid2)) return { status: 400, code: "INVALID_USER", message: "Unknown player" };
+      const [u] = await this.sql`SELECT id FROM users WHERE id = ${uid2} AND deleted_at IS NULL`;
+      return u ? { status: 204 } : { status: 400, code: "INVALID_USER", message: "Unknown player" };
+    }
+    if (type !== "order_paid" && type !== "order_canceled") return { status: 204 };
+    const order = body.order ?? {};
+    const orderId = order.id === void 0 || order.id === null ? "" : String(order.id);
+    if (!/^\d{1,20}$/.test(orderId)) return { status: 400, code: "INVALID_PARAMETER", message: "No order id" };
+    const [p] = await this.sql`SELECT * FROM payments WHERE provider = 'xsolla' AND provider_ref = ${orderId}`;
+    if (!p) return { status: 400, code: "INCORRECT_INVOICE", message: "Unknown order" };
+    if (type === "order_canceled") {
+      if (p.status === "paid") await this.markRefunded(p.id, "xsolla");
+      else await this.markClosed(p.id, "xsolla", "failed");
+      return { status: 204 };
+    }
+    if (order.mode === "sandbox" && !x.cfg.sandbox) return { status: 400, code: "INVALID_PARAMETER", message: "A sandbox order on the live server" };
+    if (String(user.external_id ?? "") !== p.user_id) return { status: 400, code: "INVALID_USER", message: "The order belongs to another player" };
+    const items = Array.isArray(body.items) ? body.items : [];
+    const ours = items.find((i) => x.packBlatsOfSku(String(i.sku ?? "")) === p.diamonds && Number(i.quantity ?? 1) === 1);
+    if (!ours) return { status: 400, code: "INCORRECT_AMOUNT", message: "The order\u2019s item is not this pack" };
+    await this.markPaid(p.id, "xsolla");
+    return { status: 204 };
+  }
+  // ── Telegram Stars (v0.2.18 part 3) ───────────────────────────────────────
+  /**
+   * An invoice for a pack: a payment row and Telegram's link to pay it in Stars. The row's amount is in
+   * the payment's own currency — Stars (XTR has no smaller unit), not dollars.
+   */
+  async starsInvoice(userId, packId, lang) {
+    const pack = diamondPack(packId);
+    if (!pack) throw new HttpError(400, "bad_pack", "No such BLATS pack");
+    const stars = this.stars;
+    if (!stars) throw new HttpError(503, "payments_not_configured", "Payments are being connected \u2014 coming soon");
+    const price = stars.price(pack);
+    const [row] = await this.sql`
+      INSERT INTO payments (user_id, provider, pack_id, diamonds, amount_cents, currency, status, stars)
+      VALUES (${userId}, 'telegram', ${pack.id}, ${pack.diamonds}, ${price}, 'xtr', 'created', ${price}) RETURNING id`;
+    const id = row.id;
+    try {
+      const link = await stars.invoiceLink(id, pack, price, lang);
+      await this.sql`UPDATE payments SET provider_ref = ${id}, updated_at = now() WHERE id = ${id}`;
+      this.log.info("stars invoice created", { paymentId: id, pack: pack.id, stars: price, userId });
+      return { paymentId: id, invoiceUrl: link, stars: price };
+    } catch (e2) {
+      await this.sql`UPDATE payments SET status = 'failed', updated_at = now() WHERE id = ${id}`;
+      this.log.error("stars invoice failed", { paymentId: id, err: e2 });
+      throw new HttpError(502, "payment_provider_error", "The payment system didn\u2019t answer \u2014 try again later");
+    }
+  }
+  /** Telegram asks whether to take the money: only for an open payment of this price, by its own player. */
+  async starsPreCheckout(q, lang) {
+    const no = (ru, en) => ({ ok: false, error: lang === "ru" ? ru : en });
+    if (!this.stars || q.currency !== "XTR" || !UUID.test(q.invoice_payload)) return no("\u042D\u0442\u043E\u0442 \u0441\u0447\u0451\u0442 \u043D\u0435 \u043E\u0442 \u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989.", "This invoice is not from BLATKOM \u201989.");
+    const rows = await this.sql`
+      SELECT p.*, u.telegram_id::text AS telegram_id FROM payments p LEFT JOIN users u ON u.id = p.user_id WHERE p.id = ${q.invoice_payload}`;
+    const p = rows[0];
+    if (!p || p.provider !== "telegram" || !p.user_id) return no("\u042D\u0442\u043E\u0442 \u0441\u0447\u0451\u0442 \u043D\u0435 \u043E\u0442 \u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989.", "This invoice is not from BLATKOM \u201989.");
+    if (p.status !== "created") return no("\u042D\u0442\u043E\u0442 \u0441\u0447\u0451\u0442 \u0443\u0436\u0435 \u043E\u043F\u043B\u0430\u0447\u0435\u043D \u0438\u043B\u0438 \u0437\u0430\u043A\u0440\u044B\u0442 \u2014 \u043E\u0442\u043A\u0440\u043E\u0439 \u043C\u0430\u0433\u0430\u0437\u0438\u043D \u0437\u0430\u043D\u043E\u0432\u043E.", "This invoice is already paid or closed \u2014 open the shop again.");
+    if (Date.now() - new Date(p.created_at).getTime() > STARS_INVOICE_TTL_MS) return no("\u0421\u0447\u0451\u0442 \u0443\u0441\u0442\u0430\u0440\u0435\u043B \u2014 \u043E\u0442\u043A\u0440\u043E\u0439 \u043C\u0430\u0433\u0430\u0437\u0438\u043D \u0437\u0430\u043D\u043E\u0432\u043E.", "The invoice has expired \u2014 open the shop again.");
+    if (p.stars === null || q.total_amount !== p.stars) return no("\u0426\u0435\u043D\u0430 \u0438\u0437\u043C\u0435\u043D\u0438\u043B\u0430\u0441\u044C \u2014 \u043E\u0442\u043A\u0440\u043E\u0439 \u043C\u0430\u0433\u0430\u0437\u0438\u043D \u0437\u0430\u043D\u043E\u0432\u043E.", "The price has changed \u2014 open the shop again.");
+    if (p.telegram_id !== null && p.telegram_id !== String(q.from.id)) return no("\u042D\u0442\u043E\u0442 \u0441\u0447\u0451\u0442 \u0432\u044B\u043F\u0438\u0441\u0430\u043D \u0434\u0440\u0443\u0433\u043E\u043C\u0443 \u0438\u0433\u0440\u043E\u043A\u0443.", "This invoice was made out to another player.");
+    return { ok: true };
+  }
+  /** Telegram reports the Stars: the payment is credited once. Returns the BLATS credited by this call (0: nothing). */
+  async starsPaid(c) {
+    if (c.currency !== "XTR" || !UUID.test(c.invoice_payload) || !c.telegram_payment_charge_id) return 0;
+    const ok = await this.markPaid(c.invoice_payload, "telegram", { stars: c.total_amount, chargeRef: c.telegram_payment_charge_id.slice(0, 200) });
+    if (!ok) return 0;
+    const [p] = await this.sql`SELECT diamonds FROM payments WHERE id = ${c.invoice_payload}`;
+    return p?.diamonds ?? 0;
+  }
+  /** A refund Telegram reports (made by this bot or not): the unspent BLATS are taken back. */
+  async starsRefunded(c) {
+    if (!UUID.test(c.invoice_payload)) return;
+    await this.markRefunded(c.invoice_payload, "telegram");
+  }
+  /** The admin's «Refund Stars»: Telegram gives the Stars back, then the unspent BLATS are taken back. */
+  async refundStars(paymentId) {
+    if (!this.stars) throw new HttpError(503, "payments_not_configured", "\u0417\u0432\u0451\u0437\u0434\u044B Telegram \u043D\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u044B");
+    if (!UUID.test(paymentId)) throw new HttpError(404, "not_found", "\u041F\u043B\u0430\u0442\u0451\u0436 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    const rows = await this.sql`
+      SELECT p.*, u.telegram_id::text AS telegram_id FROM payments p LEFT JOIN users u ON u.id = p.user_id WHERE p.id = ${paymentId}`;
+    const p = rows[0];
+    if (!p) throw new HttpError(404, "not_found", "\u041F\u043B\u0430\u0442\u0451\u0436 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+    if (p.provider !== "telegram") throw new HttpError(409, "not_stars", "\u0417\u0434\u0435\u0441\u044C \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0430\u044E\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u0437\u0432\u0451\u0437\u0434\u044B \u2014 \u043E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0435 \u043F\u043B\u0430\u0442\u0435\u0436\u0438 \u0432 \u043A\u0430\u0431\u0438\u043D\u0435\u0442\u0435 \u043F\u043B\u0430\u0442\u0451\u0436\u043D\u043E\u0439 \u0441\u0438\u0441\u0442\u0435\u043C\u044B");
+    if (p.status !== "paid" || !p.charge_ref) throw new HttpError(409, "not_paid", "\u041F\u043B\u0430\u0442\u0451\u0436 \u043D\u0435 \u043E\u043F\u043B\u0430\u0447\u0435\u043D");
+    if (!p.telegram_id) throw new HttpError(409, "no_telegram", "\u0423 \u0438\u0433\u0440\u043E\u043A\u0430 \u0431\u043E\u043B\u044C\u0448\u0435 \u043D\u0435\u0442 Telegram");
+    try {
+      await this.stars.refund(Number(p.telegram_id), p.charge_ref);
+    } catch (e2) {
+      this.log.error("stars refund failed", { paymentId, err: e2 });
+      throw new HttpError(502, "payment_provider_error", `Telegram \u043D\u0435 \u043F\u0440\u0438\u043D\u044F\u043B \u0432\u043E\u0437\u0432\u0440\u0430\u0442: ${e2.message}`.slice(0, 200));
+    }
+    return { refunded: await this.markRefunded(paymentId, "telegram") };
+  }
 };
 
 // apps/server/src/payments/providers.ts
-import { createHmac as createHmac5, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
+import { createHash as createHash2, createHmac as createHmac5, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 var ProviderError = class extends Error {
 };
 var StripeProvider = class {
@@ -19800,6 +20304,106 @@ var StripeProvider = class {
       const got = Buffer.from(s, "hex");
       return got.length === expected.length && timingSafeEqual4(got, expected);
     });
+  }
+};
+var XsollaProvider = class {
+  constructor(cfg, fetchImpl = fetch) {
+    this.cfg = cfg;
+    this.fetchImpl = fetchImpl;
+  }
+  cfg;
+  fetchImpl;
+  sku(pack) {
+    return `${this.cfg.skuPrefix}${pack.diamonds}`;
+  }
+  /** The pack a webhook's SKU names, by its BLATS (null: not one of ours). */
+  packBlatsOfSku(sku) {
+    if (!sku.startsWith(this.cfg.skuPrefix)) return null;
+    const n = Number(sku.slice(this.cfg.skuPrefix.length));
+    return Number.isInteger(n) && n > 0 ? n : null;
+  }
+  async createCheckout(i) {
+    const ipv4 = i.ip && /^\d{1,3}(\.\d{1,3}){3}$/.test(i.ip) ? i.ip : void 0;
+    const body = {
+      user: {
+        id: { value: i.userId },
+        ...i.alias ? { name: { value: i.alias.slice(0, 32) } } : {},
+        ...ipv4 ? {} : { country: { value: "US" } }
+      },
+      purchase: { items: [{ sku: this.sku(i.pack), quantity: 1 }] },
+      sandbox: this.cfg.sandbox,
+      settings: { language: i.lang, return_url: i.returnUrl },
+      custom_parameters: { payment_id: i.paymentId }
+    };
+    const res = await this.fetchImpl(`https://store.xsolla.com/api/v3/project/${this.cfg.projectId}/admin/payment/token`, {
+      method: "POST",
+      headers: {
+        authorization: `Basic ${Buffer.from(`${this.cfg.merchantId}:${this.cfg.apiKey}`).toString("base64")}`,
+        "content-type": "application/json",
+        ...ipv4 ? { "x-user-ip": ipv4 } : {}
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new ProviderError(`xsolla token failed: ${res.status}`);
+    const data = await res.json();
+    if (!data.token || typeof data.order_id !== "number") throw new ProviderError("xsolla token: malformed response");
+    const host = this.cfg.sandbox ? "https://sandbox-secure.xsolla.com" : "https://secure.xsolla.com";
+    return { providerRef: String(data.order_id), url: `${host}/paystation4/?token=${encodeURIComponent(data.token)}` };
+  }
+  /** `Authorization: Signature <hex>` where hex = sha1(raw body + the project's secret key). */
+  verifyWebhook(rawBody, header) {
+    const m = /^Signature ([0-9a-f]{40})$/i.exec((header ?? "").trim());
+    if (!m) return false;
+    const expected = createHash2("sha1").update(rawBody).update(this.cfg.webhookSecret).digest();
+    const got = Buffer.from(m[1].toLowerCase(), "hex");
+    return got.length === expected.length && timingSafeEqual4(got, expected);
+  }
+};
+
+// apps/server/src/telegram/botApi.ts
+async function botApi(token, method, params, fetchImpl = fetch, base2 = "https://api.telegram.org") {
+  const res = await fetchImpl(`${base2}/bot${token}/${method}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(params),
+    signal: AbortSignal.timeout(1e4)
+  });
+  const data = await res.json().catch(() => null);
+  if (!data?.ok) throw new Error(`${method}: ${data?.description ?? `HTTP ${res.status}`}`);
+  return data.result;
+}
+
+// apps/server/src/payments/stars.ts
+var StarsProvider = class {
+  constructor(token, starsPerUsd, fetchImpl = fetch, apiBase = "https://api.telegram.org") {
+    this.token = token;
+    this.starsPerUsd = starsPerUsd;
+    this.fetchImpl = fetchImpl;
+    this.apiBase = apiBase;
+  }
+  token;
+  starsPerUsd;
+  fetchImpl;
+  apiBase;
+  /** A pack's price in Stars: dollars × the rate, rounded to 5, at least 5. */
+  price(pack) {
+    return Math.max(5, Math.round(pack.usdCents / 100 * this.starsPerUsd / 5) * 5);
+  }
+  /** Telegram's invoice link for a payment (its id is the invoice's payload). */
+  async invoiceLink(paymentId, pack, stars, lang) {
+    const title = lang === "ru" ? `${pack.diamonds} \u0411\u041B\u0410\u0422` : `${pack.diamonds} BLATS`;
+    const description = lang === "ru" ? `${pack.diamonds} \u0411\u041B\u0410\u0422 \u043D\u0430 \u0442\u0432\u043E\u0439 \u0441\u0447\u0451\u0442 \u0432 \u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989: \u043F\u0435\u0440\u0441\u043E\u043D\u0430\u0436\u0438, \u0441\u043A\u0438\u043D\u044B, \u043A\u0435\u0439\u0441. \u0417\u0430\u0447\u0438\u0441\u043B\u044F\u044E\u0442\u0441\u044F \u0441\u0440\u0430\u0437\u0443 \u043F\u043E\u0441\u043B\u0435 \u043E\u043F\u043B\u0430\u0442\u044B.` : `${pack.diamonds} BLATS for your BLATKOM \u201989 account: characters, skins, the case. Credited as soon as you pay.`;
+    return botApi(
+      this.token,
+      "createInvoiceLink",
+      { title, description, payload: paymentId, provider_token: "", currency: "XTR", prices: [{ label: title, amount: stars }] },
+      this.fetchImpl,
+      this.apiBase
+    );
+  }
+  /** Gives a Stars payment back (only the bot that was paid can). */
+  async refund(telegramUserId, chargeId) {
+    await botApi(this.token, "refundStarPayment", { user_id: telegramUserId, telegram_payment_charge_id: chargeId }, this.fetchImpl, this.apiBase);
   }
 };
 
@@ -19867,7 +20471,13 @@ function pgContext(sql2, env2, log2) {
       log2,
       analytics,
       env2.PUBLIC_URL,
-      env2.STRIPE_SECRET_KEY && env2.STRIPE_WEBHOOK_SECRET ? new StripeProvider(env2.STRIPE_SECRET_KEY, env2.STRIPE_WEBHOOK_SECRET) : null
+      env2.STRIPE_SECRET_KEY && env2.STRIPE_WEBHOOK_SECRET ? new StripeProvider(env2.STRIPE_SECRET_KEY, env2.STRIPE_WEBHOOK_SECRET) : null,
+      {
+        // v0.2.18 part 3: Xsolla takes the website's payments once its four keys are set
+        xsolla: env2.XSOLLA_MERCHANT_ID && env2.XSOLLA_PROJECT_ID && env2.XSOLLA_API_KEY && env2.XSOLLA_WEBHOOK_SECRET ? new XsollaProvider({ merchantId: env2.XSOLLA_MERCHANT_ID, projectId: env2.XSOLLA_PROJECT_ID, apiKey: env2.XSOLLA_API_KEY, webhookSecret: env2.XSOLLA_WEBHOOK_SECRET, sandbox: env2.XSOLLA_SANDBOX, skuPrefix: env2.XSOLLA_SKU_PREFIX }) : null,
+        // …and Telegram Stars the Mini App's, whenever the bot is on
+        stars: env2.TELEGRAM_BOT_TOKEN && env2.STARS_ENABLED ? new StarsProvider(env2.TELEGRAM_BOT_TOKEN, env2.STARS_PER_USD, fetch, env2.TELEGRAM_API_BASE ?? "https://api.telegram.org") : null
+      }
     )
   };
   contexts.set(sql2, ctx);
@@ -21065,7 +21675,7 @@ async function economy(sql2, r, now = /* @__PURE__ */ new Date()) {
     WITH l AS (
       SELECT (created_at AT TIME ZONE 'UTC')::date AS d, currency, delta FROM currency_ledger WHERE created_at BETWEEN ${from} AND ${to}
     ), p AS (
-      SELECT (paid_at AT TIME ZONE 'UTC')::date AS d, amount_cents FROM payments WHERE status IN ('paid', 'refunded') AND paid_at BETWEEN ${from} AND ${to}
+      SELECT (paid_at AT TIME ZONE 'UTC')::date AS d, amount_cents FROM payments WHERE status IN ('paid', 'refunded') AND currency = 'usd' AND paid_at BETWEEN ${from} AND ${to}
     )
     SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
       COALESCE((SELECT sum(delta) FROM l WHERE l.d = g.day::date AND currency = 'tokens' AND delta > 0), 0)::int AS ti,
@@ -21352,6 +21962,16 @@ var registerAdminRoutes = (router, deps) => {
     await audit(p.sql, deps.log, { adminId: a.id, action: body.flag ? "player_flag" : "player_unflag", target: id, details: { flag: body.flag }, ip: ctx.ip });
     ctx.json(200, { flag: body.flag });
   });
+  router.post("/api/admin/payments/:id/refund", admin, async (ctx) => {
+    const id = ctx.params.id ?? "";
+    if (!UUID_RE3.test(id)) throw new HttpError(400, "bad_id", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440");
+    const a = currentAdmin(ctx);
+    if (!actionsPerAdmin.take(a.id)) throw new HttpError(429, "rate_limited", "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u0434\u0440\u044F\u0434, \u043F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435", { "retry-after": "60" });
+    const p = pg();
+    const res = await p.payments.refundStars(id);
+    await audit(p.sql, deps.log, { adminId: a.id, action: "stars_refund", target: id, details: res, ip: ctx.ip });
+    ctx.json(200, res);
+  });
   router.post("/api/admin/players/:id/grant", admin, async (ctx) => {
     const id = ctx.params.id ?? "";
     if (!UUID_RE3.test(id)) throw new HttpError(400, "bad_id", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440");
@@ -21566,7 +22186,8 @@ var registerShopRoutes = (router, deps) => {
   };
   router.get("/api/shop/config", (ctx) => {
     const p = deps.sql ? pg().payments : null;
-    const res = { card: REAL_MONEY && !!p?.card, casesEnabled: deps.env.CASES_ENABLED, packs: REAL_MONEY ? [...DIAMOND_PACKS] : [] };
+    const web = REAL_MONEY ? p?.webProvider ?? null : null;
+    const res = { card: !!web, provider: web, stars: REAL_MONEY ? p?.starsPrices() ?? null : null, casesEnabled: deps.env.CASES_ENABLED, packs: REAL_MONEY ? [...DIAMOND_PACKS] : [] };
     ctx.json(200, res);
   });
   router.get("/api/me/inventory", auth, async (ctx) => {
@@ -21634,9 +22255,37 @@ var registerShopRoutes = (router, deps) => {
   router.post("/api/pay/checkout", auth, rateLimit(payLimiter, byUser), async (ctx) => {
     if (!REAL_MONEY) throw new HttpError(403, "payments_off", "Nothing is sold for money: the game is free");
     const user = currentUser(ctx);
-    if (user.method === "telegram") throw new HttpError(403, "telegram_stars_only", "Inside Telegram, BLATS will be sold for Telegram Stars \u2014 coming soon");
+    if (user.method === "telegram") throw new HttpError(403, "telegram_stars_only", "Inside Telegram, BLATS are sold for Telegram Stars");
     const body = await ctx.body(CheckoutRequest, 1024);
-    ctx.json(200, await pg().payments.checkout(user.userId, body.packId, body.method));
+    const lang = /^ru\b/i.test(String(ctx.req.headers["accept-language"] ?? "")) ? "ru" : "en";
+    ctx.json(200, await pg().payments.checkout(user.userId, body.packId, body.method, { ip: ctx.ip, lang, alias: user.displayName }));
+  });
+  router.post("/api/pay/stars", auth, rateLimit(payLimiter, byUser), async (ctx) => {
+    if (!REAL_MONEY) throw new HttpError(403, "payments_off", "Nothing is sold for money: the game is free");
+    const user = currentUser(ctx);
+    if (user.method !== "telegram") throw new HttpError(403, "stars_in_telegram", "Telegram Stars are paid inside Telegram \u2014 open the game there");
+    const body = await ctx.body(StarsInvoiceRequest, 1024);
+    const lang = /^ru\b/i.test(String(ctx.req.headers["accept-language"] ?? "")) ? "ru" : "en";
+    ctx.json(200, await pg().payments.starsInvoice(user.userId, body.packId, lang));
+  });
+  router.post("/api/pay/xsolla/webhook", rateLimit(hookLimiter), async (ctx) => {
+    const payments = pg().payments;
+    if (!payments.xsolla) throw new HttpError(404, "not_found", "Not found");
+    const raw = await readBody(ctx.req, 256 * 1024);
+    if (!payments.xsolla.verifyWebhook(raw, ctx.req.headers["authorization"])) {
+      deps.log.warn("xsolla webhook: bad signature", { ip: ctx.ip });
+      return ctx.json(400, { error: { code: "INVALID_SIGNATURE", message: "Bad signature" } });
+    }
+    let body;
+    try {
+      body = JSON.parse(raw.toString("utf8"));
+    } catch {
+      return ctx.json(400, { error: { code: "INVALID_PARAMETER", message: "Malformed JSON" } });
+    }
+    const r = await payments.onXsollaWebhook(body);
+    if (r.status === 204) return ctx.json(204, null);
+    deps.log.warn("xsolla webhook refused", { type: String(body.notification_type ?? ""), code: r.code });
+    ctx.json(400, { error: { code: r.code, message: r.message } });
   });
   router.get("/api/pay/:id", auth, async (ctx) => {
     if (!/^[0-9a-f-]{36}$/i.test(ctx.params.id ?? "")) throw new HttpError(404, "not_found", "Payment not found");
@@ -21955,7 +22604,7 @@ var SocialHub = class {
 };
 
 // apps/server/src/api/social.ts
-var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var UUID2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var LEADERBOARD_CACHE_MS = 3e4;
 var registerSocialRoutes = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
@@ -21976,7 +22625,7 @@ var registerSocialRoutes = (router, deps) => {
   }
   const param = (ctx) => {
     const id = ctx.params.id ?? "";
-    if (!UUID.test(id)) throw new HttpError(400, "bad_id", "Invalid player id");
+    if (!UUID2.test(id)) throw new HttpError(400, "bad_id", "Invalid player id");
     return id;
   };
   const withPresence = (f2) => ({ ...f2, status: hub.status(f2.id) });
@@ -22105,7 +22754,7 @@ var registerSocialRoutes = (router, deps) => {
 
 // apps/server/src/telegram/bot.ts
 import { createHmac as createHmac7, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
-var BOT_SETTINGS_VERSION = 1;
+var BOT_SETTINGS_VERSION = 2;
 var RU_CODES = /* @__PURE__ */ new Set(["ru", "be", "kk", "ky"]);
 var langOf = (code) => code && RU_CODES.has(code.toLowerCase().split("-")[0]) ? "ru" : "en";
 var CODE = /^[A-Za-z0-9_-]{4,32}$/;
@@ -22123,8 +22772,17 @@ var TEXT = {
     groups: "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0438\u0433\u0440\u0443",
     commands: [
       { command: "start", description: "\u0421\u0441\u044B\u043B\u043A\u0430 \u043D\u0430 \u0438\u0433\u0440\u0443" },
-      { command: "play", description: "\u0418\u0433\u0440\u0430\u0442\u044C \u0432 \u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989" }
+      { command: "play", description: "\u0418\u0433\u0440\u0430\u0442\u044C \u0432 \u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989" },
+      { command: "paysupport", description: "\u041F\u043E\u043C\u043E\u0449\u044C \u0441 \u043E\u043F\u043B\u0430\u0442\u043E\u0439" },
+      { command: "terms", description: "\u0423\u0441\u043B\u043E\u0432\u0438\u044F \u043F\u043E\u043A\u0443\u043F\u043A\u0438" }
     ],
+    paysupport: (contact) => `<b>\u041F\u043E\u043C\u043E\u0449\u044C \u0441 \u043E\u043F\u043B\u0430\u0442\u043E\u0439</b>
+\u041F\u0440\u043E\u0431\u043B\u0435\u043C\u0430 \u0441 \u043F\u043E\u043A\u0443\u043F\u043A\u043E\u0439 \u0411\u041B\u0410\u0422 \u0437\u0430 \u0437\u0432\u0451\u0437\u0434\u044B? \u041D\u0430\u043F\u0438\u0448\u0438: ${contact} \u2014 \u0443\u043A\u0430\u0436\u0438 \u0434\u0430\u0442\u0443, \u0441\u0443\u043C\u043C\u0443 \u0432 \u0437\u0432\u0451\u0437\u0434\u0430\u0445 \u0438 \u0441\u0432\u043E\u0439 \u043D\u0438\u043A \u0432 \u0438\u0433\u0440\u0435. \u041C\u044B \u043E\u0442\u0432\u0435\u0447\u0430\u0435\u043C \u0438, \u0435\u0441\u043B\u0438 \u0447\u0442\u043E-\u0442\u043E \u043F\u043E\u0448\u043B\u043E \u043D\u0435 \u0442\u0430\u043A, \u0432\u0435\u0440\u043D\u0451\u043C \u0437\u0432\u0451\u0437\u0434\u044B.
+\u041F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0430 Telegram \u0438 \u0434\u0440\u0443\u0433\u0438\u0445 \u0431\u043E\u0442\u043E\u0432 \u043D\u0435 \u043C\u043E\u0436\u0435\u0442 \u043F\u043E\u043C\u043E\u0447\u044C \u0441 \u043F\u043E\u043A\u0443\u043F\u043A\u0430\u043C\u0438 \u0432 \u044D\u0442\u043E\u043C \u0431\u043E\u0442\u0435.`,
+    terms: (url) => `<b>\u0423\u0441\u043B\u043E\u0432\u0438\u044F \u043F\u043E\u043A\u0443\u043F\u043A\u0438</b>
+\u0411\u041B\u0410\u0422 \u2014 \u0438\u0433\u0440\u043E\u0432\u0430\u044F \u0432\u0430\u043B\u044E\u0442\u0430 \u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989: \u043F\u0435\u0440\u0441\u043E\u043D\u0430\u0436\u0438, \u0441\u043A\u0438\u043D\u044B, \u043A\u0435\u0439\u0441. \u041E\u043D\u0438 \u043D\u0435 \u0434\u0435\u043D\u044C\u0433\u0438, \u043D\u0435 \u0432\u044B\u0432\u043E\u0434\u044F\u0442\u0441\u044F \u0438 \u043D\u0435 \u043E\u0431\u043C\u0435\u043D\u0438\u0432\u0430\u044E\u0442\u0441\u044F. \u041F\u0435\u0440\u0435\u0434 \u043E\u043F\u043B\u0430\u0442\u043E\u0439 \u043F\u0440\u043E\u0447\u0438\u0442\u0430\u0439 \u0443\u0441\u043B\u043E\u0432\u0438\u044F: ${url}`,
+    paid: (n) => `\u2705 <b>+${n} \u0411\u041B\u0410\u0422</b> \u0437\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u043E. \u0421\u043F\u0430\u0441\u0438\u0431\u043E! \u0417\u0430\u0433\u043B\u044F\u043D\u0438 \u0432 \u0410\u0440\u0441\u0435\u043D\u0430\u043B.`,
+    refunded: "\u0417\u0432\u0451\u0437\u0434\u044B \u0437\u0430 \u043F\u043E\u043A\u0443\u043F\u043A\u0443 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0435\u043D\u044B; \u043D\u0435\u0438\u0437\u0440\u0430\u0441\u0445\u043E\u0434\u043E\u0432\u0430\u043D\u043D\u044B\u0435 \u0411\u041B\u0410\u0422 \u0441\u043F\u0438\u0441\u0430\u043D\u044B.",
     short: "\u0420\u0430\u0439\u043E\u043D\u043D\u044B\u0435 \u0434\u0435\u043B\u0430 \u2014 \u0441\u0435\u0440\u044C\u0451\u0437\u043D\u044B\u0435 \u0434\u0435\u043B\u0430. \u0411\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u044B\u0439 \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u0448\u0443\u0442\u0435\u0440 \u0441 \u0432\u0438\u0434\u043E\u043C \u0441\u0432\u0435\u0440\u0445\u0443.",
     description: "\u0411\u041B\u0410\u0422\u041A\u041E\u041C \u201989 \u2014 \u0431\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u044B\u0439 \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u0448\u0443\u0442\u0435\u0440 \u0441 \u0432\u0438\u0434\u043E\u043C \u0441\u0432\u0435\u0440\u0445\u0443 \u043F\u0440\u043E \u0440\u0430\u0439\u043E\u043D\u043D\u044B\u0435 \u0440\u0430\u0437\u0431\u043E\u0440\u043A\u0438 1989 \u0433\u043E\u0434\u0430. \u0416\u043C\u0438 \xAB\u0421\u0442\u0430\u0440\u0442\xBB \u2014 \u0431\u043E\u0442 \u0440\u0430\u0437\u0431\u0443\u0434\u0438\u0442 \u0441\u0435\u0440\u0432\u0435\u0440 \u0438 \u043F\u0440\u0438\u0448\u043B\u0451\u0442 \u0441\u0441\u044B\u043B\u043A\u0443 \u043D\u0430 \u0438\u0433\u0440\u0443. \u041D\u0438\u0447\u0435\u0433\u043E \u0443\u0441\u0442\u0430\u043D\u0430\u0432\u043B\u0438\u0432\u0430\u0442\u044C \u043D\u0435 \u043D\u0443\u0436\u043D\u043E."
   },
@@ -22141,8 +22799,17 @@ The server is warmed up \u2014 come on in.`,
     groups: "Open the game",
     commands: [
       { command: "start", description: "Get the game link" },
-      { command: "play", description: "Play BLATKOM \u201989" }
+      { command: "play", description: "Play BLATKOM \u201989" },
+      { command: "paysupport", description: "Help with a payment" },
+      { command: "terms", description: "Terms of purchase" }
     ],
+    paysupport: (contact) => `<b>Help with a payment</b>
+A problem with BLATS bought for Stars? Write to ${contact} with the date, the amount in Stars and your in-game alias. We answer and, if something went wrong, give the Stars back.
+Telegram support and other bots cannot help with purchases made in this bot.`,
+    terms: (url) => `<b>Terms of purchase</b>
+BLATS are BLATKOM \u201989\u2019s in-game currency: characters, skins, the case. They are not money, cannot be withdrawn or exchanged. Read the terms before you pay: ${url}`,
+    paid: (n) => `\u2705 <b>+${n} BLATS</b> credited. Thank you! Have a look at the Arsenal.`,
+    refunded: "The Stars for the purchase were given back; the unspent BLATS were taken back.",
     short: "District business is serious business. A free online top-down shooter.",
     description: "BLATKOM \u201989 is a free online top-down shooter about neighbourhood turf wars in 1989. Press Start: the bot wakes the server and sends you the game link. Nothing to install."
   }
@@ -22156,14 +22823,39 @@ function webhookUrl(publicUrl) {
 function botEnabled(env2) {
   return !!env2.TELEGRAM_BOT_TOKEN && env2.PUBLIC_URL.startsWith("https://") && env2.NODE_ENV !== "test";
 }
+var Charge = external_exports.object({ currency: external_exports.string().max(8), total_amount: external_exports.number().int(), invoice_payload: external_exports.string().max(128), telegram_payment_charge_id: external_exports.string().max(200) }).passthrough();
 var Update = external_exports.object({
   update_id: external_exports.number().int(),
   message: external_exports.object({
     text: external_exports.string().max(4096).optional(),
     chat: external_exports.object({ id: external_exports.number().int(), type: external_exports.string() }).passthrough(),
-    from: external_exports.object({ id: external_exports.number().int(), is_bot: external_exports.boolean().optional(), language_code: external_exports.string().max(35).optional() }).passthrough().optional()
+    from: external_exports.object({ id: external_exports.number().int(), is_bot: external_exports.boolean().optional(), language_code: external_exports.string().max(35).optional() }).passthrough().optional(),
+    successful_payment: Charge.optional(),
+    refunded_payment: Charge.optional()
+  }).passthrough().optional(),
+  pre_checkout_query: external_exports.object({
+    id: external_exports.string().max(100),
+    from: external_exports.object({ id: external_exports.number().int(), language_code: external_exports.string().max(35).optional() }).passthrough(),
+    currency: external_exports.string().max(8),
+    total_amount: external_exports.number().int(),
+    invoice_payload: external_exports.string().max(128)
   }).passthrough().optional()
 }).passthrough();
+function payCommandAnswer(update, publicUrl, support, botUsername) {
+  const m = update.message;
+  if (!m || m.from?.is_bot) return null;
+  const cmd = /^\/(paysupport|terms|support)(?:@([A-Za-z0-9_]+))?\b/i.exec((m.text ?? "").trim());
+  if (!cmd) return null;
+  if (cmd[2] && botUsername && cmd[2].toLowerCase() !== botUsername.toLowerCase()) return null;
+  const lang = langOf(m.from?.language_code);
+  const T = TEXT[lang];
+  const base2 = publicUrl.replace(/\/$/, "");
+  const termsUrl = `${base2}/${lang === "ru" ? "terms-ru.html" : "terms.html"}`;
+  const contact = support?.trim() || (lang === "ru" ? `\u043A\u043E\u043D\u0442\u0430\u043A\u0442 \u043D\u0430 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0435 ${termsUrl}` : `the contact on ${termsUrl}`);
+  const text = cmd[1].toLowerCase() === "terms" ? T.terms(termsUrl) : T.paysupport(escapeHtml(contact));
+  return { method: "sendMessage", chat_id: m.chat.id, text, parse_mode: "HTML", link_preview_options: { is_disabled: true } };
+}
+var escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 function botAnswer(update, publicUrl, botUsername) {
   const m = update.message;
   if (!m || m.from?.is_bot) return null;
@@ -22223,6 +22915,33 @@ var registerTelegramRoutes = (router, deps) => {
     }
     if (seen.has(update.update_id)) return ctx.json(200, {});
     remember(update.update_id);
+    const payments = deps.sql ? pgContext(deps.sql, env2, log2).payments : null;
+    const q = update.pre_checkout_query;
+    if (q) {
+      const lang = langOf(q.from.language_code);
+      const verdict = payments ? await payments.starsPreCheckout(q, lang) : { ok: false, error: lang === "ru" ? "\u041E\u043F\u043B\u0430\u0442\u0430 \u0441\u0435\u0439\u0447\u0430\u0441 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430." : "Payments are not available right now." };
+      log2.info("stars pre-checkout", { ok: verdict.ok, stars: q.total_amount });
+      const reply = verdict.ok ? { method: "answerPreCheckoutQuery", pre_checkout_query_id: q.id, ok: true } : { method: "answerPreCheckoutQuery", pre_checkout_query_id: q.id, ok: false, error_message: verdict.error };
+      return ctx.json(200, reply);
+    }
+    const paid = update.message?.successful_payment;
+    const back = update.message?.refunded_payment;
+    if ((paid || back) && update.message) {
+      const T = TEXT[langOf(update.message.from?.language_code)];
+      if (!payments) return ctx.json(200, {});
+      if (paid) {
+        const n = await payments.starsPaid(paid);
+        log2.info("stars payment", { credited: n, stars: paid.total_amount });
+        if (n <= 0) return ctx.json(200, {});
+        const reply = { method: "sendMessage", chat_id: update.message.chat.id, text: T.paid(n), parse_mode: "HTML", link_preview_options: { is_disabled: true } };
+        return ctx.json(200, reply);
+      }
+      await payments.starsRefunded(back);
+      log2.warn("stars refund reported", { stars: back.total_amount });
+      return ctx.json(200, { method: "sendMessage", chat_id: update.message.chat.id, text: T.refunded, parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+    }
+    const payCmd = payCommandAnswer(update, env2.PUBLIC_URL, env2.PAY_SUPPORT, env2.TELEGRAM_BOT_USERNAME);
+    if (payCmd) return perChat.take(String(payCmd.chat_id)) ? ctx.json(200, payCmd) : ctx.json(200, {});
     const answer = botAnswer(update, env2.PUBLIC_URL, env2.TELEGRAM_BOT_USERNAME);
     if (!answer || !perChat.take(String(answer.chat_id))) return ctx.json(200, {});
     log2.info("telegram bot answered", { chatType: update.message?.chat.type, invite: answer.text.includes("<code>"), link: answer.text === TEXT.ru.link || answer.text === TEXT.en.link });
@@ -22230,17 +22949,6 @@ var registerTelegramRoutes = (router, deps) => {
     ctx.json(200, answer);
   });
 };
-async function botApi(token, method, params, fetchImpl = fetch) {
-  const res = await fetchImpl(`https://api.telegram.org/bot${token}/${method}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(params),
-    signal: AbortSignal.timeout(1e4)
-  });
-  const data = await res.json().catch(() => null);
-  if (!data?.ok) throw new Error(`${method}: ${data?.description ?? `HTTP ${res.status}`}`);
-  return data.result;
-}
 async function setupBot(env2, log2, fetchImpl = fetch) {
   if (!botEnabled(env2)) return "off";
   const token = env2.TELEGRAM_BOT_TOKEN;
@@ -22251,7 +22959,7 @@ async function setupBot(env2, log2, fetchImpl = fetch) {
       if (info.last_error_message) log2.warn("telegram webhook reports an error", { error: info.last_error_message });
       return "unchanged";
     }
-    await botApi(token, "setWebhook", { url, secret_token: webhookSecret(token), allowed_updates: ["message"], max_connections: 20 }, fetchImpl);
+    await botApi(token, "setWebhook", { url, secret_token: webhookSecret(token), allowed_updates: ["message", "pre_checkout_query"], max_connections: 20 }, fetchImpl);
     const app = `${env2.PUBLIC_URL.replace(/\/$/, "")}/`;
     const cosmetic = [
       ["setMyCommands", { commands: TEXT.en.commands }],
@@ -22279,7 +22987,7 @@ async function setupBot(env2, log2, fetchImpl = fetch) {
 }
 
 // apps/server/src/api/clubs.ts
-var UUID2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var UUID3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var REFUSALS = {
   not_found: [404, "No such gang"],
   in_club: [409, "You are already in a gang \u2014 leave it first"],
@@ -22337,12 +23045,12 @@ var registerClubRoutes = (router, deps) => {
   }
   const clubId = (ctx) => {
     const id = ctx.params.id ?? "";
-    if (!UUID2.test(id)) throw new HttpError(400, "bad_id", "Invalid gang id");
+    if (!UUID3.test(id)) throw new HttpError(400, "bad_id", "Invalid gang id");
     return id;
   };
   const userParam = (ctx) => {
     const id = ctx.params.userId ?? "";
-    if (!UUID2.test(id)) throw new HttpError(400, "bad_id", "Invalid player id");
+    if (!UUID3.test(id)) throw new HttpError(400, "bad_id", "Invalid player id");
     return id;
   };
   router.get("/api/clubs", auth, rateLimit(readLimiter, byUser), async (ctx) => {
@@ -22493,7 +23201,7 @@ var registerClubRoutes = (router, deps) => {
 import { randomBytes as randomBytes9 } from "node:crypto";
 
 // apps/server/src/auth/oauth.ts
-import { createHash as createHash2, randomBytes as randomBytes8 } from "node:crypto";
+import { createHash as createHash3, randomBytes as randomBytes8 } from "node:crypto";
 
 // apps/server/src/security/signed.ts
 import { createHmac as createHmac8, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
@@ -22593,7 +23301,7 @@ var readIntent = (secret, token, now = Date.now()) => verify(secret, "intent", t
 var stateToken = (secret, s, now = Date.now()) => sign(secret, "state", { ...s, t: now });
 var readState = (secret, token, now = Date.now()) => verify(secret, "state", token, 10 * 6e4, now);
 var newNonce = () => b642(randomBytes8(18));
-var handoffHash = (code) => createHash2("sha256").update(code).digest("hex");
+var handoffHash = (code) => createHash3("sha256").update(code).digest("hex");
 function authorizeUrl(spec, clientId, redirectUri, state) {
   const u = new URL(spec.authorize);
   u.searchParams.set("client_id", clientId);
@@ -22631,13 +23339,13 @@ async function fetchProfile(spec, creds, redirectUri, code, fetchImpl = fetch) {
 }
 
 // apps/server/src/auth/telegramLogin.ts
-import { createHash as createHash3, createHmac as createHmac9, timingSafeEqual as timingSafeEqual7 } from "node:crypto";
+import { createHash as createHash4, createHmac as createHmac9, timingSafeEqual as timingSafeEqual7 } from "node:crypto";
 var TelegramLoginData = external_exports.record(external_exports.string().max(32), external_exports.union([external_exports.string().max(512), external_exports.number()])).refine((r) => Object.keys(r).length <= 16, "too many fields");
 function validateTelegramLogin(data, botToken, maxAgeSec, nowSec = Math.floor(Date.now() / 1e3)) {
   const hash = String(data.hash ?? "");
   if (!/^[0-9a-f]{64}$/.test(hash)) return { ok: false, reason: "missing_hash" };
   const check = Object.keys(data).filter((k) => k !== "hash").sort().map((k) => `${k}=${String(data[k])}`).join("\n");
-  const secret = createHash3("sha256").update(botToken).digest();
+  const secret = createHash4("sha256").update(botToken).digest();
   const want = Buffer.from(createHmac9("sha256", secret).update(check).digest("hex"));
   const got = Buffer.from(hash);
   if (want.length !== got.length || !timingSafeEqual7(want, got)) return { ok: false, reason: "bad_signature" };
@@ -22905,7 +23613,7 @@ function createApp(deps, modules = ROUTE_MODULES) {
   const startedAt = Date.now();
   router.get("/api/health", (ctx) => ctx.json(200, { ok: true, version: deps.env.SERVER_VERSION, uptimeSec: Math.round((Date.now() - startedAt) / 1e3), rooms: deps.rooms.count() }));
   router.get("/api/site", (ctx) => {
-    const res = { x: deps.env.SOCIAL_X_URL ?? null, telegram: deps.env.SOCIAL_TELEGRAM_URL ?? null };
+    const res = { x: deps.env.SOCIAL_X_URL ?? null, telegram: deps.env.SOCIAL_TELEGRAM_URL ?? null, copyright: deps.env.COPYRIGHT_HOLDER ?? "BLATKOM \u201989" };
     ctx.json(200, res, { "cache-control": "public, max-age=300" });
   });
   router.get("/api/ready", async (ctx) => {

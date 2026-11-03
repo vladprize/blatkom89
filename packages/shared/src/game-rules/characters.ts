@@ -487,7 +487,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     district: 'Centre / Business Quarter',
     business: 'Finance, control, supplies, exclusive orders',
     weaponsNote: 'Golden rifle, pistols, grenades',
-    lore: 'Officially Arkadich is the modest head of a consumer-goods workshop. Unofficially his underground workshops dress half the city: «Montana» jeans, jackets, bobble hats. A fur coat on his shoulders, gold on his neck, a cigar in his teeth — and not a single piece of paper anyone could produce against him. Arkadich never raises his voice: why would he, when everyone listens anyway?',
+    lore: 'Officially Arkadich is the modest head of a consumer-goods workshop. Unofficially his underground workshops dress half the city: jeans that pass for imported, jackets, bobble hats. A fur coat on his shoulders, gold on his neck, a cigar in his teeth — and not a single piece of paper anyone could produce against him. Arkadich never raises his voice: why would he, when everyone listens anyway?',
     tier: 'premium',
     grade: 'legendary',
     accent: '#d4a237',
