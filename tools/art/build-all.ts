@@ -11,6 +11,7 @@ import { packAtlas } from './lib/pack.js';
 import type { PackInput } from './lib/pack.js';
 import { buildCharacters } from './build-characters.js';
 import { propPrims, PROP_VARIANTS } from './props.js';
+import { parasolPrims } from './props4.js';
 import { buildWeapons } from './build-weapons.js';
 import { floorTexture, wallTexture, treeCanopy, bush, pipeTexture, roofDetail } from './textures.js';
 import type { FloorKey, WallKey } from './textures.js';
@@ -37,6 +38,7 @@ function buildProps() {
   frames.push({ name: 'bush_1', img: bush(30, 70, 5) });
   for (const k of ['vent', 'hatch', 'antenna', 'machine'] as const) frames.push({ name: `roof_${k}`, img: roofDetail(k) });
   frames.push({ name: 'roof_puddle', img: roofDetail('puddle', 4) });
+  for (let v = 0; v < 2; v++) frames.push({ name: `parasol_${v}`, img: render(parasolPrims(44, v), 98, 98) });
   return packAtlas(frames, join(OUT, 'sprites/props.png'));
 }
 
@@ -67,9 +69,9 @@ function buildFx() {
 }
 
 function buildTiles() {
-  const floors: FloorKey[] = ['concrete_slab', 'concrete_dirty', 'concrete_painted', 'linoleum_checker', 'tile_white', 'wood', 'metal_plate', 'asphalt', 'asphalt_cracked', 'dirt', 'grass', 'sand', 'gravel', 'carpet_red', 'parquet', 'tile_green', 'tile_beige', 'marble', 'paving', 'cobble'];
+  const floors: FloorKey[] = ['concrete_slab', 'concrete_dirty', 'concrete_painted', 'linoleum_checker', 'tile_white', 'wood', 'metal_plate', 'asphalt', 'asphalt_cracked', 'dirt', 'grass', 'sand', 'gravel', 'carpet_red', 'parquet', 'tile_green', 'tile_beige', 'marble', 'paving', 'cobble', 'snow', 'snow_trodden'];
   for (const f of floors) floorTexture(f).savePng(join(OUT, `tiles/floor_${f}.png`));
-  const walls: WallKey[] = ['brick', 'concrete', 'panel', 'corrugated', 'fence_concrete', 'roof_flat', 'fence_chain', 'plaster', 'fence_iron', 'water', 'kremlin', 'granite', 'roof_church'];
+  const walls: WallKey[] = ['brick', 'concrete', 'panel', 'corrugated', 'fence_concrete', 'roof_flat', 'fence_chain', 'plaster', 'fence_iron', 'water', 'kremlin', 'granite', 'roof_church', 'roof_snow', 'heat_pipe'];
   for (const w of walls) wallTexture(w).savePng(join(OUT, `tiles/wall_${w}.png`));
   pipeTexture().savePng(join(OUT, 'tiles/pipe.png'));
   return { floors: floors.length, walls: walls.length };
@@ -93,10 +95,12 @@ function writeManifest() {
 mkdirSync(join(OUT, 'sprites'), { recursive: true });
 mkdirSync(join(OUT, 'tiles'), { recursive: true });
 console.time('assets');
-buildCharacters(join(OUT, 'sprites'));
+// `--maps`: only what maps are drawn with (props, tiles) — the characters and weapons take minutes
+const mapsOnly = process.argv.includes('--maps');
+if (!mapsOnly) buildCharacters(join(OUT, 'sprites'));
 console.log('props', buildProps());
-console.log('weapons', buildWeapons(join(OUT, 'sprites'), join(OUT, 'ui'), join(ROOT, 'apps/web/src/game/render/rig.gen.ts')).atlas);
-console.log('fx', buildFx());
+if (!mapsOnly) console.log('weapons', buildWeapons(join(OUT, 'sprites'), join(OUT, 'ui'), join(ROOT, 'apps/web/src/game/render/rig.gen.ts')).atlas);
+if (!mapsOnly) console.log('fx', buildFx());
 console.log('tiles', buildTiles());
 console.log('manifest entries', writeManifest());
 console.timeEnd('assets');

@@ -43,6 +43,13 @@ for (const mapId of only.length ? only : maps) {
     }
     if (nolight) sc.lighting.enabled = false;
     g.scene.getScene('hud').scene.setVisible(false);
+    // nothing of the page over the canvas (the full-screen button…)
+    if (!document.getElementById('shot-css')) {
+      const st = document.createElement('style');
+      st.id = 'shot-css';
+      st.textContent = 'body * { visibility: hidden !important; } canvas { visibility: visible !important; }';
+      document.head.append(st);
+    }
     const w = sc.session.world.map;
     g.scale.setGameSize(w.width, w.height);
     sc.cameras.main.setZoom(1);

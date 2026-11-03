@@ -1,8 +1,9 @@
-// The v0.23 maps end-to-end (in Russian): the practice map picker lists all ten maps with their pictures,
-// the three new ones under their Russian names; then «Кладбище», «Красная площадь» and «Пионерлагерь» each
-// load into a practice match with bots — each behind its loading screen (the owner's art, gone once the
-// match is on) — every prop frame and the new wall and floor textures present,
-// nothing drawn with a missing frame, no errors, the bots move about — and a screenshot of each is saved.
+// The v0.23 and v0.2.18 maps end-to-end (in Russian): the practice map picker lists all twelve maps with
+// their pictures, the five newer ones under their Russian names; then «Кладбище», «Красная площадь»,
+// «Пионерлагерь», «Черкизон» and «Воркута» each load into a practice match with bots — each behind its
+// loading screen (gone once the match is on) — every prop frame and the new wall and floor textures
+// present, nothing drawn with a missing frame, no errors, the bots move about, snow falls on Vorkuta only —
+// and a screenshot of each is saved.
 //
 // Usage: node tests/e2e/maps.mjs <baseUrl> <outDir>
 import { chromium } from 'playwright';
@@ -18,6 +19,8 @@ const NEW = [
   ['cemetery', 'Кладбище'],
   ['square', 'Красная площадь'],
   ['camp', 'Пионерлагерь'],
+  ['cherkizon', 'Черкизон'],
+  ['vorkuta', 'Воркута'],
 ];
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const problems = [];
@@ -66,7 +69,7 @@ try {
   await page.getByRole('button', { name: 'Готово' }).click();
   await page.getByTestId('menu-nick').waitFor({ timeout: 20000 });
 
-  // the practice screen: ten map tiles, every picture loaded, the new ones under their Russian names
+  // the practice screen: twelve map tiles, every picture loaded, the new ones under their Russian names
   await page.getByRole('button', { name: /Тренировка/ }).first().click();
   await page.locator('.maps .maptile').first().waitFor({ timeout: 15000 });
   const tiles = page.locator('.maps .maptile');
@@ -78,7 +81,7 @@ try {
     names: Object.fromEntries([...document.querySelectorAll('.maps .maptile')].map((t) => [t.dataset.map, t.textContent.trim()])),
     loaded: [...document.querySelectorAll('.maps .maptile img')].filter((i) => i.complete && i.naturalWidth > 0).map((i) => i.closest('.maptile').dataset.map),
   }));
-  check(n === 10, `the practice map picker lists ${n} maps`);
+  check(n === 12, `the practice map picker lists ${n} maps`);
   check(picker.loaded.length === n, `every map picture is loaded (${picker.loaded.length}/${n})`);
   const named = NEW.filter(([id, ru]) => picker.names[id]?.toLowerCase() === ru.toLowerCase());
   check(named.length === NEW.length, `the new maps are listed in Russian: ${NEW.map(([id]) => picker.names[id]).join(', ')}`);
@@ -91,7 +94,7 @@ try {
   // each new map in a practice match against bots
   // the camp was picked on the practice screen and starts with the button; the other two through the app
   let first = true;
-  for (const [id, ru] of [NEW[2], NEW[0], NEW[1]]) {
+  for (const [id, ru] of [NEW[2], NEW[0], NEW[1], NEW[3], NEW[4]]) {
     if (!first) {
       await page.evaluate((mapId) => window.__blatkom.app.startPractice({ mapId, bots: 3, difficulty: 'normal' }), id);
     } else {
@@ -117,7 +120,9 @@ try {
       const imgs = sc.children.list.filter((o) => o.type === 'Image' || o.type === 'TileSprite');
       const missing = imgs.filter((o) => o.frame?.name === '__MISSING' || o.texture?.key === '__MISSING').length;
       const props = imgs.filter((o) => o.texture?.key === 'props' && String(o.frame?.name).startsWith('prop_')).length;
-      const tex = ['wall_fence_iron', 'wall_water', 'wall_kremlin', 'wall_granite', 'wall_roof_church', 'floor_cobble'].filter((k) => !g.textures.exists(k));
+      const tex = ['wall_fence_iron', 'wall_water', 'wall_kremlin', 'wall_granite', 'wall_roof_church', 'floor_cobble', 'floor_snow', 'floor_snow_trodden', 'wall_roof_snow', 'wall_heat_pipe'].filter((k) => !g.textures.exists(k));
+      // v0.2.18: falling snow — flakes over the light map on the winter map only
+      const flakes = imgs.filter((o) => o.texture?.key === 'fx' && o.frame?.name === 'px' && o.depth > 30 && o.depth < 31).length;
       const texts = [];
       const walk = (o) => {
         if (o.type === 'Text') texts.push(String(o.text));
@@ -125,12 +130,13 @@ try {
       };
       g.scene.getScene('hud').children.list.forEach(walk);
       const label = texts.some((t) => t.toUpperCase().includes(ru.toUpperCase()));
-      return { map: sc.session.world.map.id, missing, props, tex, label, others: sc.session.players().filter((p) => !p.isLocal).map((p) => [p.x, p.y]) };
+      return { map: sc.session.world.map.id, missing, props, tex, label, flakes, others: sc.session.players().filter((p) => !p.isLocal).map((p) => [p.x, p.y]) };
     }, ru);
     const moved = r.others.filter((p, i) => before[i] && Math.hypot(p[0] - before[i][0], p[1] - before[i][1]) > 4).length;
     check(r.map === id && r.missing === 0 && r.props > 60 && r.tex.length === 0, `«${ru}»: ${r.props} props drawn, ${r.missing} missing frames, textures ${r.tex.length ? 'missing ' + r.tex.join(', ') : 'all present'}`);
     check(r.label, `«${ru}»: the minimap shows the Russian map name`);
     check(moved > 0, `«${ru}»: the bots move about (${moved}/${r.others.length})`);
+    check(id === 'vorkuta' ? r.flakes >= 100 : r.flakes === 0, `«${ru}»: ${id === 'vorkuta' ? `snow falls (${r.flakes} flakes)` : 'no snow'}`);
     await page.screenshot({ path: `${outDir}/maps_${id}.png` });
   }
 } catch (e) {

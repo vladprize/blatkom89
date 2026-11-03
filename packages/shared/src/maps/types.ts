@@ -1,7 +1,7 @@
 import type { WeaponId } from '../game-rules/weapons.js';
 import type { PropType } from './props.js';
 
-export const MAP_IDS = ['factory', 'garages', 'yard', 'stroyka', 'dk', 'gastronom', 'hospital', 'cemetery', 'square', 'camp'] as const;
+export const MAP_IDS = ['factory', 'garages', 'yard', 'stroyka', 'dk', 'gastronom', 'hospital', 'cemetery', 'square', 'camp', 'cherkizon', 'vorkuta'] as const;
 export type MapId = (typeof MAP_IDS)[number];
 
 export type FloorType =
@@ -24,7 +24,10 @@ export type FloorType =
   | 'tile_beige'
   | 'marble'
   | 'paving'
-  | 'cobble';
+  | 'cobble'
+  /** v0.2.18: fresh snow (Vorkuta) and snow trodden by feet and wheels. */
+  | 'snow'
+  | 'snow_trodden';
 
 export type WallStyle =
   | 'brick'
@@ -46,7 +49,11 @@ export type WallStyle =
   /** Polished dark-red granite (the tribune). */
   | 'granite'
   /** A tiled church roof (no roof clutter on it). */
-  | 'roof_church';
+  | 'roof_church'
+  /** v0.2.18: a flat roof under snow (Vorkuta). */
+  | 'roof_snow'
+  /** v0.2.18: heating mains on low supports (Vorkuta): they stop you, not bullets. */
+  | 'heat_pipe';
 
 export interface Rect {
   x: number;
@@ -86,7 +93,8 @@ export type DecalPlacement =
       color: string;
       angle?: number;
       alpha?: number;
-      font?: 'stencil' | 'hand';
+      /** 'sign' (v0.2.18): a shop sign's clean bold letters, hardly worn. */
+      font?: 'stencil' | 'hand' | 'sign';
       /** 'roof' decals are drawn on top of high props (e.g. paint on garage roofs). */
       layer?: 'floor' | 'roof';
     }
@@ -102,7 +110,9 @@ export type DecalPlacement =
   /** Dashed outline of a zone (danger zone under the crane, parking bays). */
   | { kind: 'dashrect'; x: number; y: number; w: number; h: number; color: string; alpha?: number }
   /** A painted cross (red cross of the hospital, first-aid posts). */
-  | { kind: 'cross'; x: number; y: number; r: number; color: string; alpha?: number };
+  | { kind: 'cross'; x: number; y: number; r: number; color: string; alpha?: number }
+  /** v0.2.18: a railway track (two rails on sleepers) along the longer side of the box. */
+  | { kind: 'rails'; x: number; y: number; w: number; h: number; alpha?: number };
 
 export interface LightDef {
   x: number;
@@ -116,8 +126,12 @@ export interface LightDef {
 }
 
 export interface OverheadDef {
-  /** 'crane': a tower crane jib from (x, y) at `angle` degrees, `w` long, with a hook and a load at `h` along it. */
-  kind: 'tree' | 'pipe' | 'canopy' | 'wires' | 'bush' | 'crane';
+  /**
+   * 'crane': a tower crane jib from (x, y) at `angle` degrees, `w` long, with a hook and a load at `h` along it.
+   * 'parasol': a striped market umbrella over the box (v0.2.18). 'arch': a gateway's signboard over the box
+   * with `text` (and a smaller `sub` line) — the gate of the market, the town's entrance (v0.2.18).
+   */
+  kind: 'tree' | 'pipe' | 'canopy' | 'wires' | 'bush' | 'crane' | 'parasol' | 'arch';
   x: number;
   y: number;
   w: number;
@@ -125,6 +139,9 @@ export interface OverheadDef {
   rot?: Rotation;
   seed?: number;
   angle?: number;
+  /** 'arch' only: the signboard's lines. */
+  text?: string;
+  sub?: string;
 }
 
 export interface SpawnPoint {
@@ -175,4 +192,6 @@ export interface MapDef {
   ambient: { color: number; level: number };
   /** Minimap palette hint. */
   minimapFloor: string;
+  /** v0.2.18: falling snow drawn over the scene (Vorkuta). Decoration only — no effect on play. */
+  weather?: 'snow';
 }

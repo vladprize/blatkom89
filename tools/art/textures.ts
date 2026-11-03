@@ -103,7 +103,9 @@ export type FloorKey =
   | 'tile_beige'
   | 'marble'
   | 'paving'
-  | 'cobble';
+  | 'cobble'
+  | 'snow'
+  | 'snow_trodden';
 
 export function floorTexture(kind: FloorKey): Img {
   const img = new Img(T, T);
@@ -356,11 +358,52 @@ export function floorTexture(kind: FloorKey): Img {
       stains(img, 255, 6, hex('#242220'), 10, 26, 0.35);
       break;
     }
+    case 'snow': {
+      // fresh snow: soft wind-blown waves, blue hollows, rare glints and a few footprints
+      const c0 = hex('#a2aec2');
+      fill((u, v) => {
+        const wave = pfbm(u + pfbm(u, v, T, 64, 262) * 40, v, T, 128, 261);
+        let f = 0.86 + wave * 0.26 + (pfbm(u, v, T, 32, 263) - 0.5) * 0.1 + (noise2(u, v, 264) - 0.5) * 0.05;
+        if (noise2(u, v, 265) > 0.994) return hex('#f4f8ff');
+        return q(c0, step(f, u, v, 5, 0.74, 1.16));
+      });
+      stains(img, 266, 5, hex('#8a98b0'), 8, 22, 0.35);
+      for (let i = 0; i < 6; i++) {
+        // a line of footprints across the tile
+        const x0 = noise2(i, 1, 267) * T;
+        const y0 = noise2(i, 2, 267) * T;
+        const a = noise2(i, 3, 267) * Math.PI * 2;
+        for (let k = 0; k < 7; k++) {
+          const x = x0 + Math.cos(a) * k * 9 + Math.cos(a + Math.PI / 2) * (k % 2 ? 3 : -3);
+          const y = y0 + Math.sin(a) * k * 9 + Math.sin(a + Math.PI / 2) * (k % 2 ? 3 : -3);
+          for (let dy = -2; dy <= 2; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              const px = ((Math.round(x + dx) % T) + T) % T;
+              const py = ((Math.round(y + dy) % T) + T) % T;
+              img.set(px, py, mix(img.get(px, py), hex('#7c8aa2'), 0.55));
+            }
+        }
+      }
+      break;
+    }
+    case 'snow_trodden': {
+      // packed snow of a street: grey-blue, slush in the ruts, dark grit
+      const c0 = hex('#8a94a6');
+      fill((u, v) => {
+        const rut = Math.abs(((v + pfbm(u, v, T, 64, 271) * 40) % 64) - 32) < 2 && noise2(u >> 3, v >> 4, 277) > 0.35 ? 0.92 : 1;
+        const f = (0.84 + pfbm(u, v, T, 64, 272) * 0.28 + (noise2(u, v, 273) - 0.5) * 0.08) * rut;
+        if (noise2(u, v, 274) > 0.985) return hex('#3a3e46');
+        return q(c0, step(f, u, v, 5, 0.66, 1.18));
+      });
+      stains(img, 275, 7, hex('#5a6272'), 10, 28, 0.4);
+      stains(img, 276, 4, hex('#c8d2e0'), 8, 18, 0.45);
+      break;
+    }
   }
   return img;
 }
 
-export type WallKey = 'brick' | 'concrete' | 'panel' | 'corrugated' | 'fence_concrete' | 'roof_flat' | 'fence_chain' | 'plaster' | 'fence_iron' | 'water' | 'kremlin' | 'granite' | 'roof_church';
+export type WallKey = 'brick' | 'concrete' | 'panel' | 'corrugated' | 'fence_concrete' | 'roof_flat' | 'fence_chain' | 'plaster' | 'fence_iron' | 'water' | 'kremlin' | 'granite' | 'roof_church' | 'roof_snow' | 'heat_pipe';
 
 /** 128x128 tileable wall-top textures. */
 export function wallTexture(kind: WallKey): Img {
@@ -452,6 +495,29 @@ export function wallTexture(kind: WallKey): Img {
           const shade = seam ? 1.16 : u % 8 === 1 ? 0.8 : 0.94;
           c = q(hex('#2e5a42'), step(shade * (0.9 + pnoise(u / 32, v / 32, 4, 201) * 0.2) * (ridge ? 0.7 : 1), u, v, 5, 0.66, 1.22));
           if (pnoise(u / 8, v / 8, 16, 202) > 0.8 && noise2(u >> 3, 0, 203) > 0.4) c = mix(c, hex('#6a3c20'), 0.4);
+          break;
+        }
+        case 'roof_snow': {
+          // a flat roof under snow: drifted waves, blue shade where it is deeper, a hint of the felt below
+          const f = 0.86 + pnoise(u / 20 + pnoise(u / 40, v / 40, 3, 211) * 2, v / 28, 6, 212) * 0.24 + (noise2(u, v, 213) - 0.5) * 0.06;
+          c = q(hex('#c6d0e0'), step(f, u, v, 5, 0.74, 1.14));
+          if (pnoise(u / 12, v / 12, 11, 214) > 0.86) c = mix(c, hex('#5a5e68'), 0.2);
+          if (noise2(u, v, 215) > 0.993) c = hex('#f4f8ff');
+          break;
+        }
+        case 'heat_pipe': {
+          // two insulated mains along u (each 12 texels thick) with snow on their tops, clear between them
+          const pipe = v >= 2 && v < 14 ? 0 : v >= 18 && v < 30 ? 1 : -1;
+          if (pipe < 0) {
+            c = [0, 0, 0, 0];
+            break;
+          }
+          const lv = v - (pipe ? 18 : 2);
+          const band = u % 32 < 2 ? 0.74 : 1;
+          const shade = lv < 4 ? 1.12 : lv < 8 ? 0.98 : 0.8;
+          c = q(hex('#8a929c'), step(shade * band * (0.92 + noise2(u >> 2, v, 221) * 0.12), u, v, 5, 0.6, 1.25));
+          if (lv < 4 && noise2(u >> 1, pipe, 222) > 0.22) c = mix(c, hex('#e4ecf6'), 0.85);
+          if (lv >= 10) c = mix(c, hex('#2a2e34'), 0.4);
           break;
         }
       }

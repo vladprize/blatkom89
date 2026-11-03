@@ -57,7 +57,7 @@ function addTexture(scene: Phaser.Scene, key: string, c: HTMLCanvasElement): str
   return key;
 }
 
-export function paintedText(scene: Phaser.Scene, key: string, text: string, sizeWorld: number, color: string, font: 'stencil' | 'hand', seed: number): string {
+export function paintedText(scene: Phaser.Scene, key: string, text: string, sizeWorld: number, color: string, font: 'stencil' | 'hand' | 'sign', seed: number): string {
   const family = font === 'hand' ? '700 SIZEpx Caveat, "PT Sans Narrow", sans-serif' : '700 SIZEpx Oswald, "PT Sans Narrow", sans-serif';
   const px = Math.round(sizeWorld * S);
   const [m, mg] = canvas(4, 4);
@@ -76,7 +76,7 @@ export function paintedText(scene: Phaser.Scene, key: string, text: string, size
     for (let x = px / 2; x < c.width; x += px * 0.55) g.fillRect(Math.floor(x + px * 0.22), 0, Math.max(1, Math.floor(px / 14)), c.height);
     g.restore();
   }
-  wear(g, c.width, c.height, seed, font === 'hand' ? 0.25 : 0.55);
+  wear(g, c.width, c.height, seed, font === 'hand' ? 0.25 : font === 'sign' ? 0.08 : 0.55);
   return addTexture(scene, key, c);
 }
 
@@ -310,6 +310,100 @@ export function paintedCross(scene: Phaser.Scene, key: string, r: number, color:
   g.fillRect(Math.round((D - arm) / 2), 0, arm, D);
   g.fillRect(0, Math.round((D - arm) / 2), D, arm);
   wear(g, D, D, seed, 0.3);
+  return addTexture(scene, key, c);
+}
+
+/** A railway track seen from above (v0.2.18): sleepers across the short side, two rails along the long one, snow between. */
+export function railsDecal(scene: Phaser.Scene, key: string, w: number, h: number, seed: number): string {
+  const W = Math.max(4, Math.round(w * S));
+  const H = Math.max(4, Math.round(h * S));
+  const [c, g] = canvas(W, H);
+  const r = rng(seed);
+  const vertical = H > W;
+  const len = vertical ? H : W;
+  const across = vertical ? W : H;
+  const rect = (along: number, side: number, l: number, t: number) => (vertical ? g.fillRect(side, along, t, l) : g.fillRect(along, side, l, t));
+  // ballast
+  g.fillStyle = 'rgba(58,56,60,0.55)';
+  rect(0, Math.round(across * 0.12), len, Math.round(across * 0.76));
+  // sleepers
+  for (let p = 2; p < len; p += 14) {
+    const k = 0.8 + r() * 0.3;
+    g.fillStyle = `rgb(${Math.round(58 * k)},${Math.round(42 * k)},${Math.round(30 * k)})`;
+    rect(p, Math.round(across * 0.08), 7, Math.round(across * 0.84));
+    if (r() > 0.4) {
+      g.fillStyle = 'rgba(214,224,238,0.7)';
+      rect(p + 1, Math.round(across * 0.08), 3, Math.round(across * (0.2 + r() * 0.5)));
+    }
+  }
+  // the rails: a dark base and a bright worn head
+  for (const f of [0.3, 0.7]) {
+    const side = Math.round(across * f) - 2;
+    g.fillStyle = 'rgba(28,30,34,1)';
+    rect(0, side - 1, len, 6);
+    g.fillStyle = 'rgba(150,158,170,1)';
+    rect(0, side + 1, len, 2);
+  }
+  wear(g, W, H, seed, 0.08);
+  return addTexture(scene, key, c);
+}
+
+/**
+ * A gateway's signboard over the road (v0.2.18): a cream board in a dark steel frame, the big red name,
+ * a smaller line under it and a red star at each end — the market's gate and the town's entrance.
+ */
+export function archSign(scene: Phaser.Scene, key: string, w: number, h: number, text: string, sub: string | undefined, seed: number): string {
+  const W = Math.max(8, Math.round(w * S));
+  const H = Math.max(8, Math.round(h * S));
+  const [c, g] = canvas(W, H);
+  // the frame and the board
+  g.fillStyle = '#1c1a1c';
+  g.fillRect(0, Math.round(H * 0.08), W, Math.round(H * 0.84));
+  g.fillStyle = '#e4d8bc';
+  g.fillRect(6, Math.round(H * 0.08) + 5, W - 12, Math.round(H * 0.84) - 10);
+  g.fillStyle = '#a8201a';
+  g.fillRect(6, Math.round(H * 0.08) + 5, W - 12, 5);
+  g.fillRect(6, Math.round(H * 0.92) - 10, W - 12, 5);
+  // a star at each end
+  const star = (cx: number, cy: number, rr: number) => {
+    g.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const k = i % 2 ? rr * 0.42 : rr;
+      if (i === 0) g.moveTo(cx + Math.cos(a) * k, cy + Math.sin(a) * k);
+      else g.lineTo(cx + Math.cos(a) * k, cy + Math.sin(a) * k);
+    }
+    g.closePath();
+    g.fill();
+  };
+  const sr = Math.round(H * 0.24);
+  star(sr + 12, H / 2, sr);
+  star(W - sr - 12, H / 2, sr);
+  // the name and the line under it
+  const main = Math.round(H * (sub ? 0.42 : 0.56));
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.font = `700 ${main}px Oswald, "PT Sans Narrow", sans-serif`;
+  const room = W - sr * 4 - 40;
+  const fit = Math.min(1, room / Math.max(1, g.measureText(text).width));
+  g.save();
+  g.translate(W / 2, sub ? H * 0.42 : H / 2);
+  g.scale(fit, 1);
+  g.fillStyle = '#a8201a';
+  g.fillText(text, 0, 0);
+  g.restore();
+  if (sub) {
+    const small = Math.round(H * 0.17);
+    g.font = `700 ${small}px Oswald, "PT Sans Narrow", sans-serif`;
+    const f2 = Math.min(1, room / Math.max(1, g.measureText(sub).width));
+    g.save();
+    g.translate(W / 2, H * 0.72);
+    g.scale(f2, 1);
+    g.fillStyle = '#3a2a20';
+    g.fillText(sub, 0, 0);
+    g.restore();
+  }
+  wear(g, W, H, seed, 0.12);
   return addTexture(scene, key, c);
 }
 

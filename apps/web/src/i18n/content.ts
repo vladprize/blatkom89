@@ -102,6 +102,8 @@ const MAP_BLURB_EN: Record<MapId, string> = {
   cemetery: 'Gravel alleys between railed plots, a domed chapel and the crypt. Railings let bullets through, headstones don’t.',
   square: 'The fortress wall, the many-domed cathedral, the granite tribune. Lorries, carriers and barricades on the cobbles.',
   camp: 'Cabins, the dining hall, the club, a campfire ring and a lake with a jetty. Water stops you, not bullets.',
+  cherkizon: 'Rows of stalls under tarps and awnings, the covered pavilion and the shawarma stand. Narrow aisles and sudden corners.',
+  vorkuta: 'The mine, the House of Culture over the square, five-storey blocks in snow. Drifts for cover; heating mains stop you, not bullets.',
 };
 
 export function mapBlurb(id: MapId): string {

@@ -2,12 +2,14 @@
  * The big pictures of places (the owner's art, 1600×900 in `assets/scenes/`): behind the story's comic
  * pages, on a map's loading screen, in the hub's mission rows and behind a mission's end. Every map has
  * one, and 2089 its hall; a place added later without a picture keeps the comic's card layout.
+ * v0.2.18: «Черкизон» and «Воркута» show the maps themselves, rendered by the game (tools/map-scenes.mjs) —
+ * the owner's layouts carry portraits, brand logos and camp elements that must not appear.
  */
 import type { MapId } from '@blatkom/shared';
 import { asset } from '../ui/dom.js';
 import type { Beat } from './script.js';
 
-export const SCENE_IDS = ['yard', 'garages', 'factory', 'camp', 'cemetery', 'univermag', 'square', 'dk', 'stroyka', 'hospital', 'hall2089'] as const;
+export const SCENE_IDS = ['yard', 'garages', 'factory', 'camp', 'cemetery', 'univermag', 'square', 'dk', 'stroyka', 'hospital', 'cherkizon', 'vorkuta', 'hall2089'] as const;
 export type SceneId = (typeof SCENE_IDS)[number];
 
 /** Where the eye goes (percent of the width and height): the crop on narrow screens and the camera's slow push. */
@@ -23,6 +25,8 @@ export const SCENE_FOCUS: Record<SceneId, readonly [number, number]> = {
   dk: [34, 60],
   stroyka: [48, 60],
   hospital: [52, 62],
+  cherkizon: [50, 40],
+  vorkuta: [50, 44],
 };
 
 /**
@@ -43,6 +47,8 @@ export const SCENE_ART_SIDE: Record<SceneId, 'left' | 'right'> = {
   dk: 'left',
   stroyka: 'right',
   hospital: 'right',
+  cherkizon: 'left',
+  vorkuta: 'right',
   hall2089: 'left',
 };
 
@@ -58,6 +64,8 @@ export const MAP_SCENE: Partial<Record<MapId, SceneId>> = {
   dk: 'dk',
   stroyka: 'stroyka',
   hospital: 'hospital',
+  cherkizon: 'cherkizon',
+  vorkuta: 'vorkuta',
 };
 
 export function sceneForMap(map: MapId | undefined): SceneId | null {

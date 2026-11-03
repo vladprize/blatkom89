@@ -64,6 +64,12 @@ export class MapBuilder {
     return this;
   }
 
+  /** Falling snow over the scene (decoration only). */
+  weather(kind: 'snow'): this {
+    this.def.weather = kind;
+    return this;
+  }
+
   floor(type: FloorType, x: number, y: number, w: number, h: number): this {
     this.def.floors.push({ type, x, y, w, h } satisfies FloorRect);
     return this;
@@ -170,6 +176,60 @@ export class MapBuilder {
   build(): MapDef {
     return this.def;
   }
+}
+
+const MIRROR_ROT: Record<Rotation, Rotation> = { 0: 0, 90: 270, 180: 180, 270: 90 };
+
+/**
+ * v0.2.18: authoring a map that is the same on both sides of the vertical axis (the owner: «симметричные»).
+ * Everything placed through these helpers is placed again mirrored at x → W − x, so the two halves have
+ * the same walls, props, cover and spawns; the variant, the colour and the text may differ per side
+ * (the right side gets `variantR` / `textR` when given). A thing on the axis itself goes through the
+ * plain builder once.
+ */
+export function mirrorHelpers(b: MapBuilder, W: number) {
+  const mx = (x: number) => W - x;
+  return {
+    mx,
+    floor(type: FloorType, x: number, y: number, w: number, h: number) {
+      b.floor(type, x, y, w, h).floor(type, W - x - w, y, w, h);
+    },
+    wall(style: WallStyle, x: number, y: number, w: number, h: number, tag?: string, tagR?: string) {
+      b.wall(style, x, y, w, h, tag).wall(style, W - x - w, y, w, h, tagR ?? tag);
+    },
+    prop(type: PropType, x: number, y: number, rot: Rotation = 0, variant?: number, variantR?: number) {
+      b.prop(type, x, y, rot, variant).prop(type, mx(x), y, MIRROR_ROT[rot], variantR ?? variant);
+    },
+    decal(d: DecalPlacement, right?: Partial<DecalPlacement>) {
+      b.decal(d);
+      const m = { ...d, ...(right ?? {}) } as DecalPlacement;
+      if ('w' in m && m.kind !== 'arrow') (m as { x: number }).x = W - d.x - (d as { w: number }).w;
+      else (m as { x: number }).x = mx(d.x);
+      if (m.kind === 'arrow') m.angle = 180 - m.angle;
+      b.decal(m);
+    },
+    light(x: number, y: number, radius: number, color: number, intensity: number, extra: Partial<LightDef> = {}, colorR?: number) {
+      b.light(x, y, radius, color, intensity, extra).light(mx(x), y, radius, colorR ?? color, intensity, extra);
+    },
+    overhead(o: OverheadDef, right?: Partial<OverheadDef>) {
+      b.overhead(o).overhead({ ...o, ...(right ?? {}), x: W - o.x - o.w });
+    },
+    tree(x: number, y: number, size = 40, seed = 0) {
+      b.tree(x, y, size, seed).tree(mx(x), y, size, seed + 1);
+    },
+    spawn(x: number, y: number, angleDeg: number) {
+      b.spawn(x, y, angleDeg).spawn(mx(x), y, 180 - angleDeg);
+    },
+    pickup(weapon: WeaponId, x: number, y: number, respawnMs?: number) {
+      b.pickup(weapon, x, y, respawnMs).pickup(weapon, mx(x), y, respawnMs);
+    },
+    medkit(x: number, y: number, respawnMs?: number) {
+      b.medkit(x, y, respawnMs).medkit(mx(x), y, respawnMs);
+    },
+    supply(x: number, y: number) {
+      b.supply(x, y).supply(mx(x), y);
+    },
+  };
 }
 
 function splitByGaps(a0: number, a1: number, gaps: Array<[number, number]>): Array<[number, number]> {

@@ -98,7 +98,7 @@ async function socketPlayer(name) {
     new Promise((resolve) => {
       const ws = new WebSocket(`${wsBase}/ws`);
       p.room = ws;
-      ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', protocol: 8, token: auth.token, roomId, character: 'petya', clientVersion: 'e2e' })));
+      ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', protocol: 9, token: auth.token, roomId, character: 'petya', clientVersion: 'e2e' })));
       ws.on('message', (d, bin) => {
         if (bin) return;
         const m = JSON.parse(String(d));

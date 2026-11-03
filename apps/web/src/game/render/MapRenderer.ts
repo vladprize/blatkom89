@@ -7,10 +7,10 @@ import * as Phaser from 'phaser';
 import { PROP_DEFS, propFootprint } from '@blatkom/shared';
 import type { FloorType, MapDef, PropPlacement, WallRect } from '@blatkom/shared';
 import { D } from './depth.js';
-import { paintedText, paintedArrow, hazardStripes, paintedStar, stain, hopscotch, manhole, solidRect, laundry, clutterSheet, stairsDecal, dashedRect, paintedCross, craneJib, CRANE_TAIL } from './paint.js';
+import { paintedText, paintedArrow, hazardStripes, paintedStar, stain, hopscotch, manhole, solidRect, laundry, clutterSheet, stairsDecal, dashedRect, paintedCross, craneJib, CRANE_TAIL, railsDecal, archSign } from './paint.js';
 import type { ClutterFrame } from './paint.js';
 
-// keep in sync with tools/art PROP_VARIANTS (props.ts, props2.ts, props3.ts)
+// keep in sync with tools/art PROP_VARIANTS (props.ts … props4.ts)
 const PROP_VARIANTS: Record<string, number> = {
   garage: 5,
   container: 4,
@@ -21,7 +21,7 @@ const PROP_VARIANTS: Record<string, number> = {
   fridge_case: 3,
   counter: 4,
   coat_rack: 2,
-  ambulance: 3,
+  ambulance: 4,
   produce_stall: 3,
   tent: 3,
   flagpole: 3,
@@ -33,6 +33,13 @@ const PROP_VARIANTS: Record<string, number> = {
   boat: 3,
   bugler: 2,
   rock: 3,
+  stall: 7,
+  goods_table: 4,
+  clothes_rail: 3,
+  carpet_stand: 3,
+  porta_toilet: 2,
+  snowdrift: 3,
+  wagon: 2,
 };
 const TEX_SCALE = 0.5;
 
@@ -62,6 +69,9 @@ const CLUTTER: Record<FloorType, ClutterSet | null> = {
   marble: { ...INDOOR, area: 5200 },
   paving: { ...STREET, area: 2600 },
   cobble: { ...STREET, area: 2800 },
+  // v0.2.18: a little litter shows on the snow, more on the streets
+  snow: { area: 9000, frames: [['butt_0', 1], ['paper_0', 0.6], ['bottle_0', 0.5], ['can_0', 0.4]] },
+  snow_trodden: { area: 3600, frames: [['butt_0', 2], ['butt_1', 1], ['debris_0', 1.5], ['paper_0', 1], ['can_0', 0.6], ['bottle_0', 0.6], ['news_0', 0.4]] },
 };
 
 interface Cullable {
@@ -288,6 +298,11 @@ export class MapRenderer {
           this.scene.add.image(d.x, d.y, key).setScale(TEX_SCALE).setDepth(D.DECAL);
           break;
         }
+        case 'rails': {
+          const key = railsDecal(this.scene, this.nextKey('rails'), d.w, d.h, seed);
+          this.scene.add.image(d.x, d.y, key).setOrigin(0, 0).setScale(TEX_SCALE).setAlpha(d.alpha ?? 1).setDepth(D.DECAL - 0.01);
+          break;
+        }
       }
     }
   }
@@ -343,9 +358,14 @@ export class MapRenderer {
         this.ironFence(w, edges);
         continue;
       }
+      if (w.style === 'heat_pipe') {
+        shadows.fillStyle(0x000000, 0.3).fillRect(w.x + 3, w.y + 4, w.w, w.h);
+        this.heatPipe(w);
+        continue;
+      }
       const thin = w.style === 'fence_chain';
       if (!thin) {
-        const tall = w.style === 'roof_flat' || w.style === 'roof_church' || w.style === 'kremlin';
+        const tall = w.style === 'roof_flat' || w.style === 'roof_church' || w.style === 'kremlin' || w.style === 'roof_snow';
         const off = tall ? 10 : w.style === 'fence_concrete' ? 3 : 5;
         shadows.fillStyle(0x000000, tall ? 0.5 : 0.42);
         shadows.fillRect(w.x + off, w.y + off * 1.2, w.w, w.h);
@@ -361,6 +381,7 @@ export class MapRenderer {
       edges.fillStyle(0x000000, 0.35).fillRect(w.x, w.y + w.h - 1, w.w, 1).fillRect(w.x + w.w - 1, w.y, 1, w.h);
       edges.lineStyle(1, 0x0b0908, 0.9).strokeRect(w.x - 0.5, w.y - 0.5, w.w + 1, w.h + 1);
       if (w.style === 'roof_flat') this.roofDetails(w, i, edges);
+      if (w.style === 'roof_snow') this.snowRoof(w, i, edges);
       if (w.style === 'roof_church') this.hipRoof(w, edges);
       if (w.style === 'fence_concrete') {
         const vertical = w.h > w.w;
@@ -371,6 +392,54 @@ export class MapRenderer {
           else edges.fillRect(w.x + s - 2, w.y - 1, 4, w.h + 2);
         }
       }
+    }
+  }
+
+  /**
+   * Heating mains on low concrete supports (v0.2.18, Vorkuta): two insulated pipes with snow on top,
+   * rotated for vertical runs; they stop you, not bullets (collision.ts).
+   */
+  private heatPipe(w: WallRect) {
+    const vertical = w.h > w.w;
+    const len = vertical ? w.h : w.w;
+    const thick = vertical ? w.w : w.h;
+    const sup = this.scene.add.graphics().setDepth(D.WALL - 0.1);
+    for (let s = 14; s < len - 4; s += 52) {
+      sup.fillStyle(0x5a5e66, 1);
+      if (vertical) sup.fillRect(w.x - 3, w.y + s - 4, thick + 6, 8);
+      else sup.fillRect(w.x + s - 4, w.y - 3, 8, thick + 6);
+      sup.fillStyle(0xd8e0ec, 0.8);
+      if (vertical) sup.fillRect(w.x - 3, w.y + s - 4, thick + 6, 2);
+      else sup.fillRect(w.x + s - 4, w.y - 3, 8, 2);
+    }
+    const t = this.scene.add.tileSprite(w.x + w.w / 2, w.y + w.h / 2, len, thick, 'wall_heat_pipe');
+    t.setTileScale(TEX_SCALE, TEX_SCALE).setDepth(D.WALL);
+    if (vertical) t.setRotation(Math.PI / 2);
+  }
+
+  /** A flat roof under snow (v0.2.18): a pale parapet, vents and hatches with snow caps, drifts at the walls. */
+  private snowRoof(w: WallRect, i: number, g: Phaser.GameObjects.Graphics) {
+    g.lineStyle(4, 0x4a5262, 1).strokeRect(w.x + 2, w.y + 2, w.w - 4, w.h - 4);
+    g.lineStyle(1.5, 0xe8eef6, 0.9).strokeRect(w.x + 2.5, w.y + 2.5, w.w - 5, w.h - 5);
+    g.lineStyle(1, 0x2a3040, 1).strokeRect(w.x + 4.5, w.y + 4.5, w.w - 9, w.h - 9);
+    const n = Math.max(2, Math.floor((w.w * w.h) / 10000));
+    const kinds = ['roof_vent', 'roof_hatch', 'roof_vent', 'roof_antenna'];
+    for (let k = 0; k < n; k++) {
+      const fx = 0.14 + hash(i, k, 21) * 0.72;
+      const fy = 0.18 + hash(i, k, 22) * 0.64;
+      const x = w.x + w.w * fx;
+      const y = w.y + w.h * fy;
+      const frame = kinds[Math.floor(hash(i, k, 23) * kinds.length)]!;
+      this.scene.add.image(x, y, 'props', frame).setScale(TEX_SCALE).setDepth(D.WALL + 0.6);
+      if (frame !== 'roof_antenna') g.fillStyle(0xe4ecf6, 0.85).fillEllipse(x - 0.5, y - 2, 9, 4);
+    }
+    // drifts against the parapet
+    for (let k = 0; k < 6; k++) {
+      const along = hash(i, k, 24);
+      const side = Math.floor(hash(i, k, 25) * 4);
+      const x = side < 2 ? w.x + 8 + along * (w.w - 16) : side === 2 ? w.x + 9 : w.x + w.w - 9;
+      const y = side >= 2 ? w.y + 8 + along * (w.h - 16) : side === 0 ? w.y + 9 : w.y + w.h - 9;
+      g.fillStyle(0xf0f4fa, 0.55).fillEllipse(x, y, side < 2 ? 26 : 8, side < 2 ? 8 : 26);
     }
   }
 
@@ -559,6 +628,19 @@ export class MapRenderer {
         }
         case 'wires': {
           const key = laundry(this.scene, this.nextKey('laundry'), o.w, o.h, o.seed ?? i);
+          obj = this.scene.add.image(o.x, o.y, key).setOrigin(0, 0).setScale(TEX_SCALE);
+          break;
+        }
+        case 'parasol': {
+          const frame = `parasol_${(o.seed ?? i) % 2}`;
+          const k = (TEX_SCALE * o.w) / 44;
+          this.scene.add.image(o.x + o.w / 2 + 6, o.y + o.h / 2 + 8, 'props', frame).setScale(k).setTintFill(0x000000).setAlpha(0.32).setDepth(D.SHADOW);
+          obj = this.scene.add.image(o.x + o.w / 2, o.y + o.h / 2, 'props', frame).setScale(k).setRotation(hash(i, 5) * Math.PI * 2);
+          break;
+        }
+        case 'arch': {
+          const key = archSign(this.scene, this.nextKey('arch'), o.w, o.h, o.text ?? '', o.sub, o.seed ?? i);
+          this.scene.add.image(o.x + 8, o.y + 12, key).setOrigin(0, 0).setScale(TEX_SCALE).setTintFill(0x000000).setAlpha(0.35).setDepth(D.SHADOW);
           obj = this.scene.add.image(o.x, o.y, key).setOrigin(0, 0).setScale(TEX_SCALE);
           break;
         }

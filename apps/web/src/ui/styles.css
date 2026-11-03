@@ -602,7 +602,8 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .screen--practice .practice__mode { grid-column: 2; grid-row: 2; margin: 0 !important; }
   .screen--practice .practice__bots { grid-column: 2; grid-row: 3; margin: 0 !important; }
   .screen--practice .practice__start { grid-column: 2; grid-row: 4; margin: 0 !important; }
-  .screen--practice .practice__map .maps { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  /* v0.2.18: twelve maps — two rows of six */
+  .screen--practice .practice__map .maps { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 }
 @media (min-width: 1000px) and (max-height: 860px) {
   .screen--friendsroom .seg--modes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -611,7 +612,7 @@ body { font-family: 'PT Sans Narrow', 'Arial Narrow', sans-serif; font-size: 16p
   .screen--friendsroom .friendsroom__code { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
   .screen--friendsroom .friendsroom__code > .tag { grid-column: 1 / -1; }
   .screen--friendsroom .friendsroom__code .btn { min-width: 200px; }
-  .screen--friendsroom .maps { grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
+  .screen--friendsroom .maps { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 5px; }
   .screen--friendsroom .maptile__name { font-size: 11px; }
 }
 /* v0.2.17: the settings fit the window — computers: two columns, every choice on one line (the label left,

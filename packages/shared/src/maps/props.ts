@@ -150,6 +150,19 @@ export const PROP_DEFS = {
   long_table: P(70, 26, 'rect', 'low', false, 'Dining table', { inset: 1 }),
   bugler: P(26, 26, 'rect', 'high', true, 'Pioneer statue'),
   rock: P(34, 26, 'circle', 'low', true, 'Rock', { radius: 11 }),
+  // v0.2.18: the market «Черкизон» (no brand on any of it) and the mining town «Воркута»
+  stall: P(60, 44, 'rect', 'high', true, 'Market stall', { inset: 1 }),
+  goods_table: P(34, 18, 'rect', 'low', false, 'Trestle table'),
+  clothes_rail: P(46, 10, 'rect', 'high', false, 'Clothes rail', { inset: 1 }),
+  carpet_stand: P(54, 18, 'rect', 'high', false, 'Carpets', { inset: 2 }),
+  porta_toilet: P(20, 20, 'rect', 'high', true, 'Toilet cabin'),
+  headframe: P(80, 80, 'rect', 'high', true, 'Headframe', { inset: 14 }),
+  coal_pile: P(64, 48, 'circle', 'low', true, 'Coal heap', { radius: 21 }),
+  snowdrift: P(46, 22, 'rect', 'low', true, 'Snowdrift', { inset: 3 }),
+  wagon: P(40, 112, 'rect', 'high', true, 'Coal wagon', { inset: 2 }),
+  mine_cart: P(22, 32, 'rect', 'low', true, 'Mine cart', { inset: 1 }),
+  miner_statue: P(32, 32, 'rect', 'high', true, 'Miners’ monument'),
+  chimney: P(34, 34, 'circle', 'high', true, 'Chimney', { radius: 15 }),
 } as const satisfies Record<string, PropDef>;
 
 export type PropType = keyof typeof PROP_DEFS;

@@ -513,15 +513,20 @@ export function propPrims2(type: string, w: number, h: number, variant = 0): Pri
       for (const s of [-1, 1]) for (const y of [-hh + 2, hh - 2]) p.push(cyl(s * (hw - 1.5), y, 1, 2, M.rubber, `w${s}${y}`, 0.2));
       break;
     case 'ambulance': {
-      const body = ['#d8d4c4', '#4c5a2c', '#8a8e8c'][variant % 3]!;
+      // v0.2.18: variant 3 is a beige minibus with a row of side windows (the market's «РАФ»)
+      const body = ['#d8d4c4', '#4c5a2c', '#8a8e8c', '#c8b48a'][variant % 4]!;
       const cabL = 18;
       p.push(box([0, 0, 22], [w - 1, h - 1, 22], { ramp: ramp(body), pattern: (c) => (c.nz > 0.5 && c.ly < -hh + cabL && c.ly > -hh + 4 ? hex('#16232a') : null) }, 'body', 3));
-      if (variant % 3 === 0) {
+      if (variant % 4 === 0) {
         p.push(box([0, 8, 22.4], [w - 6, 4, 0.4], flat('#b8261c'), 'stripe', 0.1));
         p.push(cross(0, 18, 22.8, 7, '#c8261c', 'cross'));
         p.push(box([0, -hh + cabL + 2, 24], [10, 3, 2], { ramp: H('#1a3aa8', '#4a8aff'), flat: true }, 'light', 0.3));
-      } else if (variant % 3 === 1) {
+      } else if (variant % 4 === 1) {
         p.push(box([0, 10, 22.6], [w - 10, h * 0.4, 0.6], { ramp: ramp('#56663a') }, 'roofPanel', 0.4));
+      } else if (variant % 4 === 3) {
+        p.push(box([0, 6, 22.6], [w - 4, h - cabL - 12, 0.6], { ramp: ramp('#d8c8a0'), pattern: (c) => (Math.abs(Math.abs(c.lx) - (w - 4) / 2) < 1.4 && Math.abs(((c.ly + 200) % 12) - 6) < 4 ? hex('#16232a') : null) }, 'roofWin', 0.4));
+        for (const sx of [-1, 1]) p.push(box([sx * (hw - 7), 2, 24], [1.4, h * 0.5, 1.2], { ramp: ramp('#3a3a3c') }, 'rail' + sx, 0.3));
+        for (const y of [-12, 2, 16]) p.push(box([0, y, 24.2], [w - 14, 1.2, 1], { ramp: ramp('#3a3a3c') }, 'bar' + y, 0.3));
       }
       for (const s of [-1, 1]) for (const y of [-hh + 16, hh - 14]) p.push(box([s * (hw - 0.4), y, 4], [1.4, 9, 4], M.rubber, `w${s}${y}`, 0.4));
       break;
@@ -588,6 +593,6 @@ export const PROP_VARIANTS2: Record<string, number> = {
   fridge_case: 3,
   counter: 4,
   coat_rack: 2,
-  ambulance: 3,
+  ambulance: 4,
   produce_stall: 3,
 };

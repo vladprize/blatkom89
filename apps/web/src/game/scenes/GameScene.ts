@@ -7,6 +7,7 @@ import { TICK_MS, getMap, getCollision, WEAPONS, SCORING, CTF_RULES, BASE_RULES,
 import type { CollisionWorld, MapDef } from '@blatkom/shared';
 import type { GameSession, RenderPlayer, SessionEvent, RenderPickup } from '../session/types.js';
 import { MapRenderer } from '../render/MapRenderer.js';
+import { Snowfall } from '../render/Weather.js';
 import { Lighting } from '../render/Lighting.js';
 import { Effects, muzzlePoint } from '../render/Effects.js';
 import { CharacterView, spawnCorpse } from '../render/CharacterView.js';
@@ -64,6 +65,8 @@ export class GameScene extends Phaser.Scene {
   private perfStart = 0;
   private slowSeconds = 0;
   private qualityReduced = false;
+  /** Falling snow on a winter map (v0.2.18). */
+  private snow: Snowfall | null = null;
 
   constructor() {
     super('game');
@@ -92,6 +95,8 @@ export class GameScene extends Phaser.Scene {
     cam.setRoundPixels(true);
     this.mapView = new MapRenderer(this, this.map);
     this.mapView.build();
+    // v0.2.18: falling snow on a winter map (fewer flakes on a phone)
+    this.snow = this.map.weather === 'snow' ? new Snowfall(this, this.inputs?.usingTouch || window.innerWidth < 700 ? 140 : 260) : null;
     this.lighting = new Lighting(this, this.map);
     this.fx = new Effects(this);
     this.gadgetView = new GadgetView(this, this.fx, this.lighting);
@@ -181,6 +186,8 @@ export class GameScene extends Phaser.Scene {
     this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this);
     this.objectives?.destroy();
     this.objectives = null;
+    this.snow?.destroy();
+    this.snow = null;
     this.lighting.destroy();
     this.gadgetView.destroy();
     for (const v of this.views.values()) v.destroy();
@@ -257,6 +264,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.mapView.cull(this.cameras.main.worldView);
     this.mapView.animate(time);
+    this.snow?.update(this.cameras.main.worldView, dt, time);
     this.adaptQuality(nowMs);
     // crosshair (desktop)
     const pointer = this.input.activePointer;

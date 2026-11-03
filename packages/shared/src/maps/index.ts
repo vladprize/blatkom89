@@ -8,6 +8,8 @@ import { buildHospitalMap } from './hospital.js';
 import { buildCemeteryMap } from './cemetery.js';
 import { buildSquareMap } from './square.js';
 import { buildCampMap } from './camp.js';
+import { buildCherkizonMap } from './cherkizon.js';
+import { buildVorkutaMap } from './vorkuta.js';
 import { CollisionWorld } from './collision.js';
 import type { MapDef, MapId } from './types.js';
 import { MAP_IDS } from './types.js';
@@ -28,6 +30,8 @@ const builders: Record<MapId, () => MapDef> = {
   cemetery: buildCemeteryMap,
   square: buildSquareMap,
   camp: buildCampMap,
+  cherkizon: buildCherkizonMap,
+  vorkuta: buildVorkutaMap,
 };
 
 const mapCache = new Map<MapId, MapDef>();
@@ -55,4 +59,5 @@ export function isMapId(v: unknown): v is MapId {
   return typeof v === 'string' && (MAP_IDS as readonly string[]).includes(v);
 }
 
-export const MAP_ORDER: readonly MapId[] = ['factory', 'stroyka', 'dk', 'gastronom', 'hospital', 'cemetery', 'square', 'camp', 'garages', 'yard'];
+/** The map picker's order (v0.2.18: the two new maps right after the flagship). */
+export const MAP_ORDER: readonly MapId[] = ['factory', 'cherkizon', 'vorkuta', 'stroyka', 'dk', 'gastronom', 'hospital', 'cemetery', 'square', 'camp', 'garages', 'yard'];
