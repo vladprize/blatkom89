@@ -2848,12 +2848,6 @@ var AVATAR_IDS = [
 ];
 var AVATAR_SET = new Set(AVATAR_IDS);
 
-// packages/shared/src/game-rules/nicknames.ts
-var PRACTICE_NAMES = Object.freeze({
-  en: ["Beardy", "Comrade_312", "The Cooperator", "Petrovich", "Plumber", "Quartermaster", "Praporshchik", "Kolyan", "Mechanic", "Shurik", "Valerka", "The Docent"],
-  ru: ["Borodach", "Tovarishch_312", "Kooperator", "Petrovich", "Santekhnik", "Zavkhoz", "Praporshchik", "Kolyan", "Mekhanik", "Shurik", "Valerka", "Dotsent"]
-});
-
 // packages/shared/src/game-rules/aliases.ts
 var LOOKALIKES = Object.freeze({
   \u0430: "a",
@@ -2962,6 +2956,30 @@ function latinName(raw, fallback) {
   const s = toLatin(raw);
   return s.length >= 2 && /[A-Za-z0-9]/.test(s) ? s : fallback;
 }
+var MIN_NICK_LENGTH = 3;
+var MAX_NICK_LENGTH = 20;
+var NICK_RE = /^[a-z0-9_.-]+$/;
+var NICK_RULE = "An alias is one word: small Latin letters (a\u2013z), digits and _ . -";
+function isNick(s) {
+  return s.length >= MIN_NICK_LENGTH && s.length <= MAX_NICK_LENGTH && NICK_RE.test(s) && /[a-z0-9]/.test(s);
+}
+function toNick(raw) {
+  return transliterate(raw).replace(/[^\p{L}\p{N}\s’'_.-]+/gu, " ").toLowerCase().trim().replace(/[\s’']+/g, "_").replace(/[^a-z0-9_.-]/g, "").replace(/([_.-])[_.-]+/g, "$1").replace(/^[_.-]+/, "").slice(0, MAX_NICK_LENGTH).replace(/[_.-]+$/, "");
+}
+function nickName(raw, fallback) {
+  const s = toNick(raw);
+  return isNick(s) ? s : fallback;
+}
+function numberedNick(base2, n) {
+  const tail = `_${n}`;
+  return base2.slice(0, MAX_NICK_LENGTH - tail.length).replace(/[_.-]+$/, "") + tail;
+}
+
+// packages/shared/src/game-rules/nicknames.ts
+var PRACTICE_NAMES = Object.freeze({
+  en: ["beardy", "comrade_312", "the_cooperator", "petrovich", "plumber", "quartermaster", "praporshchik", "kolyan", "mechanic", "shurik", "valerka", "the_docent"],
+  ru: ["borodach", "tovarishch_312", "kooperator", "petrovich", "santekhnik", "zavkhoz", "praporshchik", "kolyan", "mekhanik", "shurik", "valerka", "dotsent"]
+});
 
 // packages/shared/src/game-rules/weapons.ts
 var WEAPON_IDS = [
@@ -3242,6 +3260,26 @@ var FINISH_IDS = [
   "carsky",
   "kontora",
   "yadernaya",
+  // v0.2.19: the owner's AK sheet, in its order
+  "bratok",
+  "korol",
+  "neon",
+  "shashlyk",
+  "graffiti",
+  "peklo",
+  "kilka",
+  "krovavy",
+  "kosti",
+  "kazino",
+  "hrom",
+  "pensioner",
+  "almaz",
+  "ametist",
+  "othody",
+  "biohazard",
+  "obsidian",
+  "borsch",
+  "unitaz",
   // the first line (v0.23), retired: kept by those who own them, no longer sold or dropped
   "berezka",
   "rzhavchina",
@@ -3276,6 +3314,25 @@ var FINISHES = Object.freeze({
   carsky: { id: "carsky", name: "Tsar\u2019s", rarity: "legendary" },
   kontora: { id: "kontora", name: "The Office", rarity: "legendary" },
   yadernaya: { id: "yadernaya", name: "Nuclear Winter", rarity: "legendary" },
+  bratok: { id: "bratok", name: "Golden Mobster", rarity: "legendary", live: true },
+  korol: { id: "korol", name: "Rust King", rarity: "rare" },
+  neon: { id: "neon", name: "Neon District", rarity: "epic" },
+  shashlyk: { id: "shashlyk", name: "Shashlik Master", rarity: "legendary" },
+  graffiti: { id: "graffiti", name: "Street Graffiti", rarity: "rare" },
+  peklo: { id: "peklo", name: "Hellfire", rarity: "epic" },
+  kilka: { id: "kilka", name: "Canned Fish", rarity: "epic" },
+  krovavy: { id: "krovavy", name: "Blood Reaper", rarity: "legendary", live: true },
+  kosti: { id: "kosti", name: "Bone Collector", rarity: "rare" },
+  kazino: { id: "kazino", name: "Casino Boss", rarity: "epic" },
+  hrom: { id: "hrom", name: "Blue Chrome", rarity: "rare" },
+  pensioner: { id: "pensioner", name: "Pensioner Deluxe", rarity: "epic" },
+  almaz: { id: "almaz", name: "Red Diamond", rarity: "legendary", live: true },
+  ametist: { id: "ametist", name: "Amethyst", rarity: "epic" },
+  othody: { id: "othody", name: "Toxic Waste", rarity: "rare" },
+  biohazard: { id: "biohazard", name: "Biohazard X", rarity: "epic" },
+  obsidian: { id: "obsidian", name: "Obsidian Emperor", rarity: "legendary", live: true },
+  borsch: { id: "borsch", name: "Borscht Edition", rarity: "epic" },
+  unitaz: { id: "unitaz", name: "Golden Toilet", rarity: "legendary" },
   berezka: { id: "berezka", name: "Birch Camo", rarity: "common", retired: true },
   rzhavchina: { id: "rzhavchina", name: "Rust", rarity: "common", retired: true },
   zima: { id: "zima", name: "Winter", rarity: "common", retired: true },
@@ -3289,6 +3346,7 @@ var FINISHES = Object.freeze({
 var WELCOME_FINISHES = FINISH_IDS.filter((f) => FINISHES[f].gift);
 var SHOP_FINISHES = FINISH_IDS.filter((f) => !FINISHES[f].gift && !FINISHES[f].retired);
 var LINE_FINISHES = FINISH_IDS.filter((f) => !FINISHES[f].retired);
+var LIVE_FINISHES = FINISH_IDS.filter((f) => FINISHES[f].live);
 var SKIN_PRICES = Object.freeze({ common: 99, rare: 199, epic: 299, legendary: 499 });
 var SKIN_RARITY_CHANCE = Object.freeze({ common: 40, rare: 30, epic: 20, legendary: 10 });
 
@@ -8388,7 +8446,8 @@ var ClientEventEnvelopeSchema = external_exports.object({
 var EventsBatchSchema = external_exports.object({ events: external_exports.array(ClientEventEnvelopeSchema).min(1).max(50) }).strict();
 
 // packages/shared/src/schemas/api.ts
-var displayNameSchema = external_exports.string().trim().min(2).max(MAX_NAME_LENGTH).regex(LATIN_NAME_RE, "A name may contain Latin letters (A\u2013Z), digits, spaces and _ . -");
+var displayNameSchema = external_exports.string().trim().min(MIN_NICK_LENGTH).max(MAX_NICK_LENGTH).regex(NICK_RE, NICK_RULE).refine((s) => /[a-z0-9]/.test(s), NICK_RULE);
+var aliasLookupSchema = external_exports.string().trim().min(2).max(40);
 var signupNameSchema = external_exports.string().trim().min(1).max(64);
 var refSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 var partnerCodeSchema = external_exports.string().trim().toLowerCase().regex(/^[a-z0-9_]{3,24}$/, "A partner code: 3\u201324 Latin letters, digits or _");
@@ -8491,7 +8550,7 @@ var AdminPartnerCreate = external_exports.object({ name: external_exports.string
 var AdminPartnerUpdate = external_exports.object({ name: external_exports.string().trim().min(1).max(60).optional(), note: external_exports.string().trim().max(300).nullable().optional(), active: external_exports.boolean().optional() }).strict();
 
 // packages/shared/src/schemas/social.ts
-var FriendRequestBody = external_exports.object({ name: displayNameSchema }).strict();
+var FriendRequestBody = external_exports.object({ name: aliasLookupSchema }).strict();
 var DM_MAX_LENGTH = 500;
 var DirectMessageBody = external_exports.object({
   text: external_exports.string().transform((s) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim()).pipe(external_exports.string().min(1).max(DM_MAX_LENGTH))
@@ -8621,12 +8680,39 @@ async function latinNames(tx) {
     await tx`UPDATE clubs SET name = ${name}, name_key = ${nameKey(name)}, tag = ${tag}, tag_key = ${nameKey(tag)}, motto = ${motto}, updated_at = now() WHERE id = ${c.id}`;
   }
 }
+async function oneWordNicks(tx) {
+  const users = await tx`SELECT id, display_name FROM users WHERE deleted_at IS NULL ORDER BY created_at, id`;
+  const taken = new Set(users.filter((u) => isNick(u.display_name)).map((u) => nameKey(u.display_name)));
+  const ids = [];
+  const names = [];
+  for (const u of users) {
+    if (isNick(u.display_name)) continue;
+    const base2 = nickName(u.display_name, `comrade_${u.id.replace(/\D/g, "").slice(-4).padStart(4, "0")}`);
+    let name = base2;
+    for (let n = 2; taken.has(nameKey(name)); n++) name = numberedNick(base2, n);
+    taken.add(nameKey(name));
+    ids.push(u.id);
+    names.push(name);
+  }
+  for (let i = 0; i < ids.length; i += 500) {
+    await tx`UPDATE users SET name_key = '~026~' || id::text WHERE id = ANY(${tx.array(ids.slice(i, i + 500))}::uuid[])`;
+  }
+  for (let i = 0; i < ids.length; i += 500) {
+    const part = ids.slice(i, i + 500);
+    const nm = names.slice(i, i + 500);
+    await tx`
+      UPDATE users u SET old_display_name = COALESCE(u.old_display_name, u.display_name), display_name = v.name, name_key = v.key
+      FROM unnest(${tx.array(part)}::uuid[], ${tx.array(nm)}::text[], ${tx.array(nm.map(nameKey))}::text[]) AS v(id, name, key)
+      WHERE u.id = v.id`;
+  }
+}
 var CODE_STEPS = Object.freeze({
   "010_social.sql": async (tx) => {
     await uniqueAliases(tx);
     await replayRatings(tx);
   },
-  "014_latin_names.sql": latinNames
+  "014_latin_names.sql": latinNames,
+  "026_nicknames.sql": oneWordNicks
 });
 
 // apps/server/src/database/migrate.ts

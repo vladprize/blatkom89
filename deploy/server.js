@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.18"),
+  SERVER_VERSION: external_exports.string().default("0.2.19"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -7857,6 +7857,8 @@ var EnvSchema = external_exports.object({
   /** v0.2.17: the main menu's X and Telegram buttons (left empty: «coming soon»). */
   SOCIAL_X_URL: external_exports.string().url().optional(),
   SOCIAL_TELEGRAM_URL: external_exports.string().url().optional(),
+  /** v0.2.19: the menu's Instagram button (left of X; left empty: «coming soon»). */
+  SOCIAL_INSTAGRAM_URL: external_exports.string().url().optional(),
   /** Password-reset emails through Resend (https://resend.com); without a key the admin issues reset links. */
   RESEND_API_KEY: external_exports.string().optional(),
   MAIL_FROM: external_exports.string().optional()
@@ -10785,27 +10787,6 @@ function isAvatarId(v) {
   return typeof v === "string" && AVATAR_SET.has(v);
 }
 
-// packages/shared/src/game-rules/nicknames.ts
-var PRACTICE_NAMES = Object.freeze({
-  en: ["Beardy", "Comrade_312", "The Cooperator", "Petrovich", "Plumber", "Quartermaster", "Praporshchik", "Kolyan", "Mechanic", "Shurik", "Valerka", "The Docent"],
-  ru: ["Borodach", "Tovarishch_312", "Kooperator", "Petrovich", "Santekhnik", "Zavkhoz", "Praporshchik", "Kolyan", "Mekhanik", "Shurik", "Valerka", "Dotsent"]
-});
-var ADJ_EN = ["Quiet", "Garage", "Factory", "Night", "Gloomy", "Seasoned", "Jolly", "Courtyard", "Imported", "Lucky", "Cassette", "District", "Elusive", "Shady", "Sleepy", "Bald", "Contraband", "Comrade"];
-var NOUN_EN = ["Quartermaster", "Watchman", "Storekeeper", "Gym Teacher", "Foreman", "Cabbie", "Electrician", "Fitter", "Site Boss", "Cooperator", "Plumber", "Projectionist", "Spiv", "Postman", "Janitor", "Badger", "Raccoon", "Ferret", "Beaver", "Owl", "Weasel"];
-var CASUAL_EN = ["Vadik", "Edik", "Arkasha", "Vovan", "Tolik", "Lyokha", "Seryoga", "Dimon", "Sanya", "Max", "Rustam", "Zhenya", "Gena", "Stas", "Kostyan", "Vityok", "Garik", "Zhora", "Slavik", "Tyoma", "Mishanya", "Boris", "Sanchez", "Dok", "Ryzhy", "Lis", "Kot", "Shpala"];
-var CASUAL_RU = ["Vadik", "Edik", "Arkasha", "Vovan", "Tolik", "Lyokha", "Seryoga", "Dimon", "Sanya", "Maks", "Rustam", "Zhenyok", "Gena", "Stas", "Kostyan", "Vityok", "Garik", "Zhora", "Slavik", "Tyomych", "Mishanya", "Batya", "Palych", "Mikhalych", "Ryzhiy", "Lis", "Kot", "Shpala"];
-var SUFFIX_EN = ["", "", "", "", "89", "_89", "777", "1988", "_2007", "01", "_x", " Jr"];
-var SUFFIX_RU = ["", "", "", "", "89", "_89", "777", "1988", "_2007", "_msk", "_spb", "_rayon"];
-var pickFrom = (rnd, a) => a[Math.floor(rnd() * a.length) % a.length];
-function randomNickname(rnd = Math.random, _lang = "en") {
-  return `${pickFrom(rnd, ADJ_EN)} ${pickFrom(rnd, NOUN_EN)}`;
-}
-function fillNickname(rnd, lang) {
-  if (rnd() < 0.5) return randomNickname(rnd, lang);
-  const name = lang === "ru" ? `${pickFrom(rnd, CASUAL_RU)}${pickFrom(rnd, SUFFIX_RU)}` : `${pickFrom(rnd, CASUAL_EN)}${pickFrom(rnd, SUFFIX_EN)}`;
-  return name.trim();
-}
-
 // packages/shared/src/game-rules/aliases.ts
 var LOOKALIKES = Object.freeze({
   \u0430: "a",
@@ -10913,6 +10894,51 @@ function toLatin(raw) {
 function latinName(raw, fallback) {
   const s = toLatin(raw);
   return s.length >= 2 && /[A-Za-z0-9]/.test(s) ? s : fallback;
+}
+var MIN_NICK_LENGTH = 3;
+var MAX_NICK_LENGTH = 20;
+var NICK_RE = /^[a-z0-9_.-]+$/;
+var NICK_RULE = "An alias is one word: small Latin letters (a\u2013z), digits and _ . -";
+function isNick(s) {
+  return s.length >= MIN_NICK_LENGTH && s.length <= MAX_NICK_LENGTH && NICK_RE.test(s) && /[a-z0-9]/.test(s);
+}
+function toNick(raw) {
+  return transliterate(raw).replace(/[^\p{L}\p{N}\s’'_.-]+/gu, " ").toLowerCase().trim().replace(/[\s’']+/g, "_").replace(/[^a-z0-9_.-]/g, "").replace(/([_.-])[_.-]+/g, "$1").replace(/^[_.-]+/, "").slice(0, MAX_NICK_LENGTH).replace(/[_.-]+$/, "");
+}
+function nickName(raw, fallback) {
+  const s = toNick(raw);
+  return isNick(s) ? s : fallback;
+}
+function numberedNick(base2, n) {
+  const tail = `_${n}`;
+  return base2.slice(0, MAX_NICK_LENGTH - tail.length).replace(/[_.-]+$/, "") + tail;
+}
+
+// packages/shared/src/game-rules/nicknames.ts
+var PRACTICE_NAMES = Object.freeze({
+  en: ["beardy", "comrade_312", "the_cooperator", "petrovich", "plumber", "quartermaster", "praporshchik", "kolyan", "mechanic", "shurik", "valerka", "the_docent"],
+  ru: ["borodach", "tovarishch_312", "kooperator", "petrovich", "santekhnik", "zavkhoz", "praporshchik", "kolyan", "mekhanik", "shurik", "valerka", "dotsent"]
+});
+var ADJ_EN = ["Quiet", "Garage", "Factory", "Night", "Gloomy", "Seasoned", "Jolly", "Courtyard", "Imported", "Lucky", "Cassette", "District", "Elusive", "Shady", "Sleepy", "Bald", "Contraband", "Comrade"];
+var NOUN_EN = ["Quartermaster", "Watchman", "Storekeeper", "Gym Teacher", "Foreman", "Cabbie", "Electrician", "Fitter", "Site Boss", "Cooperator", "Plumber", "Projectionist", "Spiv", "Postman", "Janitor", "Badger", "Raccoon", "Ferret", "Beaver", "Owl", "Weasel"];
+var CASUAL_EN = ["Vadik", "Edik", "Arkasha", "Vovan", "Tolik", "Lyokha", "Seryoga", "Dimon", "Sanya", "Max", "Rustam", "Zhenya", "Gena", "Stas", "Kostyan", "Vityok", "Garik", "Zhora", "Slavik", "Tyoma", "Mishanya", "Boris", "Sanchez", "Dok", "Ryzhy", "Lis", "Kot", "Shpala"];
+var CASUAL_RU = ["Vadik", "Edik", "Arkasha", "Vovan", "Tolik", "Lyokha", "Seryoga", "Dimon", "Sanya", "Maks", "Rustam", "Zhenyok", "Gena", "Stas", "Kostyan", "Vityok", "Garik", "Zhora", "Slavik", "Tyomych", "Mishanya", "Batya", "Palych", "Mikhalych", "Ryzhiy", "Lis", "Kot", "Shpala"];
+var SUFFIX_EN = ["", "", "", "", "89", "_89", "777", "1988", "_2007", "01", "_x", "_jr"];
+var SUFFIX_RU = ["", "", "", "", "89", "_89", "777", "1988", "_2007", "_msk", "_spb", "_rayon"];
+var pickFrom = (rnd, a) => a[Math.floor(rnd() * a.length) % a.length];
+function randomNickname(rnd = Math.random, _lang = "en") {
+  let name = "";
+  for (let i = 0; i < 8; i++) {
+    const full = `${pickFrom(rnd, ADJ_EN)} ${pickFrom(rnd, NOUN_EN)}`;
+    name = toNick(full);
+    if (full.length <= MAX_NICK_LENGTH) break;
+  }
+  return name;
+}
+function fillNickname(rnd, lang) {
+  if (rnd() < 0.5) return randomNickname(rnd, lang);
+  const name = lang === "ru" ? `${pickFrom(rnd, CASUAL_RU)}${pickFrom(rnd, SUFFIX_RU)}` : `${pickFrom(rnd, CASUAL_EN)}${pickFrom(rnd, SUFFIX_EN)}`;
+  return toNick(name);
 }
 
 // packages/shared/src/game-rules/weapons.ts
@@ -11293,6 +11319,26 @@ var FINISH_IDS = [
   "carsky",
   "kontora",
   "yadernaya",
+  // v0.2.19: the owner's AK sheet, in its order
+  "bratok",
+  "korol",
+  "neon",
+  "shashlyk",
+  "graffiti",
+  "peklo",
+  "kilka",
+  "krovavy",
+  "kosti",
+  "kazino",
+  "hrom",
+  "pensioner",
+  "almaz",
+  "ametist",
+  "othody",
+  "biohazard",
+  "obsidian",
+  "borsch",
+  "unitaz",
   // the first line (v0.23), retired: kept by those who own them, no longer sold or dropped
   "berezka",
   "rzhavchina",
@@ -11328,6 +11374,25 @@ var FINISHES = Object.freeze({
   carsky: { id: "carsky", name: "Tsar\u2019s", rarity: "legendary" },
   kontora: { id: "kontora", name: "The Office", rarity: "legendary" },
   yadernaya: { id: "yadernaya", name: "Nuclear Winter", rarity: "legendary" },
+  bratok: { id: "bratok", name: "Golden Mobster", rarity: "legendary", live: true },
+  korol: { id: "korol", name: "Rust King", rarity: "rare" },
+  neon: { id: "neon", name: "Neon District", rarity: "epic" },
+  shashlyk: { id: "shashlyk", name: "Shashlik Master", rarity: "legendary" },
+  graffiti: { id: "graffiti", name: "Street Graffiti", rarity: "rare" },
+  peklo: { id: "peklo", name: "Hellfire", rarity: "epic" },
+  kilka: { id: "kilka", name: "Canned Fish", rarity: "epic" },
+  krovavy: { id: "krovavy", name: "Blood Reaper", rarity: "legendary", live: true },
+  kosti: { id: "kosti", name: "Bone Collector", rarity: "rare" },
+  kazino: { id: "kazino", name: "Casino Boss", rarity: "epic" },
+  hrom: { id: "hrom", name: "Blue Chrome", rarity: "rare" },
+  pensioner: { id: "pensioner", name: "Pensioner Deluxe", rarity: "epic" },
+  almaz: { id: "almaz", name: "Red Diamond", rarity: "legendary", live: true },
+  ametist: { id: "ametist", name: "Amethyst", rarity: "epic" },
+  othody: { id: "othody", name: "Toxic Waste", rarity: "rare" },
+  biohazard: { id: "biohazard", name: "Biohazard X", rarity: "epic" },
+  obsidian: { id: "obsidian", name: "Obsidian Emperor", rarity: "legendary", live: true },
+  borsch: { id: "borsch", name: "Borscht Edition", rarity: "epic" },
+  unitaz: { id: "unitaz", name: "Golden Toilet", rarity: "legendary" },
   berezka: { id: "berezka", name: "Birch Camo", rarity: "common", retired: true },
   rzhavchina: { id: "rzhavchina", name: "Rust", rarity: "common", retired: true },
   zima: { id: "zima", name: "Winter", rarity: "common", retired: true },
@@ -11342,6 +11407,7 @@ var FREE_FINISHES = ["berezka", "rzhavchina"];
 var WELCOME_FINISHES = FINISH_IDS.filter((f2) => FINISHES[f2].gift);
 var SHOP_FINISHES = FINISH_IDS.filter((f2) => !FINISHES[f2].gift && !FINISHES[f2].retired);
 var LINE_FINISHES = FINISH_IDS.filter((f2) => !FINISHES[f2].retired);
+var LIVE_FINISHES = FINISH_IDS.filter((f2) => FINISHES[f2].live);
 function isFreeFinish(f2) {
   return FREE_FINISHES.includes(f2);
 }
@@ -17127,7 +17193,8 @@ function parseClientEventProps(name, props) {
 }
 
 // packages/shared/src/schemas/api.ts
-var displayNameSchema = external_exports.string().trim().min(2).max(MAX_NAME_LENGTH).regex(LATIN_NAME_RE, "A name may contain Latin letters (A\u2013Z), digits, spaces and _ . -");
+var displayNameSchema = external_exports.string().trim().min(MIN_NICK_LENGTH).max(MAX_NICK_LENGTH).regex(NICK_RE, NICK_RULE).refine((s) => /[a-z0-9]/.test(s), NICK_RULE);
+var aliasLookupSchema = external_exports.string().trim().min(2).max(40);
 var signupNameSchema = external_exports.string().trim().min(1).max(64);
 var refSchema = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 var partnerCodeSchema = external_exports.string().trim().toLowerCase().regex(/^[a-z0-9_]{3,24}$/, "A partner code: 3\u201324 Latin letters, digits or _");
@@ -17230,7 +17297,7 @@ var AdminPartnerCreate = external_exports.object({ name: external_exports.string
 var AdminPartnerUpdate = external_exports.object({ name: external_exports.string().trim().min(1).max(60).optional(), note: external_exports.string().trim().max(300).nullable().optional(), active: external_exports.boolean().optional() }).strict();
 
 // packages/shared/src/schemas/social.ts
-var FriendRequestBody = external_exports.object({ name: displayNameSchema }).strict();
+var FriendRequestBody = external_exports.object({ name: aliasLookupSchema }).strict();
 var MAX_FRIENDS = 200;
 var MAX_PENDING_REQUESTS = 50;
 var DM_MAX_LENGTH = 500;
@@ -17364,12 +17431,39 @@ async function latinNames(tx) {
     await tx`UPDATE clubs SET name = ${name}, name_key = ${nameKey(name)}, tag = ${tag}, tag_key = ${nameKey(tag)}, motto = ${motto}, updated_at = now() WHERE id = ${c.id}`;
   }
 }
+async function oneWordNicks(tx) {
+  const users = await tx`SELECT id, display_name FROM users WHERE deleted_at IS NULL ORDER BY created_at, id`;
+  const taken = new Set(users.filter((u) => isNick(u.display_name)).map((u) => nameKey(u.display_name)));
+  const ids = [];
+  const names = [];
+  for (const u of users) {
+    if (isNick(u.display_name)) continue;
+    const base2 = nickName(u.display_name, `comrade_${u.id.replace(/\D/g, "").slice(-4).padStart(4, "0")}`);
+    let name = base2;
+    for (let n = 2; taken.has(nameKey(name)); n++) name = numberedNick(base2, n);
+    taken.add(nameKey(name));
+    ids.push(u.id);
+    names.push(name);
+  }
+  for (let i = 0; i < ids.length; i += 500) {
+    await tx`UPDATE users SET name_key = '~026~' || id::text WHERE id = ANY(${tx.array(ids.slice(i, i + 500))}::uuid[])`;
+  }
+  for (let i = 0; i < ids.length; i += 500) {
+    const part = ids.slice(i, i + 500);
+    const nm = names.slice(i, i + 500);
+    await tx`
+      UPDATE users u SET old_display_name = COALESCE(u.old_display_name, u.display_name), display_name = v.name, name_key = v.key
+      FROM unnest(${tx.array(part)}::uuid[], ${tx.array(nm)}::text[], ${tx.array(nm.map(nameKey))}::text[]) AS v(id, name, key)
+      WHERE u.id = v.id`;
+  }
+}
 var CODE_STEPS = Object.freeze({
   "010_social.sql": async (tx) => {
     await uniqueAliases(tx);
     await replayRatings(tx);
   },
-  "014_latin_names.sql": latinNames
+  "014_latin_names.sql": latinNames,
+  "026_nicknames.sql": oneWordNicks
 });
 
 // apps/server/src/database/migrate.ts
@@ -17873,7 +17967,7 @@ function validateInitData(initData, botToken, maxAgeSec, nowSec = Math.floor(Dat
   };
 }
 function displayNameFromTelegram(u) {
-  return latinName(`${u.firstName} ${u.lastName ?? ""}`, `Comrade ${String(u.id).slice(-4)}`);
+  return nickName(`${u.firstName} ${u.lastName ?? ""}`, `comrade_${String(u.id).slice(-4)}`);
 }
 
 // apps/server/src/auth/telegramLink.ts
@@ -17984,19 +18078,19 @@ async function isNameFree(sql2, name, exceptUserId) {
 }
 async function freeName(sql2, base2) {
   if (await isNameFree(sql2, base2)) return base2;
-  const prefix = nameKey(base2.slice(0, MAX_NAME_LENGTH - 5)).replace(/[\\%_]/g, (c) => `\\${c}`) + "%";
+  const prefix = nameKey(base2.slice(0, MAX_NICK_LENGTH - 5)).replace(/[\\%_]/g, (c) => `\\${c}`) + "%";
   const used = new Set((await sql2`SELECT name_key AS k FROM users WHERE name_key LIKE ${prefix} AND deleted_at IS NULL`).map((r) => r.k));
   for (let n = 2; n < 1e3; n++) {
-    const candidate = numberedAlias(base2, n);
+    const candidate = numberedNick(base2, n);
     if (!used.has(nameKey(candidate)) && await isNameFree(sql2, candidate)) return candidate;
   }
-  return numberedAlias(base2, 1e3 + Math.floor(Math.random() * 9e3));
+  return numberedNick(base2, 1e3 + Math.floor(Math.random() * 9e3));
 }
 async function suggestNames(sql2, base2, count = 3) {
   const out = [];
   const tries = [
-    ...[89, 777, 1989, 7].map((n) => `${base2.slice(0, MAX_NAME_LENGTH - String(n).length - 1)}_${n}`),
-    ...Array.from({ length: 6 }, () => numberedAlias(base2, 2 + Math.floor(Math.random() * 98)))
+    ...[89, 777, 1989, 7].map((n) => numberedNick(base2, n)),
+    ...Array.from({ length: 6 }, () => numberedNick(base2, 2 + Math.floor(Math.random() * 98)))
   ];
   for (const c of tries) {
     if (out.length >= count) break;
@@ -20808,7 +20902,7 @@ var registerAuthRoutes = (router, deps) => {
       throw new HttpError(429, "rate_limited", "Too many new players in a row \u2014 try again in a few minutes", { "retry-after": "60" });
     }
     const platform2 = body.platform ?? null;
-    const up = await pg.users.upsertGuest(deviceKey, latinName(body.name, `Comrade_${deviceKey.slice(3, 7).replace(/[^A-Za-z0-9]/g, "X").toUpperCase()}`), platform2);
+    const up = await pg.users.upsertGuest(deviceKey, nickName(body.name, `comrade_${deviceKey.slice(3, 7).replace(/[^A-Za-z0-9]/g, "x").toLowerCase()}`), platform2);
     if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform2, body.source);
     const referred = await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
     await attachSource(deps.sql, deps.log, up.userId, up.isNew, body.source, { referral: referred, telegram: false });
@@ -20828,7 +20922,7 @@ var registerAuthRoutes = (router, deps) => {
     const pg = pgContext(deps.sql, env2, deps.log);
     const deviceId = body.deviceId ?? randomBytes7(12).toString("base64url");
     const platform2 = body.platform ?? null;
-    const up = await pg.users.upsertDev(deviceId, latinName(body.name, `Comrade_${deviceId.slice(-4).replace(/[^A-Za-z0-9]/g, "X").toUpperCase()}`), platform2);
+    const up = await pg.users.upsertDev(deviceId, nickName(body.name, `comrade_${deviceId.slice(-4).replace(/[^A-Za-z0-9]/g, "x").toLowerCase()}`), platform2);
     const referred = await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
     await attachSource(deps.sql, deps.log, up.userId, up.isNew, body.source, { referral: referred, telegram: false });
     const s = await pg.sessions.issue(up.userId, "dev", platform2, body.clientVersion ?? null);
@@ -20955,7 +21049,7 @@ var registerProfileRoutes = (router, deps) => {
   router.get("/api/names/check", auth, rateLimit(nameLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
     const user = currentUser(ctx);
     const parsed = displayNameSchema.safeParse(ctx.query.get("name") ?? "");
-    if (!parsed.success) throw new HttpError(400, "bad_name", "A name may contain letters, digits, spaces and _ . -");
+    if (!parsed.success) throw new HttpError(400, "bad_name", NICK_RULE);
     if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
     const name = parsed.data;
     const available = await isNameFree(deps.sql, name, user.userId);
@@ -22367,13 +22461,16 @@ var SocialRepo = class {
       outgoing: outgoing.map((r) => ({ ...toCard(r), createdAt: r.created_at.toISOString() }))
     };
   }
-  /** A friend request by alias; a request the other player already sent me is accepted instead. */
+  /**
+   * A friend request by alias (typed any way: «Seasoned Badger» finds «seasoned_badger», v0.2.19); a request
+   * the other player already sent me is accepted instead.
+   */
   async request(userId, name) {
     return this.sql.begin(async (tx) => {
       const target = await tx`
         SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder
         FROM users u LEFT JOIN profiles p ON p.user_id = u.id
-        WHERE u.name_key = ${nameKey(name)} AND u.deleted_at IS NULL AND u.merged_at IS NULL`;
+        WHERE u.name_key IN (${nameKey(name)}, ${nameKey(toNick(name))}) AND u.deleted_at IS NULL AND u.merged_at IS NULL`;
       const t = target[0];
       if (!t) return { outcome: "not_found", other: null };
       const other = toCard(t);
@@ -23490,7 +23587,7 @@ var registerOAuthRoutes = (router, deps) => {
       userId = current;
       linked = true;
     } else {
-      const name = latinName(`${v.user.firstName} ${v.user.lastName ?? ""}`, `Comrade ${tgId.slice(-4)}`);
+      const name = nickName(`${v.user.firstName} ${v.user.lastName ?? ""}`, `comrade_${tgId.slice(-4)}`);
       for (let attempt = 0; ; attempt++) {
         const candidate = await freeName(sql2, name);
         try {
@@ -23531,7 +23628,7 @@ async function resolveAccount(sql2, provider, profile, current) {
       return { userId: current, isNew: false, linked: true, refused: false };
     }
   }
-  const userId = await createAccount(sql2, latinName(profile.name, `Comrade ${profile.uid.replace(/\D/g, "").slice(-4).padStart(4, "0")}`));
+  const userId = await createAccount(sql2, nickName(profile.name, `comrade_${profile.uid.replace(/\D/g, "").slice(-4).padStart(4, "0")}`));
   await sql2`INSERT INTO user_identities (provider, provider_uid, user_id) VALUES (${provider}, ${profile.uid}, ${userId})`;
   return { userId, isNew: true, linked: false, refused: false };
 }
@@ -23613,7 +23710,7 @@ function createApp(deps, modules = ROUTE_MODULES) {
   const startedAt = Date.now();
   router.get("/api/health", (ctx) => ctx.json(200, { ok: true, version: deps.env.SERVER_VERSION, uptimeSec: Math.round((Date.now() - startedAt) / 1e3), rooms: deps.rooms.count() }));
   router.get("/api/site", (ctx) => {
-    const res = { x: deps.env.SOCIAL_X_URL ?? null, telegram: deps.env.SOCIAL_TELEGRAM_URL ?? null, copyright: deps.env.COPYRIGHT_HOLDER ?? "BLATKOM \u201989" };
+    const res = { instagram: deps.env.SOCIAL_INSTAGRAM_URL ?? null, x: deps.env.SOCIAL_X_URL ?? null, telegram: deps.env.SOCIAL_TELEGRAM_URL ?? null, copyright: deps.env.COPYRIGHT_HOLDER ?? "BLATKOM \u201989" };
     ctx.json(200, res, { "cache-control": "public, max-age=300" });
   });
   router.get("/api/ready", async (ctx) => {
