@@ -166,6 +166,8 @@ export interface StarsInvoiceResponse {
 export interface SiteConfig {
   x: string | null;
   telegram: string | null;
+  /** v0.2.18 part 3: who holds the rights, after «©» in the credits (COPYRIGHT_HOLDER; the game's name until set). */
+  copyright?: string;
 }
 
 /** GET /api/shop/config — which payment methods are configured on this server (v0.2.18: crypto is gone). */

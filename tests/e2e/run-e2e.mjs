@@ -52,6 +52,10 @@
 //      founder (with E2E_ADMIN_USER), the game's keys typing after a match (tests/e2e/v0218.mjs)
 //  v0.2.18 part 2: the welcome gift, 36 characters, the character case (18+, odds, reveal), a friend's
 //      collection, grades in the lobby, practice as each of the twelve new characters (tests/e2e/v0218b.mjs)
+//  v0.2.18 part 3: Telegram Stars inside the Mini App on the sign-in server (a stand-in answers the Bot API,
+//      tests/e2e/fake-botapi.mjs): the banner and the packs in Stars, a cancelled invoice, a paid one credited
+//      once after the bot's «yes» to Telegram's pre-checkout question; /paysupport, /terms; the website
+//      without Stars; the terms pages (tests/e2e/v0218c.mjs). The two new maps play in tests/e2e/maps.mjs.
 //  21. v0.2.17 part 3: a gang calls another out from its page — the battle room of the two gangs, the
 //      call's card live to both gangs' people, sides by gang, nobody else let in (a stranger's link is
 //      turned away), the battle played and counted for both gangs; a friend's «To battle» → a duel room
@@ -152,6 +156,10 @@ const signBase = `http://localhost:${signPort}`;
 const E2E_TG_BOT_TOKEN = '7000000002:AAE2E-fake-bot-token-for-the-signin-test';
 const E2E_TG_BOT_USERNAME = 'blatkom_e2e_bot';
 let signServer = null;
+// v0.2.18 part 3: a stand-in for Telegram's Bot API (Stars invoices) for the third server
+const botApiPort = port + 12;
+const botApiBase = `http://127.0.0.1:${botApiPort}`;
+const botApi = spawn(process.execPath, ['tests/e2e/fake-botapi.mjs', String(botApiPort)], { stdio: ['ignore', 'inherit', 'inherit'] });
 if (prod) console.log('[e2e] production mode: deploy/server.js with guest login');
 let failed = false;
 try {
@@ -175,6 +183,8 @@ try {
     TELEGRAM_WEB_LOGIN: 'true',
     // V2.0 part E: the bot's username makes «Link Telegram» possible (the bot itself is played by the test)
     TELEGRAM_BOT_USERNAME: E2E_TG_BOT_USERNAME,
+    // v0.2.18 part 3: Telegram Stars — the Bot API is the local stand-in
+    TELEGRAM_API_BASE: botApiBase,
   });
   console.log('\n[e2e] offline practice');
   const offline = spawnSync(process.execPath, ['tests/e2e/play.mjs', `${base}/?play=offline&map=factory&bots=3`, join(out, 'offline')], { stdio: 'inherit' });
@@ -253,6 +263,9 @@ try {
   console.log('\n[e2e] the Telegram Mini App: Telegram linked to an existing account, fullscreen, safe areas, minimised and back (the third server; Telegram played by the test)');
   const telegram = spawnSync(process.execPath, ['tests/e2e/telegram.mjs', signBase, join(out, 'telegram'), E2E_TG_BOT_USERNAME], { stdio: 'inherit', env: { ...process.env, E2E_TG_BOT_TOKEN } });
   if (telegram.status !== 0) failed = true;
+  console.log('\n[e2e] v0.2.18 part 3: Telegram Stars inside the Mini App (the Bot API and Telegram played by the test), the bot’s /paysupport and /terms, the terms pages');
+  const v0218c = spawnSync(process.execPath, ['tests/e2e/v0218c.mjs', signBase, join(out, 'v0218c'), botApiBase], { stdio: 'inherit', env: { ...process.env, E2E_TG_BOT_TOKEN } });
+  if (v0218c.status !== 0) failed = true;
   console.log('\n[e2e] filled lineups (second server, MATCH_FILL_BOTS=true): one person always plays');
   await ready(fillBase);
   const fill = spawnSync(process.execPath, ['tests/e2e/fill.mjs', fillBase, join(out, 'fill')], { stdio: 'inherit' });
@@ -264,6 +277,7 @@ try {
   server.kill('SIGTERM');
   fillServer?.kill('SIGTERM');
   signServer?.kill('SIGTERM');
+  botApi.kill('SIGTERM');
 }
 console.log(failed ? '\n[e2e] FAILED' : `\n[e2e] passed — screenshots in ${out}`);
 process.exit(failed ? 1 : 0);

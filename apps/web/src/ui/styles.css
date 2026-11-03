@@ -2150,3 +2150,6 @@ button.blatsban:focus-visible { outline: 2px solid var(--tape); outline-offset: 
   .blatsban--menu .blatsban__cta { padding: 3px 9px; }
   .wrap--menu .logo { width: min(40%, 150px); }
 }
+/* v0.2.18 part 3: the terms of purchase beside the packs */
+.termslink { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+.termslink:hover { color: var(--beige); }

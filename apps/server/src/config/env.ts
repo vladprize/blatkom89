@@ -104,6 +104,8 @@ const EnvSchema = z.object({
     .string()
     .regex(/^http:\/\/(127\.0\.0\.1|localhost)(:\d{2,5})?$/, 'a local test address only')
     .optional(),
+  /** v0.2.18 part 3: the rights holder named after «©» in the game's credits (e.g. the owner's legal name). */
+  COPYRIGHT_HOLDER: z.string().min(2).max(120).optional(),
   /** v0.2.17: the main menu's X and Telegram buttons (left empty: «coming soon»). */
   SOCIAL_X_URL: z.string().url().optional(),
   SOCIAL_TELEGRAM_URL: z.string().url().optional(),

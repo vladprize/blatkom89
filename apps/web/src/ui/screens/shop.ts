@@ -1144,7 +1144,8 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   };
 
   // ── BLATS (real money, v0.2.18) ───────────────────────────────────────
-  const payMethods = (): Array<['card', string]> => (cfg?.card ? [['card', t('By card')]] : []);
+  // Xsolla offers cards and local methods on its own page; Stripe takes cards
+  const payMethods = (): Array<['card', string]> => (cfg?.card ? [['card', cfg.provider === 'xsolla' ? t('Pay') : t('By card')]] : []);
   /** v0.2.18 part 3: inside Telegram each pack's price in Stars (null: not on sale there yet). */
   const starsPrices = (): Record<string, number> | null => (o.inTelegram ? (cfg?.stars ?? null) : null);
   /** Waits for the server to hear of the payment from Telegram (a few seconds), then shows the BLATS. */
@@ -1156,12 +1157,12 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         inv = (await online!.loadInventory().catch(() => null)) ?? inv;
         sfx.play('buy');
         haptic('notify-success');
-        toast(t('{n} credited', { n: count(st.diamonds, 'diamond') }));
+        toast(t('{n} credited', { n: `${fmtNum(st.diamonds)} ${t('BLATS')}` }));
         return;
       }
       if (st?.status === 'failed' || st?.status === 'expired') return void toast(t('The payment did not go through'));
     }
-    toast(t('The payment is still being processed — the diamonds will arrive automatically'));
+    toast(t('The payment is still being processed — the BLATS will arrive automatically'));
   };
   const buyStars = (packId: string) =>
     void act(async () => {

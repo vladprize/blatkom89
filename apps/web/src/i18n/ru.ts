@@ -11,7 +11,6 @@ export const RU: Record<string, string> = {
   'Menu music': 'Музыка в меню',
   'Fonts': 'Шрифты',
   'Engine': 'Движок',
-  'Characters, maps, weapons and sound effects are original work made for this game.': 'Персонажи, карты, оружие и звуки сделаны специально для этой игры.',
   'Full licence texts': 'Полные тексты лицензий',
   'Close': 'Закрыть',
   'This account’s session has expired — please sign in again.': 'Сессия этого аккаунта истекла — войдите снова.',
@@ -19,7 +18,6 @@ export const RU: Record<string, string> = {
   'Payment cancelled': 'Оплата отменена',
   '{n} credited': 'Зачислено: {n}',
   'The payment did not go through': 'Платёж не прошёл',
-  'The payment is still being processed — the diamonds will arrive automatically': 'Платёж ещё обрабатывается — алмазы придут сами',
   'Checking the payment…': 'Проверяем оплату…',
   'Back': 'Назад',
   '← Back': '← Назад',
@@ -1069,8 +1067,14 @@ export const RU: Record<string, string> = {
   // ── v0.2.18 part 3: Telegram Stars, Xsolla, the terms of purchase
   'Update Telegram to pay with Stars': 'Обновите Telegram, чтобы платить звёздами',
   'Terms of purchase': 'Условия покупки',
+  'Pay': 'Оплатить',
+  'Terms': 'Условия',
+  'All rights reserved.': 'Все права защищены.',
+  'original music written for this game': 'оригинальная музыка, написанная для этой игры',
+  'Characters, maps, weapons, music and sound effects are original work made for this game.': 'Персонажи, карты, оружие, музыка и звуки сделаны специально для этой игры.',
   'Paid with Telegram Stars in Telegram’s own window. The BLATS are credited as soon as the payment goes through.': 'Оплата звёздами Telegram — в окне самого Telegram. БЛАТ зачисляются сразу после оплаты.',
   'Paid with Telegram Stars in Telegram’s own window.': 'Оплата звёздами Telegram — в окне самого Telegram.',
+  'The payment is still being processed — the BLATS will arrive automatically': 'Платёж ещё обрабатывается — БЛАТ придут сами',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)

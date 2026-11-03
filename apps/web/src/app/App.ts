@@ -40,7 +40,7 @@ import type { SocialSignal } from '../net/SocialClient.js';
 import { needsTelegramWelcome, needsWelcome, openTelegramWelcome, openWelcome } from '../ui/screens/welcome.js';
 import { sfx } from '../game/audio/Sfx.js';
 import { music } from '../game/audio/Music.js';
-import { t, count, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
+import { t, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
 import { charText, finishName, gadgetName, modText, refusalText, weaponName } from '../i18n/content.js';
 import { apiErrorText } from '../net/errors.js';
 import { watchForUpdates } from './updates.js';
@@ -336,10 +336,12 @@ export class App {
         h('span', { class: 'tag' }, t('Credits')),
         h('div', { class: 'h2', style: 'margin-top:6px' }, 'BLATKOM ’89'),
         // names of works, authors and licences stay as they are in every language
-        h('div', null, h('b', null, t('Menu music')), ': «Hurt» — Infraction & Emerel Gray (Brazilian Phonk Sport).'),
+        // v0.2.18 part 3: the game's own soundtrack (tools/music/compose.py) and the rights notice
+        h('div', { 'data-testid': 'credits-copyright' }, `© 2026 ${this.site?.copyright ?? 'BLATKOM ’89'}. ${t('All rights reserved.')}`),
+        h('div', null, h('b', null, t('Menu music')), ': «Районные дела» — ', t('original music written for this game')),
         h('div', null, h('b', null, t('Fonts')), ': Oswald, PT Sans Narrow, Caveat — SIL Open Font License; Permanent Marker — Apache License 2.0.'),
         h('div', null, h('b', null, t('Engine')), ': Phaser 3 — MIT License.'),
-        h('div', { class: 'muted' }, t('Characters, maps, weapons and sound effects are original work made for this game.')),
+        h('div', { class: 'muted' }, t('Characters, maps, weapons, music and sound effects are original work made for this game.')),
         h('a', { href: asset('THIRD_PARTY_LICENSES.txt'), target: '_blank', class: 'muted' }, t('Full licence texts')),
         h('button', { class: 'btn btn--red', onclick: close }, t('Close')),
       ),
@@ -455,7 +457,7 @@ export class App {
             await online.loadInventory().catch(() => {});
             this.refreshStrip();
             sfx.play('buy');
-            toast(t('{n} credited', { n: count(st.diamonds, 'diamond') }));
+            toast(t('{n} credited', { n: `${fmtNum(st.diamonds)} ${t('BLATS')}` }));
             return;
           }
           if (st.status === 'failed' || st.status === 'expired') return toast(t('The payment did not go through'));
@@ -463,7 +465,7 @@ export class App {
           /* keep polling */
         }
         if (tries < 40) setTimeout(() => void poll(), 3000);
-        else toast(t('The payment is still being processed — the diamonds will arrive automatically'));
+        else toast(t('The payment is still being processed — the BLATS will arrive automatically'));
       };
       setTimeout(() => {
         toast(t('Checking the payment…'));
@@ -668,7 +670,7 @@ export class App {
           ),
         ),
         ONLINE_AVAILABLE
-          ? h('div', { class: 'footer' }, (REAL_MONEY ? t('BLATKOM ’89 · v{v} · Free to play, purchases optional', { v: VERSION }) : t('BLATKOM ’89 · v{v} · Free to play', { v: VERSION })), ' · ', h('a', { href: asset(getLang() === 'ru' ? 'privacy-ru.html' : 'privacy.html'), target: '_blank', style: 'color:inherit' }, t('Privacy')), ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits')))
+          ? h('div', { class: 'footer' }, '© ', (REAL_MONEY ? t('BLATKOM ’89 · v{v} · Free to play, purchases optional', { v: VERSION }) : t('BLATKOM ’89 · v{v} · Free to play', { v: VERSION })), ' · ', h('a', { href: asset(getLang() === 'ru' ? 'privacy-ru.html' : 'privacy.html'), target: '_blank', style: 'color:inherit' }, t('Privacy')), REAL_MONEY ? ' · ' : null, REAL_MONEY ? h('a', { href: asset(getLang() === 'ru' ? 'terms-ru.html' : 'terms.html'), target: '_blank', style: 'color:inherit', 'data-testid': 'footer-terms' }, t('Terms')) : null, ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits')))
           : h('div', { class: 'footer' }, t('BLATKOM ’89 · v{v} · Demo: the game runs right in your browser; no data is collected or sent anywhere.', { v: VERSION }), ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits'))),
       ),
     );
