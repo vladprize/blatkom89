@@ -7,7 +7,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { WebSocket } from 'ws';
-import { PROTOCOL_VERSION, RATING_RULES, ratingDelta } from '@blatkom/shared';
+import { PROTOCOL_VERSION, RATING_RULES, isNick, ratingDelta } from '@blatkom/shared';
 import type { SocialEvent } from '@blatkom/shared';
 import { startTestApp, api, devLogin } from '../admin/testkit.js';
 import type { TestApp } from '../admin/testkit.js';
@@ -63,33 +63,41 @@ const request = (token: string, name: string) => api(app.base, '/api/friends/req
 
 test('aliases are unique (any letter case): new accounts get a number, renames to a taken alias are refused with free suggestions', async () => {
   const a = await devLogin(app.base, 'Petya Unikum');
-  const b = await devLogin(app.base, 'Petya Unikum');
+  const b = await devLogin(app.base, 'PETYA UNIKUM');
   const pa = await api(app.base, '/api/me', { token: a.token });
   const pb = await api(app.base, '/api/me', { token: b.token });
-  assert.equal(pa.body.displayName, 'Petya Unikum');
-  assert.equal(pb.body.displayName, 'Petya Unikum 2', 'a second account with the same name gets a number');
-  const taken = await api(app.base, '/api/me', { method: 'PATCH', token: b.token, body: { displayName: 'petya unikum' } });
+  assert.equal(pa.body.displayName, 'petya_unikum', 'the sign-up name as an alias: one word, small letters (v0.2.19)');
+  assert.equal(pb.body.displayName, 'petya_unikum_2', 'a second account with the same name (in any letter case) gets a number');
+  const taken = await api(app.base, '/api/me', { method: 'PATCH', token: b.token, body: { displayName: 'petya_unikum' } });
   assert.equal(taken.status, 409);
   assert.equal(taken.body.error.code, 'name_taken');
-  const own = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { displayName: 'PETYA unikum' } });
-  assert.equal(own.status, 200, 'changing the case of your own alias is fine');
-  const check = await api(app.base, `/api/names/check?name=${encodeURIComponent('Petya Unikum')}`, { token: b.token });
+  const caps = await api(app.base, '/api/me', { method: 'PATCH', token: b.token, body: { displayName: 'Petya_Unikum' } });
+  assert.equal(caps.status, 400, 'an alias is written in small letters (v0.2.19)');
+  const own = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { displayName: 'petya_unikum' } });
+  assert.equal(own.status, 200, 'your own alias is not taken by yourself');
+  const check = await api(app.base, `/api/names/check?name=${encodeURIComponent('petya_unikum')}`, { token: b.token });
   assert.equal(check.status, 200);
   assert.equal(check.body.available, false);
   assert.ok(check.body.suggestions.length >= 2);
   for (const s of check.body.suggestions) {
+    assert.ok(isNick(s) && /^petya_unikum_\d+$/.test(s), `a free variant is one word, numbered with «_»: ${s}`);
     const c = await api(app.base, `/api/names/check?name=${encodeURIComponent(s)}`, { token: b.token });
     assert.equal(c.body.available, true, `${s} is free`);
   }
-  const free = await api(app.base, `/api/names/check?name=${encodeURIComponent('Totally New')}`, { token: b.token });
+  const free = await api(app.base, `/api/names/check?name=${encodeURIComponent('totally_new')}`, { token: b.token });
   assert.deepEqual([free.body.available, free.body.suggestions], [true, []]);
-  const bad = await api(app.base, `/api/names/check?name=${encodeURIComponent('<script>')}`, { token: b.token });
-  assert.equal(bad.status, 400);
+  for (const ok of ['ok_name', 'a.b-c']) assert.equal((await api(app.base, `/api/names/check?name=${encodeURIComponent(ok)}`, { token: b.token })).status, 200, ok);
+  // v0.2.19: one word of small Latin letters, digits and _ . -, 3–20 characters
+  for (const bad of ['<script>', 'Totally New', 'totally new', 'Caps', 'ab', 'x'.repeat(21)]) {
+    const r = await api(app.base, `/api/names/check?name=${encodeURIComponent(bad)}`, { token: b.token });
+    assert.equal(r.status, 400, `refused: ${bad}`);
+  }
   // guests: the temporary name of a new browser gets a number too
   const g1 = await api(app.base, '/api/auth/guest', { method: 'POST', body: { name: 'Comrade_ABC', deviceId: randomUUID().replace(/-/g, '') } });
   const g2 = await api(app.base, '/api/auth/guest', { method: 'POST', body: { name: 'Comrade_ABC', deviceId: randomUUID().replace(/-/g, '') } });
   assert.equal(g1.status, 200, g1.text);
-  assert.equal(g2.body.profile.displayName, 'Comrade_ABC 2');
+  assert.equal(g1.body.profile.displayName, 'comrade_abc');
+  assert.equal(g2.body.profile.displayName, 'comrade_abc_2');
 });
 
 test('friends: a request by alias, live notice, acceptance; mutual requests; refusals', async () => {
@@ -97,14 +105,16 @@ test('friends: a request by alias, live notice, acceptance; mutual requests; ref
   const b = await devLogin(app.base, 'Friend Two');
   const sb = new Social(b.token);
   await sb.next('ready');
+  // typed any way: found as the alias it makes («friend_two», v0.2.19)
   const r = await request(a.token, 'friend two');
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.result, 'sent');
   const ev = await sb.next('friend_request');
-  assert.equal(ev.from.name, 'Friend One');
+  assert.equal(ev.from.name, 'friend_one');
   assert.equal((await friends(b.token)).body.incoming[0].id, a.userId);
   assert.equal((await friends(a.token)).body.outgoing[0].id, b.userId);
   assert.equal((await request(a.token, 'Friend Two')).body.error.code, 'already_sent');
+  assert.equal((await request(a.token, 'friend_two')).body.error.code, 'already_sent', 'the alias itself');
   const sa = new Social(a.token);
   await sa.next('ready');
   const acc = await api(app.base, `/api/friends/${a.userId}/accept`, { method: 'POST', token: b.token });
@@ -153,7 +163,7 @@ test('v0.2.18 part 2: a friend’s collection — characters and skins by grade,
   assert.equal((await api(app.base, `/api/friends/${a.userId}/accept`, { method: 'POST', token: b.token })).status, 200);
   const r = await look(a.token, b.userId);
   assert.equal(r.status, 200, r.text);
-  assert.equal(r.body.player.name, 'Collector Two');
+  assert.equal(r.body.player.name, 'collector_two');
   assert.ok(r.body.characters.includes('kasatka') && r.body.characters.includes('petya') && !r.body.characters.includes('lev'));
   assert.deepEqual(r.body.skins, { common: 2, rare: 0, epic: 0, legendary: 1 }, 'the welcome gift isn’t counted');
   assert.equal((await look(c.token, b.userId)).status, 403, 'a stranger');
@@ -173,7 +183,7 @@ test('direct messages: only between friends, live delivery, unread counts and re
   assert.equal(sent.body.message.text, 'Здорово! Как дела?', 'trimmed, control characters dropped');
   const dm = await sb.next('dm');
   assert.equal(dm.message.text, 'Здорово! Как дела?');
-  assert.equal(dm.from.name, 'Writer');
+  assert.equal(dm.from.name, 'writer');
   const fb = (await friends(b.token)).body.friends[0];
   assert.equal(fb.unread, 1);
   const conv = await api(app.base, `/api/messages/${a.userId}`, { token: b.token });
@@ -225,7 +235,7 @@ test('invitations: a friend in your room gets a live invite with the room; stran
   assert.equal(inv.status, 200, inv.text);
   assert.equal(inv.body.delivered, true);
   const ev = await sb.next('invite');
-  assert.deepEqual([ev.invite.roomId, ev.invite.mode, ev.invite.mapId, ev.invite.isPrivate, ev.invite.from.name], [room.body.roomId, 'ctf', 'factory', true, 'Barker']);
+  assert.deepEqual([ev.invite.roomId, ev.invite.mode, ev.invite.mapId, ev.invite.isPrivate, ev.invite.from.name], [room.body.roomId, 'ctf', 'factory', true, 'barker']);
   assert.equal((await api(app.base, `/api/friends/${c.userId}/invite`, { method: 'POST', token: a.token, body: { roomId: room.body.roomId } })).status, 403, 'only friends');
   sb.close();
   await new Promise((r) => setTimeout(r, 300));
@@ -268,19 +278,19 @@ test('rating and the Top-100: places move the rating, the table ranks by rating,
   const lb = await api(app.base, '/api/leaderboard?by=rating', { token: idle.token });
   assert.equal(lb.status, 200);
   const names = lb.body.entries.map((e: { name: string }) => e.name);
-  assert.ok(names.indexOf('Champion') >= 0 && names.indexOf('Champion') < names.indexOf('Recruit'));
-  assert.ok(!names.includes('No Matches'), 'players without a finished match are not ranked');
+  assert.ok(names.indexOf('champion') >= 0 && names.indexOf('champion') < names.indexOf('recruit'));
+  assert.ok(!names.includes('no_matches'), 'players without a finished match are not ranked');
   assert.equal(lb.body.me, null);
   const mine = await api(app.base, '/api/leaderboard?by=kills', { token: low.token });
   assert.equal(mine.body.by, 'kills');
-  assert.equal(mine.body.me.name, 'Recruit');
+  assert.equal(mine.body.me.name, 'recruit');
   assert.ok(mine.body.me.rank >= 2);
   assert.ok(mine.body.entries.every((_e: unknown, i: number, arr: Array<{ kills: number }>) => i === 0 || arr[i - 1]!.kills >= arr[i]!.kills));
   // places are distinct (ties go to the other measure, then the older account) and «me» matches the table
   assert.deepEqual(mine.body.entries.map((e: { rank: number }) => e.rank), mine.body.entries.map((_: unknown, i: number) => i + 1));
-  assert.equal(mine.body.entries.find((e: { name: string }) => e.name === 'Recruit').rank, mine.body.me.rank);
+  assert.equal(mine.body.entries.find((e: { name: string }) => e.name === 'recruit').rank, mine.body.me.rank);
   const topMe = await api(app.base, '/api/leaderboard?by=rating', { token: top.token });
-  assert.equal(topMe.body.entries.find((e: { name: string }) => e.name === 'Champion').rank, topMe.body.me.rank);
+  assert.equal(topMe.body.entries.find((e: { name: string }) => e.name === 'champion').rank, topMe.body.me.rank);
   const lvl = await api(app.base, '/api/leaderboard?by=level', { token: low.token });
   assert.equal(lvl.body.entries[0].rank, 1);
   // a leaver loses rating; the rating never goes below zero

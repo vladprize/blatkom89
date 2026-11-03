@@ -3,7 +3,7 @@
  * the lobby's «invite friends» panel and the card of an incoming invitation. Everything reads the
  * SocialClient store and redraws itself when it changes; the server decides every action.
  */
-import { CHARACTERS, CHARACTER_IDS, GRADES, GRADE_RANK, displayNameSchema, DM_MAX_LENGTH, LEADERBOARD_BY, REFERRAL_TALONS } from '@blatkom/shared';
+import { CHARACTERS, CHARACTER_IDS, GRADES, GRADE_RANK, isNick, toNick, DM_MAX_LENGTH, LEADERBOARD_BY, REFERRAL_TALONS } from '@blatkom/shared';
 import type { DirectMessage, FriendEntry, FriendRequestEntry, FriendStatus, LeaderboardBy, LeaderboardEntry, LeaderboardResponse, PlayerCard, RoomInviteEvent, GameMode } from '@blatkom/shared';
 import { h, fill, toast, founderTag, portrait } from '../dom.js';
 import { gradeTag } from './shop.js';
@@ -99,12 +99,13 @@ export function renderFriends(o: { online: OnlineClient; root: HTMLElement; onPl
   const { online } = o;
   const social = online.social;
   const myName = online.profile?.displayName ?? '';
-  const input = h('input', { class: 'input', placeholder: t('Friend’s alias'), maxlength: '24', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': t('Friend’s alias'), 'data-testid': 'friend-alias' }) as HTMLInputElement;
+  const input = h('input', { class: 'input', placeholder: t('Friend’s alias'), maxlength: '40', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': t('Friend’s alias'), 'data-testid': 'friend-alias' }) as HTMLInputElement;
   const send = async () => {
-    const parsed = displayNameSchema.safeParse(input.value);
-    if (!parsed.success) return toast(t('Enter the alias exactly as your friend has it'));
+    // v0.2.19: «Seasoned Badger» typed finds «seasoned_badger»
+    const alias = toNick(input.value);
+    if (!isNick(alias)) return toast(t('Enter the alias exactly as your friend has it'));
     try {
-      const r = await online.api.friendRequest(parsed.data);
+      const r = await online.api.friendRequest(alias);
       input.value = '';
       sfx.play('click');
       toast(r.result === 'accepted' ? t('{name} is your friend now', { name: r.player.name }) : t('Request sent to {name}', { name: r.player.name }));

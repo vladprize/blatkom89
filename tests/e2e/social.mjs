@@ -53,8 +53,9 @@ async function pressPlay(page) {
 const A = await player('A', 'en', { width: 1280, height: 720 });
 const B = await player('B', 'ru', { width: 390, height: 844 });
 // v0.3: aliases are Latin — B types it in Cyrillic and takes the Latin version the dialog offers
-const NB = `Tester ${RUN}`;
-const NA = `Social A ${RUN}`;
+// v0.2.19: aliases are one word of small Latin letters, digits and _ . -
+const NB = `tester_${RUN}`;
+const NA = `social_a_${RUN}`;
 const EMAIL = `e2e-social-${RUN}@example.com`;
 const friendRow = (p, list, name) => p.page.locator(`[data-testid=${list}] [data-friend="${name}"]`);
 
@@ -68,12 +69,10 @@ try {
   await B.page.getByTestId('welcome-guest').click();
   const nickB = B.page.getByRole('textbox', { name: 'Кличка' });
   await nickB.waitFor({ timeout: 20000 });
-  await nickB.fill(`Тестер ${RUN}`);
-  await B.page.getByTestId('name-latin').waitFor({ timeout: 10000 });
-  const latin = (await B.page.getByTestId('name-latin').innerText()).trim();
-  check(latin === NB && /латиниц/i.test(await B.page.getByTestId('name-hint').innerText()), `B typed the alias in Cyrillic: the dialog says Latin letters only and offers «${latin}»`);
-  await B.page.getByTestId('name-latin').click();
-  check((await nickB.inputValue()) === NB, 'one tap puts the Latin version in the field');
+  await nickB.fill(`Тестер ${RUN.toUpperCase()}`);
+  const typed = await nickB.inputValue();
+  check(typed === NB, `B typed the alias in Cyrillic, with a space and capitals: the field writes it as one word of small Latin letters («${typed}»)`);
+  check(/a–z/.test(await B.page.getByTestId('name-rule').innerText()), 'the dialog states the rule under the field');
   await B.page.getByRole('button', { name: 'Готово' }).click();
   await B.page.getByTestId('menu-nick').filter({ hasText: NB }).waitFor({ timeout: 20000 });
   check(true, `B continued as a guest and took the alias «${NB}»`);
@@ -109,7 +108,9 @@ try {
   // the server refuses a taken alias even without the dialog's check (asked from here, not the page)
   const tokenA = await A.page.evaluate(() => localStorage.getItem('blatkom89.token'));
   const status = (await fetch(`${base}/api/me`, { method: 'PATCH', headers: { authorization: `Bearer ${tokenA}`, 'content-type': 'application/json' }, body: JSON.stringify({ displayName: NB.toLowerCase() }) })).status;
-  check(status === 409, `PATCH /api/me with B's alias in lower case → ${status}`);
+  check(status === 409, `PATCH /api/me with B's alias → ${status}`);
+  const twoWords = (await fetch(`${base}/api/me`, { method: 'PATCH', headers: { authorization: `Bearer ${tokenA}`, 'content-type': 'application/json' }, body: JSON.stringify({ displayName: `Two Words ${RUN}` }) })).status;
+  check(twoWords === 400, `PATCH /api/me with an alias of two words in capitals → ${twoWords} (one word of small letters only)`);
 
   // ── friends ─────────────────────────────────────────────────────────────
   await A.page.getByTestId('menu-friends').click();

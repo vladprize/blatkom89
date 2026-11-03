@@ -13,7 +13,7 @@ directly; the crypto theme is gone (no `$BLAT`, no BLAT DROP, no stakes — §8)
 are still the `diamonds` columns and currency id: no data was renamed or moved.
 
 **v0.2.18 part 2:** twelve new characters from the owner's sheets (36 in all, §3a), the owner's skin
-line — twenty finishes on sale, a welcome gift of two for early players, the first line retired (§4a),
+line — 39 finishes on sale (v0.2.19: the AK sheet's 19, four of them live), a welcome gift of two for early players, the first line retired (§4a),
 and the character case for BLATS (§4c).
 
 **v0.2.18 part 3:** BLATS are sold through Xsolla on the website and for Telegram Stars inside Telegram
@@ -107,14 +107,18 @@ A skin is a **finish on one particular weapon** («Автомат „Дружб�
 (`game-rules/skins.ts`). Every weapon can wear every finish.
 
 **v0.2.18 part 2 — the owner's line** (references/64-skins-lineup.png): twenty finishes on sale, two
-as a welcome gift; the plain factory paint («Standard») stays everyone's.
+as a welcome gift; the plain factory paint («Standard») stays everyone's. **v0.2.19 — the owner's AK
+sheet** (references/83-skins-ak-sheet.png): nineteen more on sale, graded rare, epic and legendary (the
+owner: no «Absurd» grade); **four of them live** (about a tenth of the line, `LIVE_FINISHES`): each loops
+its own light animation wherever the weapon is drawn — still only the look, at its grade's price.
+**39 on sale.**
 
 | Grade | On sale (`SHOP_FINISHES`) | Price each (`SKIN_PRICES`) | In the skin case |
 |---|---|---|---|
 | regular | Khaki, Worn (+ the gift: Shark, Blatkom ’89) | 99 BLATS ($0.99) | 40 % |
-| rare | Spartakiad ’80, Tracksuit, Wild Nineties, Raspberry Jacket, Video Parlour, Cherkizon, Radioactive, Afghan, Tattoo, Film | 199 BLATS ($1.99) | 30 % |
-| epic | Cosmos ’88, Golden Sunset, Khokhloma, Elektronika, Ice Camo | 299 BLATS ($2.99) | 20 % |
-| legendary | Tsar’s, The Office, Nuclear Winter | 499 BLATS ($4.99) | 10 % |
+| rare | Spartakiad ’80, Tracksuit, Wild Nineties, Raspberry Jacket, Video Parlour, Cherkizon, Radioactive, Afghan, Tattoo, Film; v0.2.19: Rust King, Street Graffiti, Bone Collector, Blue Chrome, Toxic Waste | 199 BLATS ($1.99) | 30 % |
+| epic | Cosmos ’88, Golden Sunset, Khokhloma, Elektronika, Ice Camo; v0.2.19: Neon District, Hellfire, Canned Fish, Casino Boss, Amethyst, Biohazard X, Pensioner Deluxe, Borscht Edition | 299 BLATS ($2.99) | 20 % |
+| legendary | Tsar’s, The Office, Nuclear Winter; v0.2.19: **Golden Mobster** ✦, Blood Reaper ✦, Red Diamond ✦, Obsidian Emperor ✦, Golden Toilet, Shashlik Master (✦ live) | 499 BLATS ($4.99) | 10 % |
 
 * **Marks of others are left out** (the owner was told on 2 Nov): no Olympic rings («Спартакиада ’80»,
   the line's «Олимпийский ’80»), no sportswear brand's stripes or logo («Спортивный»: two stripes), no
@@ -137,7 +141,8 @@ as a welcome gift; the plain factory paint («Standard») stays everyone's.
 * **The skin case** — 299 BLATS ($2.99): first the grade is drawn by the chances above (a grade whose
   skins are all owned drops out and the others share its chance — `skinCaseOdds`), then any unowned
   skin of that grade with equal chance (`drawSkin`, OS CSPRNG). No duplicates; only the finishes on sale
-  (`CASE_FINISHES`): 20 × 32 weapons = **640 skins**. The odds open from the Arsenal before buying.
+  (`CASE_FINISHES`): 39 × 32 weapons = **1 248 skins** (v0.2.18 part 2: 640). The odds open from the
+  Arsenal before buying.
 * Owned skins are `user_items` rows of kind `skin` (`item_id` = `weapon.finish`); the worn ones are
   `profiles.loadout.skins`, checked against ownership on every read (`ownsSkin` counts the free
   finishes). The room sends everyone's worn skins; the client paints the weapon's pixel art with the
@@ -264,7 +269,7 @@ invitation can never become money.
 reason, never below zero, ledger reason `grant` with the admin's id, audited as `balance_grant`. Used
 for compensation and corrections, not for selling. «Сделать основателем» (one account): level 87 (its
 levels' BLATS paid as for anybody), every character, weapon, equipment, skin of the current line
-(v0.2.18 part 2: the 20 on sale on every weapon, plus the welcome gift's mark) and modification as
+(v0.2.19: the 39 on sale on every weapon, plus the welcome gift's mark) and modification as
 grants, the gold badge.
 
 ## 8. Retired in v0.2.18: $BLAT, BLAT DROP, stakes

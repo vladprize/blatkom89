@@ -130,7 +130,7 @@ try {
   check((await A.page.locator('[data-testid=club-requests] [data-request]').count()) === 1, 'A’s club page shows the request without a reload');
   await A.page.screenshot({ path: `${outDir}/clubs_request_A.png` });
   await A.page.locator('[data-testid=club-requests] .btn--red').click();
-  await A.page.locator('.clubmember', { hasText: `Recruit ${RUN}` }).waitFor({ timeout: 10000 });
+  await A.page.locator('.clubmember', { hasText: `recruit_${RUN}` }).waitFor({ timeout: 10000 });
   check(true, 'A took B in: B is among the club’s people');
   await B.page.getByText(/Тебя приняли в/).waitFor({ timeout: 15000 });
   check(true, 'B hears it at once («Тебя приняли в …»)');

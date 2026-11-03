@@ -54,7 +54,7 @@ function konMatch(format: MatchCompletion['kon'], winner: 0 | 1 | null, sides: A
 let a: Who, b: Who, c: Who, d: Who, gangId: string;
 
 test('Kon 2×2: Elo by side averages, the leaver loses, records and streaks; the general rating stays, XP comes; a one-gang side moves the gang; once only', async () => {
-  const [x0, x1, x2, x3] = await Promise.all(['Kon Ataman', 'Kon Bratok', 'Kon Cyrus', 'Kon Dimon'].map((n) => devLogin(app.base, n)));
+  const [x0, x1, x2, x3] = await Promise.all(['kon_ataman', 'kon_bratok', 'kon_cyrus', 'kon_dimon'].map((n) => devLogin(app.base, n)));
   [a, b, c, d] = [x0!, x1!, x2!, x3!];
   // a and b play for one gang
   const made = await api(app.base, '/api/clubs', { method: 'POST', token: a!.token, body: { name: 'Kon Brigade', tag: 'KONB', flag: { pattern: 'h3', colors: [0, 8, 5] }, emblem: { icon: 'gear', color: 9 } } });
@@ -109,8 +109,8 @@ test('Kon API: the player’s numbers and history with team-mates and opponents;
   assert.equal(me.body.me.bestStreak, 2);
   assert.deepEqual(me.body.waiting, { '1x1': 0, '2x2': 0, '3x3': 0, '5x5': 0 });
   const [last, second, first] = me.body.history;
-  assert.deepEqual([last!.format, last!.outcome, last!.rivals], ['1x1', 'draw', ['Kon Cyrus']]);
-  assert.deepEqual([first!.format, first!.outcome, first!.delta, first!.mates, first!.rivals, first!.kills], ['2x2', 'win', 20, ['Kon Bratok'], ['Kon Cyrus', 'Kon Dimon'], 6]);
+  assert.deepEqual([last!.format, last!.outcome, last!.rivals], ['1x1', 'draw', ['kon_cyrus']]);
+  assert.deepEqual([first!.format, first!.outcome, first!.delta, first!.mates, first!.rivals, first!.kills], ['2x2', 'win', 20, ['kon_bratok'], ['kon_cyrus', 'kon_dimon'], 6]);
   assert.equal(second!.outcome, 'win');
   const dHist = (await api<KonResponse>(app.base, '/api/kon', { token: d!.token })).body.history;
   assert.deepEqual([dHist.at(-1)!.outcome, dHist.at(-1)!.left], ['loss', true], 'the leaver sees the match as left — a loss');
@@ -123,7 +123,7 @@ test('Kon API: the player’s numbers and history with team-mates and opponents;
   assert.equal(top.body.me!.id, c!.userId);
   const gangs = await api<KonTopResponse>(app.base, '/api/kon/top?by=gangs', { token: b!.token });
   assert.deepEqual([gangs.body.rows[0]!.id, gangs.body.rows[0]!.tag, gangs.body.me!.id], [gangId, 'KONB', gangId]);
-  const outsider = await devLogin(app.base, 'Kon Nobody');
+  const outsider = await devLogin(app.base, 'kon_nobody');
   const none = await api<KonTopResponse>(app.base, '/api/kon/top?by=players', { token: outsider.token });
   assert.equal(none.body.me, null, 'no Kon matches — no place');
 });

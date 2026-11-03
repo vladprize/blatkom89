@@ -10,7 +10,7 @@
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import { latinName } from '@blatkom/shared';
+import { nickName } from '@blatkom/shared';
 
 export interface TelegramUser {
   id: number;
@@ -94,8 +94,10 @@ export function validateInitData(initData: string, botToken: string, maxAgeSec: 
   };
 }
 
-/** Builds an in-game display name from Telegram names (letters, digits, space, _ . - ’ '). */
-/** The first alias of a new Telegram player: their name in Latin letters (v0.3: «Влад» → «Vlad»). */
+/**
+ * The first alias of a new Telegram player: their name as one word of small Latin letters (v0.3 Latin,
+ * v0.2.19 one word: «Влад Петров» → «vlad_petrov»; nothing left → «comrade_1234»).
+ */
 export function displayNameFromTelegram(u: TelegramUser): string {
-  return latinName(`${u.firstName} ${u.lastName ?? ''}`, `Comrade ${String(u.id).slice(-4)}`);
+  return nickName(`${u.firstName} ${u.lastName ?? ''}`, `comrade_${String(u.id).slice(-4)}`);
 }

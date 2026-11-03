@@ -9,7 +9,7 @@
  *   POST /api/auth/oauth/finish {code}            the one-time code → a session
  *   POST /api/auth/telegram/web {data}            Telegram Login data (+ the current session, optional)
  */
-import { latinName, nameKey, PlatformSchema } from '@blatkom/shared';
+import { nickName, nameKey, PlatformSchema } from '@blatkom/shared';
 import type { AuthResponse } from '@blatkom/shared';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
@@ -164,7 +164,7 @@ export const registerOAuthRoutes: RouteModule = (router, deps) => {
       userId = current;
       linked = true;
     } else {
-      const name = latinName(`${v.user.firstName} ${v.user.lastName ?? ''}`, `Comrade ${tgId.slice(-4)}`);
+      const name = nickName(`${v.user.firstName} ${v.user.lastName ?? ''}`, `comrade_${tgId.slice(-4)}`);
       for (let attempt = 0; ; attempt++) {
         const candidate = await freeName(sql, name);
         try {
@@ -211,7 +211,7 @@ export async function resolveAccount(sql: Sql, provider: OAuthProvider, profile:
       return { userId: current, isNew: false, linked: true, refused: false };
     }
   }
-  const userId = await createAccount(sql, latinName(profile.name, `Comrade ${profile.uid.replace(/\D/g, '').slice(-4).padStart(4, '0')}`));
+  const userId = await createAccount(sql, nickName(profile.name, `comrade_${profile.uid.replace(/\D/g, '').slice(-4).padStart(4, '0')}`));
   await sql`INSERT INTO user_identities (provider, provider_uid, user_id) VALUES (${provider}, ${profile.uid}, ${userId})`;
   return { userId, isNew: true, linked: false, refused: false };
 }

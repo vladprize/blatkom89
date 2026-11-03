@@ -21,21 +21,28 @@ import type { MapId } from '../maps/types.js';
 import type { AchievementId } from '../game-rules/progression.js';
 import type { Grade } from '../game-rules/grades.js';
 import type { StoryDone } from './story.js';
-import { MAX_NAME_LENGTH } from '../constants/game.js';
-import { LATIN_NAME_RE } from '../game-rules/aliases.js';
+import { MAX_NICK_LENGTH, MIN_NICK_LENGTH, NICK_RE, NICK_RULE } from '../game-rules/aliases.js';
 import { PlatformSchema } from '../events/analytics.js';
 
-/** Aliases (v0.3): Latin letters only — see game-rules/aliases.ts (`LATIN_NAME_RE`, `toLatin`). */
+/**
+ * Aliases (v0.2.19): one word of small Latin letters, digits and _ . -, 3–20 characters — see
+ * game-rules/aliases.ts (`NICK_RE`, `toNick`).
+ */
 export const displayNameSchema = z
   .string()
   .trim()
-  .min(2)
-  .max(MAX_NAME_LENGTH)
-  .regex(LATIN_NAME_RE, 'A name may contain Latin letters (A–Z), digits, spaces and _ . -');
+  .min(MIN_NICK_LENGTH)
+  .max(MAX_NICK_LENGTH)
+  .regex(NICK_RE, NICK_RULE)
+  .refine((s) => /[a-z0-9]/.test(s), NICK_RULE);
+
+/** An alias someone looks up (a friend's): typed any way — the server finds it as an alias (`toNick`). */
+export const aliasLookupSchema = z.string().trim().min(2).max(40);
 
 /**
  * The first name a new account brings (guest and development sign-up): anything readable — the server
- * keeps it in Latin letters (`latinName`; an older client may still send a Cyrillic suggestion).
+ * makes it an alias (`nickName`: one word of small Latin letters; an older client may still send «Quiet
+ * Quartermaster» or a Cyrillic suggestion).
  */
 export const signupNameSchema = z.string().trim().min(1).max(64);
 

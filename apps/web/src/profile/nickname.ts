@@ -3,7 +3,7 @@
  * (first launch, and «✎» in the menu/profile). Validation is the shared `displayNameSchema`,
  * the same one the server applies to PATCH /api/me.
  */
-import { displayNameSchema, latinName, sameAlias } from '@blatkom/shared';
+import { displayNameSchema, isNick, nickInput, sameAlias, toNick, MAX_NICK_LENGTH, MIN_NICK_LENGTH } from '@blatkom/shared';
 import type { NameCheckResponse } from '@blatkom/shared';
 import { h, fill, toast } from '../ui/dom.js';
 import { sfx } from '../game/audio/Sfx.js';
@@ -31,7 +31,10 @@ export interface NicknameDialogOptions {
 
 /** Opens the nickname dialog on top of `root`; returns a function that closes it. */
 export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions): () => void {
-  const input = h('input', { class: 'input input--big', value: o.initial, maxlength: '24', autocomplete: 'off', autocapitalize: 'words', spellcheck: 'false', 'aria-label': t('Alias') }) as HTMLInputElement;
+  // v0.2.19 (the owner): one word of small Latin letters, digits and _ . — typed letters become small, a space
+  // becomes «_», Cyrillic is spelled in Latin letters as it is typed
+  const input = h('input', { class: 'input input--big', value: isNick(o.initial) ? o.initial : toNick(o.initial), maxlength: String(MAX_NICK_LENGTH), autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', inputmode: 'text', 'aria-label': t('Alias') }) as HTMLInputElement;
+  const rule = h('div', { class: 'muted namerule', 'data-testid': 'name-rule' }, t('One word: a–z, 0–9 and _ . - · {min}–{max} characters', { min: MIN_NICK_LENGTH, max: MAX_NICK_LENGTH }));
   const error = h('div', { class: 'muted', style: 'min-height:18px;font-size:14px;color:#e07a6a' });
   // online: «✓ free» or «taken — try: …» with free variants to tap
   const hint = h('div', { class: 'namehint', 'data-testid': 'name-hint', 'aria-live': 'polite' });
@@ -74,37 +77,10 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
         if (seq === checkSeq) hint.replaceChildren();
       });
   };
-  /** v0.3: aliases are Latin — Cyrillic (or accents) typed: offer the same name in Latin letters. */
-  const latinHint = (): boolean => {
-    const v = input.value.trim();
-    if (!/[^\x20-\x7E’]/.test(v)) return false;
-    const fixed = latinName(v, '');
-    fill(
-      hint,
-      h('span', { class: 'namehint__bad' }, t('Latin letters only.')),
-      fixed && fixed !== v
-        ? h(
-            'button',
-            {
-              class: 'chip',
-              'data-testid': 'name-latin',
-              onclick: () => {
-                input.value = fixed;
-                error.textContent = '';
-                scheduleCheck();
-                input.focus();
-              },
-            },
-            fixed,
-          )
-        : null,
-    );
-    return true;
-  };
   const scheduleCheck = () => {
     if (checkTimer) clearTimeout(checkTimer);
     hint.replaceChildren();
-    if (latinHint() || !o.check) return;
+    if (!o.check) return;
     const parsed = displayNameSchema.safeParse(input.value);
     if (!parsed.success) return;
     checkTimer = setTimeout(() => runCheck(parsed.data), 350);
@@ -123,8 +99,8 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
     if (busy) return;
     const parsed = displayNameSchema.safeParse(input.value);
     if (!parsed.success) {
-      error.textContent = input.value.trim().length < 2 ? t('At least 2 characters.') : input.value.trim().length > 24 ? t('At most 24 characters.') : t('A name may contain Latin letters (A–Z), digits, spaces and _ . -');
-      latinHint();
+      const n = input.value.trim().length;
+      error.textContent = n < MIN_NICK_LENGTH ? t('At least {n} characters.', { n: MIN_NICK_LENGTH }) : n > MAX_NICK_LENGTH ? t('At most {n} characters.', { n: MAX_NICK_LENGTH }) : t('An alias is one word: small Latin letters (a–z), digits and _ . -');
       input.focus();
       return;
     }
@@ -156,6 +132,19 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
     }
   };
   input.addEventListener('input', () => {
+    const v = input.value;
+    const fixed = nickInput(v);
+    if (fixed !== v) {
+      // keep the caret where it was when only letters changed case or a space became «_»
+      const at = input.selectionStart ?? fixed.length;
+      input.value = fixed;
+      const caret = fixed.length === v.length ? at : fixed.length;
+      try {
+        input.setSelectionRange(caret, caret);
+      } catch {
+        /* not a text input in this browser */
+      }
+    }
     error.textContent = '';
     scheduleCheck();
   });
@@ -170,6 +159,7 @@ export function openNicknameDialog(root: HTMLElement, o: NicknameDialogOptions):
       h('div', { class: 'h2', style: 'margin-top:8px' }, o.title ?? t('What do they call you round here?')),
       h('div', { class: 'muted', style: 'font-size:15px' }, o.note ?? t('Rivals see your alias — above your character, on the scoreboard and in the results. You can change it in the profile.')),
       input,
+      rule,
       error,
       hint,
       h(

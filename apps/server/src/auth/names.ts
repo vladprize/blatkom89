@@ -3,9 +3,9 @@
  * index users_name_key_unique, migration 010; the key ignores letter case, spacing and Cyrillic
  * look-alikes of Latin letters). New accounts whose name is taken (a Telegram first name, a guest's
  * temporary name) get the first free numbered variant; a player choosing an alias is told it is taken
- * and offered free variants.
+ * and offered free variants. v0.2.19: aliases are one word (`isNick`) — the variants are «name_2», «name_89».
  */
-import { MAX_NAME_LENGTH, nameKey, numberedAlias } from '@blatkom/shared';
+import { MAX_NICK_LENGTH, nameKey, numberedNick } from '@blatkom/shared';
 import type { Sql } from '../database/db.js';
 
 /** Postgres unique violation on the alias index (a concurrent sign-up took the name first). */
@@ -26,21 +26,21 @@ export async function isNameFree(sql: Sql, name: string, exceptUserId?: string):
 export async function freeName(sql: Sql, base: string): Promise<string> {
   if (await isNameFree(sql, base)) return base;
   // one query for the variants already used (every numbered variant starts with this prefix)
-  const prefix = nameKey(base.slice(0, MAX_NAME_LENGTH - 5)).replace(/[\\%_]/g, (c) => `\\${c}`) + '%';
+  const prefix = nameKey(base.slice(0, MAX_NICK_LENGTH - 5)).replace(/[\\%_]/g, (c) => `\\${c}`) + '%';
   const used = new Set((await sql<Array<{ k: string }>>`SELECT name_key AS k FROM users WHERE name_key LIKE ${prefix} AND deleted_at IS NULL`).map((r) => r.k));
   for (let n = 2; n < 1000; n++) {
-    const candidate = numberedAlias(base, n);
+    const candidate = numberedNick(base, n);
     if (!used.has(nameKey(candidate)) && (await isNameFree(sql, candidate))) return candidate;
   }
-  return numberedAlias(base, 1000 + Math.floor(Math.random() * 9000));
+  return numberedNick(base, 1000 + Math.floor(Math.random() * 9000));
 }
 
 /** A few free variants of a taken alias for the player to pick from. */
 export async function suggestNames(sql: Sql, base: string, count = 3): Promise<string[]> {
   const out: string[] = [];
   const tries = [
-    ...[89, 777, 1989, 7].map((n) => `${base.slice(0, MAX_NAME_LENGTH - String(n).length - 1)}_${n}`),
-    ...Array.from({ length: 6 }, () => numberedAlias(base, 2 + Math.floor(Math.random() * 98))),
+    ...[89, 777, 1989, 7].map((n) => numberedNick(base, n)),
+    ...Array.from({ length: 6 }, () => numberedNick(base, 2 + Math.floor(Math.random() * 98))),
   ];
   for (const c of tries) {
     if (out.length >= count) break;

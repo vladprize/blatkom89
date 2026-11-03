@@ -1,4 +1,4 @@
-/** Migration 010 on a database that already has players: duplicate aliases are resolved, keys filled. */
+/** Migrations 010, 014 and 026 on a database that already has players: duplicate aliases are resolved, keys filled. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
@@ -86,7 +86,10 @@ test('010 keeps every alias with its oldest living holder and numbers the later 
 
     // 014 (v0.3): every living alias in Latin letters; a transliteration already taken gets a number
     await sql`INSERT INTO users (dev_device_id, display_name, name_key, created_at) VALUES ('dev-mig-z', 'Pyotr', 'pyotr', ${new Date(Date.UTC(2026, 0, 30))})`;
-    const later = await migrate(sql);
+    const upTo025 = mkdtempSync(join(tmpdir(), 'blatkom-mig-'));
+    for (const f of readdirSync(DEFAULT_MIGRATIONS_DIR).filter((f) => f < '026')) cpSync(join(DEFAULT_MIGRATIONS_DIR, f), join(upTo025, f));
+    const later = await migrate(sql, upTo025);
+    rmSync(upTo025, { recursive: true, force: true });
     assert.equal(later[0], '014_latin_names.sql', 'the migrations after 013, 014 first');
     const after = new Map((await sql<Array<{ id: string; display_name: string; name_key: string }>>`SELECT id, display_name, name_key FROM users`).map((r) => [r.id, r]));
     assert.deepEqual(
@@ -99,6 +102,39 @@ test('010 keeps every alias with its oldest living holder and numbers the later 
       sql`INSERT INTO users (dev_device_id, display_name, name_key) VALUES ('dev-mig-w', 'PETYA', ${nameKey('PETYA')})`,
       (e: { code?: string; constraint_name?: string }) => e.code === '23505' && (e.constraint_name ?? '').includes('name_key'),
     );
+
+    // 026 (v0.2.19): every living alias in one word of small letters; an alias that already fits stays
+    // («petya_2»: the older «Petya 2» comes to the same and takes the next number); two aliases that come to
+    // the same one in the same pass — the older keeps it; the old alias is kept
+    const extra: Array<[string, string, number]> = [
+      ['dev-mig-n1', 'petya_2', 31],
+      ['dev-mig-n2', 'Mr. Smith', 32],
+      ['dev-mig-n3', 'Mr.Smith', 33],
+      ['dev-mig-n4', 'Seasoned Badger', 34],
+      ['dev-mig-n5', '__', 35],
+    ];
+    const extraIds: string[] = [];
+    for (const [dev, name, day] of extra) {
+      const [x] = await sql<Array<{ id: string }>>`INSERT INTO users (dev_device_id, display_name, name_key, created_at) VALUES (${dev}, ${name}, ${nameKey(name)}, ${new Date(Date.UTC(2026, 0, day))}) RETURNING id`;
+      extraIds.push(x!.id);
+    }
+    const last = await migrate(sql);
+    assert.deepEqual(last, ['026_nicknames.sql']);
+    const nick = new Map((await sql<Array<{ id: string; display_name: string; name_key: string; old_display_name: string | null }>>`SELECT id, display_name, name_key, old_display_name FROM users`).map((r) => [r.id, r]));
+    assert.deepEqual(
+      ids.map((id) => nick.get(id)!.display_name),
+      ['petya', 'petya_3', 'petya_2_2', 'som', 'com_2', 'петя', 'pyotr_2', 'petr_2', 'valuta'],
+      'one word, small letters (the deleted account as it was); «Petya 2» meets the newer «petya_2» that already fits',
+    );
+    assert.equal(nick.get(ids[0]!)!.old_display_name, 'Petya', 'the old alias is kept');
+    assert.equal(nick.get(ids[5]!)!.old_display_name, null, 'a deleted account is not touched');
+    const fallback = nick.get(extraIds[4]!)!.display_name;
+    assert.deepEqual(extraIds.slice(0, 4).map((id) => nick.get(id)!.display_name), ['petya_2', 'mr.smith', 'mr.smith_2', 'seasoned_badger']);
+    assert.match(fallback, /^comrade_\d{4}$/, 'nothing left of the alias: comrade and four digits');
+    assert.equal(nick.get(extraIds[0]!)!.old_display_name, null, 'an alias that fits is not touched');
+    for (const r of nick.values()) assert.equal(r.name_key, nameKey(r.display_name));
+    const living = [...nick.values()].filter((r) => r.id !== ids[5]);
+    assert.equal(new Set(living.map((r) => r.name_key)).size, living.length, 'every key unique');
   } finally {
     await sql.end({ timeout: 5 });
     await root.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);

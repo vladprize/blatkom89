@@ -606,8 +606,9 @@ export class HudScene extends Phaser.Scene {
       const lift = portrait ? 120 : 96;
       type Spot = readonly [u: number, v: number, r: number];
       // the aiming thumb: fire, reload, pick up; the moving thumb: equipment, the weapon switch
-      const AIM: readonly Spot[] = portrait ? [[-40, 120, 44], [50, 96, 32], [5, 215, 36]] : [[-62, 108, 44], [112, -26, 32], [100, 80, 36]];
-      const MOVE: readonly Spot[] = portrait ? [[-40, 120, 34], [50, 96, 32]] : [[-62, 108, 34], [112, -26, 32]];
+      // (every button at least ~24 units clear of its stick's ring, 78 across at rest)
+      const AIM: readonly Spot[] = portrait ? [[-36, 150, 44], [64, 130, 32], [20, 236, 36]] : [[-62, 132, 44], [132, -30, 32], [112, 100, 36]];
+      const MOVE: readonly Spot[] = portrait ? [[-36, 150, 34], [64, 130, 32]] : [[-62, 132, 34], [132, -30, 32]];
       const spots = [...AIM, ...MOVE];
       const fit = (rs: number) => Math.min(1, Math.min(...spots.map(([, v, r]) => (room - r * rs) / (lift + v))));
       const rs = Math.max(0.78, Math.min(1, fit(1)));

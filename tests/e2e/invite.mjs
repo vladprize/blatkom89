@@ -136,7 +136,7 @@ try {
   await openInvite(A.page);
   check((await stat(A.page, 'invite-invited')) === '1' && (await stat(A.page, 'invite-pending')) === '1' && (await stat(A.page, 'invite-confirmed')) === '0', 'A’s screen: invited 1, waiting 1, counted 0');
   const recent = (await screen(A.page)).recent[0] ?? '';
-  check(recent.includes(`Recruit ${RUN}`) && /waiting for their first match/.test(recent), `A sees B waiting for a first match («${recent}»)`);
+  check(recent.includes(`recruit_${RUN}`) && /waiting for their first match/.test(recent), `A sees B waiting for a first match («${recent}»)`);
 
   // ── B's first whole online match → the invitation counts ─────────────────
   const t0 = await talons(A.id);
@@ -153,7 +153,7 @@ try {
   check(t1 - t0 === REWARD, `A’s talons: ${t0} → ${t1} (+${REWARD})`);
   const a2 = await screen(A.page);
   check(/150/.test(a2.earned ?? ''), `A’s screen: «${a2.earned}»`);
-  check(a2.recent[0]?.includes(`Recruit ${RUN}`) && /counted/.test(a2.recent[0] ?? ''), `A’s invitations: «${a2.recent[0]}»`);
+  check(a2.recent[0]?.includes(`recruit_${RUN}`) && /counted/.test(a2.recent[0] ?? ''), `A’s invitations: «${a2.recent[0]}»`);
   check((await stat(A.page, 'invite-pending')) === '0', 'nobody waiting any more');
   await A.page.screenshot({ path: `${outDir}/invite_counted_A.png` });
   // B again: nothing more is paid
@@ -193,9 +193,9 @@ try {
     await page.locator('.tile-label', { hasText: 'Талонов за приглашения' }).waitFor({ timeout: 15000 });
     await page.locator('button.chip', { hasText: 'все' }).click();
     const refCard = page.getByTestId('referrals-card');
-    await refCard.locator('tbody tr', { hasText: `Recruit ${RUN}` }).waitFor({ timeout: 15000 });
-    const row = await refCard.locator('tbody tr', { hasText: `Recruit ${RUN}` }).first().evaluate((el) => [...el.cells].map((c) => c.textContent.trim()).join(' | '));
-    check(/засчитано/.test(row) && row.includes(`Inviter ${RUN}`) && /\| 150 \|/.test(row), `admin «Приглашения»: the invitation, counted, 150 talons («${row.replace(/\s+/g, ' ')}»)`);
+    await refCard.locator('tbody tr', { hasText: `recruit_${RUN}` }).waitFor({ timeout: 15000 });
+    const row = await refCard.locator('tbody tr', { hasText: `recruit_${RUN}` }).first().evaluate((el) => [...el.cells].map((c) => c.textContent.trim()).join(' | '));
+    check(/засчитано/.test(row) && row.includes(`inviter_${RUN}`) && /\| 150 \|/.test(row), `admin «Приглашения»: the invitation, counted, 150 talons («${row.replace(/\s+/g, ' ')}»)`);
     await page.screenshot({ path: `${outDir}/admin_referrals.png`, fullPage: true });
     await page.goto(`${base}/admin#/players/${A.id}`);
     const card = page.locator('section.card').filter({ has: page.locator('h3', { hasText: /^Приглашения$/ }) });

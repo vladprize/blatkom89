@@ -30,7 +30,7 @@ const check = (ok, what) => {
 page.on('pageerror', (e) => problems.push(`[pageerror] ${e.message}`));
 page.on('console', (m) => m.type() === 'error' && problems.push(`[console] ${m.text()}`));
 
-const NICK = 'Quiet Quartermaster';
+const NICK = 'quiet_quartermaster';
 try {
   await page.goto(url);
   // ── first launch: nickname dialog ───────────────────────────────────────

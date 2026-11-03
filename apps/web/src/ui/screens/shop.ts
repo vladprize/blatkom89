@@ -195,13 +195,13 @@ export function weaponImg(w: WeaponId, size: IconSize = 'big', finish: FinishId 
   if (finish) {
     // the painted icon replaces the plain one as soon as it is ready (at once when it was painted before);
     // a live finish then loops (v0.2.19)
-    img.dataset.finish = finish;
+    img.dataset.paint = finish;
     const now = skinIconReady(w, finish, size === 'small');
     if (now) img.src = now;
     else
       void skinIconUrl(w, finish, size === 'small')
         .then((url) => {
-          if (img.dataset.finish === finish) img.src = url;
+          if (img.dataset.paint === finish) img.src = url;
         })
         .catch(() => {});
     animateLiveIcon(img, w, finish, size === 'small');

@@ -1130,7 +1130,7 @@ export class App {
     const p = this.online.profile;
     if (!p || p.matchesPlayed > 0 || storageGet(NICK_CONFIRMED_KEY) === p.id) return;
     this.nickClose = openNicknameDialog(this.root, {
-      initial: /^(Гость|Guest|Comrade)_/.test(p.displayName) ? randomNickname() : p.displayName,
+      initial: /^(гость|guest|comrade)_/i.test(p.displayName) ? randomNickname() : p.displayName,
       onSave: (name) => this.saveNickname(name),
       onCancel: () => storageSet(NICK_CONFIRMED_KEY, p.id),
       cancelLabel: t('Keep it as is'),
@@ -1146,7 +1146,7 @@ export class App {
     if (p.matchesPlayed > 0 || storageGet(NICK_CONFIRMED_KEY) === p.id) return;
     await new Promise<void>((resolve) => {
       this.nickClose = openNicknameDialog(this.root, {
-        initial: /^(Гость|Guest|Comrade)_/.test(p.displayName) ? randomNickname() : p.displayName,
+        initial: /^(гость|guest|comrade)_/i.test(p.displayName) ? randomNickname() : p.displayName,
         note: t('You’ve been invited to a room. The other players will see your alias — above your character, on the scoreboard and in the match report.'),
         onSave: (name) => this.saveNickname(name),
         onCancel: () => storageSet(NICK_CONFIRMED_KEY, p.id),

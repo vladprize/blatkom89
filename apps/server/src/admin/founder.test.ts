@@ -32,8 +32,8 @@ describe('admin: the founder (v0.2.17; v0.2.18 without $BLAT)', () => {
   });
 
   test('«Make founder»: the badge, level 87, every item, the levels’ BLATS once; admins only, audited', async () => {
-    const owner = await devLogin(app.base, 'Owner');
-    const other = await devLogin(app.base, 'Somebody');
+    const owner = await devLogin(app.base, 'owner');
+    const other = await devLogin(app.base, 'somebody');
     const url = `/api/admin/players/${owner.userId}/founder`;
     assert.equal((await api(app.base, url, { method: 'POST', token: owner.token })).status, 401, 'a player can’t');
     assert.equal((await api(app.base, url, { method: 'POST', cookie })).status, 403, 'CSRF');
@@ -53,7 +53,7 @@ describe('admin: the founder (v0.2.17; v0.2.18 without $BLAT)', () => {
     await app.db.sql`UPDATE profiles SET matches_completed = 1 WHERE user_id = ${owner.userId}`;
     const top = await api(app.base, '/api/leaderboard?by=level', { token: other.token });
     assert.equal(top.status, 200, top.text);
-    const row = top.body.entries.find((e: { name: string }) => e.name === 'Owner');
+    const row = top.body.entries.find((e: { name: string }) => e.name === 'owner');
     assert.equal(row?.founder, true, 'the Top-100 shows the badge');
     const card = await api(app.base, `/api/admin/players/${owner.userId}`, { cookie });
     assert.equal(card.body.founder, true);

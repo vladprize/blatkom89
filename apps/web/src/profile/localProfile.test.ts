@@ -24,17 +24,25 @@ const st = (id: string, place: number, kills: number, assists: number, deaths: n
   place,
 });
 
-test('demo profile: nickname is validated like the server does (v0.3: Latin letters)', () => {
-  assert.equal(createLocalProfile('  Quiet Quartermaster ').displayName, 'Quiet Quartermaster');
+test('demo profile: nickname is validated like the server does (v0.2.19: one word, small Latin letters)', () => {
+  assert.equal(createLocalProfile('  quiet_quartermaster ').displayName, 'quiet_quartermaster');
+  for (const ok of ['ok_name', 'a.b-c', 'garik_89', 'x'.repeat(20)]) assert.equal(createLocalProfile(ok).displayName, ok, ok);
   assert.throws(() => createLocalProfile('x'));
+  assert.throws(() => createLocalProfile('ab'), 'too short');
+  assert.throws(() => createLocalProfile('x'.repeat(21)), 'too long');
   assert.throws(() => createLocalProfile('<script>'));
-  assert.throws(() => createLocalProfile('Тихий Завхоз'), 'Cyrillic is refused');
-  assert.equal(renameLocalProfile(createLocalProfile('Petya'), 'Lucky Raccoon').displayName, 'Lucky Raccoon');
+  assert.throws(() => createLocalProfile('Two Words'), 'one word');
+  assert.throws(() => createLocalProfile('two words'), 'no spaces');
+  assert.throws(() => createLocalProfile('Caps'), 'small letters only');
+  assert.throws(() => createLocalProfile('___'), 'a letter or a digit');
+  assert.throws(() => createLocalProfile('тихий_завхоз'), 'Cyrillic is refused');
+  assert.equal(renameLocalProfile(createLocalProfile('petya'), 'lucky_raccoon').displayName, 'lucky_raccoon');
+  assert.throws(() => renameLocalProfile(createLocalProfile('petya'), 'Lucky Raccoon'), 'a rename follows the same rule');
   for (let i = 0; i < 200; i++) assert.doesNotThrow(() => createLocalProfile(randomNickname()));
 });
 
 test('demo profile: a practice win awards XP, achievements and history exactly once', () => {
-  const p0 = createLocalProfile('Quiet Quartermaster');
+  const p0 = createLocalProfile('quiet_quartermaster');
   const match = { matchId: 'offline-a', reason: 'score' as const, durationMs: 180_000, mapId: 'factory' as const, localId: 'local', standings: [st('local', 1, 6, 2, 1), st('bot0', 2, 3, 1, 4), st('bot1', 3, 1, 0, 5)] };
   const rec = recordLocalMatch(p0, match);
   assert.ok(rec);
@@ -62,16 +70,18 @@ test('demo profile: a practice win awards XP, achievements and history exactly o
 test('demo profile: storage data is sanitised and the view matches the online shapes', () => {
   assert.equal(sanitizeLocalProfile(null), null);
   assert.equal(sanitizeLocalProfile({ displayName: '' }), null);
-  // a name saved by an older build in Cyrillic comes back in Latin letters
-  assert.equal(sanitizeLocalProfile({ displayName: 'Фартовый Енот' })?.displayName, 'Fartovyy Enot');
-  const s = sanitizeLocalProfile({ displayName: 'Enot', xp: -5, kills: 'many', wins: 3.7, achievements: { first_win: '2026-10-01T10:00:00.000Z', bogus: 'x' }, history: [{ matchId: 'm', mapId: 'nowhere', character: 'petya' }, { matchId: 'm2', mapId: 'yard', character: 'valuta', kills: 2 }] });
+  // a name saved by an older build (in Cyrillic, or in Latin letters with spaces and capitals) comes back as an alias
+  assert.equal(sanitizeLocalProfile({ displayName: 'Фартовый Енот' })?.displayName, 'fartovyy_enot');
+  assert.equal(sanitizeLocalProfile({ displayName: 'Quiet Quartermaster' })?.displayName, 'quiet_quartermaster');
+  assert.equal(sanitizeLocalProfile({ displayName: 'Enot' })?.displayName, 'enot');
+  const s = sanitizeLocalProfile({ displayName: 'enot', xp: -5, kills: 'many', wins: 3.7, achievements: { first_win: '2026-10-01T10:00:00.000Z', bogus: 'x' }, history: [{ matchId: 'm', mapId: 'nowhere', character: 'petya' }, { matchId: 'm2', mapId: 'yard', character: 'valuta', kills: 2 }] });
   assert.ok(s);
   assert.equal(s.xp, 0);
   assert.equal(s.kills, 0);
   assert.equal(s.wins, 3);
   assert.deepEqual(Object.keys(s.achievements), ['first_win']);
   assert.equal(s.history.length, 1);
-  let p = createLocalProfile('Sych');
+  let p = createLocalProfile('sych');
   for (let i = 0; i < LOCAL_HISTORY_MAX + 5; i++) p = recordLocalMatch(p, { matchId: `m${i}`, reason: 'time', durationMs: 1000, mapId: 'yard', localId: 'local', standings: [st('local', 1, 1, 0, 0), st('bot0', 2, 0, 0, 1)] })!.profile;
   assert.equal(p.history.length, LOCAL_HISTORY_MAX);
   const v = localProfileView(p, 'petya');
@@ -82,7 +92,7 @@ test('demo profile: storage data is sanitised and the view matches the online sh
 });
 
 test('avatars: picked, kept through matches and storage, unknown ids dropped; every id has a picture and names', () => {
-  let p = setLocalAvatar(createLocalProfile('Sych'), 'militia');
+  let p = setLocalAvatar(createLocalProfile('sych'), 'militia');
   assert.equal(p.avatar, 'militia');
   p = recordLocalMatch(p, { matchId: 'a1', reason: 'time', durationMs: 1000, mapId: 'yard', localId: 'local', standings: [st('local', 1, 1, 0, 0), st('bot0', 2, 0, 0, 1)] })!.profile;
   assert.equal(p.avatar, 'militia', 'a match keeps the avatar');
@@ -90,7 +100,7 @@ test('avatars: picked, kept through matches and storage, unknown ids dropped; ev
   assert.equal(localProfileView(p, 'petya').profile.avatar, 'militia');
   assert.equal(sanitizeLocalProfile({ ...p, avatar: 'nobody' })?.avatar, undefined, 'an unknown id is dropped');
   assert.equal(setLocalAvatar(p, null).avatar, undefined, 'null removes it');
-  assert.equal(localProfileView(createLocalProfile('Sych'), 'petya').profile.avatar, null);
+  assert.equal(localProfileView(createLocalProfile('sych'), 'petya').profile.avatar, null);
   assert.equal(new Set(AVATAR_IDS).size, 24);
   const names = new Set<string>();
   for (const id of AVATAR_IDS) {

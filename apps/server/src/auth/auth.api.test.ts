@@ -21,7 +21,7 @@ test('auth: valid Telegram initData creates a user and a session; repeat login r
   const r1 = await api(app.base, '/api/auth/telegram', { method: 'POST', body: { initData: init, platform: 'telegram_android', clientVersion: '0.1.0' } });
   assert.equal(r1.status, 200, r1.text);
   assert.equal(r1.body.isNew, true);
-  assert.equal(r1.body.profile.displayName, 'Mikhalych', 'a Telegram name in Latin letters (v0.3)');
+  assert.equal(r1.body.profile.displayName, 'mikhalych', 'a Telegram name as an alias: one word, small Latin letters (v0.2.19)');
   assert.equal(r1.body.profile.telegramLinked, true);
   const me = await api(app.base, '/api/me', { token: r1.body.token });
   assert.equal(me.status, 200);
@@ -83,17 +83,19 @@ test('auth: guest login for the public website (production): nickname kept, only
     const r1 = await api(prod.base, '/api/auth/guest', { method: 'POST', body: { name: 'Гость_123', deviceId, platform: 'browser_mobile' } });
     assert.equal(r1.status, 200, r1.text);
     assert.equal(r1.body.isNew, true);
-    assert.equal(r1.body.profile.displayName, 'Gost_123', 'a sign-up name is kept in Latin letters (v0.3)');
+    assert.equal(r1.body.profile.displayName, 'gost_123', 'a sign-up name is kept as an alias in small Latin letters (v0.2.19)');
     // the player picks a nickname, loses the token and signs in again from the same browser
     const cyr = await api(prod.base, '/api/me', { method: 'PATCH', token: r1.body.token, body: { displayName: 'Тихий Завхоз' } });
     assert.equal(cyr.status, 400, 'a chosen alias must be Latin');
-    const ren = await api(prod.base, '/api/me', { method: 'PATCH', token: r1.body.token, body: { displayName: 'Quiet Quartermaster' } });
+    const words = await api(prod.base, '/api/me', { method: 'PATCH', token: r1.body.token, body: { displayName: 'Quiet Quartermaster' } });
+    assert.equal(words.status, 400, 'a chosen alias is one word of small letters (v0.2.19)');
+    const ren = await api(prod.base, '/api/me', { method: 'PATCH', token: r1.body.token, body: { displayName: 'quiet_quartermaster' } });
     assert.equal(ren.status, 200, ren.text);
     const r2 = await api(prod.base, '/api/auth/guest', { method: 'POST', body: { name: 'Гость_999', deviceId } });
     assert.equal(r2.status, 200, r2.text);
     assert.equal(r2.body.isNew, false);
     assert.equal(r2.body.profile.id, r1.body.profile.id);
-    assert.equal(r2.body.profile.displayName, 'Quiet Quartermaster');
+    assert.equal(r2.body.profile.displayName, 'quiet_quartermaster');
     // the raw device secret is never stored
     const [u] = await prod.db.sql<Array<{ dev_device_id: string }>>`SELECT dev_device_id FROM users WHERE id = ${r1.body.profile.id}`;
     assert.ok(u!.dev_device_id.startsWith('g1:'));
@@ -130,9 +132,18 @@ test('auth: dev login keyed by deviceId; profile update validation', async () =>
   const bad = await api(app.base, '/api/me', { method: 'PATCH', token: b.token, body: { displayName: '<script>' } });
   assert.equal(bad.status, 400);
   assert.equal((await api(app.base, '/api/me', { method: 'PATCH', token: b.token, body: { displayName: 'Валюта' } })).status, 400, 'Cyrillic: refused (v0.3)');
-  const ok = await api(app.base, '/api/me', { method: 'PATCH', token: b.token, body: { displayName: 'Valyuta', preferredCharacter: 'valuta' } });
+  // v0.2.19: one word of small Latin letters, digits and _ . -, 3–20 characters (PATCH /api/me allows 10 writes in a row)
+  for (const name of ['Two Words', 'Caps', 'ab', 'x'.repeat(21)]) {
+    assert.equal((await api(app.base, '/api/me', { method: 'PATCH', token: b.token, body: { displayName: name } })).status, 400, `refused: ${name}`);
+  }
+  for (const name of ['ok_name', 'a.b-c']) {
+    const r = await api(app.base, '/api/me', { method: 'PATCH', token: b.token, body: { displayName: name } });
+    assert.equal(r.status, 200, `${name}: ${r.text}`);
+    assert.equal(r.body.displayName, name);
+  }
+  const ok = await api(app.base, '/api/me', { method: 'PATCH', token: b.token, body: { displayName: 'valyuta', preferredCharacter: 'valuta' } });
   assert.equal(ok.status, 200);
-  assert.equal(ok.body.displayName, 'Valyuta');
+  assert.equal(ok.body.displayName, 'valyuta');
   assert.equal(ok.body.preferredCharacter, 'valuta');
   const ach = await api(app.base, '/api/me/achievements', { token: b.token });
   assert.equal(ach.status, 200);
@@ -156,7 +167,7 @@ test('profile avatar: set, kept, shown to the room through the session, removed;
     assert.equal(r.status, 400, `refused: ${JSON.stringify(bad)}`);
   }
   // other fields leave the avatar alone; null removes it
-  assert.equal((await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { displayName: 'Second Hat' } })).body.avatar, 'militia');
+  assert.equal((await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { displayName: 'second_hat' } })).body.avatar, 'militia');
   const off = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { avatar: null } });
   assert.equal(off.status, 200);
   assert.equal(off.body.avatar, null);

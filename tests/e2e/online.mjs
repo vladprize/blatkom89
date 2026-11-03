@@ -70,7 +70,8 @@ process.on('uncaughtException', async (e) => {
 // ── nickname (first launch) ───────────────────────────────────────────────
 // aliases are unique (v0.23): every run brings its own
 const RUN = Math.random().toString(36).slice(2, 5);
-const NICK_A = `Courtyard Commandant ${RUN}`;
+// v0.2.19: aliases are one word of small Latin letters, digits and _ . -
+const NICK_A = `yard_boss_${RUN}`;
 await A.page.goto(base + '/');
 await pressPlay(A.page);
 // a guest in a browser is first offered to register an email; A carries on as a guest
@@ -94,7 +95,7 @@ step(`A created a private room, invite code ${code}`);
 await B.page.goto(`${base}/?invite=${encodeURIComponent(code)}`);
 await pressPlay(B.page);
 // a new player who opens an invite link picks a nickname before entering the room
-const NICK_B = `Night Owl ${RUN}`;
+const NICK_B = `night_owl_${RUN}`;
 const nickInputB = B.page.getByRole('textbox', { name: 'Alias' });
 await nickInputB.waitFor({ timeout: 60000 });
 await nickInputB.fill(NICK_B);

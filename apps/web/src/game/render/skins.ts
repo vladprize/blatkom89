@@ -137,7 +137,7 @@ function tick() {
   const k = liveFrame();
   const now = performance.now();
   for (const e of liveIcons) {
-    if (e.img.dataset.finish !== e.finish) {
+    if (e.img.dataset.paint !== e.finish) {
       liveIcons.delete(e);
       continue;
     }
@@ -167,12 +167,12 @@ export function animateLiveIcon(img: HTMLImageElement, weapon: WeaponId, finish:
   void (async () => {
     const urls: string[] = [];
     for (let k = 0; k < LIVE_FRAMES; k++) {
-      if (img.dataset.finish !== finish) return;
+      if (img.dataset.paint !== finish) return;
       const cached = ready.get(iconKey(weapon, finish, small, k));
       urls.push(cached ?? (await skinIconUrl(weapon, finish, small, k)));
       if (!cached) await yieldToPage();
     }
-    if (img.dataset.finish !== finish) return;
+    if (img.dataset.paint !== finish) return;
     liveIcons.add({ img, finish, urls, shown: -1, seen: img.isConnected, born: performance.now() });
     if (!ticker) ticker = window.setInterval(tick, LIVE_FRAME_MS);
   })().catch(() => {});

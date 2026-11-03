@@ -99,7 +99,7 @@ test('oauth: the redirect to the provider carries the client id, the callback ad
   const f = await finish(s.back);
   assert.equal(f.status, 200, f.text);
   assert.equal(f.body.isNew, true);
-  assert.equal(f.body.profile.displayName, 'Ivan', 'a new account named after the first name, in Latin letters');
+  assert.equal(f.body.profile.displayName, 'ivan', 'a new account named after the first name, as an alias in small Latin letters (v0.2.19)');
   const [idn] = await app.db.sql<Array<{ user_id: string }>>`SELECT user_id FROM user_identities WHERE provider = 'google' AND provider_uid = 'g-1001'`;
   assert.equal(idn!.user_id, f.body.profile.id);
   // the hand-over works once
@@ -183,7 +183,7 @@ test('telegram on the website: signed data signs in, links a guest, finds the Mi
   const fresh = signedTelegram({ id: 5550001, first_name: 'Вася', last_name: 'Пупкин', username: 'vasya', auth_date: now });
   const r = await api(app.base, '/api/auth/telegram/web', { method: 'POST', body: { data: fresh } });
   assert.equal(r.status, 200, r.text);
-  assert.deepEqual([r.body.isNew, r.body.profile.displayName, r.body.profile.telegramLinked], [true, 'Vasya Pupkin', true]);
+  assert.deepEqual([r.body.isNew, r.body.profile.displayName, r.body.profile.telegramLinked], [true, 'vasya_pupkin', true]);
   const again = await api(app.base, '/api/auth/telegram/web', { method: 'POST', body: { data: signedTelegram({ id: 5550001, first_name: 'Вася', auth_date: now }) } });
   assert.equal(again.body.profile.id, r.body.profile.id, 'the same Telegram account, the same profile');
   // the Mini App signs in to the very same account

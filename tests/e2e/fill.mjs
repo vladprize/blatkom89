@@ -94,7 +94,7 @@ try {
   // ── A: a room with friends, started alone ───────────────────────────────
   await A.page.goto(base + '/');
   await pressPlay(A.page);
-  await nickname(A, `Lone Ranger ${RUN}`);
+  await nickname(A, `lone_ranger_${RUN}`);
   await A.page.getByRole('button', { name: /Play with Friends/ }).click({ timeout: 30000 });
   await A.page.getByRole('button', { name: 'Create a room' }).click();
   await A.page.locator('.code').waitFor({ timeout: 20000 });
@@ -110,7 +110,7 @@ try {
   const la = await lineup(A.page);
   check(la.roster.length === 4 && la.inGame.length === 4, `the match runs with 4 players (${la.roster.map((p) => p.name).join(', ')})`);
   check([...la.roster, ...la.inGame].every((p) => p.isBot === false) && !la.roster.some((p) => MARKED.test(p.name)), 'nobody is marked in the roster or the match');
-  check(la.roster.filter((p) => p.host).length === 1 && la.roster.find((p) => p.host)?.name === `Lone Ranger ${RUN}`, 'the person who made the room is its only host');
+  check(la.roster.filter((p) => p.host).length === 1 && la.roster.find((p) => p.host)?.name === `lone_ranger_${RUN}`, 'the person who made the room is its only host');
   await A.page.screenshot({ path: `${outDir}/fill_match_A.png` });
   await A.page.keyboard.down('Tab');
   await A.page.waitForTimeout(400);

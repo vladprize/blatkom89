@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { MAX_NICK_LENGTH, isNick } from '@blatkom/shared';
 import { validateInitData, signInitData, displayNameFromTelegram } from './telegram.js';
+import type { TelegramUser } from './telegram.js';
 
 const BOT = '7000000001:AAH-unit-test-token';
 const NOW = 1_760_000_000;
@@ -61,10 +63,18 @@ test('telegram: stale and future auth_date are rejected', () => {
   assert.equal(validateInitData(fresh, BOT, 86400, NOW).ok, true);
 });
 
-test('telegram: display names are sanitized for the game — in Latin letters (v0.3)', () => {
-  assert.equal(displayNameFromTelegram({ id: 1, firstName: 'Петя 🐓', lastName: 'Комендант', languageCode: null }), 'Petya Komendant');
-  assert.equal(displayNameFromTelegram({ id: 3, firstName: 'José', lastName: 'Müller', languageCode: null }), 'Jose Muller');
-  assert.equal(displayNameFromTelegram({ id: 4, firstName: '王小明', lastName: null, languageCode: null }), 'Comrade 4');
-  assert.equal(displayNameFromTelegram({ id: 12345678, firstName: '🔥', lastName: null, languageCode: null }), 'Comrade 5678');
-  assert.ok(displayNameFromTelegram({ id: 2, firstName: 'А'.repeat(60), lastName: null, languageCode: null }).length <= 24);
+test('telegram: display names are sanitized for the game — one-word aliases in small Latin letters (v0.2.19)', () => {
+  const cases: Array<[TelegramUser, string]> = [
+    [{ id: 1, firstName: 'Петя 🐓', lastName: 'Комендант', languageCode: null }, 'petya_komendant'],
+    [{ id: 3, firstName: 'José', lastName: 'Müller', languageCode: null }, 'jose_muller'],
+    [{ id: 5, firstName: 'Mikhalych', lastName: null, languageCode: null }, 'mikhalych'],
+    [{ id: 4, firstName: '王小明', lastName: null, languageCode: null }, 'comrade_4'],
+    [{ id: 12345678, firstName: '🔥', lastName: null, languageCode: null }, 'comrade_5678'],
+  ];
+  for (const [u, alias] of cases) {
+    assert.equal(displayNameFromTelegram(u), alias);
+    assert.ok(isNick(alias), alias);
+  }
+  const long = displayNameFromTelegram({ id: 2, firstName: 'А'.repeat(60), lastName: null, languageCode: null });
+  assert.ok(long.length <= MAX_NICK_LENGTH && isNick(long), long);
 });

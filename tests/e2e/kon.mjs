@@ -112,11 +112,11 @@ try {
   await openKon(A.page);
   await A.page.getByTestId('kon-history').waitFor({ timeout: 15000 });
   const hist = (await A.page.locator('.konhist__row').first().innerText()).replace(/\s+/g, ' ');
-  check(/1×1/.test(hist) && /win/.test(hist) && /\+20/.test(hist) && hist.includes(`Konchik ${RUN}`), `A’s history: «${hist}»`);
+  check(/1×1/.test(hist) && /win/.test(hist) && /\+20/.test(hist) && hist.includes(`konchik_${RUN}`), `A’s history: «${hist}»`);
   check((await text(A.page, 'kon-wins')) === '1', 'A: one win');
   await A.page.getByTestId('kon-top').waitFor({ timeout: 15000 });
   const first = (await A.page.locator('.kontop__row').first().innerText()).replace(/\s+/g, ' ');
-  check(first.includes(`Konnik ${RUN}`) || (await A.page.locator('.kontop__row[data-me=true]').count()) === 1, `the Kon table has A («${first}»)`);
+  check(first.includes(`konnik_${RUN}`) || (await A.page.locator('.kontop__row[data-me=true]').count()) === 1, `the Kon table has A («${first}»)`);
   await A.page.screenshot({ path: `${outDir}/kon_after_A.png`, fullPage: true });
 
   // the search: A and C look for 1×1 opponents and meet in one public room that starts by itself

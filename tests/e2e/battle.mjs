@@ -189,7 +189,7 @@ try {
   await A.page.waitForFunction(() => document.querySelectorAll('.teamcol .player:not(.player--free)').length === 4, null, { timeout: 20000 });
   const sides = await A.page.evaluate(() => [...document.querySelectorAll('.teamcol')].map((col) => ({ head: col.querySelector('.teamcol__head b')?.textContent ?? '', names: [...col.querySelectorAll('.player:not(.player--free) .player__name')].map((n) => n.textContent) })));
   check(
-    sides.length === 2 && sides[0].head.includes(`[${tagX}]`) && sides[1].head.includes(`[${tagY}]`) && sides[0].names.every((n) => /Warlord|Brother/.test(n)) && sides[1].names.every((n) => /Chief|Deputy/.test(n)),
+    sides.length === 2 && sides[0].head.includes(`[${tagX}]`) && sides[1].head.includes(`[${tagY}]`) && sides[0].names.every((n) => /warlord|brother/i.test(n)) && sides[1].names.every((n) => /chief|deputy/i.test(n)),
     `the sides are the gangs: ${sides.map((s) => `${s.head}: ${s.names.join(', ')}`).join(' | ')}`,
   );
   check((await A.page.locator('.teamcol__join').count()) === 0, 'nobody is offered the other side');
@@ -244,7 +244,8 @@ try {
   await api(D.token, 'POST', '/api/friends/request', { name: `Warlord ${RUN}` });
   await api(A.token, 'POST', `/api/friends/${D.id}/accept`);
   await D.page.getByTestId('menu-friends').click();
-  const row = D.page.locator(`[data-testid=friends-list] [data-friend="Warlord ${RUN}"]`);
+  // v0.2.19: aliases are one word of small letters («Warlord xyz» typed is «warlord_xyz»)
+  const row = D.page.locator(`[data-testid=friends-list] [data-friend="warlord_${RUN}"]`);
   await row.getByTestId('friend-battle').click({ timeout: 30000 });
   await D.page.getByTestId('friend-battle-sheet').waitFor({ timeout: 10000 });
   const offer = await D.page.locator('[data-testid=friend-battle-sheet] .modebtn').count();

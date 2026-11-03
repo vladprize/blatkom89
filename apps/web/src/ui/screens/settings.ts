@@ -2,7 +2,7 @@ import { h, toast } from '../dom.js';
 import { getSettings, updateSettings } from '../../app/settings.js';
 import type { Settings } from '../../app/settings.js';
 import type { OnlineClient } from '../../net/OnlineClient.js';
-import { displayNameSchema } from '@blatkom/shared';
+import { displayNameSchema, nickInput, MAX_NICK_LENGTH } from '@blatkom/shared';
 import { sfx } from '../../game/audio/Sfx.js';
 import { music } from '../../game/audio/Music.js';
 import { confirmAsync } from '../../telegram/tg.js';
@@ -114,7 +114,12 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
   const items: HTMLElement[] = [language, graphics, sound, controls];
   if (chat) items.push(chat);
   if (opts.online && !opts.inGame) {
-    const input = h('input', { class: 'input', value: opts.online.profile?.displayName ?? '', maxlength: '24', 'aria-label': t('In-game name') }) as HTMLInputElement;
+    const input = h('input', { class: 'input', value: opts.online.profile?.displayName ?? '', maxlength: String(MAX_NICK_LENGTH), autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', 'aria-label': t('In-game name') }) as HTMLInputElement;
+    // v0.2.19: one word of small letters (typed letters become small, a space «_»)
+    input.addEventListener('input', () => {
+      const fixed = nickInput(input.value);
+      if (fixed !== input.value) input.value = fixed;
+    });
     items.push(
       h(
         'div',
@@ -128,7 +133,7 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
             class: 'btn btn--small',
             onclick: async () => {
               const parsed = displayNameSchema.safeParse(input.value);
-              if (!parsed.success) return toast(t('A name may contain Latin letters (A–Z), digits, spaces and _ . -'));
+              if (!parsed.success) return toast(t('An alias is one word: small Latin letters (a–z), digits and _ . -'));
               try {
                 await opts.online!.rename(parsed.data);
                 toast(t('Name saved'));

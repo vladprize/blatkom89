@@ -108,9 +108,9 @@ try {
   const cards = await page.locator('[data-testid=skin-pick] .skincard').evaluateAll((els) => ({ n: els.length, pics: els.filter((e) => e.querySelector('.skincard__pic img')).length, live: els.filter((e) => e.querySelector('.skincard__live')).map((e) => e.getAttribute('data-finish')).sort() }));
   check(cards.n === 42 && cards.pics === 42 && JSON.stringify(cards.live) === JSON.stringify(['almaz', 'bratok', 'krovavy', 'obsidian']), `every skin is a card with its picture, the standard paint first; the live four are marked (${JSON.stringify(cards)})`);
   // a live skin's picture moves: its card's picture changes frames
-  const liveSrc = () => page.locator('[data-testid=skin-pick] .skincard[data-finish=almaz] img').getAttribute('src');
+  const liveSrc = () => page.locator('[data-testid=skin-pick] .skincard[data-finish=almaz] .skincard__pic img').getAttribute('src');
   await page.locator('[data-testid=skin-pick] .skincard[data-finish=almaz]').scrollIntoViewIfNeeded();
-  await page.waitForFunction(() => document.querySelector('[data-testid=skin-pick] .skincard[data-finish=almaz] img')?.getAttribute('src')?.startsWith('data:'), null, { timeout: 10000 }).catch(() => {});
+  await page.waitForFunction(() => document.querySelector('[data-testid=skin-pick] .skincard[data-finish=almaz] .skincard__pic img')?.getAttribute('src')?.startsWith('data:'), null, { timeout: 10000 }).catch(() => {});
   const seen = new Set();
   for (let i = 0; i < 8; i++) {
     seen.add(await liveSrc());

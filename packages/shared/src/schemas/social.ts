@@ -10,7 +10,7 @@ import type { Grade } from '../game-rules/grades.js';
 import type { GameMode } from '../game-rules/match.js';
 import type { MapId } from '../maps/types.js';
 import type { ClubSummary } from '../game-rules/clubs.js';
-import { displayNameSchema } from './api.js';
+import { aliasLookupSchema } from './api.js';
 import type { GangBattle } from '../game-rules/gangBattle.js';
 import type { KonFormat } from '../game-rules/kon.js';
 
@@ -59,7 +59,7 @@ export interface FriendsResponse {
 }
 
 /** POST /api/friends/request — by alias (aliases are unique, case does not matter). */
-export const FriendRequestBody = z.object({ name: displayNameSchema }).strict();
+export const FriendRequestBody = z.object({ name: aliasLookupSchema }).strict();
 export type FriendRequestResult = 'sent' | 'accepted';
 
 export const MAX_FRIENDS = 200;

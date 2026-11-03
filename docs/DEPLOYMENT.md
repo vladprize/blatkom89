@@ -74,7 +74,7 @@ Copy `.env.example` to `.env` and set at least:
 | `RESEND_API_KEY` + `MAIL_FROM` | optional: password-reset letters (Resend; the sender domain must be verified there). Without them admins issue one-time reset links in `/admin` |
 | `CASES_ENABLED` | `true` (default) / `false` — every case: the rare-weapon case (talons), the skin case and the character case (BLATS, 18+); off for markets where paid random items are restricted |
 | `WELCOME_GIFT_UNTIL` | v0.2.18 part 2 — optional ISO date (e.g. `2027-01-31T23:59:59Z`): players who sign in before it get the welcome gift («Shark», «Blatkom ’89» on every weapon) and keep it; **unset: the gift has no end yet** (the owner sets the date) |
-| `SOCIAL_X_URL`, `SOCIAL_TELEGRAM_URL` | optional (v0.2.17): where the menu's X and Telegram buttons lead; without them the buttons say «coming soon» |
+| `SOCIAL_X_URL`, `SOCIAL_TELEGRAM_URL`, `SOCIAL_INSTAGRAM_URL` | optional (v0.2.17; Instagram v0.2.19): where the menu's X, Telegram and Instagram buttons lead; without them the buttons say «coming soon» |
 | `MATCH_FILL_BOTS` | complete small lineups with players the server runs itself (default `true`: 4 in free-for-all, 3 a side in team modes; Quick Match after a 5 s head start, rooms with friends at kick-off; see docs/NETCODE.md §2a) |
 | `GUEST_SIGNUPS_PER_IP_HOUR` | new guest accounts per address per hour (default 10; raise it for events where many new players share one Wi-Fi) |
 | `LOG_LEVEL`, `MAX_ROOMS`, `SESSION_TTL_HOURS`, `TELEGRAM_AUTH_MAX_AGE_SEC` | optional |

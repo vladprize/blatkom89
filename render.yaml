@@ -63,6 +63,13 @@ services:
         sync: false
       - key: COPYRIGHT_HOLDER
         sync: false
+      # The menu's social buttons (v0.2.17; Instagram v0.2.19): without an address a button says «coming soon».
+      - key: SOCIAL_X_URL
+        sync: false
+      - key: SOCIAL_TELEGRAM_URL
+        sync: false
+      - key: SOCIAL_INSTAGRAM_URL
+        sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: MAIL_FROM

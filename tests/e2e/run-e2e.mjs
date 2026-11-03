@@ -56,6 +56,12 @@
 //      tests/e2e/fake-botapi.mjs): the banner and the packs in Stars, a cancelled invoice, a paid one credited
 //      once after the bot's «yes» to Telegram's pre-checkout question; /paysupport, /terms; the website
 //      without Stars; the terms pages (tests/e2e/v0218c.mjs). The two new maps play in tests/e2e/maps.mjs.
+//  v0.2.19: the owner's pre-final edits — Instagram in the corner, full screen labelled on a computer, the
+//      owner's BLAT banner and Arsenal tile in the page's language, the District Tournament's name aligned,
+//      the smallest phone's menu one screen; aliases one word of small Latin letters (typed and on the
+//      server); the Arsenal's «Cases» button and the bright «Skins», the skins' cards; no tutorial card; the
+//      touch sticks mirrored and clear of their buttons; the prologue covering a phone, its characters in
+//      colour (tests/e2e/v0219.mjs). The skins' cards, the 41 finishes and a live skin's frames: tests/e2e/skins.mjs.
 //  21. v0.2.17 part 3: a gang calls another out from its page — the battle room of the two gangs, the
 //      call's card live to both gangs' people, sides by gang, nobody else let in (a stranger's link is
 //      turned away), the battle played and counted for both gangs; a friend's «To battle» → a duel room
@@ -228,6 +234,9 @@ try {
   console.log('\n[e2e] v0.2.18 part 2: the welcome gift, 36 characters, the character case, a friend\'s collection, grades in the lobby, the twelve in practice');
   const v0218b = spawnSync(process.execPath, ['tests/e2e/v0218b.mjs', base, join(out, 'v0218b')], { stdio: 'inherit' });
   if (v0218b.status !== 0) failed = true;
+  console.log('\n[e2e] v0.2.19: the owner\'s pre-final edits — the menu\'s corner and art, one-word aliases, the Arsenal\'s cases and skins, no tutorial, the touch sticks, the prologue on a phone');
+  const v0219 = spawnSync(process.execPath, ['tests/e2e/v0219.mjs', base, join(out, 'v0219')], { stdio: 'inherit' });
+  if (v0219.status !== 0) failed = true;
   console.log('\n[e2e] v0.2.17 part 3: gang against gang, a friend called to a duel (two browsers, two socket players)');
   const battle = spawnSync(process.execPath, ['tests/e2e/battle.mjs', base, join(out, 'battle')], { stdio: 'inherit' });
   if (battle.status !== 0) failed = true;

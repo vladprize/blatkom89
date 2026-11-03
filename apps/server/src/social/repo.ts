@@ -4,7 +4,7 @@
  * parameterised; aliases are matched by their key (letter case, spacing and look-alike letters ignored; unique,
  * migration 010).
  */
-import { LEADERBOARD_SIZE, MAX_FRIENDS, MAX_PENDING_REQUESTS, isAvatarId, isCharacterId, nameKey } from '@blatkom/shared';
+import { LEADERBOARD_SIZE, MAX_FRIENDS, MAX_PENDING_REQUESTS, isAvatarId, isCharacterId, nameKey, toNick } from '@blatkom/shared';
 import type { DirectMessage, FriendEntry, FriendRequestEntry, LeaderboardBy, LeaderboardEntry, PlayerCard } from '@blatkom/shared';
 import type { Sql } from '../database/db.js';
 
@@ -88,13 +88,16 @@ export class SocialRepo {
     };
   }
 
-  /** A friend request by alias; a request the other player already sent me is accepted instead. */
+  /**
+   * A friend request by alias (typed any way: «Seasoned Badger» finds «seasoned_badger», v0.2.19); a request
+   * the other player already sent me is accepted instead.
+   */
   async request(userId: string, name: string): Promise<{ outcome: RequestOutcome; other: PlayerCard | null }> {
     return this.sql.begin(async (tx) => {
       const target = await tx<CardRow[]>`
         SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder
         FROM users u LEFT JOIN profiles p ON p.user_id = u.id
-        WHERE u.name_key = ${nameKey(name)} AND u.deleted_at IS NULL AND u.merged_at IS NULL`;
+        WHERE u.name_key IN (${nameKey(name)}, ${nameKey(toNick(name))}) AND u.deleted_at IS NULL AND u.merged_at IS NULL`;
       const t = target[0];
       if (!t) return { outcome: 'not_found' as const, other: null };
       const other = toCard(t);

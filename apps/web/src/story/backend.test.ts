@@ -7,7 +7,7 @@ import { loadLocalDone, localBackend } from './backend.js';
 
 const setup = (withProfile = true) => {
   const mem = new Map<string, string>();
-  let profile: LocalProfile | null = withProfile ? createLocalProfile('Pilot') : null;
+  let profile: LocalProfile | null = withProfile ? createLocalProfile('pilot') : null;
   const b = localBackend({ profile: () => profile, saveProfile: (p) => (profile = p), storage: { get: (k) => mem.get(k) ?? null, set: (k, v) => mem.set(k, v) }, now: () => new Date('2026-10-23T12:00:00Z') });
   return { b, mem, profile: () => profile };
 };

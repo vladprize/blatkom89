@@ -8,7 +8,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { WebSocket } from 'ws';
-import { CLUB_RULES, PROTOCOL_VERSION, clubMottoSchema, clubNameSchema, clubTagSchema, nameKey } from '@blatkom/shared';
+import { CLUB_RULES, PROTOCOL_VERSION, clubMottoSchema, clubNameSchema, clubTagSchema, isNick, nameKey } from '@blatkom/shared';
 import type { ClubDetails, ClubsResponse, ServerMessage, SocialEvent } from '@blatkom/shared';
 import { startTestApp, api, devLogin, cookieFrom } from '../admin/testkit.js';
 import { ADMIN_COOKIE } from '../admin/auth.js';
@@ -334,7 +334,7 @@ test('clubs: house clubs — the same people for the same seed, a newcomer now a
   const b = housePeople(seed, 'ru', 12, created, now);
   assert.deepEqual(a, b);
   assert.equal(new Set(a.map((m) => m.name.toLowerCase())).size, 12, 'no two alike');
-  for (const m of a) assert.match(m.name, /^[A-Za-z0-9 _.\-’']+$/, 'house people have Latin aliases like everybody (v0.3)');
+  for (const m of a) assert.ok(isNick(m.name), `house people have aliases like everybody — one word, small Latin letters (v0.2.19): ${m.name}`);
   assert.equal(a[0]!.role, 'head');
   const later = housePeople(seed, 'ru', 12, created, new Date(now.getTime() + 14 * 86_400_000));
   assert.deepEqual(later.map((m) => m.name), a.map((m) => m.name), 'the same people two weeks later…');
@@ -392,7 +392,7 @@ test('clubs: the admin sees every club (the game’s own marked) and removes a p
   assert.ok(rows.filter((r) => r.house).length >= 20);
   const mine = rows.find((r) => r.id === club.id)!;
   assert.deepEqual([mine.house, mine.realMembers], [false, 2]);
-  assert.match(mine.headName ?? '', /Khuligan/, 'the head’s alias in Latin letters');
+  assert.match(mine.headName ?? '', /^khuligan_/, 'the head’s alias: one word in small Latin letters (v0.2.19)');
   assert.equal((await api(app.base, `/api/admin/clubs/${club.id}`, { method: 'DELETE', cookie })).status, 403, 'no CSRF token');
   const bs = new Social(b.token);
   try {
@@ -446,7 +446,7 @@ test('gang battles (v0.2.17): a gang calls another out — refusals, the room of
     assert.match(ok.body.inviteCode, /^[A-Za-z0-9]{6,16}$/);
     for (const e of ears.slice(0, 3)) {
       const ev = await e.next('invite');
-      assert.deepEqual([ev.invite.roomId, ev.invite.battle?.format, ev.invite.battle?.red.id, ev.invite.battle?.blue.id, ev.invite.from.name.startsWith('Redhead')], [ok.body.roomId, '2x2', red.id, blue.id, true]);
+      assert.deepEqual([ev.invite.roomId, ev.invite.battle?.format, ev.invite.battle?.red.id, ev.invite.battle?.blue.id, ev.invite.from.name.startsWith('redhead')], [ok.body.roomId, '2x2', red.id, blue.id, true]);
     }
     await new Promise((r) => setTimeout(r, 200));
     assert.equal(ears[3]!.events.filter((e) => e.type === 'invite').length, 0, 'nobody outside the two gangs is called');

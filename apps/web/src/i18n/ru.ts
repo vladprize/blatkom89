@@ -374,8 +374,6 @@ export const RU: Record<string, string> = {
   'At least {n} players needed': 'Нужно игроков — минимум {n}',
   'Server error ({n})': 'Ошибка сервера ({n})',
   'That didn’t work': 'Не вышло',
-  'At least 2 characters.': 'Минимум 2 символа.',
-  'At most 24 characters.': 'Не длиннее 24 символов.',
   'Couldn’t save it': 'Не удалось сохранить',
   'Personal file': 'Личное дело',
   'Rivals see your alias — above your character, on the scoreboard and in the results. You can change it in the profile.': 'Кличку видят соперники — над персонажем, в таблице и в итогах. Поменять её можно в профиле.',
@@ -1071,6 +1069,10 @@ export const RU: Record<string, string> = {
   'All skins': 'Все скины',
   'Live': 'Живой',
   'A live skin: it shimmers in the game': 'Живой скин: переливается в игре',
+  'An alias is one word: small Latin letters (a–z), digits and _ . -': 'Кличка — одно слово: маленькие латинские буквы (a–z), цифры и _ . -',
+  'One word: a–z, 0–9 and _ . - · {min}–{max} characters': 'Одно слово: a–z, 0–9 и _ . - · от {min} до {max} символов',
+  'At least {n} characters.': 'Не короче {n} символов.',
+  'At most {n} characters.': 'Не длиннее {n} символов.',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)

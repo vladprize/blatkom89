@@ -3,7 +3,7 @@
  * transaction and under the same advisory lock, and is recorded with it (forward-only, exactly once).
  */
 import type postgres from 'postgres';
-import { LATIN_NAME_RE, MAX_NAME_LENGTH, RATING_RULES, latinName, nameKey, numberedAlias, ratingDelta, toLatin, transliterate } from '@blatkom/shared';
+import { LATIN_NAME_RE, MAX_NAME_LENGTH, RATING_RULES, isNick, latinName, nameKey, nickName, numberedAlias, numberedNick, ratingDelta, toLatin, transliterate } from '@blatkom/shared';
 
 export type MigrationTx = postgres.TransactionSql<Record<string, unknown>>;
 
@@ -139,10 +139,47 @@ async function latinNames(tx: MigrationTx): Promise<void> {
   }
 }
 
+/**
+ * 026 (v0.2.19): aliases in one word (`isNick`). Every living account whose alias doesn't fit gets it
+ * rewritten (`nickName`: «Seasoned Badger» → «seasoned_badger», «Petya 2» → «petya_2», a name with nothing
+ * left → «comrade_1234»); the aliases that already fit stay, and when a rewritten one is taken, the first
+ * free number («petya_3», the oldest account keeps the plain one). The alias it had is kept in
+ * old_display_name. Two passes, so no two accounts hold the same key in between: the accounts that change
+ * get a temporary key first.
+ */
+async function oneWordNicks(tx: MigrationTx): Promise<void> {
+  type U = { id: string; display_name: string };
+  const users = await tx<U[]>`SELECT id, display_name FROM users WHERE deleted_at IS NULL ORDER BY created_at, id`;
+  const taken = new Set(users.filter((u) => isNick(u.display_name)).map((u) => nameKey(u.display_name)));
+  const ids: string[] = [];
+  const names: string[] = [];
+  for (const u of users) {
+    if (isNick(u.display_name)) continue;
+    const base = nickName(u.display_name, `comrade_${u.id.replace(/\D/g, '').slice(-4).padStart(4, '0')}`);
+    let name = base;
+    for (let n = 2; taken.has(nameKey(name)); n++) name = numberedNick(base, n);
+    taken.add(nameKey(name));
+    ids.push(u.id);
+    names.push(name);
+  }
+  for (let i = 0; i < ids.length; i += 500) {
+    await tx`UPDATE users SET name_key = '~026~' || id::text WHERE id = ANY(${tx.array(ids.slice(i, i + 500))}::uuid[])`;
+  }
+  for (let i = 0; i < ids.length; i += 500) {
+    const part = ids.slice(i, i + 500);
+    const nm = names.slice(i, i + 500);
+    await tx`
+      UPDATE users u SET old_display_name = COALESCE(u.old_display_name, u.display_name), display_name = v.name, name_key = v.key
+      FROM unnest(${tx.array(part)}::uuid[], ${tx.array(nm)}::text[], ${tx.array(nm.map(nameKey))}::text[]) AS v(id, name, key)
+      WHERE u.id = v.id`;
+  }
+}
+
 export const CODE_STEPS: Readonly<Record<string, (tx: MigrationTx) => Promise<void>>> = Object.freeze({
   '010_social.sql': async (tx: MigrationTx) => {
     await uniqueAliases(tx);
     await replayRatings(tx);
   },
   '014_latin_names.sql': latinNames,
+  '026_nicknames.sql': oneWordNicks,
 });

@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { WebSocket } from 'ws';
-import { FILL_RULES, TICK_MS, displayNameSchema } from '@blatkom/shared';
+import { FILL_RULES, TICK_MS, displayNameSchema, isNick } from '@blatkom/shared';
 import type { GameMode, MatchConfig, RosterEntry, ServerMessage } from '@blatkom/shared';
 import { MatchRoom } from './MatchRoom.js';
 import type { RoomOptions } from './MatchRoom.js';
@@ -97,7 +97,8 @@ function setup(o: Partial<RoomOptions> & { mode?: GameMode } = {}) {
 function assertLooksLikePeople(players: RosterEntry[]) {
   for (const p of players) {
     assert.equal(p.isBot, false, `${p.name} is not marked`);
-    assert.ok(displayNameSchema.safeParse(p.name).success, `valid alias ${p.name}`);
+    assert.ok(isNick(p.name), `valid alias — one word, small Latin letters (v0.2.19): ${p.name}`);
+    assert.ok(displayNameSchema.safeParse(p.name).success, `an alias the server would take: ${p.name}`);
     assert.ok(!/bot|бот/i.test(p.name), p.name);
     assert.equal(p.connected, true);
     assert.ok(p.level >= 1);
@@ -108,7 +109,7 @@ function assertLooksLikePeople(players: RosterEntry[]) {
 
 test('fill: in a room with friends the host starts alone; the lineup fills up to 4 at kick-off and nobody is marked', () => {
   const t = setup();
-  const a = person('Khozyain', 7);
+  const a = person('khozyain', 7);
   const { ws } = t.join(a);
   assert.equal(ws.roster().minToStart, 1, 'the host may start alone');
   // a room with friends doesn't fill up while people gather
@@ -155,8 +156,8 @@ test('fill: in a room with friends the host starts alone; the lineup fills up to
 test('fill: team modes get 3 a side; friends may share a side and the room evens it out', () => {
   for (const mode of ['teams', 'ctf', 'bases'] as const) {
     const t = setup({ mode });
-    const a = person('Petya');
-    const b = person('Valyuta');
+    const a = person('petya');
+    const b = person('valyuta');
     t.join(a);
     const { ws } = t.join(b);
     const teamA = ws.roster().players.find((p) => p.id === a.userId)!.team;
@@ -176,7 +177,7 @@ test('fill: team modes get 3 a side; friends may share a side and the room evens
 
 test('fill: Quick Match gives people a head start, then players arrive one by one and the match starts by itself', () => {
   const t = setup({ isPrivate: false, config: { reconnectGraceMs: 10_000 } });
-  const a = person('Shurik');
+  const a = person('shurik');
   const t0 = t.now;
   const { ws } = t.join(a);
   t.run(FILL_RULES.waitMs - 200);
@@ -200,7 +201,7 @@ test('fill: Quick Match gives people a head start, then players arrive one by on
   assert.ok(t.run(3000, () => t.room.phase === 'active'));
 
   // a person joining in progress takes a filled place
-  const b = person('Kolyan');
+  const b = person('kolyan');
   const before = new Set(ws.roster().players.map((p) => p.id));
   assert.equal(t.join(b).res, 'ok');
   assert.equal(t.room.world.players.size, 5);
@@ -219,12 +220,12 @@ test('fill: Quick Match gives people a head start, then players arrive one by on
 
 test('fill: a person always gets a place — in a full room a filled player gives up theirs at once', () => {
   const t = setup({ config: { maxPlayers: 4 } });
-  const a = person('Petya');
+  const a = person('petya');
   t.join(a);
   t.send(a, { type: 'start' });
   assert.ok(t.run(2000, () => t.room.phase === 'active'));
   assert.equal(t.room.world.players.size, 4);
-  const b = person('Mikhalych');
+  const b = person('mikhalych');
   const { res, ws } = t.join(b);
   assert.equal(res, 'ok');
   assert.equal(t.room.world.players.size, 4);
@@ -234,7 +235,7 @@ test('fill: a person always gets a place — in a full room a filled player give
 
 test('fill: the filled players stay for a rematch and vote like people; they leave with the last person', () => {
   const t = setup({ config: { emptyRoomTtlMs: 10_000 } });
-  const a = person('Valyuta');
+  const a = person('valyuta');
   const { ws } = t.join(a);
   t.send(a, { type: 'start' });
   assert.ok(t.run(2000, () => t.room.phase === 'active'));
@@ -264,7 +265,7 @@ test('fill: the filled players stay for a rematch and vote like people; they lea
 
 test('fill: off unless enabled — nothing is added and two people are needed', () => {
   const t = setup({ fillBots: false });
-  const a = person('Odin');
+  const a = person('odin');
   const { ws } = t.join(a);
   assert.equal(ws.roster().minToStart, 2);
   t.send(a, { type: 'start' });

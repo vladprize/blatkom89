@@ -110,3 +110,58 @@ export function latinName(raw: string, fallback: string): string {
   const s = toLatin(raw);
   return s.length >= 2 && /[A-Za-z0-9]/.test(s) ? s : fallback;
 }
+
+// ── Nicknames (v0.2.19) ─────────────────────────────────────────────────────────────────────────────
+/**
+ * The owner (3 Nov 2026): «никнеймы меняем на маленькие буквы и цифры + спец символы, английский, слитно» —
+ * an alias is one word of small Latin letters, digits and «_ . -» (no spaces, no capitals), 3–20 characters,
+ * with at least one letter or digit. Club names keep LATIN_NAME_RE. Every alias of v0.2.18 was rewritten
+ * so once (migration 026, the old one kept in users.old_display_name).
+ */
+export const MIN_NICK_LENGTH = 3;
+export const MAX_NICK_LENGTH = 20;
+export const NICK_RE = /^[a-z0-9_.-]+$/;
+/** What the server says about an alias it can't take (the client shows the same words). */
+export const NICK_RULE = 'An alias is one word: small Latin letters (a–z), digits and _ . -';
+
+export function isNick(s: string): boolean {
+  return s.length >= MIN_NICK_LENGTH && s.length <= MAX_NICK_LENGTH && NICK_RE.test(s) && /[a-z0-9]/.test(s);
+}
+
+/**
+ * An alias as it is being typed: Cyrillic spelled in Latin letters, small letters, a space (or an
+ * apostrophe) becomes «_», anything else not allowed goes; nothing is trimmed (the player is still typing).
+ */
+export function nickInput(raw: string): string {
+  return transliterate(raw)
+    .toLowerCase()
+    .replace(/[\s’']+/g, '_')
+    .replace(/[^a-z0-9_.-]/g, '')
+    .slice(0, MAX_NICK_LENGTH);
+}
+
+/** Any name as an alias: as typed (above), runs of «_ . -» made one, none at either end, at most 20 characters. */
+export function toNick(raw: string): string {
+  return transliterate(raw)
+    .replace(/[^\p{L}\p{N}\s’'_.-]+/gu, ' ')
+    .toLowerCase()
+    .trim()
+    .replace(/[\s’']+/g, '_')
+    .replace(/[^a-z0-9_.-]/g, '')
+    .replace(/([_.-])[_.-]+/g, '$1')
+    .replace(/^[_.-]+/, '')
+    .slice(0, MAX_NICK_LENGTH)
+    .replace(/[_.-]+$/, '');
+}
+
+/** `toNick`, or the fallback when too little is left (a name in another script, a single letter). */
+export function nickName(raw: string, fallback: string): string {
+  const s = toNick(raw);
+  return isNick(s) ? s : fallback;
+}
+
+/** «name_2», «name_3», … within the length limit. */
+export function numberedNick(base: string, n: number): string {
+  const tail = `_${n}`;
+  return base.slice(0, MAX_NICK_LENGTH - tail.length).replace(/[_.-]+$/, '') + tail;
+}

@@ -1,5 +1,5 @@
 /** Player authentication: Telegram Mini App initData (and attaching Telegram to an existing account), guest login (public website), dev-only login, email, logout. */
-import { latinName, DevAuthRequest, EmailLinkRequest, EmailLoginRequest, GuestAuthRequest, PasswordChangeRequest, PasswordResetConfirm, PasswordResetRequest, TelegramAuthRequest, VisitRequest } from '@blatkom/shared';
+import { nickName, DevAuthRequest, EmailLinkRequest, EmailLoginRequest, GuestAuthRequest, PasswordChangeRequest, PasswordResetConfirm, PasswordResetRequest, TelegramAuthRequest, VisitRequest } from '@blatkom/shared';
 import type { AuthResponse, FirstTouch, TelegramLinkCodeResponse } from '@blatkom/shared';
 import { createHmac, randomBytes } from 'node:crypto';
 import type { RouteModule } from '../app.js';
@@ -140,7 +140,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
       throw new HttpError(429, 'rate_limited', 'Too many new players in a row — try again in a few minutes', { 'retry-after': '60' });
     }
     const platform = body.platform ?? null;
-    const up = await pg.users.upsertGuest(deviceKey, latinName(body.name, `Comrade_${deviceKey.slice(3, 7).replace(/[^A-Za-z0-9]/g, 'X').toUpperCase()}`), platform);
+    const up = await pg.users.upsertGuest(deviceKey, nickName(body.name, `comrade_${deviceKey.slice(3, 7).replace(/[^A-Za-z0-9]/g, 'x').toLowerCase()}`), platform);
     // the visitor funnel: link the anonymous visit to the account it became
     if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform, body.source);
     const referred = await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
@@ -162,7 +162,7 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     const pg = pgContext(deps.sql, env, deps.log);
     const deviceId = body.deviceId ?? randomBytes(12).toString('base64url');
     const platform = body.platform ?? null;
-    const up = await pg.users.upsertDev(deviceId, latinName(body.name, `Comrade_${deviceId.slice(-4).replace(/[^A-Za-z0-9]/g, 'X').toUpperCase()}`), platform);
+    const up = await pg.users.upsertDev(deviceId, nickName(body.name, `comrade_${deviceId.slice(-4).replace(/[^A-Za-z0-9]/g, 'x').toLowerCase()}`), platform);
     const referred = await attachReferral(deps.sql, deps.log, up.userId, up.isNew, body.ref);
     await attachSource(deps.sql, deps.log, up.userId, up.isNew, body.source, { referral: referred, telegram: false });
     const s = await pg.sessions.issue(up.userId, 'dev', platform, body.clientVersion ?? null);

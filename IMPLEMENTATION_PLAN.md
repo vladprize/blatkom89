@@ -281,8 +281,44 @@ registry (real gun names included), the full test run and docs.
 | The full test run and the docs | unit and integration 332 / 332; the full browser run on the release bundle — every stage passes (the gang battle's last step needed a test fix: a timing assumption, not a regression); the docs updated (PAYMENTS, ASSETS, ECONOMY, TELEGRAM, DEPLOYMENT, ART_DIRECTION, ARCHITECTURE, NETCODE, PRIVACY, ADMIN, ANALYTICS, README, TESTING) — [docs/TESTING.md](docs/TESTING.md) §3 | ✅ (⛔ real payments and the live site: the owner's steps) |
 
 
+## 2k. v0.2.19 (2026-11-03) — «Предфинальные правки» (the owner's pre-final edits)
+
+The owner's list of 20 (phones first, the same on a computer where it applies), the AK sheet of new skins
+(`references/83-skins-ak-sheet.png`: «10 % of our skins with a unique light shimmering animation each»),
+a follow-up («Новый класс Абсурд не надо добавлять, распредели их по эпик и легендари») and a question
+about the admin panel. My defaults, announced back: aliases `a–z 0–9 _ . -`, 3–20 characters, one word;
+«Ghetto Graffiti» named «Street Graffiti»; the grades of the 19; the four live ones.
+
+| # | Request (owner) | Implementation | Status |
+|---|---|---|---|
+| 1 | The game should open at once, not wait for Render | an answer, no code: Render's free plan sleeps after 15 min without visitors — `KEEP_AWAKE=true` (the server pings itself) or the Starter plan keeps it awake | ✅ answered |
+| 2 | Instagram left of X | the menu's corner: Instagram, X, Telegram (`SOCIAL_INSTAGRAM_URL`; without it «Our Instagram — coming soon») | ✅ e2e `v0219` |
+| 3 | Full-screen story picture on a phone | the comic's scenes cover the screen around their focus (the portrait-only override and the side pan that could slide a scene away removed) | ✅ e2e `v0219` (390×844) |
+| 4 | The music's volume changes by itself on entering | on browsers that ignore an audio element's volume (iOS) the music no longer starts there before the first tap; it starts on WebAudio with the tap, at the set volume | 🟡 the code path; ⛔ no real iPhone here |
+| 5 | A more colourful skins menu with bigger pictures | every skin a card in its grade's colours — the weapon painted big on a glow, a slanted grade ribbon, the name, «✓ Worn / Owned» or the price; a strip in the dressing room, a grid of 4 (computer) / 2 (phone) in the skins' sheet, «Buy» stays in sight; live skins marked «Live» | ✅ e2e `skins`, `v0219` |
+| 6 | No tutorial at the start of a match | the first-match controls card removed | ✅ e2e `v0219` |
+| 7 | The joysticks too close to the other buttons | the sticks mirrored in the bottom corners, each with its buttons on an arc ≥ 24 units clear of its ring (fire, reload, pick up by the aiming thumb; equipment, switch by the moving one); upright, the buttons stand above the sticks | ✅ e2e `v0219`, `telegram` |
+| 8 | A bright SKINS button in the Arsenal | phones: the kit's «✦ Skins 2/41» in gold-violet; computers: «✦ All skins» by the dressing room's strip | ✅ e2e `v0219` |
+| 9 | The prologue's characters turned orange | the 2089 chapter's neon filter on the portraits removed — their own colours | ✅ e2e `v0219` |
+| 10 | Story backgrounds sometimes disappear | the scene's side pan (which could carry the picture off a narrow screen) removed; every scene covers the screen | ✅ e2e `v0219` |
+| 11 | Aliases: small letters, digits, special characters, one word | `isNick` (`a–z 0–9 _ . -`, 3–20, one word): the dialog writes what is typed that way (capitals small, a space «_», Cyrillic in Latin letters) and states the rule; the server refuses anything else; sign-ups convert (`nickName`); suggestions and the game's players «quiet_storekeeper», «dimon_89»; **migration 026** rewrote every living alias once («Seasoned Badger» → «seasoned_badger», the older account keeping a name two came to), the old one kept in `users.old_display_name`; a friend's alias typed the old way is still found | ✅ unit (`codeSteps`, `social`), e2e `social`, `v0219` |
+| 12 | Headers cut on some screens | the screen's title fits its line; the labels on a panel's top edge get room in a scrolling box; the gangs' names keep their letters' tops | ✅ (clip audit at 360 … 1440) |
+| 13 | The settings icon looks cut | an eight-tooth gear, whole | ✅ (screenshots) |
+| 14 | The owner's BLAT banner | `tools/make-menu-art.py` composes the owner's RU / EN art into the menu's 4 : 1 banner (the EN «SKWNS» fixed); a slimmer band of the same picture on the smallest phones; the packs' price and «on sale soon» over it | ✅ e2e `v0219` |
+| 15 | The asymmetric DISTRICT TOURNAMENT text | its name starts where the other buttons' names start, the cup at the right end; on a phone the name in the middle, the cup a faint emblem behind it | ✅ e2e `v0219` |
+| 16 | The BLAT coin from the new banner | `tools/make-blat-coin.py`: the octagonal red gem coin at 16 / 32 / 64 / 128 px everywhere | ✅ |
+| 17 | CASES more noticeable | computers: the «Cases» tab gold and violet with a chest, glowing; phones: «🎁 Cases» in the Arsenal's top row next to «Loadout | Shop» | ✅ e2e `v0219`, `phone` |
+| 18 | The owner's ARSENAL tile (RU / EN) | the owner's art fills the menu's Arsenal tile in the page's language | ✅ e2e `v0219` |
+| 19 | Full screen not found on a computer | the corner's button says «FULL SCREEN» on a computer (the bare icon on phones) | ✅ e2e `v0219` |
+| 20 | The mantis misses part of an antenna | the hero art's antenna kept by the cut-out (`tools/extract-heroes.py`), the top-down rig's antennae thicker | ✅ (screenshots) |
+| — | New skins from the AK sheet, no «Absurd» grade | 19 finishes painted by code over the weapons: rare Rust King, Street Graffiti, Bone Collector, Blue Chrome, Toxic Waste; epic Neon District, Hellfire, Canned Fish, Casino Boss, Amethyst, Biohazard X, Pensioner Deluxe, Borscht Edition; legendary Golden Mobster, Blood Reaper, Red Diamond, Obsidian Emperor, Golden Toilet, Shashlik Master — 39 on sale, the skin case 1 248 skins, odds unchanged | ✅ unit (`skins`, `economy`, `finish`) |
+| — | 10 % live skins, each animation unique | Golden Mobster (a gold glint sweeps along it), Red Diamond (facets catch the light, stars glint), Obsidian Emperor (lava veins pulse along), Blood Reaper (a red shimmer runs along the blades): 16 frames × 110 ms, in the hand, the HUD, the dressing room's doll and the Arsenal's cards; still only the look, at the grade's price; still with «reduce motion» | ✅ unit (`finish`: moving, seamless), e2e `skins` |
+| — | «выдать админку, чтобы задеплоить» | answered: `/admin` on the same site, login `admin`, the password in Render → Environment → `ADMIN_BOOTSTRAP_PASSWORD`; more admins with `node admin-cli.js create` in Render's Shell | ✅ answered |
+
+
 ## 3. Open risks / next steps
 
+- After v0.2.19 (above, §2k): the owner's final edits; an Instagram address (`SOCIAL_INSTAGRAM_URL`); a look at the 19 new skins and the four live ones on a real phone.
 - After v0.2.18 part 3 (above, §2j), the owner's: the Xsolla keys and its store items, then a sandbox purchase and `XSOLLA_SANDBOX=false`; a real Telegram Stars purchase and refund; `COPYRIGHT_HOLDER`, `PAY_SUPPORT` and the operator's name and contact in the privacy and terms pages; his verdict on the music; the starter pack once he picks one; the welcome gift's end date (`WELCOME_GIFT_UNTIL`); the grades of the twelve new characters. Invitations: watch the held queue in `/admin → Приглашения` — several guest accounts from different browsers can still farm talons slowly.
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).

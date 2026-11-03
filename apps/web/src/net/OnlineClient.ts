@@ -3,7 +3,7 @@
  * match/invites over HTTP, the game WebSocket, lobby state and the OnlineSession lifecycle.
  */
 import type { AvatarId, CharacterId, FinishId, GameMode, InviteInfo, Inventory, KonFormat, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, TelegramLinkOutcome, WeaponId, GangBattle, GangBattleFormat, GangBattleResponse } from '@blatkom/shared';
-import { latinName } from '@blatkom/shared';
+import { nickName } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { readLoginReturn } from './oauth.js';
 import { captureReferral, captureTelegramLink, clearReferral, pendingReferral } from './referral.js';
@@ -225,9 +225,9 @@ export class OnlineClient {
       device = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
       storageSet(DEVICE_KEY, device);
     }
-    // v0.3: aliases are Latin — a Telegram name is transliterated («Влад» → «Vlad»)
-    const fallback = `Comrade_${device.slice(0, 3).toUpperCase()}`;
-    const name = latinName(telegramUserName() ?? '', fallback);
+    // aliases are one word of small Latin letters (v0.2.19) — a Telegram name is transliterated («Влад» → «vlad»)
+    const fallback = `comrade_${device.slice(0, 3).toLowerCase()}`;
+    const name = nickName(telegramUserName() ?? '', fallback);
     try {
       const res = await this.api.authGuest(name, device, storageGet(VISITOR_KEY) ?? undefined, pendingReferral() ?? undefined, this.firstTouch);
       clearReferral();

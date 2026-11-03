@@ -116,7 +116,7 @@ test('referrals: a code per player, links; attached only to a new account opened
   assert.equal((await app.db.sql`SELECT 1 FROM referrals WHERE referee_id = ${c.userId}`).length, 0);
   const view = (await refs(a.token)).body;
   assert.deepEqual([view.invited, view.pending, view.confirmed, view.reward, view.earned], [1, 1, 0, REFERRAL_TALONS, 0]);
-  assert.equal(view.recent[0]?.name, 'Invited Bee');
+  assert.equal(view.recent[0]?.name, 'invited_bee', 'the alias the sign-up name became (v0.2.19)');
   assert.equal((await api(app.base, '/api/blat', { token: a.token })).status, 404, 'the $BLAT screen is gone');
 });
 
@@ -135,7 +135,7 @@ test('referrals: counted after a whole match — not a short one, not an idle on
   await rec.matchCompleted(match(b.userId));
   for (let i = 0; i < 50 && heard.length === 0; i++) await new Promise((r) => setTimeout(r, 50));
   assert.equal(heard[0]?.status, 'confirmed');
-  if (heard[0]?.status === 'confirmed') assert.deepEqual([heard[0].paid.referrerId, heard[0].paid.reward, heard[0].paid.ordinal, heard[0].paid.refereeName, heard[0].paid.balance], [a.userId, REFERRAL_TALONS, 1, 'Short Match', before0 + REFERRAL_TALONS]);
+  if (heard[0]?.status === 'confirmed') assert.deepEqual([heard[0].paid.referrerId, heard[0].paid.reward, heard[0].paid.ordinal, heard[0].paid.refereeName, heard[0].paid.balance], [a.userId, REFERRAL_TALONS, 1, 'short_match', before0 + REFERRAL_TALONS]);
   assert.equal(await talonsOf(a.userId), before0 + REFERRAL_TALONS);
   // the referee opening the screen later changes nothing
   await refs(b.token);
@@ -149,7 +149,7 @@ test('referrals: counted after a whole match — not a short one, not an idle on
   assert.ok(r5?.status === 'confirmed' && r5.paid.ordinal === 5 && r5.paid.reward === REFERRAL_TALONS, JSON.stringify(r5));
   const view = (await refs(a.token)).body;
   assert.deepEqual([view.confirmed, view.earned, view.reward], [5, 2 * REFERRAL_TALONS, REFERRAL_TALONS]);
-  assert.ok(view.recent.some((x) => x.name === 'Fifth Friend' && x.reward === REFERRAL_TALONS && x.status === 'confirmed'));
+  assert.ok(view.recent.some((x) => x.name === 'fifth_friend' && x.reward === REFERRAL_TALONS && x.status === 'confirmed'));
   const ledger = await app.db.sql<Array<{ currency: string; delta: number }>>`SELECT currency, delta FROM currency_ledger WHERE user_id = ${a.userId} AND reason = 'referral'`;
   assert.deepEqual(ledger.map((l) => [l.currency, l.delta]), [['tokens', REFERRAL_TALONS], ['tokens', REFERRAL_TALONS]]);
   assert.ok(await noBlat(a.userId));
@@ -200,7 +200,7 @@ test('referrals: over the daily cap or a flagged account waits for an administra
   const csrf = login.body.csrfToken as string;
   assert.equal((await api(app.base, '/api/admin/referrals?status=held', { token: a.token })).status, 401, 'players can’t');
   const list = await api(app.base, '/api/admin/referrals?status=held', { cookie });
-  assert.ok(list.body.some((r: { refereeName: string }) => r.refereeName === 'One Too Many'));
+  assert.ok(list.body.some((r: { refereeName: string }) => r.refereeName === 'one_too_many'));
   const before0 = await talonsOf(a.userId);
   assert.equal((await api(app.base, `/api/admin/referrals/${over.userId}`, { method: 'POST', cookie, body: { action: 'confirm' } })).status, 403, 'CSRF');
   const ok = await api(app.base, `/api/admin/referrals/${over.userId}`, { method: 'POST', cookie, csrf, body: { action: 'confirm', note: 'checked by hand' } });

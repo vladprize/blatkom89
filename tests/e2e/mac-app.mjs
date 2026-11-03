@@ -64,7 +64,7 @@ await win.getByTestId('menu-story').click();
 await win.getByTestId('story').waitFor({ timeout: 20000 });
 await win.waitForTimeout(600);
 const hub = await win.evaluate(() => ({ a1: document.querySelector('[data-testid=story-mission-a1]')?.getAttribute('data-state'), a2: document.querySelector('[data-testid=story-mission-a2]')?.getAttribute('data-state'), warn: !!document.querySelector('[data-testid=story-unsaved]'), comic: !!document.querySelector('[data-testid=comic]') }));
-check(again.nick === 'Pilot' && again.xp === 40 && !again.dialog && hub.a1 === 'done' && hub.a2 === 'open' && !hub.warn && !hub.comic, `the next launch keeps it all (${JSON.stringify({ ...again, ...hub })})`);
+check(again.nick === 'pilot' && again.xp === 40 && !again.dialog && hub.a1 === 'done' && hub.a2 === 'open' && !hub.warn && !hub.comic, `the next launch keeps it all (${JSON.stringify({ ...again, ...hub })})`);
 await win.screenshot({ path: `${out}/electron_relaunch_hub.png` });
 await app.close();
 check(problems.length === 0, `no page errors (${problems.join(' | ')})`);

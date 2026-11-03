@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { FILL_RULES, fillTarget, fillPersona } from '../sim/fill.js';
 import { PRACTICE_NAMES, fillNickname, randomNickname } from '../game-rules/nicknames.js';
 import { displayNameSchema } from '../schemas/api.js';
+import { isNick } from '../game-rules/aliases.js';
 import { CHARACTER_IDS } from '../game-rules/characters.js';
 import { isAvatarId } from '../game-rules/avatars.js';
 import { sanitizeLoadout } from '../game-rules/loadout.js';
@@ -25,12 +26,13 @@ test('fill: the lineup to reach — 4 in free-for-all, 3 a side (even) in team m
 
 test('fill: added players look like people — valid names (never «bot»), plausible levels, avatars, characters and gear', () => {
   const rnd = mulberry32(1989);
-  const taken = new Set<string>(['тихий завхоз', 'kolyan']);
+  // aliases already in the room (v0.2.19: one word, small letters) — both are names the generator makes
+  const taken = new Set<string>(['quiet_storekeeper', 'dimon']);
   const seen = new Set<string>();
   for (let i = 0; i < 2000; i++) {
     const around = 1 + Math.floor(rnd() * 40);
     const p = fillPersona(rnd, { lang: i % 2 ? 'ru' : 'en', aroundLevel: around, taken });
-    assert.ok(displayNameSchema.safeParse(p.name).success, `valid alias: ${p.name}`);
+    assert.ok(isNick(p.name), `valid alias (one word, small Latin letters): ${p.name}`);
     assert.equal(p.name, p.name.trim());
     assert.ok(!/bot|бот/i.test(p.name), `no «bot» in ${p.name}`);
     assert.ok(!taken.has(p.name.toLowerCase()), `not a name already in the room: ${p.name}`);
@@ -50,7 +52,7 @@ test('fill: alias suggestions and filled names are valid in both languages, neve
   for (let i = 0; i < 3000; i++) {
     for (const lang of ['en', 'ru'] as const) {
       for (const name of [randomNickname(rnd, lang), fillNickname(rnd, lang)]) {
-        assert.ok(displayNameSchema.safeParse(name).success, name);
+        assert.ok(isNick(name) && displayNameSchema.safeParse(name).success, name);
         assert.ok(!/bot|бот/i.test(name), name);
       }
       const filled = fillNickname(rnd, lang).toLowerCase();

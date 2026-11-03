@@ -95,13 +95,13 @@ test('Russian plurals and substitution', () => {
     assert.equal(count(12, 'talon'), '12 талонов');
     assert.equal(t('Players {n}/{max}', { n: 3, max: 10 }), 'Игроки 3/10');
     assert.equal(t('No such key in the dictionary'), 'No such key in the dictionary');
-    // v0.3: aliases are Latin — the Russian version suggests the same English names
-    assert.match(randomNickname(() => 0.5), /^[A-Z][a-z]+ [A-Z][a-z ]+$/);
+    // aliases are Latin (v0.3), one word of small letters (v0.2.19) — the Russian version suggests the same names
+    assert.match(randomNickname(() => 0.5), /^[a-z]+_[a-z_]+$/);
   } finally {
     _setLangForTests('en');
   }
   assert.equal(plural(1, 'point'), 'point');
   assert.equal(plural(2, 'point'), 'points');
   assert.equal(t('Players {n}/{max}', { n: 3, max: 10 }), 'Players 3/10');
-  assert.match(randomNickname(() => 0.5), /^[A-Z][a-z]+ [A-Z][a-z ]+$/);
+  assert.match(randomNickname(() => 0.5), /^[a-z]+_[a-z_]+$/);
 });

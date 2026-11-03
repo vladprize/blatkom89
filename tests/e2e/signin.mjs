@@ -153,7 +153,7 @@ try {
   const nick = A.page.getByRole('textbox', { name: 'Alias' });
   await nick.waitFor({ timeout: 20000 });
   check((await A.page.getByTestId('welcome').count()) === 0, 'with Telegram linked the welcome window is not asked again');
-  const alias = `Signin ${RUN}`;
+  const alias = `signin_${RUN}`;
   await nick.fill(alias);
   await A.page.getByRole('button', { name: 'Done' }).click();
   await A.page.getByTestId('menu-nick').waitFor({ timeout: 20000 });

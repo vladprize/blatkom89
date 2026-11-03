@@ -2295,3 +2295,21 @@ button.blatsban:focus-visible { outline: 2px solid var(--tape); outline-offset: 
 }
 /* in the skins' sheet the «Buy» row of a tried-on skin stays in sight at the bottom while the grid scrolls */
 .skinpick--sheet .skinpick__buy { position: sticky; bottom: 0; z-index: 2; margin: 2px -2px 0; padding: 10px 8px; background: linear-gradient(180deg, rgba(20, 16, 13, .94), #14100d); border-top: 1px solid var(--line); box-shadow: 0 -10px 18px rgba(0, 0, 0, .55); }
+/* the smallest phones (360×640, 393×680): the menu stays one screen with the owner's BLAT banner — the banner
+   a slimmer band of the same picture, less air round the logo, the footer one line */
+@media (max-width: 760px) and (max-height: 690px) {
+  .blatsart { aspect-ratio: 6 / 1; }
+  .blatsart__img { object-position: 50% 34%; }
+  .blatsart .blatsban__from { display: none; }
+  .blatsart__foot { bottom: 5px; right: 7px; }
+  .blatsart .blatsban__cta { padding: 2px 9px; font-size: 12px; }
+  .wrap--menu > .menu-center { grid-template-rows: minmax(2px, 1fr) auto minmax(10px, 1fr) auto minmax(0, .5fr); }
+  .wrap--menu > .footer { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; column-gap: 10px; row-gap: 0; font-size: 11px; line-height: 1.25; }
+  .wrap--menu > .footer > * { margin: 0; }
+}
+/* the narrowest phones (360 px): five characters a row, so the names and «Легендарный» stay inside their cells */
+@media (max-width: 380px) {
+  .charshop { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .cell--char .cell__name { font-size: 9.5px; letter-spacing: 0; }
+  .cell--char .grade { font-size: 8px; letter-spacing: .01em; padding: 2px 2px 1px; }
+}

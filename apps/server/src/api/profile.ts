@@ -1,5 +1,5 @@
 /** Player profile, history, achievements, alias checks and account deletion. */
-import { UpdateProfileRequest, displayNameSchema } from '@blatkom/shared';
+import { NICK_RULE, UpdateProfileRequest, displayNameSchema } from '@blatkom/shared';
 import type { AchievementsResponse, MatchHistoryResponse, NameCheckResponse } from '@blatkom/shared';
 import { isNameConflict, isNameFree, suggestNames } from '../auth/names.js';
 import type { RouteModule } from '../app.js';
@@ -48,7 +48,7 @@ export const registerProfileRoutes: RouteModule = (router, deps) => {
   router.get('/api/names/check', auth, rateLimit(nameLimiter, (ctx) => currentUser(ctx).userId), async (ctx) => {
     const user = currentUser(ctx);
     const parsed = displayNameSchema.safeParse(ctx.query.get('name') ?? '');
-    if (!parsed.success) throw new HttpError(400, 'bad_name', 'A name may contain letters, digits, spaces and _ . -');
+    if (!parsed.success) throw new HttpError(400, 'bad_name', NICK_RULE);
     if (!deps.sql) throw new HttpError(503, 'persistence_unavailable', 'The service is temporarily unavailable');
     const name = parsed.data;
     const available = await isNameFree(deps.sql, name, user.userId);
