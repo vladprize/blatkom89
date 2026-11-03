@@ -2303,7 +2303,8 @@ button.blatsban:focus-visible { outline: 2px solid var(--tape); outline-offset: 
   .blatsart .blatsban__from { display: none; }
   .blatsart__foot { bottom: 5px; right: 7px; }
   .blatsart .blatsban__cta { padding: 2px 9px; font-size: 12px; }
-  .wrap--menu > .menu-center { grid-template-rows: minmax(2px, 1fr) auto minmax(10px, 1fr) auto minmax(0, .5fr); }
+  /* the little free height goes mostly between the logo and the panels (the logo stays clear of them) */
+  .wrap--menu > .menu-center { grid-template-rows: minmax(2px, .4fr) auto minmax(10px, 1fr) auto minmax(0, .2fr); }
   .wrap--menu > .footer { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; column-gap: 10px; row-gap: 0; font-size: 11px; line-height: 1.25; }
   .wrap--menu > .footer > * { margin: 0; }
 }
