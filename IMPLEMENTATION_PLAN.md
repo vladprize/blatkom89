@@ -278,7 +278,7 @@ registry (real gun names included), the full test run and docs.
 | © and a register of assets | the credits' «© 2026 <holder>. All rights reserved.» (`COPYRIGHT_HOLDER`), the footer's ©, terms of purchase (`terms.html`, `terms-ru.html`), [docs/ASSETS.md](docs/ASSETS.md) — every asset, its origin and rights, the fonts' and libraries' licences | ✅ (the holder's name, the operator's contact — the owner's) |
 | Real gun names | the owner said yes (3 Nov) to the proposed names: «Дружба» (AK-47), «Золотая Дружба», «Бархан», «Трещотка», ПП «Точка», «Импортная», «Дальнобой», «Чикагская машинка», «Пистолет комиссара»; ids, balance and purchases unchanged; a test keeps the marks out of the names | ✅ |
 | Arkadich's «Montana» | «джинсы „под фирму“» / «jeans that pass for imported» | ✅ |
-| The full test run and the docs | unit and integration tests, the full browser run on the release bundle, the docs updated (PAYMENTS, ASSETS, ECONOMY, TELEGRAM, DEPLOYMENT, ART_DIRECTION, ARCHITECTURE, PRIVACY, README, TESTING) | see [docs/TESTING.md](docs/TESTING.md) |
+| The full test run and the docs | unit and integration 332 / 332; the full browser run on the release bundle — every stage passes (the gang battle's last step needed a test fix: a timing assumption, not a regression); the docs updated (PAYMENTS, ASSETS, ECONOMY, TELEGRAM, DEPLOYMENT, ART_DIRECTION, ARCHITECTURE, NETCODE, PRIVACY, ADMIN, ANALYTICS, README, TESTING) — [docs/TESTING.md](docs/TESTING.md) §3 | ✅ (⛔ real payments and the live site: the owner's steps) |
 
 
 ## 3. Open risks / next steps
