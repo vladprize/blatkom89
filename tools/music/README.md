@@ -55,7 +55,7 @@ python3 tools/music/compose_blatnyak.py /tmp/strelka_blatnyak.wav    # STEMS=<di
 ffmpeg -i /tmp/strelka_blatnyak.wav -c:a libmp3lame -b:a 320k /tmp/strelka_blatnyak.mp3
 ```
 
-## «MONTAGEM BLATKOM» — a plain hard Brazilian phonk (not in the game)
+## «MONTAGEM BLATKOM» — a hard Brazilian phonk, the dark cut (not in the game)
 
 `compose_funk.py` (5 Nov 2026, the owner asked for hard Brazilian phonk with nothing Soviet in it): 130 BPM,
 G phrygian (Gm – Gm – A♭ – Fm, D to lead home), 72 bars = 2:13, loopable. A synthesised «aah» choir chopped
@@ -63,6 +63,12 @@ like a montagem, an agudo FM lead with its pitch drop, the phonk cowbell, tambor
 808 sliding under the funk kick, claps with a snap, Memphis hat rolls, tuim whistles, a siren, a formant-synth
 crowd «HEY!»; a half-time switch with the choir slowed an octave down, stutter fills, gaps and tape stops.
 Mastered loud like the genre: about −7.5 LUFS, −0.7 dBTP after MP3.
+
+The dark cut (the owner's «сделай его более мрачным», same night) is what the script renders now: Gm – Gm –
+A♭ – G° with the 808 sliding up the tritone, the riff and the lead on D♭ and the raised seventh, the lead an
+octave down and darker, the choir low on «o» with an octave under it, a church bell's toll, a drone under the
+intro, the switch and the break, an air-raid siren, a lower gang shout, no tuim whistles, the top rolled off,
+a longer, darker reverb. About −7 LUFS, −0.9 dBTP after MP3. The first cut is in git (c8ba6d6).
 
 ```sh
 python3 tools/music/compose_funk.py /tmp/montagem.wav     # STEMS=<dir> writes each part as .npy

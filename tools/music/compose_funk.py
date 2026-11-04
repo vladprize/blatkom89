@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""«MONTAGEM BLATKOM» — a hard Brazilian phonk (funk mandelão / automotivo), made for the owner to hear
-(5 Nov 2026); not in the game. Nothing Soviet in it: a synthesised choir chopped like a montagem, a high
-«agudo» lead with its «pew», the phonk cowbell, tamborzão toms, a distorted 808 sliding under the funk
-kick, claps, Memphis hat rolls, tuim whistles, a siren, a crowd's «HEY!». Every sound is synthesised here:
-no samples, no recordings.
+"""«MONTAGEM BLATKOM» — a hard, dark Brazilian phonk (funk mandelão), made for the owner to hear (5 Nov 2026);
+not in the game. Nothing Soviet in it. The dark cut (the owner's «сделай его более мрачным»): G phrygian with the
+tritone — Gm – Gm – A♭ – G° — the 808 sliding up the tritone, a low choir on «o», a church bell's toll, a
+drone under the quiet parts, an air-raid siren, the lead an octave down and darker, the shout of a gang, the
+top end rolled off. The montagem choir chopped on the funk kick, tamborzão toms, claps, Memphis hat rolls,
+the phonk cowbell. Every sound is synthesised here: no samples, no recordings.
 
-130 BPM, G phrygian (Gm – Gm – A♭ – Fm; D to lead home), 72 bars (2:13), loopable:
-  0–7    the montagem: the choir opening up, the agudo, a riser, a gap, the shout
+130 BPM, 72 bars (2:13), loopable:
+  0–7    the drone, the bell, the siren far off; the choir rising out of the dark; a riser, a gap, the shout
   8–23   drop 1 — the 808 on the funk kick, claps, tamborzão toms, the cowbell riff; the chopped choir joins
-  24–31  the switch — half time, the choir slowed an octave down, 808 slides, an HP-swept build into a gap
-  32–47  drop 2 — the agudo lead over the drop, tuims, extra kicks; the cowbell an octave up joins
-  48–55  the break — the choir and the sub, then the choir stuttering up into the gap
-  56–71  drop 3 — everything, a siren; a tape stop at the end
+  24–31  the switch — half time, the choir and the bell, 808 slides, an HP-swept build into a gap
+  32–47  drop 2 — the lead over the drop, extra kicks; the cowbell joins
+  48–55  the break — the drone, the bell, the choir, then the choir stuttering up into the gap
+  56–71  drop 3 — everything, the siren, the cowbell doubled an octave down; a tape stop at the end
 Usage: python3 tools/music/compose_funk.py [out.wav]   — deterministic: the same file every run.
 """
 import os
@@ -31,7 +32,7 @@ LEN = int(round(BARS * BAR * SR))
 TAIL = int(4.0 * SR)
 N = LEN + TAIL
 MASTER_DRIVE = 2.0  # how hard the master hits the clipper (sets the loudness)
-LEVEL = dict(kick=0.85, bass=0.65, clap=0.6, tom=0.42, roll=0.42, hat=1.1, bell=1.0, agudo=0.18, choir=1.25, fx=0.6)
+LEVEL = dict(kick=0.85, bass=0.68, clap=0.6, tom=0.42, roll=0.42, hat=0.95, bell=1.0, agudo=0.24, choir=1.4, fx=0.6, toll=0.9, drone=0.35)
 rng = np.random.default_rng(55130)
 
 
@@ -106,11 +107,11 @@ def section(bar):
     return 'drop3'
 
 
-CYCLE = ['Gm', 'Gm', 'Ab', 'Fm']
-SWITCH = ['Gm', 'Gm', 'Ab', 'Ab', 'Fm', 'Fm', 'D', 'D']
-ROOT = {'Gm': 31, 'Ab': 32, 'Fm': 29, 'D': 38}  # G1 A♭1 F1 D2
-UP = {'Gm': 43, 'Ab': 44, 'Fm': 41, 'D': 50}  # where the 808 slides to on the off-beats
-CHORD = {'Gm': (67, 70, 74), 'Ab': (68, 72, 75), 'Fm': (65, 68, 72), 'D': (66, 69, 74)}  # the choir's voicing
+CYCLE = ['Gm', 'Gm', 'Ab', 'Gdim']
+SWITCH = ['Gm', 'Gm', 'Ab', 'Ab', 'Gdim', 'Gdim', 'D', 'D']
+ROOT = {'Gm': 31, 'Ab': 32, 'Gdim': 31, 'D': 38}  # G1 A♭1 G1 D2
+UP = {'Gm': 43, 'Ab': 44, 'Gdim': 37, 'D': 50}  # where the 808 slides to on the off-beats (G° — up the tritone to D♭2)
+CHORD = {'Gm': (55, 58, 62), 'Ab': (56, 60, 63), 'Gdim': (55, 58, 61), 'D': (54, 57, 62)}  # the choir: low, G3 B♭3 D4 …
 
 
 def chord_at(bar):
@@ -122,7 +123,7 @@ def chord_at(bar):
     return CYCLE[bar % 4]
 
 
-bus = {k: np.zeros(N) for k in ('kick', 'clap', 'tom', 'roll', 'hat', 'bell', 'agudo', 'choir', 'fx')}
+bus = {k: np.zeros(N) for k in ('kick', 'clap', 'tom', 'roll', 'hat', 'bell', 'agudo', 'choir', 'fx', 'toll', 'drone')}
 kick_times = []
 bass_notes = []  # (time, midi, level, slide, decay)
 bass_cuts = []
@@ -171,7 +172,7 @@ def snare(t, amp=1.0, pitch=200.0):
 def hat(t, amp=1.0, open_=False):
     n = int((0.28 if open_ else 0.05) * SR)
     tt = np.arange(n) / SR
-    x = hp(noise(n), 7000, 4) + 0.15 * hp(np.sign(np.sin(2 * np.pi * 3270 * tt)) * np.sign(np.sin(2 * np.pi * 4730 * tt)), 6000)
+    x = hp(noise(n), 6000, 4) + 0.12 * hp(np.sign(np.sin(2 * np.pi * 3270 * tt)) * np.sign(np.sin(2 * np.pi * 4730 * tt)), 5500)
     place(bus['hat'], amp * 0.5 * x * np.exp(-tt / (0.1 if open_ else 0.016)), t)
 
 
@@ -227,11 +228,11 @@ def drop_bar(bar, extra=False):
 
 
 # ── the cowbell riff and the agudo ──────────────────────────────────────────
-RIFF = [(0, 67), (3, 67), (6, 70), (8, 67), (10, 68), (12, 67), (14, 65), (16, 67), (19, 67), (22, 74), (24, 72), (26, 70), (28, 68), (30, 67)]
-AGUDO = [(0, 86, 3), (3, 86, 3), (6, 84, 2), (8, 82, 4), (12, 79, 4),
-         (16, 82, 3), (19, 82, 3), (22, 80, 2), (24, 79, 8),
-         (32, 87, 3), (35, 87, 3), (38, 86, 2), (40, 84, 4), (44, 80, 4),
-         (48, 84, 3), (51, 84, 3), (54, 82, 2), (56, 80, 4), (60, 79, 4)]  # four bars over Gm Gm A♭ Fm
+RIFF = [(0, 67), (3, 67), (6, 68), (8, 67), (10, 73), (12, 72), (14, 68), (16, 67), (19, 67), (22, 70), (24, 68), (26, 67), (28, 66), (30, 67)]
+AGUDO = [(0, 74, 3), (3, 74, 3), (6, 73, 2), (8, 70, 4), (12, 67, 4),
+         (16, 70, 3), (19, 70, 3), (22, 68, 2), (24, 67, 8),
+         (32, 75, 3), (35, 75, 3), (38, 74, 2), (40, 72, 4), (44, 68, 4),
+         (48, 72, 3), (51, 72, 3), (54, 68, 2), (56, 67, 4), (60, 66, 2), (62, 67, 2)]  # four bars over Gm Gm A♭ G°: D–D♭–B♭, the F♯ that won't leave G
 
 
 def cowbell(t, note, amp=1.0):
@@ -253,11 +254,11 @@ def agudo(t, note, dur_steps, amp=1.0):
     dur = dur_steps * STEP * 0.9
     n = int((dur + 0.3) * SR)
     tt = np.arange(n) / SR
-    f = midi(note) * 2 ** (100 * np.exp(-tt / 0.022) / 1200)
+    f = midi(note) * 2 ** (100 * np.exp(-tt / 0.03) / 1200)
     ph = 2 * np.pi * np.cumsum(f) / SR
-    y = np.sin(ph + (2.0 * np.exp(-tt / 0.15) + 0.6) * np.sin(ph)) + 0.35 * np.sign(np.sin(ph))
-    env = np.minimum(1, tt / 0.002) * (0.55 + 0.45 * np.exp(-tt / 0.2)) * np.where(tt < dur, 1.0, np.exp(-(tt - dur) / 0.05))
-    place(bus['agudo'], amp * lp(np.tanh(1.8 * y * env), 9000), t)
+    y = np.sin(ph + (1.2 * np.exp(-tt / 0.15) + 0.35) * np.sin(ph)) + 0.3 * np.sign(np.sin(ph)) + 0.25 * np.sin(0.5 * ph)  # with a sub-octave
+    env = np.minimum(1, tt / 0.003) * (0.55 + 0.45 * np.exp(-tt / 0.25)) * np.where(tt < dur, 1.0, np.exp(-(tt - dur) / 0.07))
+    place(bus['agudo'], amp * lp(np.tanh(1.8 * y * env), 4800), t)
 
 
 def agudo_bars(bar, amp=1.0, up=0):
@@ -266,21 +267,21 @@ def agudo_bars(bar, amp=1.0, up=0):
 
 
 # ── the choir: «aah», a few voices a note, through a vowel's formants ───────
-FORMANTS_A = ((800, 90, 1.0), (1150, 100, 0.55), (2900, 140, 0.28), (3900, 160, 0.12))
+FORMANTS_O = ((430, 80, 1.0), (780, 90, 0.6), (2600, 130, 0.12), (3300, 150, 0.06))  # «o»: dark
 
 
-def choir(t0, notes, dur, amp=1.0, attack=0.08, voices=4):
+def choir(t0, notes, dur, amp=1.0, attack=0.08, voices=4, under=False):
     n = int((dur + 0.35) * SR)
     tt = np.arange(n) / SR
     src = np.zeros(n)
-    for note in notes:
+    for note in list(notes) + ([notes[0] - 12] if under else []):
         for v in range(voices):
             f = midi(note) * (1 + rng.uniform(-0.006, 0.006))
             vib = 1 + 0.004 * np.sin(2 * np.pi * rng.uniform(4.6, 5.6) * tt + rng.uniform(0, 6.3))
             src += 2 * ((np.cumsum(f * vib) / SR + rng.uniform()) % 1.0) - 1
     src = lp(src / (len(notes) * voices), 6000) + 0.04 * noise(n)
     y = np.zeros(n)
-    for F, bw, g in FORMANTS_A:
+    for F, bw, g in FORMANTS_O:
         y += g * bp(src, F - bw, F + bw)
     env = np.minimum(1, tt / attack) * np.where(tt < dur, 1.0, np.exp(-(tt - dur) / 0.12))
     place(bus['choir'], amp * 3.0 * y * env, t0)
@@ -322,11 +323,38 @@ def riser(bar0, bars=2, amp=1.0):
 
 
 def siren(bar0, bars=2, amp=1.0):
+    """An air-raid siren, far off: a slow wail between 260 and 620 Hz."""
     n = int(bars * BAR * SR)
     tt = np.arange(n) / SR
-    f = 900 + 350 * np.sin(2 * np.pi * (BPM / 60 / 2) * tt)
-    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.minimum(1, tt / 0.3) * np.minimum(1, (tt[-1] - tt) / 0.4)
-    place(bus['fx'], amp * 0.2 * np.tanh(1.5 * x), T(bar0))
+    f = 260 + 360 * (0.5 - 0.5 * np.cos(2 * np.pi * 0.27 * tt))
+    ph = np.cumsum(f) / SR
+    x = np.sin(2 * np.pi * ph) + 0.35 * np.sin(4 * np.pi * ph) + 0.15 * (2 * (ph % 1.0) - 1)
+    x *= np.minimum(1, tt / 1.0) * np.minimum(1, (tt[-1] - tt) / 0.8)
+    place(bus['fx'], amp * 0.18 * lp(np.tanh(1.3 * x), 1800), T(bar0))
+
+
+def toll(t, note=43, amp=1.0):
+    """A church bell's toll (its minor-third partial makes it mournful)."""
+    n = int(4.5 * SR)
+    tt = np.arange(n) / SR
+    f = midi(note)
+    x = np.zeros(n)
+    for ratio, a, tau in ((0.5, 0.5, 2.6), (1.0, 1.0, 1.8), (1.19, 0.55, 1.2), (1.5, 0.35, 0.9), (2.0, 0.5, 0.8), (2.52, 0.25, 0.5), (3.0, 0.2, 0.4), (4.1, 0.1, 0.25)):
+        x += a * np.sin(2 * np.pi * f * ratio * tt + rng.uniform(0, 6.3)) * np.exp(-tt / tau)
+    x += hp(noise(n), 2000) * np.exp(-tt / 0.006) * 0.3
+    place(bus['toll'], amp * 0.45 * x * np.minimum(1, tt / 0.002), t)
+
+
+def drone(bar0, bars, root=31, amp=1.0):
+    """A low drone: detuned saws on the root and its octave under a slowly breathing filter."""
+    n = int(bars * BAR * SR)
+    tt = np.arange(n) / SR
+    x = np.zeros(n)
+    for nn, a in ((root, 1.0), (root + 12, 0.7), (root + 19, 0.25)):
+        for d in (-0.004, 0.0, 0.005):
+            x += a * (2 * ((midi(nn) * (1 + d) * tt + rng.uniform()) % 1.0) - 1)
+    x = sweep(x / 6, 220 + 160 * (0.5 - 0.5 * np.cos(2 * np.pi * 0.11 * tt)), 'low')
+    place(bus['drone'], amp * x * np.minimum(1, tt / 1.5) * np.minimum(1, (tt[-1] - tt) / 0.3), T(bar0))
 
 
 # ═══ the parts, bar by bar ══════════════════════════════════════════════════════════════════════
@@ -334,7 +362,7 @@ for bar in range(BARS):
     s = section(bar)
     ch = chord_at(bar)
     if s == 'intro':
-        choir(T(bar), CHORD[ch], BAR, 0.8)
+        choir(T(bar), CHORD[ch], BAR, 0.6, attack=0.4 if bar == 0 else 0.08, under=True)
         if bar >= 4 and bar % 4 == 0:
             agudo_bars(bar, 0.5)
         continue
@@ -345,8 +373,6 @@ for bar in range(BARS):
         if bar >= 16:
             choir(T(bar), CHORD[ch], BAR, 0.75)
             gate_bar(bar)
-        if bar % 4 == 3:
-            tuim(T(bar, 15), 0.45)
         continue
     if s == 'switch':
         kick(T(bar, 0), 0.95)
@@ -361,7 +387,7 @@ for bar in range(BARS):
             hat(T(bar, 6), 0.35, open_=True)
             if bar % 2 == 1:
                 tambor(T(bar, 14), True, 0.7)
-        choir(T(bar), [n - 12 for n in CHORD[ch]], BAR, 0.9, attack=0.25)  # slowed: an octave down
+        choir(T(bar), CHORD[ch], BAR, 0.9, attack=0.25, under=True)
         if bar % 4 == 0 and bar < 30:
             riff(bar, -12, 0.45, half=True)
         continue
@@ -370,16 +396,14 @@ for bar in range(BARS):
         if bar % 4 == 0:
             agudo_bars(bar, 1.0)
         if bar >= 40 and bar % 2 == 0:
-            riff(bar, 12, 0.55)
+            riff(bar, 0, 0.55)
         choir(T(bar), CHORD[ch], BAR, 0.5)
         gate_bar(bar)
-        if bar % 2 == 0:
-            tuim(T(bar, 7), 0.5)
         continue
     if s == 'break':
         i = bar - 48
         if i < 6:
-            choir(T(bar), CHORD[ch], BAR, 0.85, attack=0.15)
+            choir(T(bar), CHORD[ch], BAR, 0.6, attack=0.15, under=True)
         if i < 6 and i % 2 == 0:
             bass_notes.append((T(bar, 0), ROOT[ch], 0.4, True, 1.6))
         if i >= 2:
@@ -397,15 +421,11 @@ for bar in range(BARS):
         drop_bar(bar, extra=True)
         if bar % 2 == 0:
             riff(bar, 0, 0.85)
-            riff(bar, 12, 0.35)
+            riff(bar, -12, 0.4)
         if bar % 4 == 0:
             agudo_bars(bar, 0.9)
         choir(T(bar), CHORD[ch], BAR, 0.55)
         gate_bar(bar)
-        if bar % 4 == 2:
-            tuim(T(bar, 7), 0.45)
-        if bar % 4 == 3:
-            tuim(T(bar, 15), 0.45)
 
 # the intro: hats and toms creep in, a riser and a roll
 for st in range(0, 16, 2):
@@ -434,7 +454,15 @@ for k in range(8):
 bass_notes.append((T(54, 0), ROOT['D'], 0.55, True, 2.5))
 roll(54, 2)
 riser(54, 2, 1.1)
-siren(56, 2, 1.0)
+siren(56, 4, 0.9)
+siren(0, 7, 0.55)
+for b in (0, 4, 24, 28, 48, 52):
+    toll(T(b), 43, 1.0 if b else 0.8)
+for b in (8, 32, 56):
+    toll(T(b), 43, 0.7)
+drone(0, 8, 31, 1.0)
+drone(24, 8, 31, 0.8)
+drone(48, 7, 31, 1.0)
 
 # the choir's filters: the intro and the break open up from a dark low-pass
 for b0, b1, f0, f1 in ((0, 7, 450, 9000), (48, 52, 600, 8000)):
@@ -483,7 +511,7 @@ def render_808():
         prev_f, prev_end = ft, i1
     ph = 2 * np.pi * np.cumsum(freq) / SR
     sub = np.sin(ph) * amp
-    dist = lp(hp(np.tanh(6.0 * (sub + 0.15 * sub ** 2)), 25), 3500)
+    dist = lp(hp(np.tanh(6.0 * (sub + 0.15 * sub ** 2)), 25), 2600)
     dist -= 0.4 * bp(dist, 90, 220)
     return 0.34 * dist + 0.6 * sub
 
@@ -534,7 +562,7 @@ def hey_voice(f0, dur=0.3, glide=0.55):
 def crowd_hey():
     n = int(0.55 * SR)
     L, R = np.zeros(n), np.zeros(n)
-    for f0, off, pan in ((205, 0.0, 0.5), (232, 0.012, 0.2), (250, 0.006, 0.8), (218, 0.02, 0.35), (241, 0.016, 0.65)):
+    for f0, off, pan in ((132, 0.0, 0.5), (148, 0.012, 0.2), (160, 0.006, 0.8), (140, 0.02, 0.35), (153, 0.016, 0.65), (118, 0.009, 0.5)):
         v = hey_voice(f0 * rng.uniform(0.98, 1.02))
         i = int(off * SR)
         m = min(len(v), n - i)
@@ -562,8 +590,8 @@ for t in kick_times:
 
 _irn = int(2.0 * SR)
 _tt = np.arange(_irn) / SR
-irL = lp(noise(_irn) * np.exp(-_tt / 0.42), 6000)
-irR = lp(noise(_irn) * np.exp(-_tt / 0.42), 6000)
+irL = lp(noise(_irn) * np.exp(-_tt / 0.6), 4500)
+irR = lp(noise(_irn) * np.exp(-_tt / 0.6), 4500)
 irL[: int(0.012 * SR)] = 0
 irR[: int(0.017 * SR)] = 0
 irL /= np.sqrt(np.sum(irL ** 2))
@@ -579,7 +607,7 @@ echoR[d4:] = echo_src[:-d4] * 0.24
 del echo_src
 
 send = (bus['clap'] * V['clap'] * 0.45 + bus['roll'] * V['roll'] * 0.3 + bus['bell'] * V['bell'] * 0.45 + bus['agudo'] * V['agudo'] * 0.55
-        + bus['choir'] * V['choir'] * 0.5 + bus['fx'] * V['fx'] * 0.5 + bus['tom'] * V['tom'] * 0.2)
+        + bus['choir'] * V['choir'] * 0.6 + bus['fx'] * V['fx'] * 0.5 + bus['tom'] * V['tom'] * 0.2 + bus['toll'] * V['toll'] * 0.7)
 wetL = fftconvolve(send, irL)[:N] * 0.42
 wetR = fftconvolve(send, irR)[:N] * 0.42
 del send
@@ -589,9 +617,10 @@ music = (bus['bell'] * V['bell'] + bus['agudo'] * V['agudo'] + bus['fx'] * V['fx
 cho = bus['choir'] * V['choir'] * duck
 choD = np.zeros(N)
 choD[int(0.013 * SR):] = cho[: -int(0.013 * SR)]
-L = drums + bass_bus * V['bass'] + music + cho + echoL * duck + bus['hat'] * V['hat'] * 0.85 + wetL
-R = drums + bass_bus * V['bass'] + music + cho * 0.55 + choD * 0.5 + echoR * duck + bus['hat'] * V['hat'] * 1.15 + wetR
-del drums, music, cho, choD, wetL, wetR, echoL, echoR
+dark = bus['toll'] * V['toll'] + bus['drone'] * V['drone']
+L = drums + bass_bus * V['bass'] + music + cho + echoL * duck + bus['hat'] * V['hat'] * 0.85 + wetL + dark
+R = drums + bass_bus * V['bass'] + music + cho * 0.55 + choD * 0.5 + echoR * duck + bus['hat'] * V['hat'] * 1.15 + wetR + dark
+del drums, music, cho, choD, wetL, wetR, echoL, echoR, dark
 
 
 # ── the master's moves: stutters, sweeps, tape stops, gaps ──────────────────
@@ -685,8 +714,8 @@ del postL, postR, heyWet
 # ── the master: the loop, a clipper at 4× the rate, a limiter that watches the peaks between samples ──
 L = hp(L, 25)
 R = hp(R, 25)
-L += 0.25 * bp(L, 2000, 5000)  # a little more bite where the ear is keenest
-R += 0.25 * bp(R, 2000, 5000)
+L += 0.12 * bp(L, 2000, 5000) - 0.35 * hp(L, 7500)  # a little bite kept, the top rolled off: darker
+R += 0.12 * bp(R, 2000, 5000) - 0.35 * hp(R, 7500)
 for ch_ in (L, R):
     ch_[:TAIL] += ch_[LEN:LEN + TAIL]
 L, R = L[:LEN], R[:LEN]
@@ -715,7 +744,7 @@ def limiter(L, R, ceiling=0.79, release=0.06, look=0.003):  # −2 dBFS: room fo
 
 L, R = limiter(L, R)
 out = np.stack([L, R], axis=1)
-path = sys.argv[1] if len(sys.argv) > 1 else 'montagem_blatkom.wav'
+path = sys.argv[1] if len(sys.argv) > 1 else 'montagem_blatkom_dark.wav'
 with wave.open(path, 'wb') as w:
     w.setnchannels(2)
     w.setsampwidth(2)
