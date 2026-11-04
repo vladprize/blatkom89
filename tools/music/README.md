@@ -39,3 +39,18 @@ ffmpeg -i /tmp/strelka.wav -c:a libmp3lame -b:a 320k /tmp/strelka.mp3
 ```
 
 For the game it would be re-encoded like the theme (loudnorm, 96–128 kbps) and named in the credits.
+
+## «Стрелка» in 90s blatnyak (not in the game)
+
+`compose_blatnyak.py` (5 Nov 2026, the owner asked for the 90s blatnoy style instead of phonk): «Районные дела»
+as a 90s restaurant-chanson instrumental, 124 BPM, 84 bars = 2:47 with its ending (not a loop). The band of a
+90s keyboard workstation on a worn cassette, all synthesised: a drum machine (a gated-reverb snare, a
+tambourine, toms), a synth bass in bass-and-chord under the seven-string guitar's off-beat strums, the accordion
+with the theme, a «synth sax» for the verse (the circle of fifths), a DX-style electric piano, a string pad,
+brass stabs; an Odessa polka in the bridge, F7 into the last chorus a semitone up, a «та-да-дам… пам!» ending.
+About −11 LUFS, −1.7 dBTP.
+
+```sh
+python3 tools/music/compose_blatnyak.py /tmp/strelka_blatnyak.wav    # STEMS=<dir> writes each part as .npy
+ffmpeg -i /tmp/strelka_blatnyak.wav -c:a libmp3lame -b:a 320k /tmp/strelka_blatnyak.mp3
+```
