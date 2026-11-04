@@ -20,7 +20,8 @@ wording and the assignments below before a sale.
 | Pictures of places (loading screens, the story's comics) | `assets/scenes/*` | the owner's scene art (`references/40…50`), cropped (`tools/make-scenes.py`); «Черкизон» and «Воркута» rendered from the maps themselves (`tools/map-scenes.mjs`) — the owner's layouts for them carry portraits, brand logos and camp elements that must not appear | the owner's |
 | Map thumbnails | `assets/maps/*` | rendered from the maps by the game (`tools/map-thumbs.mjs`) | the owner's |
 | Logo, banners, case banners, avatars | `assets/ui/*`, `assets/avatars/*` | the owner's art (`references/01`, `23…25`, `60…61`), cut or redrawn by `tools/make-logo.py`, `tools/crop-avatars.py`, `tools/make-drop-banners.py` | as the owner's art (§2) |
-| Menu music «Районные дела» | `assets/audio/theme.mp3` | **original**: composed and synthesised by `tools/music/compose.py` — no samples, no recordings (v0.2.18 part 3) | the owner's |
+| Menu music «Hurt» — Infraction & Emerel Gray (Brazilian Phonk Sport) | `assets/audio/theme.mp3` (96 kbps, 2:53) | **third-party**: supplied by the owner as the soundtrack, in a file labelled "No Copyright Music"; back in v0.2.19 at the owner's choice | **to confirm**: the authors distribute their library with downloadable licences (their Bandcamp page says commercial licences are included for every track and forbids claiming or reselling the music); use in a game isn't named there — get the licence file for «Hurt» (or the authors' written yes for a game) and keep it with the game's papers; credited on the Credits screen and in `THIRD_PARTY_LICENSES.txt` |
+| The game's own track «Районные дела» (not used since v0.2.19) | `tools/music/compose.py` renders it | **original**: composed and synthesised by the script — no samples, no recordings (v0.2.18 part 3) | the owner's; a ready replacement if «Hurt»'s licence can't be had |
 | Sound effects | `apps/web/src/game/audio/Sfx.ts` | synthesised at run time (WebAudio) | the owner's |
 | Story texts, character lore, UI texts (EN/RU), maps' signs | `apps/web/src/story`, `apps/web/src/i18n`, `packages/shared` | written for the project | the owner's |
 | Fonts | `assets/fonts/*` | Oswald, PT Sans Narrow, Caveat — SIL Open Font License 1.1; Permanent Marker — Apache License 2.0 (subset by `tools/subset-fonts.py`) | open licences: may be shipped and sold with the game; the licence texts travel with them (`THIRD_PARTY_LICENSES.txt`) |
@@ -28,8 +29,9 @@ wording and the assignments below before a sale.
 | Server libraries | `deploy/server.js` bundle | `ws` (MIT), `zod` (MIT), `postgres` (Unlicense) | open licences |
 | Mac app shell | `BLATKOM 89.app` (`tools/build-mac-app.py`) | Electron 33.2.1 (MIT; Chromium's licences ship inside the app as Electron provides them) | open licences |
 
-The music before v0.2.18 part 3 — «Hurt» (Infraction & Emerel Gray), supplied labelled "No Copyright Music"
-— is **no longer in the game**; its licence for use in a game was never confirmed, so it was replaced.
+The music: «Hurt» (Infraction & Emerel Gray), supplied labelled "No Copyright Music", was replaced in v0.2.18
+part 3 by the game's own «Районные дела» (its licence for use in a game was never confirmed); the owner
+preferred the phonk and **chose «Hurt» again in v0.2.19** — so its licence is open again (the row above).
 
 ## 2. The owner's art (`references/`)
 

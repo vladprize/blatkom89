@@ -166,8 +166,9 @@ in `online.mjs`) are informational only; authoritative consistency is asserted i
 * Team modes with many real players over real networks: capture the flag and base capture were played
   by bots and by two local browsers; their limits (3 captures, 250 points, 15 s flag return, 6 s base
   capture) are first guesses.
-* The menu soundtrack «Районные дела» (v0.2.18 part 3) was synthesised here and checked as a file (length,
-  loudness, the loop), not by ear — the owner listens to it. It is the game's own, so no licence is left to check.
+* The menu soundtrack is «Hurt» again (v0.2.19, the owner's choice; the file of v0.2.18 part 2, restored
+  from git): its licence for use in a game is the owner's to confirm. The game's own «Районные дела»
+  (v0.2.18 part 3, `tools/music/`) was checked as a file, not by ear; the owner preferred the phonk.
 * Live payments: Xsolla and Stripe were exercised with signed fixtures and a fake HTTP client, Telegram
   Stars against a stand-in for the Bot API (`tests/e2e/fake-botapi.mjs`) — never with a real account or
   real Stars (no provider keys on the live server; the website says «Payments are being connected — coming

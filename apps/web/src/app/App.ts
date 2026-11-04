@@ -349,12 +349,12 @@ export class App {
         h('span', { class: 'tag' }, t('Credits')),
         h('div', { class: 'h2', style: 'margin-top:6px' }, 'BLATKOM ’89'),
         // names of works, authors and licences stay as they are in every language
-        // v0.2.18 part 3: the game's own soundtrack (tools/music/compose.py) and the rights notice
+        // the rights notice (v0.2.18 part 3); the menu music is «Hurt» again (v0.2.19, the owner's choice)
         h('div', { 'data-testid': 'credits-copyright' }, `© 2026 ${this.site?.copyright ?? 'BLATKOM ’89'}. ${t('All rights reserved.')}`),
-        h('div', null, h('b', null, t('Menu music')), ': «Районные дела» — ', t('original music written for this game')),
+        h('div', { 'data-testid': 'credits-music' }, h('b', null, t('Menu music')), ': «Hurt» — Infraction & Emerel Gray (Brazilian Phonk Sport).'),
         h('div', null, h('b', null, t('Fonts')), ': Oswald, PT Sans Narrow, Caveat — SIL Open Font License; Permanent Marker — Apache License 2.0.'),
         h('div', null, h('b', null, t('Engine')), ': Phaser 3 — MIT License.'),
-        h('div', { class: 'muted' }, t('Characters, maps, weapons, music and sound effects are original work made for this game.')),
+        h('div', { class: 'muted' }, t('Characters, maps, weapons and sound effects are original work made for this game.')),
         h('a', { href: asset('THIRD_PARTY_LICENSES.txt'), target: '_blank', class: 'muted' }, t('Full licence texts')),
         h('button', { class: 'btn btn--red', onclick: close }, t('Close')),
       ),

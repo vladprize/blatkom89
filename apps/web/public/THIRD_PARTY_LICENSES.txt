@@ -1,5 +1,5 @@
-Third-party software and fonts included in the БЛАТКОМ ’89 web client
-======================================================================
+Third-party software, fonts and music included in the БЛАТКОМ ’89 web client
+=============================================================================
 
 Phaser 3.90.0 — https://phaser.io
 ----------------------------------
@@ -35,6 +35,8 @@ Permanent Marker — Apache License 2.0 (assets/fonts/permanentmarker-LICENSE.tx
 
 Menu music (assets/audio/theme.mp3; not in the single-file offline demo)
 ---------------------------------------------------------------------------
-«Районные дела» — original music written for BLATKOM ’89 (v0.2.18): composed and synthesised by the
-game's own script (tools/music/compose.py) — no samples, no third-party recordings. Not third-party
-material; listed here because it replaced «Hurt» (Infraction & Emerel Gray), which the game no longer uses.
+«Hurt» — Infraction & Emerel Gray (Brazilian Phonk Sport). Supplied by the product owner as the
+game's soundtrack in a file labelled "No Copyright Music" (back in v0.2.19 at the owner's choice;
+v0.2.18 part 3 had the game's own «Районные дела» instead). Credited here and on the game's Credits
+screen; re-encoded to 96 kbit/s. The rights holders' terms for use in a game (and the attribution they
+require) must be confirmed by the operator — see docs/ASSETS.md.

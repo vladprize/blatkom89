@@ -5,7 +5,7 @@
 //   word of small Latin letters (and the server refuses two words); no tutorial card at the start of a
 //   match; the touch sticks mirrored, every button clear of its stick; the Arsenal's «Cases» button and
 //   the bright «Skins» button on a phone, the skins' sheet of picture cards; the story's prologue covering
-//   a phone's screen, its characters in their own colours.
+//   a phone's screen, its characters in their own colours; the menu music is «Hurt» again (4 Nov).
 // Usage: node tests/e2e/v0219.mjs <baseUrl> <outDir>
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -97,6 +97,14 @@ try {
     return { hot: !!hot, name: txt(hot), other: txt(other) };
   });
   check(kon.hot && kon.name !== null && kon.other !== null && Math.abs(kon.name - kon.other) <= 3, `the District Tournament's name starts where the other buttons' names start (${kon.name} / ${kon.other})`);
+  // the menu music is «Hurt» again (4 Nov, the owner's choice): the file served and the credits name it
+  const theme = await fetch(`${base}/assets/audio/theme.mp3`);
+  const themeLen = theme.ok ? (await theme.arrayBuffer()).byteLength : 0;
+  check(theme.ok && /audio\/mpeg/.test(theme.headers.get('content-type') ?? '') && themeLen === 2077406, `the menu music is the phonk «Hurt» (${theme.status}, ${theme.headers.get('content-type')}, ${themeLen} bytes)`);
+  await A.page.locator('.footer button.linkish').click();
+  const creditsMusic = await A.page.getByTestId('credits-music').innerText({ timeout: 10000 }).catch(() => '');
+  check(/«Hurt»/.test(creditsMusic) && /Infraction/.test(creditsMusic), `the credits name it («${creditsMusic}»)`);
+  await A.page.locator('.credits .btn--red').click();
   await A.page.screenshot({ path: `${outDir}/menu_en_1280.png` });
   // the server: one word of small letters only
   const token = await A.page.evaluate(() => localStorage.getItem('blatkom89.token'));

@@ -144,8 +144,10 @@ proxy_read_timeout 1h;`) and set `TRUST_PROXY=true` so rate limits see real clie
 - [ ] `/admin` is protected by server-side sessions, CSRF tokens, roles, rate limits and an audit log —
       optionally also restrict it by IP at the proxy.
 - [ ] Monitor `/api/ready`, disk space for PostgreSQL and the backups directory.
-- [x] Menu music: «Hurt» was replaced in v0.2.18 part 3 by the game's own «Районные дела»
-      (`tools/music/compose.py`, [ASSETS.md](ASSETS.md)) — nothing to license.
+- [ ] Menu music: «Hurt» (Infraction & Emerel Gray) again since v0.2.19 (the owner's choice; v0.2.18
+      part 3 had the game's own «Районные дела», kept in `tools/music/`) — get its licence for use in a
+      game (the authors' «No Copyright Music» library; [ASSETS.md](ASSETS.md)) and keep it with the
+      game's papers.
 - [ ] Before selling: the operator's name and contact in `apps/web/public/privacy*.html` and
       `terms*.html` (placeholders), `PAY_SUPPORT`, `COPYRIGHT_HOLDER`.
 - [ ] Xsolla: the project, six store items, the webhook and the four keys ([PAYMENTS.md](PAYMENTS.md) §2);

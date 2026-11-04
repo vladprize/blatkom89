@@ -138,11 +138,11 @@ state in a strip under the timer, on the minimap and as edge markers.
   per-weapon shots, ricochets, hits, deaths, footsteps, reloads, pickups, countdown beeps, equipment,
   and the objective cues — a factory klaxon when a flag is stolen, a bugle call for a capture, chimes
   for bases taken and lost. No third-party samples.
-* Menu music (v0.2.18 part 3): **«Районные дела»**, the game's own track — composed and synthesised by
-  `tools/music/compose.py` (drums, an 808 bass, a cowbell riff, a pad, a lead and tape hiss; no
-  samples, no recordings): 128 BPM, A minor (Am – F – Dm – E), 2:00, looped; `assets/audio/theme.mp3`
-  (loudness-normalised, 128 kbps). How to change and re-render it: `tools/music/README.md`. It replaced
-  «Hurt» (Infraction & Emerel Gray), whose licence for a game was never confirmed. It plays in the
+* Menu music: **«Hurt»** — Infraction & Emerel Gray (Brazilian Phonk Sport), the phonk the owner supplied
+  (`assets/audio/theme.mp3`, 96 kbps, 2:53, looped). v0.2.18 part 3 replaced it with the game's own
+  «Районные дела» (`tools/music/compose.py`: synthesised, no samples — still there to re-render, see
+  `tools/music/README.md`); in v0.2.19 the owner chose «Hurt» again («более запоминающийся и динамичный»),
+  so its licence for use in a game is to confirm ([ASSETS.md](ASSETS.md)). It plays in the
   menus, the lobby and on the results screen, fades out when a match starts and pauses when the tab is
   hidden (`apps/web/src/game/audio/Music.ts`); volume in Settings, a mute button in the menu corner.
   It starts together with the menu: at start-up the game tries to play it without a tap (browsers that
@@ -150,5 +150,5 @@ state in a strip under the timer, on the minimap and as edge markers.
   iOS), so then the loading screen ends with a «▶ Play» button (`main.ts`) and that tap starts the
   music with the menu. A player who arrives by an invite link goes straight to the room; the music
   starts with their first tap.
-  The credits name it as the game's own music. The single-file demo does not include the music. Every
+  The credits name it and its authors. The single-file demo does not include the music. Every
   asset and its rights: [ASSETS.md](ASSETS.md).

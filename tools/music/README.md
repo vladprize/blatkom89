@@ -1,5 +1,8 @@
 # The menu soundtrack — «Районные дела»
 
+**Not in the game since v0.2.19**: the owner chose the phonk «Hurt» again; this track stays here, ready to
+re-render, should «Hurt»'s licence for a game not be had.
+
 The game's own music (v0.2.18 part 3), replacing the track supplied earlier («Hurt»). Everything is
 synthesised by `compose.py` — the drums, the 808 bass, the cowbell riff, the pad, the lead, the tape hiss —
 so the music belongs to the game like the code does: no samples, no recordings, no licence to keep.
