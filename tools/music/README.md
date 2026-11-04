@@ -54,3 +54,17 @@ About −11 LUFS, −1.7 dBTP.
 python3 tools/music/compose_blatnyak.py /tmp/strelka_blatnyak.wav    # STEMS=<dir> writes each part as .npy
 ffmpeg -i /tmp/strelka_blatnyak.wav -c:a libmp3lame -b:a 320k /tmp/strelka_blatnyak.mp3
 ```
+
+## «MONTAGEM BLATKOM» — a plain hard Brazilian phonk (not in the game)
+
+`compose_funk.py` (5 Nov 2026, the owner asked for hard Brazilian phonk with nothing Soviet in it): 130 BPM,
+G phrygian (Gm – Gm – A♭ – Fm, D to lead home), 72 bars = 2:13, loopable. A synthesised «aah» choir chopped
+like a montagem, an agudo FM lead with its pitch drop, the phonk cowbell, tamborzão toms, a heavily distorted
+808 sliding under the funk kick, claps with a snap, Memphis hat rolls, tuim whistles, a siren, a formant-synth
+crowd «HEY!»; a half-time switch with the choir slowed an octave down, stutter fills, gaps and tape stops.
+Mastered loud like the genre: about −7.5 LUFS, −0.7 dBTP after MP3.
+
+```sh
+python3 tools/music/compose_funk.py /tmp/montagem.wav     # STEMS=<dir> writes each part as .npy
+ffmpeg -i /tmp/montagem.wav -c:a libmp3lame -b:a 320k /tmp/montagem.mp3
+```
