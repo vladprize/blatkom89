@@ -94,7 +94,7 @@ export function renderClubs(o: { api: ClubsApi; level: number; tokens: number; o
       h('span', { class: 'tag' }, query.length >= 2 ? t('Search') : t('Gang table')),
       search,
       data.clubs.length ? h('div', { class: 'clubrows fitscroll' }, ...data.clubs.map((c) => row(c, c.id === my?.id))) : h('div', { class: 'muted' }, t('No gangs found.')),
-      h('div', { class: 'muted', style: 'font-size:13px' }, t('A gang’s rating rises and falls with its people’s results: every rating point a member wins or loses in a match counts for the gang too.')),
+      h('div', { class: 'muted clubs__ratingnote', style: 'font-size:13px' }, t('A gang’s rating rises and falls with its people’s results: every rating point a member wins or loses in a match counts for the gang too.')),
     );
     if (query && document.activeElement !== search) search.focus();
   };

@@ -3,7 +3,7 @@
  * portrait, weapon & ammo with slots, centre messages, hit markers, scoreboard and touch controls.
  */
 import * as Phaser from 'phaser';
-import { getMap, PROP_DEFS, propFootprint, WEAPONS, SCORING, BASE_RULES, CTF_RULES, isTeamMode } from '@blatkom/shared';
+import { getMap, PROP_DEFS, propFootprint, WEAPONS, SCORING, BASE_RULES, CTF_RULES, SPRINT, isTeamMode } from '@blatkom/shared';
 import type { MapDef, Team, WeaponId } from '@blatkom/shared';
 import type { GameSession, RenderBase, RenderFlag, RenderPlayer } from '../session/types.js';
 import { hudBus, publishHudLayout } from './hudBus.js';
@@ -48,6 +48,10 @@ interface Stick {
   knob: Phaser.GameObjects.Image;
   x: number;
   y: number;
+  /** v0.2.20: the finger came from inside the ring (a deliberate pull outwards sprints). */
+  sprintArmed: boolean;
+  /** v0.2.20: pulled past the ring — sprinting (the move stick). */
+  sprinting: boolean;
 }
 
 interface Btn {
@@ -266,6 +270,7 @@ export class HudScene extends Phaser.Scene {
       touchState.aimActive = false;
       touchState.fireHeld = false;
       touchState.gadgetTap = false;
+      touchState.sprint = false;
     });
   }
 
@@ -391,6 +396,8 @@ export class HudScene extends Phaser.Scene {
       y: 0,
       base: this.add.image(0, 0, 'fx', 'joy_base').setAlpha(0.5).setDepth(40),
       knob: this.add.image(0, 0, 'fx', 'joy_knob').setAlpha(0.75).setDepth(41),
+      sprintArmed: false,
+      sprinting: false,
     });
     this.sticks = [mk(), mk()];
     const btn = (icon: string, r: number, onDown: () => void, onUp?: () => void): Btn => {
@@ -420,8 +427,13 @@ export class HudScene extends Phaser.Scene {
   }
 
   // ── touch handling ─────────────────────────────────────────────────────
+  /**
+   * v0.2.20 (the owner: «ужасно, когда джойстики двигаются при сильной тяге — сделай их статичными»): the sticks
+   * stay where they rest; a thumb anywhere on its half drives the knob from the stick's centre, and pulling
+   * past the ring sprints (the move stick, when the pull started inside the ring).
+   */
   private stickRadius() {
-    return 58 * getSettings().stickScale;
+    return 58 * getSettings().stickScale * Math.min(1, this.btnScaleY);
   }
 
   private onPointerDown(p: Phaser.Input.Pointer) {
@@ -437,34 +449,38 @@ export class HudScene extends Phaser.Scene {
     }
     const W = this.scale.width;
     const left = getSettings().leftHanded ? p.x > W * 0.5 : p.x < W * 0.5;
-    const stick = left ? this.sticks[0]! : this.sticks[1]!;
+    const i = left ? 0 : 1;
+    const stick = this.sticks[i]!;
     if (stick.id !== null) return;
+    const rest = this.stickRest[i] ?? { x: p.x, y: p.y };
     stick.id = p.id;
-    stick.baseX = p.x;
-    stick.baseY = p.y;
-    stick.x = 0;
-    stick.y = 0;
-    this.updateStick(stick, left);
+    stick.baseX = rest.x;
+    stick.baseY = rest.y;
+    const R = this.stickRadius();
+    stick.sprintArmed = Math.hypot(p.x - rest.x, p.y - rest.y) <= R * 1.05;
+    this.driveStick(stick, p.x - rest.x, p.y - rest.y, i === 0);
   }
 
   private onPointerMove(p: Phaser.Input.Pointer) {
     for (const [i, s] of this.sticks.entries()) {
       if (s.id !== p.id) continue;
-      const R = this.stickRadius();
-      let dx = p.x - s.baseX;
-      let dy = p.y - s.baseY;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d > R) {
-        // drag the base along so the stick never "sticks" at the edge
-        s.baseX += (dx / d) * (d - R);
-        s.baseY += (dy / d) * (d - R);
-        dx = p.x - s.baseX;
-        dy = p.y - s.baseY;
-      }
-      s.x = dx / R;
-      s.y = dy / R;
-      this.updateStick(s, i === 0);
+      const dx = p.x - s.baseX;
+      const dy = p.y - s.baseY;
+      // back inside the ring: the next pull outwards sprints again
+      if (Math.hypot(dx, dy) <= this.stickRadius() * 0.9) s.sprintArmed = true;
+      this.driveStick(s, dx, dy, i === 0);
     }
+  }
+
+  /** The knob follows the thumb up to the ring; the stick itself never moves. */
+  private driveStick(s: Stick, dx: number, dy: number, isMove: boolean) {
+    const R = this.stickRadius();
+    const d = Math.sqrt(dx * dx + dy * dy);
+    const c = d > R ? R / d : 1;
+    s.x = (dx * c) / R;
+    s.y = (dy * c) / R;
+    s.sprinting = isMove && s.sprintArmed && d >= R * 1.12;
+    this.updateStick(s, isMove);
   }
 
   private onPointerUp(p: Phaser.Input.Pointer) {
@@ -480,6 +496,7 @@ export class HudScene extends Phaser.Scene {
       s.id = null;
       s.x = 0;
       s.y = 0;
+      s.sprinting = false;
       this.updateStick(s, i === 0);
     }
   }
@@ -497,19 +514,33 @@ export class HudScene extends Phaser.Scene {
       s.id = null;
       s.x = 0;
       s.y = 0;
+      s.sprinting = false;
       this.updateStick(s, i === 0);
     }
     touchState.moveX = touchState.moveY = 0;
     touchState.aimActive = false;
     touchState.fireHeld = false;
+    touchState.sprint = false;
   }
 
   private updateStick(s: Stick, isMove: boolean) {
     const R = this.stickRadius();
     const active = s.id !== null;
     if (active) {
-      s.base.setPosition(s.baseX, s.baseY).setScale(getSettings().stickScale).setAlpha(0.6);
-      s.knob.setPosition(s.baseX + s.x * R, s.baseY + s.y * R).setScale(getSettings().stickScale).setAlpha(0.9);
+      const k = getSettings().stickScale * Math.min(1, this.btnScaleY);
+      s.base.setPosition(s.baseX, s.baseY).setScale(k).setAlpha(0.6);
+      s.knob.setPosition(s.baseX + s.x * R, s.baseY + s.y * R).setScale(k).setAlpha(0.9);
+      // sprinting: the stick glows the breath's colour
+      if (s.sprinting) {
+        s.base.setTint(0x9fd8ff).setAlpha(0.85);
+        s.knob.setTint(0xcfeeff);
+      } else {
+        s.base.clearTint();
+        s.knob.clearTint();
+      }
+    } else {
+      s.base.clearTint();
+      s.knob.clearTint();
     }
     const dead = 0.12;
     const mag = Math.sqrt(s.x * s.x + s.y * s.y);
@@ -517,6 +548,7 @@ export class HudScene extends Phaser.Scene {
     if (isMove) {
       touchState.moveX = s.x * k;
       touchState.moveY = s.y * k;
+      touchState.sprint = active && s.sprinting;
     } else {
       touchState.aimActive = active && mag > 0.25;
       touchState.aimX = s.x;
@@ -563,6 +595,15 @@ export class HudScene extends Phaser.Scene {
       goalY = this.feedY0;
       this.feedY0 += 30;
     }
+    // v0.2.20 (the owner: «MOVE TO UP LEFT»): a phone held sideways stacks the player's card, the story's goal
+    // and the kill feed in the top-left corner, clear of the score in the middle
+    const cornerCard = this.touch && W > H;
+    let goalX = cx;
+    if (cornerCard) {
+      goalX = padL;
+      goalY = padT + 36 + 6;
+      this.feedY0 = goalY + (this.storyGoal ? 30 : 0);
+    }
     // score box (its colours follow the mode: drawScoreBoxes)
     this.scoreCx = cx;
     this.scorePad = padT;
@@ -579,14 +620,15 @@ export class HudScene extends Phaser.Scene {
     this.pauseBtn.setPosition(mmx - 26, padT + 18);
     // health + weapon panels
     if (this.touch) {
-      const y = padT + 54 + this.extraTop;
+      const px = cornerCard ? padL : cx - 150;
+      const y = cornerCard ? padT : padT + 54 + this.extraTop;
       this.healthBg.clear();
-      this.panel(this.healthBg, cx - 150, y, 300, 36, 0.7);
-      this.portrait.setPosition(cx - 147, y + 3).setDisplaySize(30, 30);
-      this.nameText.setPosition(cx - 112, y + 2);
-      this.hpText.setPosition(cx - 112, y + 17);
-      this.weaponIcon.setPosition(cx + 52, y + 18);
-      this.ammoText.setPosition(cx + 118, y + 6);
+      this.panel(this.healthBg, px, y, 300, 36, 0.7);
+      this.portrait.setPosition(px + 3, y + 3).setDisplaySize(30, 30);
+      this.nameText.setPosition(px + 38, y + 2);
+      this.hpText.setPosition(px + 38, y + 17);
+      this.weaponIcon.setPosition(px + 202, y + 18);
+      this.ammoText.setPosition(px + 268, y + 6);
       this.weaponName.setVisible(false);
       this.weaponBg.clear();
       this.slotGfx.clear();
@@ -671,7 +713,7 @@ export class HudScene extends Phaser.Scene {
       chatBtn: { x: mmx - 26 - 42, y: padT + 18, size: 34 },
       fsBtn: { x: mmx - 26, y: padT + 18 + 44, size: 34 },
       chat: this.touch ? { left: padL, width: Math.min(W * 0.42, 420), top: this.feedY0 + 5 * 22 + 8 } : { left: padL, width: Math.min(W * 0.4, 360), bottom: pad + ins.bottom + 74 + 10 },
-      goal: { x: cx, y: goalY },
+      goal: { x: goalX, y: goalY, align: cornerCard ? 'left' : 'center' },
     });
     this.bigText.setPosition(cx, H * 0.36);
     this.subText.setPosition(cx, H * 0.36 + 48);
@@ -1000,15 +1042,21 @@ export class HudScene extends Phaser.Scene {
     const hp = Math.max(0, hud.hp);
     this.hpText.setText(`${hp}/100`);
     this.hpBar.clear();
+    // v0.2.20: the breath for the sprint, a thin bar under the health (dim while too short to start a sprint)
+    const breath = Math.max(0, Math.min(1, hud.stamina / SPRINT.max));
+    const winded = hud.stamina < SPRINT.minToStart && !hud.sprinting;
+    const breathCol = winded ? 0x5d6f7d : hud.sprinting ? 0xcfeeff : 0x8cc8f0;
     if (this.touch) {
       const x = this.nameText.x + 70;
       const y = this.hpText.y + 6;
       this.hpBar.fillStyle(0x200a08, 1).fillRect(x, y, 90, 7).fillStyle(hp < 30 ? 0xff3a2a : 0xc8312a, 1).fillRect(x, y, (90 * hp) / 100, 7);
+      this.hpBar.fillStyle(0x0e1820, 1).fillRect(x, y + 9, 90, 3).fillStyle(breathCol, 1).fillRect(x, y + 9, 90 * breath, 3);
     } else {
       const x = this.hpText.x;
       const y = this.hpText.y + 24;
       this.hpBar.fillStyle(0x200a08, 1).fillRect(x, y, 150, 10).fillStyle(hp < 30 ? 0xff3a2a : 0xc8312a, 1).fillRect(x, y, (150 * hp) / 100, 10);
       this.hpBar.lineStyle(1, 0x0b0908, 1).strokeRect(x - 0.5, y - 0.5, 151, 11);
+      this.hpBar.fillStyle(0x0e1820, 1).fillRect(x, y + 13, 150, 4).fillStyle(breathCol, 1).fillRect(x, y + 13, 150 * breath, 4);
     }
     // weapon (with the skin it wears)
     const mySkin = this.session.players().find((p) => p.isLocal)?.skin ?? null;

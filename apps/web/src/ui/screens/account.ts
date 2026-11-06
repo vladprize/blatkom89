@@ -11,6 +11,7 @@ import type { OnlineClient } from '../../net/OnlineClient.js';
 import { t } from '../../i18n/index.js';
 import { apiErrorText } from '../../net/errors.js';
 import { PROVIDER_NAME, providerButtons } from './signin.js';
+import { bonusRibbon } from '../coin.js';
 import type { LoginProvider } from '../../net/oauth.js';
 import { inTelegram } from '../../telegram/tg.js';
 
@@ -151,6 +152,8 @@ export function renderAccountPanel(online: OnlineClient, o: { root: HTMLElement;
   // with Google, Telegram… attached the account is already safe: the email is just one more way in
   const safe = (p?.identities?.length ?? 0) > 0 || !!p?.telegramLinked;
   panel.append(
+    // v0.2.20: a guest is paid for registering (an email here, or a provider above)
+    p?.welcomeBonus ? bonusRibbon(p.welcomeBonus, t('The welcome bonus: credited as soon as you register'), 'account-bonus') : '',
     h(
       'div',
       { style: 'margin-top:8px' },

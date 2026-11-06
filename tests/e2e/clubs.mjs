@@ -74,7 +74,9 @@ try {
   const flags = await A.page.locator('[data-testid=club-row] svg.clubflag').count();
   check(flags === names.length, `every row has its flag (${flags})`);
   await A.page.screenshot({ path: `${outDir}/clubs_table_A.png` });
-  await A.page.getByTestId('club-row').nth(1).click();
+  // a house club that recruits (one that has grown to the cap of 50 no longer does — the rows say so)
+  const recruitingAt = await A.page.evaluate(() => [...document.querySelectorAll('[data-testid=club-row]')].findIndex((r, i) => i > 0 && !/not recruiting|набор закрыт/i.test(r.textContent ?? '')));
+  await A.page.getByTestId('club-row').nth(Math.max(1, recruitingAt)).click();
   await A.page.locator('.clubhead').waitFor({ timeout: 15000 });
   const page2 = await A.page.evaluate(() => ({
     roles: [...document.querySelectorAll('.clubmember')].map((m) => (m.querySelector('.clubrole') ? 'head' : 'member')),

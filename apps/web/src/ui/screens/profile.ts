@@ -41,11 +41,11 @@ export function renderProfileView(d: ProfileData, o: { local: boolean; onRename:
     avatarButton(p.avatar, o.onAvatar, 'ava-btn--big'),
     h('div', { class: 'lvlbadge lvlbadge--big', title: t('Level') }, h('small', null, t('LVL')), String(p.level)),
     nick,
-    h('button', { class: 'btn btn--small', onclick: o.onRename, 'aria-label': t('Change alias') }, `✎ ${t('Alias')}`),
+    h('button', { class: 'btn btn--small profile__rename', onclick: o.onRename, 'aria-label': t('Change alias'), title: t('Change alias') }, '✎', h('span', { class: 'profile__renametxt' }, ` ${t('Alias')}`)),
   );
   // the whole alias stays visible: the heading's size (as .h1: 26–40 px with the screen) shrinks for
   // long ones, a very long one takes two lines
-  whenSized(head, () => fitAlias(nick, { max: () => Math.min(40, Math.max(26, window.innerWidth * 0.05)), min: 20, minTwoLines: 16 }));
+  whenSized(head, () => fitAlias(nick, { max: () => Math.min(40, Math.max(26, window.innerWidth * 0.05), Math.max(22, window.innerHeight * 0.075)), min: 13, minTwoLines: 13, wrap: false }));
   const root = h('div', { class: 'col profile fitcol', 'data-testid': 'profile' });
   const tabs = paneTabs(root, 'profile', [
     { id: 'a', label: t('Dossier'), testid: 'profile-pane-dossier' },

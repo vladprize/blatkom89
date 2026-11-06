@@ -26,7 +26,7 @@ export class InputManager {
     const kb = scene.input.keyboard;
     if (kb) {
       const K = Phaser.Input.Keyboard.KeyCodes;
-      const map: Record<string, number> = { W: K.W, A: K.A, S: K.S, D: K.D, UP: K.UP, DOWN: K.DOWN, LEFT: K.LEFT, RIGHT: K.RIGHT, SHIFT: K.SHIFT, R: K.R, Q: K.Q, E: K.E, ONE: K.ONE, TWO: K.TWO, THREE: K.THREE, G: K.G, TAB: K.TAB, ESC: K.ESC, SPACE: K.SPACE };
+      const map: Record<string, number> = { W: K.W, A: K.A, S: K.S, D: K.D, UP: K.UP, DOWN: K.DOWN, LEFT: K.LEFT, RIGHT: K.RIGHT, SHIFT: K.SHIFT, C: K.C, R: K.R, Q: K.Q, E: K.E, ONE: K.ONE, TWO: K.TWO, THREE: K.THREE, G: K.G, TAB: K.TAB, ESC: K.ESC, SPACE: K.SPACE };
       for (const [name, code] of Object.entries(map)) this.keys[name] = kb.addKey(code, true, false);
       kb.on('keydown-R', () => (this.edgeButtons |= BTN.RELOAD));
       kb.on('keydown-Q', () => (this.edgeButtons |= BTN.NEXT_WEAPON));
@@ -85,6 +85,7 @@ export class InputManager {
         if (touchState.swapTap) buttons |= BTN.NEXT_WEAPON;
         if (touchState.interactTap) buttons |= BTN.INTERACT;
         if (touchState.gadgetTap) buttons |= BTN.GADGET;
+        if (touchState.sprint) buttons |= BTN.SPRINT;
         touchState.reloadTap = touchState.swapTap = touchState.interactTap = touchState.gadgetTap = false;
       } else {
         if (k.A?.isDown || k.LEFT?.isDown) mx -= 1;
@@ -96,7 +97,9 @@ export class InputManager {
           mx /= len;
           my /= len;
         }
-        if (k.SHIFT?.isDown) buttons |= BTN.WALK;
+        // v0.2.20 (the owner): Shift sprints; walking quietly moved to C
+        if (k.SHIFT?.isDown) buttons |= BTN.SPRINT;
+        if (k.C?.isDown) buttons |= BTN.WALK;
         const pointer = this.scene.input.activePointer;
         if (player) {
           const cam = this.scene.cameras.main;

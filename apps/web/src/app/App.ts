@@ -48,6 +48,7 @@ import { renderClubs, renderClub, renderClubEditor, clubLabel } from '../ui/scre
 import { renderInvite } from '../ui/screens/invite.js';
 import { blatsCoin, fmtNum } from '../ui/coin.js';
 import { blatsArtBanner, blatsSale, setBannerSale, setBannerStars } from '../ui/blats.js';
+import { forceLandscape } from './landscape.js';
 import { MatchFullscreenButton, fullscreenAction, fullscreenButton } from '../ui/fullscreenButton.js';
 import { fullscreenWay, isFullscreen } from './fullscreen.js';
 import { renderKon, konLabel, tourneyIcon } from '../ui/screens/kon.js';
@@ -384,6 +385,12 @@ export class App {
         this.blatsNote = t('+{n} BLATS for the levels you reached', { n: fmtNum(n) });
         if (this.screen === 'menu') this.flushBlatsNote();
       };
+      // v0.2.20: the welcome bonus — paid as the player registers, so said at once
+      this.online.onWelcomeCredited = (n) => {
+        toast(t('+{n} BLATS — the welcome bonus for registering', { n: fmtNum(n) }));
+        sfx.play('buy');
+        this.refreshStrip();
+      };
       this.online.pingVisit();
       void this.loadSiteInfo();
       this.online.social.on((e) => this.onSocial(e));
@@ -533,6 +540,10 @@ export class App {
   private go(s: Screen, push = true) {
     if (push && this.screen !== s && !['loading', 'error', 'game', 'storyEnd'].includes(this.screen)) this.history.push(this.screen);
     this.screen = s;
+    // v0.2.20 (the owner: «когда матч закончился — уже горизонтально снова лобби открывается»): a match turns the
+    // game sideways and the room stays sideways after it — the results and the room's lobby; anywhere else the
+    // screen follows the phone again
+    if (!['game', 'results', 'lobby', 'loading'].includes(s)) forceLandscape(false);
     if (s !== 'game' && this.chatOverlay) {
       this.chatOverlay.destroy();
       this.chatOverlay = null;
@@ -1325,6 +1336,8 @@ export class App {
             h('span', null, charText(id).name),
           ),
         ),
+        // v0.2.20 (the owner): «?» cards for the characters to come fill the last row of eight (computers)
+        ...Array.from({ length: (8 - (CHARACTER_IDS.length % 8)) % 8 }, () => h('div', { class: 'chars__soon', 'aria-hidden': 'true' }, h('b', null, '?'), h('span', null, t('Soon')))),
       );
       const c = charText(selected);
       const locked = !this.ownsCharacter(selected);
@@ -1500,8 +1513,9 @@ export class App {
     this.session = session;
     this.resultsShown = false;
     this.go('game');
-    this.root.replaceChildren(h('div', { class: 'rotate-hint panel', style: 'position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);pointer-events:none;opacity:.85' }, t('Turn your phone sideways')));
-    setTimeout(() => this.root.querySelector('.rotate-hint')?.remove(), 4000);
+    this.root.replaceChildren();
+    // v0.2.20 (the owner): a match is sideways from its first frame — an upright phone gets the page turned
+    forceLandscape(true);
     enterGameMode();
     this.host.startGame(session);
     // a story mission has just shown its place in the comic

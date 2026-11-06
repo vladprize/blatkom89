@@ -16,6 +16,7 @@ import type {
   InviteInfo,
   MapId,
   PublicProfile,
+  PromoRedeemResponse,
   CharacterId,
   GameMode,
   MatchHistoryResponse,
@@ -139,6 +140,10 @@ export class Api {
     return this.req<{ ok: true }>('POST', '/api/auth/email/reset', { token, password });
   }
   // ── economy ─────────────────────────────────────────────────────────────
+  /** v0.2.20: a promo code for BLATS (BLATNOY…). */
+  redeemPromo(code: string) {
+    return this.req<PromoRedeemResponse>('POST', '/api/promo', { code });
+  }
   shopConfig() {
     return this.req<ShopConfig>('GET', '/api/shop/config');
   }

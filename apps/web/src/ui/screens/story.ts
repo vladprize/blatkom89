@@ -149,7 +149,7 @@ export function renderStory(o: {
       { class: 'panel story__intro' },
       h('span', { class: 'tag' }, '2089 → 1989'),
       h('div', { class: 'story__lead' }, t('In 2089 the city’s disputes go to BLATKOM: both sides wake up in a simulation of 1989, half human, half beast — and whoever holds the district there is right out here.')),
-      h('div', { class: 'story__btns' }, h('button', { class: 'btn btn--small', 'data-testid': 'story-prologue', onclick: o.onPrologue }, t('Prologue ▶')), h('button', { class: 'btn btn--small', 'data-testid': 'story-cards', onclick: o.onCards }, t('Card index · {n}/{all}', { n: STORY_CARD_INDEX.filter((c) => met.has(c)).length, all: STORY_CARD_INDEX.length }))),
+      h('div', { class: 'story__btns' }, h('button', { class: 'btn btn--small', 'data-testid': 'story-prologue', onclick: o.onPrologue }, t('Prologue')), h('button', { class: 'btn btn--small', 'data-testid': 'story-cards', onclick: o.onCards }, t('Card index · {n}/{all}', { n: STORY_CARD_INDEX.filter((c) => met.has(c)).length, all: STORY_CARD_INDEX.length }))),
     ),
     h('div', { class: 'story__camps' }, ...CAMPAIGN_ORDER.map((c) => campaignPanel(c, done, ids, o.chapter[c], o.onChapter, o.onPlay, !!o.offline))),
     o.offline

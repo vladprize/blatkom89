@@ -18,6 +18,8 @@ export interface RenderPlayer {
   reloading: boolean;
   invulnerable: boolean;
   walking: boolean;
+  /** v0.2.20: sprinting (dust at the feet). */
+  sprinting: boolean;
   connected: boolean;
   kills: number;
   assists: number;
@@ -123,6 +125,9 @@ export type SessionEvent =
 export interface HudState {
   hp: number;
   alive: boolean;
+  /** v0.2.20: breath for the sprint (0..100) and sprinting now. */
+  stamina: number;
+  sprinting: boolean;
   respawnInMs: number;
   weapon: WeaponId;
   /** Loadout slots 1 and 2, and the slot-3 weapon carried (if any). */

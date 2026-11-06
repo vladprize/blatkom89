@@ -11,10 +11,13 @@
 //
 // Usage: DATABASE_URL=… node tests/e2e/battle.mjs <baseUrl> <outDir>
 import { chromium } from 'playwright';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import WebSocket from 'ws';
 import postgres from 'postgres';
+
+// the socket players speak the game's current protocol (read from the shared source, never a stale number)
+const PROTOCOL = Number(/PROTOCOL_VERSION = (\d+)/.exec(readFileSync(new URL('../../packages/shared/src/net/protocol.ts', import.meta.url), 'utf8'))[1]);
 
 const [base, outDir] = process.argv.slice(2);
 if (!base || !outDir || !process.env.DATABASE_URL) {
@@ -115,7 +118,7 @@ async function socketPlayer(name) {
     new Promise((resolve) => {
       const ws = new WebSocket(`${wsBase}/ws`);
       p.room = ws;
-      ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', protocol: 9, token: auth.token, roomId, character: 'petya', clientVersion: 'e2e' })));
+      ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', protocol: PROTOCOL, token: auth.token, roomId, character: 'petya', clientVersion: 'e2e' })));
       ws.on('message', (d, bin) => {
         if (bin) return;
         const m = JSON.parse(String(d));

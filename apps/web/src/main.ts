@@ -9,6 +9,7 @@ import { loadFonts } from './app/fonts.js';
 import { music } from './game/audio/Music.js';
 import { getLang, onLangChange, t } from './i18n/index.js';
 import { initLifecycle, isPaused, onLifecycle } from './app/lifecycle.js';
+import { markIosStandalone } from './app/landscape.js';
 
 /** Page language and the tab title follow the game language (Cyrillic name in Russian). */
 function applyLang() {
@@ -20,6 +21,7 @@ function applyLang() {
 }
 
 async function main() {
+  markIosStandalone();
   applyLang();
   onLangChange(applyLang);
   const hint = document.querySelector('.boot__hint');

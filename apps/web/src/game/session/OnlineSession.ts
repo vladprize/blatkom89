@@ -200,6 +200,8 @@ export class OnlineSession implements GameSession {
     me.score = np.score;
     this.myObjectives = np.objectives;
     me.walking = np.walking;
+    me.stamina = np.stamina;
+    me.sprinting = np.sprinting;
     me.connected = np.connected;
     me.team = np.team;
     this.myTeam = np.team;
@@ -207,6 +209,7 @@ export class OnlineSession implements GameSession {
     me.clock = np.ack * TICK_MS;
     me.reloadWeapon = np.reloading ? np.weapon : null;
     me.reloadUntil = me.clock + np.reloadRemaining;
+    me.staminaRegenAt = me.clock + np.staminaRegenIn;
     me.nextFireAt = me.clock + np.cooldownRemaining;
     me.spreadHeat = np.spreadHeat;
     // shot counter travels as 16 bits: rebuild the high bits from the local counter
@@ -336,6 +339,7 @@ export class OnlineSession implements GameSession {
         reloading: src.reloading,
         invulnerable: src.invulnerable,
         walking: src.walking,
+        sprinting: src.sprinting,
         connected: src.connected,
         kills: pb.kills,
         assists: pb.assists,
@@ -429,6 +433,7 @@ export class OnlineSession implements GameSession {
         reloading: me.reloadWeapon !== null,
         invulnerable: me.invulnUntil > 0,
         walking: me.walking,
+        sprinting: me.sprinting,
         connected: true,
         kills: me.kills,
         assists: me.assists,
@@ -482,6 +487,8 @@ export class OnlineSession implements GameSession {
     return {
       hp: me?.hp ?? 100,
       alive: me?.alive ?? true,
+      stamina: me?.stamina ?? 100,
+      sprinting: me?.sprinting ?? false,
       respawnInMs: me && !me.alive ? Math.max(0, me.respawnAt - elapsed) : 0,
       weapon,
       sidearm: me?.sidearm ?? 'pistol',

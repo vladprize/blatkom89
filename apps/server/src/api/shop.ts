@@ -4,14 +4,15 @@
  * All prices and rules come from packages/shared/src/game-rules/economy.ts; the server never trusts
  * client-side ownership, balances or prices.
  */
-import { BuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, CHARACTER_CASE_PRICE, REAL_MONEY, SKIN_CASE_PRICE, SkinBuyRequest, StarsInvoiceRequest, priceOf, skinPrice } from '@blatkom/shared';
-import type { CaseResult, CharacterCaseResult, Loadout, ShopConfig, ShopPrice, SkinCaseResult } from '@blatkom/shared';
+import { BuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, CHARACTER_CASE_PRICE, PromoRedeemRequest, REAL_MONEY, SKIN_CASE_PRICE, SkinBuyRequest, StarsInvoiceRequest, priceOf, skinPrice } from '@blatkom/shared';
+import type { CaseResult, CharacterCaseResult, Loadout, PromoRedeemResponse, ShopConfig, ShopPrice, SkinCaseResult } from '@blatkom/shared';
 import type { RouteModule } from '../app.js';
 import { HttpError, readBody } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
 import { RateLimiter, rateLimit } from '../security/rateLimit.js';
 import { pgContext } from '../services/persistence.js';
 import { EconomyError } from '../economy/repo.js';
+import { redeemPromo } from '../economy/bonuses.js';
 
 export const registerShopRoutes: RouteModule = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
@@ -54,6 +55,24 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
   router.get('/api/me/ledger', auth, async (ctx) => {
     const limit = Math.min(100, Math.max(1, Number(ctx.query.get('limit') ?? 30) || 30));
     ctx.json(200, { entries: await pg().economy.ledger(currentUser(ctx).userId, limit) });
+  });
+
+  // v0.2.20: promo codes for BLATS (BLATNOY…), each once per account (economy/bonuses.ts); a few tries per
+  // player and per address, so codes aren't guessed
+  const promoLimiter = new RateLimiter(8, 8 / 600);
+  const promoIpLimiter = new RateLimiter(30, 30 / 600);
+  router.post('/api/promo', auth, rateLimit(promoIpLimiter), rateLimit(promoLimiter, byUser), async (ctx) => {
+    const user = currentUser(ctx);
+    const body = await ctx.body(PromoRedeemRequest, 1024);
+    const r = await redeemPromo(pg().sql, user.userId, body.code);
+    if (!r.ok) {
+      if (r.reason === 'unknown') throw new HttpError(404, 'promo_unknown', 'There is no such promo code');
+      if (r.reason === 'used') throw new HttpError(409, 'promo_used', 'This promo code has already been used on your account');
+      throw new HttpError(410, 'promo_expired', 'This promo code no longer works');
+    }
+    deps.log.info('promo code redeemed', { code: r.code, userId: user.userId, diamonds: r.gained });
+    const res: PromoRedeemResponse = { code: r.code, diamonds: r.gained, balance: r.balance };
+    ctx.json(200, res);
   });
 
   router.post('/api/shop/buy', auth, rateLimit(shopLimiter, byUser), async (ctx) => {

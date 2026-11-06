@@ -146,6 +146,8 @@ export const LEDGER_REASONS: Record<string, string> = {
   level: 'За уровни',
   referral: 'За приглашения',
   story: 'Сюжет',
+  welcome: 'Бонус за регистрацию',
+  promo: 'Промокоды',
 };
 export const PAYMENT_STATUSES: Record<string, string> = { created: 'ожидает', paid: 'оплачен', failed: 'ошибка', expired: 'истёк', refunded: 'возврат' };
 export const PAYMENT_PROVIDERS: Record<string, string> = { stripe: 'Карта (Stripe)', xsolla: 'Xsolla (сайт)', nowpayments: 'NOWPayments (до v0.2.18)', telegram: 'Telegram Stars' };

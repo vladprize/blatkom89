@@ -75,6 +75,8 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     SERVER_VERSION: 'test',
     MAX_ROOMS: 10,
     CASES_ENABLED: true,
+    WELCOME_BONUS_BLATS: 199,
+    HOUSE_PLAYERS: 0,
     XSOLLA_SANDBOX: true,
     XSOLLA_SKU_PREFIX: 'blats_',
     STARS_ENABLED: true,

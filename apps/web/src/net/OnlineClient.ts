@@ -2,7 +2,7 @@
  * Online flow controller: authentication (Telegram initData or dev login), room creation/quick
  * match/invites over HTTP, the game WebSocket, lobby state and the OnlineSession lifecycle.
  */
-import type { AvatarId, CharacterId, FinishId, GameMode, InviteInfo, Inventory, KonFormat, Loadout, MapId, MatchConfig, MatchPhase, ModId, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, TelegramLinkOutcome, WeaponId, GangBattle, GangBattleFormat, GangBattleResponse } from '@blatkom/shared';
+import type { AvatarId, CharacterId, FinishId, GameMode, InviteInfo, Inventory, KonFormat, Loadout, MapId, MatchConfig, MatchPhase, ModId, PromoRedeemResponse, PublicProfile, RosterEntry, ServerMessage, ShopKind, Team, TelegramLinkOutcome, WeaponId, GangBattle, GangBattleFormat, GangBattleResponse } from '@blatkom/shared';
 import { nickName } from '@blatkom/shared';
 import { Api, ApiError } from './api.js';
 import { readLoginReturn } from './oauth.js';
@@ -85,13 +85,21 @@ export class OnlineClient {
   private me: PublicProfile | null = null;
   /** v0.2.18: a profile read paid BLATS for levels (the levels reached before BLATS existed) — say so once. */
   onBlatsCredited: ((amount: number, level: number) => void) | null = null;
+  /** v0.2.20: registering paid the welcome bonus — say so once. */
+  onWelcomeCredited: ((amount: number) => void) | null = null;
   get profile(): PublicProfile | null {
     return this.me;
   }
   set profile(p: PublicProfile | null) {
     const credited = p?.blatsCredited ?? 0;
-    this.me = p && credited ? { ...p, blatsCredited: 0 } : p;
+    const welcome = p?.welcomeCredited ?? 0;
+    this.me = p && (credited || welcome) ? { ...p, blatsCredited: 0, welcomeCredited: 0 } : p;
     if (p && credited > 0) this.onBlatsCredited?.(credited, p.level);
+    if (p && welcome > 0) {
+      // the wallet the Arsenal shows follows at once
+      if (this.inventory) this.inventory = { ...this.inventory, diamonds: p.diamonds };
+      this.onWelcomeCredited?.(welcome);
+    }
   }
   /** Friends, presence, private messages, invitations (opened once signed in). */
   readonly social = new SocialClient(this.api, () => this.profile?.id ?? null);
@@ -331,6 +339,14 @@ export class OnlineClient {
   }
 
   // ── economy ─────────────────────────────────────────────────────────────
+  /** v0.2.20: redeems a promo code; the wallet follows. */
+  async redeemPromo(code: string): Promise<PromoRedeemResponse> {
+    await this.ensureAuth();
+    const r = await this.api.redeemPromo(code);
+    if (this.inventory) this.inventory = { ...this.inventory, diamonds: r.balance };
+    if (this.me) this.me = { ...this.me, diamonds: r.balance };
+    return r;
+  }
   async loadInventory(): Promise<Inventory> {
     await this.ensureAuth();
     this.inventory = await this.api.inventory();

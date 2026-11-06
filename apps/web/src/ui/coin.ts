@@ -6,7 +6,7 @@
  * file ×3, 96 → the 32 px one ×3).
  */
 import { asset, h } from './dom.js';
-import { getLang } from '../i18n/index.js';
+import { getLang, t } from '../i18n/index.js';
 
 export function blatsCoin(size = 16, alt = ''): HTMLImageElement {
   const file = [128, 64, 32, 16].find((s) => size % s === 0) ?? 128;
@@ -16,4 +16,12 @@ export function blatsCoin(size = 16, alt = ''): HTMLImageElement {
 /** 12 345 678 (Russian) / 12,345,678 (English). */
 export function fmtNum(n: number): string {
   return new Intl.NumberFormat(getLang() === 'ru' ? 'ru-RU' : 'en-GB', { maximumFractionDigits: 0 }).format(n);
+}
+
+/**
+ * v0.2.20: the welcome bonus, as a red BLATS strip (the registration window and the profile's account
+ * panel): «+199 BLATS» and what it is for.
+ */
+export function bonusRibbon(n: number, line: string, testid: string): HTMLElement {
+  return h('div', { class: 'bonusrib', 'data-testid': testid }, blatsCoin(32, ''), h('span', { class: 'bonusrib__txt' }, h('b', null, `+${fmtNum(n)} ${t('BLATS')}`), h('small', null, line)));
 }

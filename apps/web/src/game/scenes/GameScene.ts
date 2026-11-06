@@ -45,6 +45,8 @@ export class GameScene extends Phaser.Scene {
   private laserDots: Phaser.GameObjects.Image[] = [];
   private inputs!: InputManager;
   private readonly views = new Map<number, CharacterView>();
+  /** v0.2.20: when each sprinting player last kicked up dust. */
+  private readonly sprintDust = new Map<number, number>();
   private readonly pickupSprites = new Map<number, { img: Phaser.GameObjects.Image; ring: Phaser.GameObjects.Image; marker: Phaser.GameObjects.Image | null; crate: Phaser.GameObjects.Image | null; glow: Phaser.GameObjects.Image | null }>();
   private acc = 0;
   private camX = 0;
@@ -232,7 +234,13 @@ export class GameScene extends Phaser.Scene {
         v.onSmoke = (x, y) => this.fx.cigaretteSmoke(x, y);
         this.views.set(p.slot, v);
       }
-      v.update(p, time, dt, !p.isLocal && this.gadgetView.concealed(p.x, p.y));
+      const hidden = !p.isLocal && this.gadgetView.concealed(p.x, p.y);
+      v.update(p, time, dt, hidden);
+      // v0.2.20: a sprinting player kicks up dust behind
+      if (p.sprinting && p.alive && !hidden && time - (this.sprintDust.get(p.slot) ?? 0) > 70) {
+        this.sprintDust.set(p.slot, time);
+        this.fx.dust(p.x - p.vx * 0.05, p.y - p.vy * 0.05 + 5);
+      }
     }
     this.drawLasers(players);
     for (const [slot, v] of this.views) {

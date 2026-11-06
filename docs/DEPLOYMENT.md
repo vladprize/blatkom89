@@ -74,6 +74,8 @@ Copy `.env.example` to `.env` and set at least:
 | `RESEND_API_KEY` + `MAIL_FROM` | optional: password-reset letters (Resend; the sender domain must be verified there). Without them admins issue one-time reset links in `/admin` |
 | `CASES_ENABLED` | `true` (default) / `false` — every case: the rare-weapon case (talons), the skin case and the character case (BLATS, 18+); off for markets where paid random items are restricted |
 | `WELCOME_GIFT_UNTIL` | v0.2.18 part 2 — optional ISO date (e.g. `2027-01-31T23:59:59Z`): players who sign in before it get the welcome gift («Shark», «Blatkom ’89» on every weapon) and keep it; **unset: the gift has no end yet** (the owner sets the date) |
+| `WELCOME_BONUS_BLATS` | v0.2.20 — BLATS a guest account gets once for registering (an email, or a sign-in provider on the website); default `199`, `0` switches the bonus off ([ECONOMY.md](ECONOMY.md) §5b). Promo codes (BLATNOY …) live in the `promo_codes` table, not in the environment |
+| `HOUSE_PLAYERS` | v0.2.20 — house players: accounts the game keeps itself in the player tables (Top-100), with natural aliases and slowly moving numbers, left out of the dashboard's metrics, tables and exports, the tournament and every reward (default `240`, at most 500; `0`: none are added and the ones there leave the tables). Nobody can sign in to one |
 | `SOCIAL_X_URL`, `SOCIAL_TELEGRAM_URL`, `SOCIAL_INSTAGRAM_URL` | optional (v0.2.17; Instagram v0.2.19): where the menu's X, Telegram and Instagram buttons lead; without them the buttons say «coming soon» |
 | `MATCH_FILL_BOTS` | complete small lineups with players the server runs itself (default `true`: 4 in free-for-all, 3 a side in team modes; Quick Match after a 5 s head start, rooms with friends at kick-off; see docs/NETCODE.md §2a) |
 | `GUEST_SIGNUPS_PER_IP_HOUR` | new guest accounts per address per hour (default 10; raise it for events where many new players share one Wi-Fi) |
@@ -172,4 +174,14 @@ Migration `023_blats.sql` only adds (a column and two unique indexes) and runs b
 * The protocol version is 9 (two new maps): clients still open on the old version are told to reload.
 * New optional variables: `XSOLLA_*`, `STARS_ENABLED`, `STARS_PER_USD`, `PAY_SUPPORT`,
   `COPYRIGHT_HOLDER` (§2). Nothing has to be set for the update itself.
+
+## v0.2.20: what the update changes on the server
+
+- Migrations **027** (the ledger's reasons `welcome` and `promo`, their once-only indexes, the `promo_codes` table
+  with BLATNOY = 500) and **028** (`users.house_player`; the identity check also lets a house player have no way
+  in). Both only add; nothing is rewritten or dropped.
+- On its first start the server adds the house players (`HOUSE_PLAYERS`, 240) in the background — a few seconds —
+  and every half hour plays the hours since their last move (`app_settings` key `house_players.drift_at`).
+- The game's protocol is 10 (the sprint button and the breath in the snapshot): a page opened before the update
+  is asked to reload, as after every protocol change.
 

@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.19"),
+  SERVER_VERSION: external_exports.string().default("0.2.20"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -7826,6 +7826,16 @@ var EnvSchema = external_exports.object({
    * owner sets the date when the window should close; players who got the gift keep it.
    */
   WELCOME_GIFT_UNTIL: external_exports.coerce.date().optional(),
+  /**
+   * v0.2.20: BLATS a guest account gets for registering (an email, or a sign-in provider on the website),
+   * once per account (economy/bonuses.ts). 0 switches the bonus off.
+   */
+  WELCOME_BONUS_BLATS: external_exports.coerce.number().int().min(0).max(1e4).default(199),
+  /**
+   * v0.2.20: house players — accounts the game keeps itself so the player tables are never empty
+   * (social/housePlayers.ts). 0: none are added, and the ones there are leave the tables.
+   */
+  HOUSE_PLAYERS: external_exports.coerce.number().int().min(0).max(500).default(240),
   /** Card payments for BLATS (Stripe Checkout). Both keys are required to enable them. */
   STRIPE_SECRET_KEY: external_exports.string().optional(),
   STRIPE_WEBHOOK_SECRET: external_exports.string().optional(),
@@ -10074,6 +10084,22 @@ var RUN_SPEED = 140;
 var WALK_SPEED = 72;
 var ACCELERATION = 1400;
 var DECELERATION = 1900;
+var SPRINT = Object.freeze({
+  /** × the run speed. */
+  speed: 1.36,
+  /** A full breath. */
+  max: 100,
+  /** Spent per second of sprint (≈3.1 s from full). */
+  drainPerSec: 32,
+  /** Back per second once rested (≈4.5 s to full). */
+  regenPerSec: 22,
+  /** The rest before the breath starts coming back (ms). */
+  regenDelayMs: 700,
+  /** A new sprint needs at least this much (no stutter at the bottom of the bar). */
+  minToStart: 18,
+  /** The stick's share of a full pull it takes (a sprint is a run, not a creep). */
+  minStick: 0.6
+});
 var MAX_REWIND_MS = 250;
 var HISTORY_MS = 600;
 var PICKUP_RADIUS = 18;
@@ -11488,7 +11514,7 @@ function sanitizeLoadout(raw, own = {}) {
   const ownsW = own.weapon ?? (() => true);
   const ownsG = own.gadget ?? (() => true);
   const ownsM = own.mod ?? (() => true);
-  const pick2 = (v, slot, fallback) => isWeaponId(v) && WEAPONS[v].slot === slot && ownsW(v) ? v : fallback;
+  const pick3 = (v, slot, fallback) => isWeaponId(v) && WEAPONS[v].slot === slot && ownsW(v) ? v : fallback;
   const mods = {};
   if (r.mods && typeof r.mods === "object" && !Array.isArray(r.mods)) {
     for (const [k, v] of Object.entries(r.mods)) {
@@ -11499,9 +11525,9 @@ function sanitizeLoadout(raw, own = {}) {
   }
   const gadget = r.gadget === null ? null : isGadgetId(r.gadget) && ownsG(r.gadget) ? r.gadget : DEFAULT_LOADOUT.gadget;
   return {
-    sidearm: pick2(r.sidearm, 1, DEFAULT_LOADOUT.sidearm),
-    melee: pick2(r.melee, 2, DEFAULT_LOADOUT.melee),
-    primary: r.primary === null ? null : pick2(r.primary, 3, DEFAULT_LOADOUT.primary),
+    sidearm: pick3(r.sidearm, 1, DEFAULT_LOADOUT.sidearm),
+    melee: pick3(r.melee, 2, DEFAULT_LOADOUT.melee),
+    primary: r.primary === null ? null : pick3(r.primary, 3, DEFAULT_LOADOUT.primary),
     gadget,
     mods,
     skins: sanitizeSkins(r.skins, own.skin ?? (() => true))
@@ -11686,6 +11712,12 @@ var SHOP_WEAPONS = WEAPON_IDS.filter((w) => WEAPON_PRICES[w]);
 var SHOP_CHARACTERS = CHARACTER_IDS.filter((c) => CHARACTER_PRICES[c]);
 var SHOP_GADGETS = GADGET_IDS.filter((g) => GADGET_PRICES[g]);
 var CASE_WEAPONS = CASE_TABLE.map((e2) => e2.weapon);
+
+// packages/shared/src/game-rules/promo.ts
+var PROMO_CODE_RE = /^[A-Z0-9_-]{3,32}$/;
+function normalizePromoCode(raw) {
+  return transliterate(raw).replace(/\s+/g, "").toUpperCase();
+}
 
 // packages/shared/src/game-rules/match.ts
 var MATCH_PHASES = ["waiting", "ready", "countdown", "active", "finished", "closed"];
@@ -14742,8 +14774,11 @@ var BTN = {
   INTERACT: 8,
   NEXT_WEAPON: 16,
   /** Throw / place / deploy the equipment (slot 4); detonates a placed C4. */
-  GADGET: 32
+  GADGET: 32,
+  /** v0.2.20: sprint while the breath lasts (Shift; the move stick pulled past its ring). */
+  SPRINT: 64
 };
+var BTN_MASK = 127;
 var MAX_SLOTS = 12;
 var SUPPLY_POOL = ["avtomat", "obrez", "ksyuha", "s12", "mp5", "m4", "g36", "svd", "m249", "rpg"];
 function createPlayerState(id, slot, name, character, isBot, now, seed, team = null) {
@@ -14797,6 +14832,10 @@ function createPlayerState(id, slot, name, character, isBot, now, seed, team = n
     lastSeq: 0,
     lastButtons: 0,
     walking: false,
+    stamina: SPRINT.max,
+    sprinting: false,
+    staminaRegenAt: 0,
+    heardAt: -1e9,
     lastShotAt: -1e9,
     lastHitAt: -1e9,
     lastDamagedBy: null,
@@ -14816,7 +14855,16 @@ function stepMovement(p, input, collision, normals) {
     mag = 1;
   }
   const walking = (input.buttons & BTN.WALK) !== 0;
-  const maxSpeed = (walking ? WALK_SPEED : RUN_SPEED) * WEAPONS[p.weapon].moveSpeed;
+  const wantSprint = (input.buttons & BTN.SPRINT) !== 0 && (input.buttons & BTN.FIRE) === 0 && !walking && mag >= SPRINT.minStick;
+  const sprint = wantSprint && p.stamina > 0 && (p.sprinting || p.stamina >= SPRINT.minToStart);
+  if (sprint) {
+    p.stamina = Math.max(0, p.stamina - SPRINT.drainPerSec * TICK_DT);
+    p.staminaRegenAt = p.clock + SPRINT.regenDelayMs;
+  } else if (p.clock >= p.staminaRegenAt) {
+    p.stamina = Math.min(SPRINT.max, p.stamina + SPRINT.regenPerSec * TICK_DT);
+  }
+  p.sprinting = sprint;
+  const maxSpeed = (walking ? WALK_SPEED : RUN_SPEED * (sprint ? SPRINT.speed : 1)) * WEAPONS[p.weapon].moveSpeed;
   const tx = mx * maxSpeed;
   const ty = my * maxSpeed;
   let dvx = tx - p.vx;
@@ -15331,6 +15379,9 @@ var World = class {
     p.gadgetCharges = p.gadget ? GADGETS[p.gadget].charges : 0;
     p.gadgetReadyAt = 0;
     p.flashedUntil = 0;
+    p.stamina = SPRINT.max;
+    p.sprinting = false;
+    p.staminaRegenAt = 0;
     this.events.push({ t: "respawn", slot: p.slot, x: p.x, y: p.y });
   }
   // ── Inputs ──────────────────────────────────────────────────────────────
@@ -15378,6 +15429,7 @@ var World = class {
   }
   doShot(p, w, spread, viewTime) {
     p.invulnUntil = Math.min(p.invulnUntil, this.time);
+    if (!w.silenced) p.heardAt = this.time;
     if (w.kind === "projectile" && w.projectile) return this.launch(p, w, spread);
     const targets = this.targetsAt(viewTime, p);
     const turrets = this.gadgets.filter((g) => g.kind === "turret" && g.ownerId !== p.id && (!this.teams || g.ownerTeam !== p.team));
@@ -15562,6 +15614,7 @@ var World = class {
     victim.respawnAt = this.time + this.config.respawnDelayMs;
     victim.vx = 0;
     victim.vy = 0;
+    victim.sprinting = false;
     victim.reloadWeapon = null;
     if (victim.heavy) this.dropHeavy(victim);
     const carried = this.flags.find((f2) => f2.carrierId === victim.id);
@@ -16510,11 +16563,15 @@ var MinHeap = class {
 };
 
 // packages/shared/src/sim/bots.ts
+var BOT_VIEW = Object.freeze({ halfW: 250, halfH: 135 });
 var DIFFICULTY = {
-  easy: { reaction: 560, aimError: 0.17, turnRate: 4.5, tolerance: 0.28, vision: 420 },
-  normal: { reaction: 360, aimError: 0.1, turnRate: 7, tolerance: 0.18, vision: 520 },
-  hard: { reaction: 230, aimError: 0.055, turnRate: 10, tolerance: 0.11, vision: 620 }
+  easy: { reaction: 560, aimError: 0.17, turnRate: 4.5, tolerance: 0.28, vision: 0.9 },
+  normal: { reaction: 360, aimError: 0.1, turnRate: 7, tolerance: 0.18, vision: 1 },
+  hard: { reaction: 230, aimError: 0.055, turnRate: 10, tolerance: 0.11, vision: 1.12 }
 };
+var HEARD_MS = 2500;
+var HEARD_RANGE = 1e3;
+var RETREAT_HP = 35;
 var BOT_EASE = Object.freeze({ reaction: 1.35, aimError: 1.45, turnRate: 0.78, vision: 0.9, fireDuty: 0.75 });
 function eased(d) {
   return { reaction: d.reaction * BOT_EASE.reaction, aimError: d.aimError * BOT_EASE.aimError, turnRate: d.turnRate * BOT_EASE.turnRate, tolerance: d.tolerance, vision: d.vision * BOT_EASE.vision };
@@ -16568,6 +16625,8 @@ var BotBrain = class {
   /** Fire in bursts (BOT_EASE.fireDuty): shooting until `burstUntil`, then a pause until `pauseUntil`. */
   burstUntil = 0;
   pauseUntil = 0;
+  /** The last hit this bot reacted to (world time): being shot from off its screen, it turns to look. */
+  hitSeen = -1e9;
   /** Bursts with pauses: on for 450–800 ms, off for a share that keeps BOT_EASE.fireDuty on average. */
   burstOn(now) {
     if (!this.ease) return true;
@@ -16597,11 +16656,13 @@ var BotBrain = class {
       const dx = target.x - me.x;
       const dy = target.y - me.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
+      const settle = Math.max(0, 1 - (now - this.targetSeenAt) / 700);
       if (now > this.aimNoiseAt) {
-        this.aimNoise = (this.rng() * 2 - 1) * this.d.aimError;
+        this.aimNoise = (this.rng() * 2 - 1) * this.d.aimError * (1 + settle);
         this.aimNoiseAt = now + 250 + this.rng() * 300;
       }
-      desiredAim = Math.atan2(dy, dx) + this.aimNoise;
+      const lag = this.ease ? 0.14 : 0.08;
+      desiredAim = Math.atan2(dy - target.vy * lag, dx - target.vx * lag) + this.aimNoise;
       const meleeInHand = me.weapon === me.melee;
       const heavyDef = me.heavy ? WEAPONS[me.heavy] : null;
       const tooCloseForLauncher = !!heavyDef?.projectile && dist < heavyDef.projectile.radius * 1.4;
@@ -16619,6 +16680,8 @@ var BotBrain = class {
       }
       const nx = dx / (dist || 1);
       const ny = dy / (dist || 1);
+      const retreat = !obj?.urgent && me.hp <= RETREAT_HP && target.hp > me.hp + 15 && dist > 40;
+      if (retreat) fwd = -1;
       moveX = nx * fwd + -ny * this.strafeDir * 0.7;
       moveY = ny * fwd + nx * this.strafeDir * 0.7;
       if (!this.nav.isWalkable(me.x + moveX * 18, me.y + moveY * 18)) {
@@ -16626,6 +16689,18 @@ var BotBrain = class {
         moveX = nx * fwd + -ny * this.strafeDir * 0.7;
         moveY = ny * fwd + nx * this.strafeDir * 0.7;
       }
+      if (retreat) {
+        const kit2 = this.nearPickup(me, 700, "medkit");
+        const wp = kit2 ? this.followPath(me, kit2, now) : null;
+        if (wp) {
+          const ox = wp.x - me.x;
+          const oy = wp.y - me.y;
+          const od = Math.sqrt(ox * ox + oy * oy) || 1;
+          moveX = ox / od;
+          moveY = oy / od;
+        }
+        if (me.stamina > 0) frame.buttons |= BTN.SPRINT;
+      } else if (fwd === 1 && dist > pref + 160 && me.stamina > 60) frame.buttons |= BTN.SPRINT;
       if (obj?.urgent) {
         const wp = this.followPath(me, obj, now);
         if (wp) {
@@ -16680,6 +16755,7 @@ var BotBrain = class {
         moveX = dx / d;
         moveY = dy / d;
         desiredAim = Math.atan2(moveY, moveX);
+        if (Math.hypot(goal.x - me.x, goal.y - me.y) > 260 && me.stamina > 55 + SPRINT.minToStart) frame.buttons |= BTN.SPRINT;
       }
       const ammo = me.weapon === me.sidearm ? me.sideMag : me.heavyMag;
       const mag = WEAPONS[me.weapon].magazine;
@@ -16709,11 +16785,11 @@ var BotBrain = class {
     frame.aim = quantizeAngle(this.aim);
     return frame;
   }
-  nearPickup(me, within) {
+  nearPickup(me, within, kind = "weapon") {
     let best = null;
     let bestD = within;
     for (const pk of this.world.pickups) {
-      if (!pk.active || pk.kind !== "weapon") continue;
+      if (!pk.active || pk.kind !== kind) continue;
       const d = Math.abs(pk.x - me.x) + Math.abs(pk.y - me.y);
       if (d < bestD) {
         bestD = d;
@@ -16767,18 +16843,27 @@ var BotBrain = class {
     }
     return null;
   }
+  /** On this bot's screen (a sideways screen like a player's, scaled by the difficulty). */
+  onScreen(me, p) {
+    return Math.abs(p.x - me.x) <= BOT_VIEW.halfW * this.d.vision && Math.abs(p.y - me.y) <= BOT_VIEW.halfH * this.d.vision;
+  }
   pickTarget(me, now) {
     let best = null;
-    let bestD = this.d.vision;
-    if (now < me.flashedUntil) bestD = 0;
+    let bestD = Infinity;
+    const blind = now < me.flashedUntil;
+    const attacker = now - me.lastHitAt < 1500 ? me.lastDamagedBy : null;
     for (const p of this.world.players.values()) {
-      if (p === me || !p.alive || !this.world.hostile(me, p)) continue;
-      const d = Math.sqrt((p.x - me.x) ** 2 + (p.y - me.y) ** 2);
-      const sticky = p.id === this.targetId ? 80 : 0;
-      if (d - sticky < bestD && this.world.collision.lineOfSight(me.x, me.y, p.x, p.y) && !this.world.smokeBlocks(me.x, me.y, p.x, p.y)) {
-        bestD = d - sticky;
+      if (blind || p === me || !p.alive || !this.world.hostile(me, p) || !this.onScreen(me, p)) continue;
+      const d = Math.sqrt((p.x - me.x) ** 2 + (p.y - me.y) ** 2) - (p.id === this.targetId ? 80 : 0) - (p.id === attacker ? 120 : 0);
+      if (d < bestD && this.world.collision.lineOfSight(me.x, me.y, p.x, p.y) && !this.world.smokeBlocks(me.x, me.y, p.x, p.y)) {
+        bestD = d;
         best = p;
       }
+    }
+    if (!best && attacker && me.lastHitAt > this.hitSeen) {
+      this.hitSeen = me.lastHitAt;
+      const a = this.world.players.get(attacker);
+      if (a?.alive) this.lastSeen = { x: a.x, y: a.y, at: now };
     }
     if (best) {
       if (best.id !== this.targetId) {
@@ -16806,17 +16891,17 @@ var BotBrain = class {
       if (best) return best;
     }
     if (this.lastSeen && now - this.lastSeen.at < 4e3) return this.lastSeen;
-    let nearestEnemy = null;
-    let nd = Infinity;
+    let heard = null;
+    let hd = HEARD_RANGE;
     for (const p of this.world.players.values()) {
-      if (p === me || !p.alive || !this.world.hostile(me, p)) continue;
-      const d = Math.abs(p.x - me.x) + Math.abs(p.y - me.y);
-      if (d < nd) {
-        nd = d;
-        nearestEnemy = p;
+      if (p === me || !p.alive || !this.world.hostile(me, p) || now - p.heardAt > HEARD_MS) continue;
+      const d = Math.hypot(p.x - me.x, p.y - me.y);
+      if (d < hd) {
+        hd = d;
+        heard = p;
       }
     }
-    if (nearestEnemy && this.rng() < 0.6) return { x: nearestEnemy.x, y: nearestEnemy.y };
+    if (heard) return { x: heard.x, y: heard.y };
     if (!this.roamGoal || Math.abs(this.roamGoal.x - me.x) + Math.abs(this.roamGoal.y - me.y) < 40) {
       const pts = [...this.world.map.spawns, ...this.world.map.pickups];
       const pt = pts[Math.floor(this.rng() * pts.length)];
@@ -16878,7 +16963,7 @@ function fillPersona(rnd, o) {
   const level = Math.max(1, Math.min(60, Math.round(around - 3 + rnd() * 9)));
   const r = rnd();
   const difficulty = around < 4 ? r < 0.6 ? "easy" : "normal" : around < 15 ? r < 0.15 ? "easy" : r < 0.85 ? "normal" : "hard" : r < 0.5 ? "normal" : "hard";
-  const persona = {
+  const persona2 = {
     name,
     character: rnd() < 0.65 ? pick(rnd, FREE_CHARACTERS) : pick(rnd, CHARACTER_IDS),
     level,
@@ -16887,10 +16972,10 @@ function fillPersona(rnd, o) {
     difficulty
   };
   const skins = {};
-  if (persona.loadout.primary && rnd() < 0.3) skins[persona.loadout.primary] = pick(rnd, FILL_FINISHES);
-  if (rnd() < 0.1) skins[persona.loadout.sidearm] = pick(rnd, FILL_FINISHES);
-  persona.loadout.skins = skins;
-  return persona;
+  if (persona2.loadout.primary && rnd() < 0.3) skins[persona2.loadout.primary] = pick(rnd, FILL_FINISHES);
+  if (rnd() < 0.1) skins[persona2.loadout.sidearm] = pick(rnd, FILL_FINISHES);
+  persona2.loadout.skins = skins;
+  return persona2;
 }
 
 // packages/shared/src/net/codec.ts
@@ -16912,7 +16997,7 @@ function decodeInputs(data) {
   for (let i = 0; i < n; i++) {
     const buttons = v.getUint8(o + 8);
     const slot = v.getUint8(o + 9);
-    if (buttons > 63 || slot > 3) throw new ProtocolError("bad input flags");
+    if (buttons > BTN_MASK || slot > 3) throw new ProtocolError("bad input flags");
     const mx = v.getInt8(o + 4);
     const my = v.getInt8(o + 5);
     if (mx === -128 || my === -128) throw new ProtocolError("bad move axis");
@@ -16930,7 +17015,7 @@ function decodeInputs(data) {
   return out;
 }
 var HEADER_BYTES = 19;
-var PLAYER_BYTES = 48;
+var PLAYER_BYTES = 50;
 var FLAG_BYTES = 9;
 var BASE_BYTES = 4;
 var FLAG_STATUSES = ["home", "carried", "dropped"];
@@ -16965,7 +17050,7 @@ function encodeSnapshot(src) {
   v.setUint8(o + 18, players.length);
   o += HEADER_BYTES;
   for (const p of players) {
-    const flags2 = (p.alive ? 1 : 0) | (p.connected ? 2 : 0) | (p.reloadWeapon ? 4 : 0) | (src.now < p.invulnUntil ? 8 : 0) | (p.walking ? 16 : 0) | (p.heavy ? 32 : 0) | (p.mods[p.weapon]?.includes("laser") ? 64 : 0);
+    const flags2 = (p.alive ? 1 : 0) | (p.connected ? 2 : 0) | (p.reloadWeapon ? 4 : 0) | (src.now < p.invulnUntil ? 8 : 0) | (p.walking ? 16 : 0) | (p.heavy ? 32 : 0) | (p.mods[p.weapon]?.includes("laser") ? 64 : 0) | (p.sprinting ? 128 : 0);
     v.setUint8(o, p.slot);
     v.setUint8(o + 1, flags2);
     v.setUint16(o + 2, u16(p.x * POS_SCALE), true);
@@ -16996,6 +17081,8 @@ function encodeSnapshot(src) {
     v.setUint16(o + 44, u16(Math.max(0, p.flashedUntil - src.time)), true);
     v.setUint8(o + 46, p.team === null ? 255 : p.team);
     v.setUint8(o + 47, u8c(p.objectives));
+    v.setUint8(o + 48, u8c(p.stamina / SPRINT.max * 255));
+    v.setUint8(o + 49, u8c(Math.max(0, p.staminaRegenAt - p.clock) / 10));
     o += PLAYER_BYTES;
   }
   v.setUint8(o, pickups.length);
@@ -17076,7 +17163,7 @@ function encodeSnapshot(src) {
 }
 
 // packages/shared/src/net/protocol.ts
-var PROTOCOL_VERSION = 9;
+var PROTOCOL_VERSION = 10;
 var CHAT_RULES = Object.freeze({ maxLength: 140, maxRaw: 400, burst: 4, refillMs: 2500, repeatMs: 4e3 });
 function cleanChat(raw) {
   const s = raw.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ").replace(new RegExp("(\\p{M}{2})\\p{M}+", "gu"), "$1").replace(/\s+/g, " ").trim();
@@ -17253,6 +17340,7 @@ var EmailLinkRequest = external_exports.object({ email: emailSchema, password: p
 var PasswordChangeRequest = external_exports.object({ current: external_exports.string().min(1).max(128), password: passwordSchema }).strict();
 var PasswordResetRequest = external_exports.object({ email: emailSchema }).strict();
 var PasswordResetConfirm = external_exports.object({ token: external_exports.string().regex(/^[A-Za-z0-9_-]{20,64}$/), password: passwordSchema }).strict();
+var PromoRedeemRequest = external_exports.object({ code: external_exports.string().trim().min(1).max(64) }).strict();
 var VisitRequest = external_exports.object({ visitorId: visitorIdSchema, platform: PlatformSchema.optional(), referrer: external_exports.string().max(120).optional(), source: FirstTouchSchema.optional() }).strict();
 var BuyRequest = external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget"]), id: external_exports.string().regex(/^[a-z0-9_]{2,24}$/) }).strict();
 var ModBuyRequest = external_exports.object({ weapon: external_exports.enum(WEAPON_IDS), mod: external_exports.enum(MOD_IDS) }).strict();
@@ -18299,10 +18387,13 @@ function toPublicProfile(r) {
   };
 }
 var ProfileRepo = class {
-  constructor(sql2) {
+  /** @param welcomeBonus v0.2.20: BLATS a guest gets for registering (WELCOME_BONUS_BLATS; 0: off). */
+  constructor(sql2, welcomeBonus = 0) {
     this.sql = sql2;
+    this.welcomeBonus = welcomeBonus;
   }
   sql;
+  welcomeBonus;
   /**
    * The player's own profile. v0.2.18: levels not paid in BLATS yet — the levels reached before BLATS
    * existed — are paid here, once (`blatsCredited` tells the client to say so).
@@ -18317,6 +18408,8 @@ var ProfileRepo = class {
       row.diamonds = r.balance;
     }
     const profile = toPublicProfile(row);
+    const guest = !row.email && row.telegram_id === null && (row.identities?.length ?? 0) === 0;
+    if (this.welcomeBonus > 0 && guest && !row.welcome_paid) profile.welcomeBonus = this.welcomeBonus;
     return credited > 0 ? { ...profile, blatsCredited: credited } : profile;
   }
   async row(userId) {
@@ -18331,6 +18424,7 @@ var ProfileRepo = class {
              p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email,
              COALESCE(p.blats_level, 0) AS blats_level, p.user_id IS NOT NULL AS has_profile,
              COALESCE(p.rating, 1000) AS rating, u.founder,
+             EXISTS (SELECT 1 FROM currency_ledger l WHERE l.user_id = u.id AND l.reason = 'welcome') AS welcome_paid,
              c.id AS club_id, c.tag AS club_tag, c.name AS club_name, c.flag AS club_flag, c.emblem AS club_emblem,
              (SELECT array_agg(i.provider ORDER BY i.provider) FROM user_identities i WHERE i.user_id = u.id) AS identities
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id
@@ -20012,6 +20106,430 @@ function scheduleRetention(sql2, log2, opts = {}) {
   };
 }
 
+// apps/server/src/social/housePlayers.ts
+var DAY2 = 864e5;
+var HOUSE_STEP_MS = 36e5;
+var DRIFT_KEY = "house_players.drift_at";
+var FIRST = [
+  "alex",
+  "sasha",
+  "dima",
+  "dimon",
+  "maks",
+  "max",
+  "nikita",
+  "artem",
+  "kirill",
+  "ivan",
+  "vanya",
+  "egor",
+  "vlad",
+  "denis",
+  "roma",
+  "misha",
+  "oleg",
+  "ilya",
+  "andrey",
+  "serega",
+  "pasha",
+  "anton",
+  "gleb",
+  "timur",
+  "ruslan",
+  "danya",
+  "kostya",
+  "vova",
+  "vitya",
+  "zhenya",
+  "stas",
+  "yura",
+  "lyosha",
+  "kolya",
+  "fedya",
+  "sanya",
+  "tolik",
+  "slava",
+  "igor",
+  "lev",
+  "mark",
+  "matvey",
+  "yarik",
+  "vadim",
+  "seva",
+  "john",
+  "mike",
+  "jake",
+  "ryan",
+  "kevin",
+  "tom",
+  "chris",
+  "leo",
+  "lucas",
+  "noah",
+  "ethan",
+  "sam",
+  "dan",
+  "nick",
+  "ben",
+  "matt",
+  "tyler",
+  "zack",
+  "josh",
+  "kyle",
+  "adam",
+  "eric",
+  "sean",
+  "liam",
+  "oscar",
+  "finn",
+  "jack",
+  "luke",
+  "owen",
+  "dylan",
+  "cole",
+  "evan",
+  "ian",
+  "jay",
+  "kai",
+  "rex",
+  "ray",
+  "tony",
+  "eddie",
+  "frank",
+  "paul",
+  "kate",
+  "anna",
+  "masha",
+  "dasha",
+  "nastya",
+  "lena",
+  "olya",
+  "katya",
+  "sonya",
+  "alina",
+  "vika",
+  "lisa",
+  "julia",
+  "emma",
+  "mia",
+  "zoe",
+  "nina",
+  "vera",
+  "yana",
+  "polina",
+  "sara",
+  "eva",
+  "ira"
+];
+var HANDLE = [
+  "wolf",
+  "shadow",
+  "ghost",
+  "viper",
+  "hawk",
+  "fox",
+  "bear",
+  "tiger",
+  "sniper",
+  "hunter",
+  "frost",
+  "storm",
+  "blaze",
+  "rocket",
+  "pixel",
+  "turbo",
+  "nitro",
+  "cobra",
+  "raven",
+  "lynx",
+  "panther",
+  "rebel",
+  "ace",
+  "joker",
+  "phantom",
+  "drift",
+  "racer",
+  "boxer",
+  "chief",
+  "major",
+  "sarge",
+  "rookie",
+  "legend",
+  "boss",
+  "king",
+  "duke",
+  "baron",
+  "spark",
+  "flash",
+  "bullet",
+  "trigger",
+  "recoil",
+  "falcon",
+  "badger",
+  "beaver",
+  "owl",
+  "hedgehog",
+  "cat",
+  "crow",
+  "shark",
+  "moose",
+  "bison",
+  "otter",
+  "ferret",
+  "jackal",
+  "coyote",
+  "bandit",
+  "outlaw",
+  "ranger",
+  "scout",
+  "nomad",
+  "pilot",
+  "captain",
+  "volk",
+  "medved",
+  "kot",
+  "lis",
+  "yozh",
+  "sokol",
+  "voron",
+  "bars",
+  "zver",
+  "batya",
+  "sosed",
+  "prapor",
+  "kapitan",
+  "mechanic",
+  "gopher",
+  "walrus",
+  "goose",
+  "sparrow",
+  "comet",
+  "meteor",
+  "cyclone",
+  "tank",
+  "diesel",
+  "piston",
+  "gear",
+  "bolt",
+  "wrench",
+  "cassette",
+  "vhs"
+];
+var ADJ = [
+  "dark",
+  "mad",
+  "big",
+  "lil",
+  "crazy",
+  "silent",
+  "fast",
+  "lucky",
+  "cool",
+  "real",
+  "true",
+  "old",
+  "young",
+  "iron",
+  "black",
+  "red",
+  "gold",
+  "grey",
+  "night",
+  "wild",
+  "angry",
+  "lazy",
+  "sleepy",
+  "sneaky",
+  "tiny",
+  "mega",
+  "hyper",
+  "super",
+  "frozen",
+  "toxic",
+  "rusty",
+  "dusty",
+  "salty",
+  "quiet",
+  "loud",
+  "sly",
+  "brave",
+  "grim",
+  "swift"
+];
+var TAIL = ["pro", "tv", "gg", "play", "xd", "top", "go", "yt"];
+var CITY = ["msk", "spb", "nsk", "ekb", "kzn", "nn", "krd", "ufa"];
+var BANNED_NUMBERS = /* @__PURE__ */ new Set(["88", "14", "1488", "228", "666", "69", "420", "1312", "911", "18"]);
+function digits(r) {
+  const k = r();
+  if (k < 0.45) return String(Math.floor(r() * 99) + 1).padStart(2, "0");
+  if (k < 0.8) return String(1985 + Math.floor(r() * 28));
+  return ["7", "77", "777", "123", "321", "404", "999", "111", "007", "2k", "01", "13", "42"][Math.floor(r() * 13)];
+}
+var pick2 = (r, list) => list[Math.floor(r() * list.length)];
+var leet = (s) => s.replace(/[eaoi]/, (c) => ({ e: "3", a: "4", o: "0", i: "1" })[c] ?? c);
+function houseName(i) {
+  const r = mulberry32(hash32(1213158739, i));
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const k = r();
+    const n = k < 0.24 ? `${pick2(r, FIRST)}${r() < 0.3 ? "_" : ""}${digits(r)}` : k < 0.36 ? `${pick2(r, FIRST)}${String(1990 + Math.floor(r() * 22))}` : k < 0.42 ? `${pick2(r, FIRST)}_${pick2(r, HANDLE)}` : k < 0.54 ? `${pick2(r, ADJ)}${r() < 0.25 ? "_" : ""}${pick2(r, HANDLE)}` : k < 0.62 ? `${pick2(r, ADJ)}${pick2(r, HANDLE)}${digits(r)}` : k < 0.74 ? `${pick2(r, HANDLE)}${r() < 0.2 ? "_" : ""}${digits(r)}` : k < 0.79 ? `${pick2(r, FIRST)}${"abcdefgklmnprstvz"[Math.floor(r() * 17)]}` : k < 0.84 ? `${pick2(r, FIRST)}${pick2(r, HANDLE)}` : k < 0.88 ? `${r() < 0.5 ? "the" : "mr"}${pick2(r, HANDLE)}` : k < 0.94 ? `${pick2(r, FIRST)}${r() < 0.3 ? "_" : ""}${pick2(r, TAIL)}` : k < 0.97 ? `${pick2(r, HANDLE)}_${pick2(r, CITY)}` : `${leet(pick2(r, HANDLE))}${r() < 0.5 ? digits(r) : ""}`;
+    const num = /\d+$/.exec(n)?.[0];
+    if (num && BANNED_NUMBERS.has(num)) continue;
+    if (isNick(n)) return n;
+  }
+  return `player${1e3 + i}`;
+}
+var houseSeedOf = (name) => {
+  let h = 2166136261;
+  for (const ch of name) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return h >>> 0;
+};
+function persona(name) {
+  const r = mulberry32(houseSeedOf(name));
+  const skill = Math.min(1, Math.max(0, (r() + r() + r()) / 3 + (r() - 0.5) * 0.25));
+  const perDay = 0.4 + 9 * r() ** 2.2;
+  const ageDays = 3 + Math.floor(r() ** 0.8 * 72);
+  const avatar = r() < 0.55 ? pick2(r, AVATAR_IDS) : null;
+  const c = r();
+  const character = c < 0.5 ? pick2(r, CHARACTER_IDS.slice(0, 2)) : c < 0.82 ? pick2(r, CHARACTER_IDS.slice(2, 5)) : pick2(r, CHARACTER_IDS.slice(5));
+  return { name, skill, perDay, ageDays, avatar, character };
+}
+var ratingTarget = (skill) => Math.round(RATING_RULES.start + (skill - 0.45) * 700);
+function playOne(p, s, r) {
+  const players = 4 + Math.floor(r() * 3);
+  const placeRoll = Math.min(0.999, Math.max(0, r() * 0.75 + (1 - p.skill) * 0.45 - 0.1));
+  const place = 1 + Math.floor(placeRoll * players);
+  const kills = Math.max(0, Math.round((1.5 + 7 * p.skill) * (0.4 + r() * 1.2)));
+  const deaths = Math.max(0, Math.round((6.5 - 3.5 * p.skill) * (0.5 + r())));
+  const assists = Math.floor(r() * 3 * (0.5 + p.skill));
+  s.matches++;
+  s.kills += kills;
+  s.deaths += deaths;
+  s.assists += assists;
+  s.playtimeSec += 150 + Math.floor(r() * 150);
+  const win = place === 1;
+  if (win) {
+    s.wins++;
+    s.streak++;
+    s.bestStreak = Math.max(s.bestStreak, s.streak);
+  } else {
+    s.losses++;
+    s.streak = 0;
+  }
+  s.xp += Math.min(XP_RULES.maxPerMatch, XP_RULES.completion + XP_RULES.perKill * kills + XP_RULES.perAssist * assists + (XP_RULES.placement[place - 1] ?? 0));
+  const score = (players - place) / (players - 1);
+  const pull = (ratingTarget(p.skill) - s.rating) * 0.08;
+  s.rating = Math.max(RATING_RULES.floor, Math.round(s.rating + RATING_RULES.k * (score - 0.5) + pull));
+}
+function history(p) {
+  const r = mulberry32(houseSeedOf(p.name) ^ 24301);
+  const s = { matches: 0, wins: 0, losses: 0, kills: 0, assists: 0, deaths: 0, xp: 0, rating: RATING_RULES.start, playtimeSec: 0, streak: 0, bestStreak: 0 };
+  const total = Math.max(1, Math.round(p.perDay * p.ageDays * (0.6 + r() * 0.8)));
+  for (let i = 0; i < Math.min(total, 1500); i++) playOne(p, s, r);
+  return s;
+}
+function stepMatches(p, step) {
+  const hour = (Math.floor(step * HOUSE_STEP_MS / 36e5) + 3) % 24;
+  const daypart = hour < 8 ? 0.25 : hour < 16 ? 0.9 : 1.6;
+  const r = mulberry32(hash32(houseSeedOf(p.name), step));
+  const expected = p.perDay / 24 * daypart;
+  let n = 0;
+  for (let i = 0; i < 4; i++) if (r() < expected / 4) n++;
+  return n;
+}
+function advance(p, s, fromStep, toStep) {
+  const next = { ...s };
+  for (let step = Math.max(fromStep + 1, toStep - 7 * 24 + 1); step <= toStep; step++) {
+    const n = stepMatches(p, step);
+    if (!n) continue;
+    const r = mulberry32(hash32(houseSeedOf(p.name), step, 109));
+    for (let i = 0; i < n; i++) playOne(p, next, r);
+  }
+  return next;
+}
+async function seedHousePlayers(sql2, count, now = /* @__PURE__ */ new Date()) {
+  if (count <= 0) return 0;
+  const [have] = await sql2`SELECT count(*)::int AS n FROM users WHERE house_player`;
+  let missing = count - (have?.n ?? 0);
+  if (missing <= 0) return 0;
+  let added = 0;
+  for (let i = 0; missing > 0 && i < count * 4; i++) {
+    const name = houseName(i);
+    const p = persona(name);
+    const s = history(p);
+    const created = new Date(now.getTime() - p.ageDays * DAY2 - Math.floor(houseSeedOf(name) % 86400 * 1e3));
+    const lastSeen = new Date(now.getTime() - houseSeedOf(name) % 72 * 36e5);
+    const done = await sql2.begin(async (tx) => {
+      const [u] = await tx`
+        INSERT INTO users (display_name, name_key, house_player, created_at, last_seen_at)
+        SELECT ${name}, ${nameKey(name)}, true, ${created}, ${lastSeen}
+        WHERE NOT EXISTS (SELECT 1 FROM users WHERE name_key = ${nameKey(name)} AND deleted_at IS NULL)
+        ON CONFLICT DO NOTHING RETURNING id`;
+      if (!u) return false;
+      await tx`
+        INSERT INTO profiles (user_id, level, xp, matches_played, matches_completed, wins, losses, kills, assists, deaths, playtime_sec,
+                              current_win_streak, best_win_streak, preferred_character, avatar, rating, updated_at)
+        VALUES (${u.id}, ${levelForXp(s.xp).level}, ${s.xp}, ${s.matches}, ${s.matches}, ${s.wins}, ${s.losses}, ${s.kills}, ${s.assists}, ${s.deaths}, ${s.playtimeSec},
+                ${s.streak}, ${s.bestStreak}, ${p.character}, ${p.avatar}, ${s.rating}, ${lastSeen})`;
+      return true;
+    });
+    if (done) {
+      added++;
+      missing--;
+    }
+  }
+  await sql2`INSERT INTO app_settings (key, value) VALUES (${DRIFT_KEY}, ${sql2.json(new Date(Math.floor(now.getTime() / HOUSE_STEP_MS) * HOUSE_STEP_MS).toISOString())}) ON CONFLICT (key) DO NOTHING`;
+  return added;
+}
+async function driftHousePlayers(sql2, now = /* @__PURE__ */ new Date()) {
+  return sql2.begin(async (tx) => {
+    const [st] = await tx`SELECT value FROM app_settings WHERE key = ${DRIFT_KEY} FOR UPDATE`;
+    if (!st || typeof st.value !== "string") return 0;
+    const fromStep = Math.floor(new Date(st.value).getTime() / HOUSE_STEP_MS);
+    const toStep = Math.floor(now.getTime() / HOUSE_STEP_MS);
+    if (!Number.isFinite(fromStep) || toStep <= fromStep) return 0;
+    const rows = await tx`
+      SELECT u.id, u.display_name AS name, p.matches_completed AS matches, p.wins, p.losses, p.kills, p.assists, p.deaths, p.xp, p.rating,
+             p.playtime_sec AS playtime, p.current_win_streak AS streak, p.best_win_streak AS best
+      FROM users u JOIN profiles p ON p.user_id = u.id WHERE u.house_player AND u.deleted_at IS NULL`;
+    let changed = 0;
+    for (const row of rows) {
+      const p = persona(row.name);
+      const before = { matches: row.matches, wins: row.wins, losses: row.losses, kills: row.kills, assists: row.assists, deaths: row.deaths, xp: row.xp, rating: row.rating, playtimeSec: row.playtime, streak: row.streak, bestStreak: row.best };
+      const s = advance(p, before, fromStep, toStep);
+      if (s.matches === before.matches) continue;
+      changed++;
+      await tx`
+        UPDATE profiles SET matches_played = matches_played + ${s.matches - before.matches}, matches_completed = ${s.matches}, wins = ${s.wins}, losses = ${s.losses},
+               kills = ${s.kills}, assists = ${s.assists}, deaths = ${s.deaths}, xp = ${s.xp}, level = ${levelForXp(s.xp).level}, rating = ${s.rating},
+               playtime_sec = ${s.playtimeSec}, current_win_streak = ${s.streak}, best_win_streak = ${s.bestStreak}, updated_at = ${now}
+        WHERE user_id = ${row.id}`;
+      await tx`UPDATE users SET last_seen_at = ${now} WHERE id = ${row.id}`;
+    }
+    await tx`UPDATE app_settings SET value = ${tx.json(new Date(toStep * HOUSE_STEP_MS).toISOString())}, updated_at = now() WHERE key = ${DRIFT_KEY}`;
+    return changed;
+  });
+}
+function scheduleHousePlayers(sql2, log2, count) {
+  let stopped = false;
+  const run = async () => {
+    if (stopped) return;
+    try {
+      const added = await seedHousePlayers(sql2, count);
+      if (added) log2.info("house players added", { added });
+      await driftHousePlayers(sql2);
+    } catch (e2) {
+      log2.warn("house players not ready", { err: e2 });
+    }
+  };
+  void run();
+  const timer2 = setInterval(() => void run(), 30 * 6e4);
+  timer2.unref?.();
+  return () => {
+    stopped = true;
+    clearInterval(timer2);
+  };
+}
+
 // apps/server/src/auth/email.ts
 var RESET_TTL_MS = 36e5;
 var EmailAuth = class {
@@ -20553,7 +21071,7 @@ function pgContext(sql2, env2, log2) {
     activity,
     users: new UserRepo(sql2),
     sessions: new SessionStore(sql2, env2.SESSION_SECRET, env2.SESSION_TTL_HOURS, activity, log2),
-    profiles: new ProfileRepo(sql2),
+    profiles: new ProfileRepo(sql2, env2.WELCOME_BONUS_BLATS),
     recorder: new PgMatchRecorder(sql2, log2),
     invites: new PgInvites(sql2),
     analytics,
@@ -20591,11 +21109,14 @@ async function createPersistence(deps) {
   await bootstrapAdmin(deps.sql, ctx.adminAuth, deps.log, deps.env.ADMIN_BOOTSTRAP_USERNAME, deps.env.ADMIN_BOOTSTRAP_PASSWORD);
   const stopRetention = deps.env.NODE_ENV === "test" ? () => {
   } : scheduleRetention(deps.sql, deps.log);
+  const stopHouse = deps.env.NODE_ENV === "test" || deps.env.HOUSE_PLAYERS === 0 ? () => {
+  } : scheduleHousePlayers(deps.sql, deps.log, deps.env.HOUSE_PLAYERS);
   return {
     services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy, gangs: pgGangs(deps.sql) },
     recorder: ctx.recorder,
     close: async () => {
       stopRetention();
+      stopHouse();
       await ctx.analytics.close();
     }
   };
@@ -20665,7 +21186,7 @@ async function growth(sql2, r, now = /* @__PURE__ */ new Date()) {
   const to = new Date(r.to);
   const [pl] = await sql2`
     SELECT
-      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND created_at BETWEEN ${from} AND ${to})::int AS registered,
+      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND NOT house_player AND created_at BETWEEN ${from} AND ${to})::int AS registered,
       (SELECT count(DISTINCT mp.user_id) FROM match_participants mp JOIN matches m ON m.id = mp.match_id WHERE m.started_at BETWEEN ${from} AND ${to})::int AS unique,
       (SELECT count(*) FROM (
          SELECT mp.user_id, min(m.started_at) AS first FROM match_participants mp JOIN matches m ON m.id = mp.match_id GROUP BY mp.user_id
@@ -20677,7 +21198,7 @@ async function growth(sql2, r, now = /* @__PURE__ */ new Date()) {
            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed))::int AS completed,
            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM user_daily_activity a WHERE a.user_id = u.id AND a.day > (u.created_at AT TIME ZONE 'UTC')::date))::int AS returned
     FROM users u
-    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}
+    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player AND u.created_at BETWEEN ${from} AND ${to}
     GROUP BY 1, 2 ORDER BY accounts DESC, channel, detail LIMIT 50`;
   const visits = await sql2`
     SELECT CASE WHEN v.partner_id IS NOT NULL THEN 'partner' WHEN v.utm_source IS NOT NULL THEN 'utm' WHEN COALESCE(v.referrer, '') <> '' THEN 'referrer' ELSE 'direct' END AS kind,
@@ -20700,7 +21221,7 @@ async function growth(sql2, r, now = /* @__PURE__ */ new Date()) {
       (SELECT count(*) FROM referrals WHERE attached_at BETWEEN ${from} AND ${to} AND status = 'confirmed')::int AS confirmed`;
   const levelRows = await sql2`
     SELECT p.level, count(*)::int AS players FROM profiles p JOIN users u ON u.id = p.user_id
-    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL GROUP BY p.level`;
+    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player GROUP BY p.level`;
   const reached = await sql2`
     SELECT substring(ref FROM 7)::int AS level, count(DISTINCT user_id)::int AS players FROM currency_ledger
     WHERE currency IN ('blat', 'diamonds') AND reason = 'level' AND ref ~ '^level:[0-9]{1,6}$' AND created_at BETWEEN ${from} AND ${to}
@@ -20758,7 +21279,7 @@ async function partnersWithStats(sql2, r, env2) {
       (SELECT count(*) FROM match_participants mp JOIN matches m ON m.id = mp.match_id JOIN users x ON x.id = mp.user_id
          WHERE x.partner_id = p.id AND mp.completed AND m.ended_at BETWEEN ${from} AND ${to})::int AS matches
     FROM partners p
-    LEFT JOIN users u ON u.partner_id = p.id AND u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}
+    LEFT JOIN users u ON u.partner_id = p.id AND u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player AND u.created_at BETWEEN ${from} AND ${to}
     GROUP BY p.id ORDER BY p.created_at DESC, p.code`;
   return rows.map((x) => ({
     id: x.id,
@@ -20802,6 +21323,60 @@ async function updatePartner(sql2, id, o) {
     if (o.name !== void 0) await tx`UPDATE partners SET name = ${o.name} WHERE id = ${id}`;
     if (o.note !== void 0) await tx`UPDATE partners SET note = ${o.note || null} WHERE id = ${id}`;
     if (o.active !== void 0) await tx`UPDATE partners SET active = ${o.active} WHERE id = ${id}`;
+  });
+}
+
+// apps/server/src/economy/bonuses.ts
+async function lockWallet(tx, userId) {
+  await tx`INSERT INTO profiles (user_id) VALUES (${userId}) ON CONFLICT (user_id) DO NOTHING`;
+  const [p] = await tx`SELECT diamonds FROM profiles WHERE user_id = ${userId} FOR UPDATE`;
+  return p?.diamonds ?? 0;
+}
+async function creditWelcomeBonus(sql2, userId, amount, via) {
+  if (amount <= 0) return { gained: 0, balance: null };
+  return sql2.begin(async (tx) => {
+    const [u] = await tx`
+      SELECT u.email, u.telegram_id IS NOT NULL AS telegram,
+             ARRAY(SELECT i.provider FROM user_identities i WHERE i.user_id = u.id) AS providers
+      FROM users u WHERE u.id = ${userId} AND u.deleted_at IS NULL`;
+    if (!u) return { gained: 0, balance: null };
+    const ways = [...u.email ? ["email"] : [], ...u.telegram ? ["telegram"] : [], ...u.providers];
+    if (ways.some((w) => w !== via)) return { gained: 0, balance: null };
+    const balance = await lockWallet(tx, userId);
+    const ins = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'diamonds', ${amount}, ${balance + amount}, 'welcome', ${`welcome:${via}`}) ON CONFLICT DO NOTHING RETURNING id`;
+    if (ins.length === 0) return { gained: 0, balance };
+    await tx`UPDATE profiles SET diamonds = ${balance + amount}, updated_at = now() WHERE user_id = ${userId}`;
+    return { gained: amount, balance: balance + amount };
+  });
+}
+async function welcomeAfterRegistration(sql2, log2, userId, amount, via) {
+  try {
+    return (await creditWelcomeBonus(sql2, userId, amount, via)).gained;
+  } catch (e2) {
+    log2.warn("welcome bonus failed", { via, err: e2 });
+    return 0;
+  }
+}
+async function redeemPromo(sql2, userId, typed, now = /* @__PURE__ */ new Date()) {
+  const code = normalizePromoCode(typed);
+  if (!PROMO_CODE_RE.test(code)) return { ok: false, reason: "unknown" };
+  return sql2.begin(async (tx) => {
+    const [c] = await tx`
+      SELECT diamonds, active, max_uses, expires_at FROM promo_codes WHERE code = ${code} FOR UPDATE`;
+    if (!c) return { ok: false, reason: "unknown" };
+    const ref = `promo:${code}`;
+    const [mine] = await tx`SELECT 1 FROM currency_ledger WHERE user_id = ${userId} AND reason = 'promo' AND ref = ${ref}`;
+    if (mine) return { ok: false, reason: "used" };
+    if (!c.active || c.expires_at && c.expires_at.getTime() <= now.getTime()) return { ok: false, reason: "expired" };
+    if (c.max_uses !== null) {
+      const [n] = await tx`SELECT count(*)::int AS n FROM currency_ledger WHERE reason = 'promo' AND ref = ${ref}`;
+      if ((n?.n ?? 0) >= c.max_uses) return { ok: false, reason: "exhausted" };
+    }
+    const balance = await lockWallet(tx, userId);
+    const ins = await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'diamonds', ${c.diamonds}, ${balance + c.diamonds}, 'promo', ${ref}) ON CONFLICT DO NOTHING RETURNING id`;
+    if (ins.length === 0) return { ok: false, reason: "used" };
+    await tx`UPDATE profiles SET diamonds = ${balance + c.diamonds}, updated_at = now() WHERE user_id = ${userId}`;
+    return { ok: true, code, gained: c.diamonds, balance: balance + c.diamonds };
   });
 }
 
@@ -20872,9 +21447,10 @@ var registerAuthRoutes = (router, deps) => {
     if (up.isNew) services2.analytics.server("profile_created", { method: "telegram" }, evCtx);
     if (link?.outcome === "linked") services2.analytics.server("identity_linked", { provider: "telegram", via: "code", merged: !!link.released }, evCtx);
     if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform2, body.source);
+    const welcome = link?.outcome === "linked" ? await welcomeAfterRegistration(deps.sql, deps.log, up.userId, env2.WELCOME_BONUS_BLATS, "telegram") : 0;
     const profile = await pg.profiles.get(up.userId);
     if (!profile) throw new HttpError(500, "internal", "Profile not found");
-    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew, ...link ? { telegramLink: link.outcome } : {} };
+    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile: welcome ? { ...profile, welcomeCredited: welcome } : profile, isNew: up.isNew, ...link ? { telegramLink: link.outcome } : {} };
     ctx.json(200, res);
   });
   router.post("/api/auth/telegram/link-code", requireUser(services2.sessions), rateLimit(linkLimiter, byUser), async (ctx) => {
@@ -20978,7 +21554,9 @@ var registerAuthRoutes = (router, deps) => {
     if (r === "already_linked") throw new HttpError(409, "already_linked", "An email is already registered to this account");
     if (r === "email_taken") throw new HttpError(409, "email_taken", "This email is already registered to another account");
     services2.analytics.server("email_linked", {}, user);
-    ctx.json(200, await pg.profiles.get(user.userId));
+    const welcome = await welcomeAfterRegistration(deps.sql, deps.log, user.userId, env2.WELCOME_BONUS_BLATS, "email");
+    const profile = await pg.profiles.get(user.userId);
+    ctx.json(200, profile && welcome ? { ...profile, welcomeCredited: welcome } : profile);
   });
   router.post("/api/auth/email/password", requireUser(services2.sessions), rateLimit(emailUserLimiter, byUser), async (ctx) => {
     if (!deps.sql) return unavailable();
@@ -21339,7 +21917,7 @@ function toCsv(headers, rows) {
 }
 
 // apps/server/src/analytics/metrics.ts
-var DAY2 = 864e5;
+var DAY3 = 864e5;
 var RangeError400 = class extends Error {
 };
 function utcDayString(d) {
@@ -21351,7 +21929,7 @@ function resolveRange(key, fromStr, toStr, now = /* @__PURE__ */ new Date()) {
   let to;
   switch (k) {
     case "24h":
-      from = new Date(now.getTime() - DAY2);
+      from = new Date(now.getTime() - DAY3);
       to = now;
       break;
     case "7d":
@@ -21359,7 +21937,7 @@ function resolveRange(key, fromStr, toStr, now = /* @__PURE__ */ new Date()) {
     case "90d": {
       const days = Number(k.replace("d", ""));
       to = now;
-      from = new Date(Date.parse(utcDayString(now)) - (days - 1) * DAY2);
+      from = new Date(Date.parse(utcDayString(now)) - (days - 1) * DAY3);
       break;
     }
     case "custom": {
@@ -21369,7 +21947,7 @@ function resolveRange(key, fromStr, toStr, now = /* @__PURE__ */ new Date()) {
       to = /* @__PURE__ */ new Date(`${toStr}T23:59:59.999Z`);
       if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) throw new RangeError400("invalid date");
       if (from > to) throw new RangeError400("from must be before to");
-      if (to.getTime() - from.getTime() > 400 * DAY2) throw new RangeError400("range too long (max 400 days)");
+      if (to.getTime() - from.getTime() > 400 * DAY3) throw new RangeError400("range too long (max 400 days)");
       break;
     }
     default:
@@ -21384,8 +21962,8 @@ async function overview(sql2, r, activeRooms, now = /* @__PURE__ */ new Date()) 
   const today = utcDayString(now);
   const [counts] = await sql2`
     SELECT
-      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND created_at <= ${to})::int AS total_players,
-      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND created_at BETWEEN ${from} AND ${to})::int AS new_players,
+      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND NOT house_player AND created_at <= ${to})::int AS total_players,
+      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND NOT house_player AND created_at BETWEEN ${from} AND ${to})::int AS new_players,
       (SELECT count(*) FROM user_daily_activity WHERE day = ${r.lastDay}::date)::int AS dau,
       (SELECT count(DISTINCT user_id) FROM user_daily_activity WHERE day > ${r.lastDay}::date - 7 AND day <= ${r.lastDay}::date)::int AS wau,
       (SELECT count(DISTINCT user_id) FROM user_daily_activity WHERE day > ${r.lastDay}::date - 30 AND day <= ${r.lastDay}::date)::int AS mau,
@@ -21399,16 +21977,17 @@ async function overview(sql2, r, activeRooms, now = /* @__PURE__ */ new Date()) 
       (SELECT count(*) FROM (
          SELECT mp.user_id, min(m.started_at) AS first FROM match_participants mp JOIN matches m ON m.id = mp.match_id GROUP BY mp.user_id
        ) f WHERE f.first BETWEEN ${from} AND ${to})::int AS first_match,
-      (SELECT COALESCE(sum(delta), 0) FROM currency_ledger WHERE currency = 'diamonds' AND reason = 'level' AND created_at BETWEEN ${from} AND ${to})::int AS blats_levels`;
+      (SELECT COALESCE(sum(delta), 0) FROM currency_ledger WHERE currency = 'diamonds' AND reason = 'level' AND created_at BETWEEN ${from} AND ${to})::int AS blats_levels,
+      (SELECT count(*) FROM users WHERE house_player AND deleted_at IS NULL)::int AS house_players`;
   const [conv] = await sql2`
     SELECT count(*)::int AS cohort,
            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed))::int AS converted
-    FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}`;
+    FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player AND u.created_at BETWEEN ${from} AND ${to}`;
   const [ret] = await sql2`
     WITH cohort AS (
       SELECT u.id, (u.created_at AT TIME ZONE 'UTC')::date AS d
       FROM users u
-      WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND (u.created_at AT TIME ZONE 'UTC')::date BETWEEN ${r.firstDay}::date AND ${r.lastDay}::date
+      WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player AND (u.created_at AT TIME ZONE 'UTC')::date BETWEEN ${r.firstDay}::date AND ${r.lastDay}::date
     )
     SELECT
       count(*) FILTER (WHERE c.d + 1 < ${today}::date)::int AS d1_size,
@@ -21437,7 +22016,8 @@ async function overview(sql2, r, activeRooms, now = /* @__PURE__ */ new Date()) 
     errorCount: counts.errors,
     uniquePlayers: counts.unique_players,
     firstMatchPlayers: counts.first_match,
-    blatsForLevels: counts.blats_levels
+    blatsForLevels: counts.blats_levels,
+    housePlayers: counts.house_players
   };
 }
 var SESSION_BUCKETS = ["<1 \u043C\u0438\u043D", "1\u20133 \u043C\u0438\u043D", "3\u20135 \u043C\u0438\u043D", "5\u201310 \u043C\u0438\u043D", "10\u201320 \u043C\u0438\u043D", "20\u201330 \u043C\u0438\u043D", "30\u201360 \u043C\u0438\u043D", "60+ \u043C\u0438\u043D"];
@@ -21452,7 +22032,7 @@ async function charts(sql2, r, now = /* @__PURE__ */ new Date()) {
   const today = utcDayString(now);
   const registrations = await sql2`
     SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
-      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL
+      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player
          AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS count
     FROM generate_series(${r.firstDay}::date, ${r.lastDay}::date, interval '1 day') AS g(day)
     ORDER BY g.day`;
@@ -21471,7 +22051,7 @@ async function charts(sql2, r, now = /* @__PURE__ */ new Date()) {
     WITH days AS (SELECT g.day::date AS d FROM generate_series(${r.firstDay}::date, ${r.lastDay}::date, interval '1 day') AS g(day)),
     cohort AS (
       SELECT u.id, (u.created_at AT TIME ZONE 'UTC')::date AS d FROM users u
-      WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND (u.created_at AT TIME ZONE 'UTC')::date BETWEEN ${r.firstDay}::date AND ${r.lastDay}::date
+      WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player AND (u.created_at AT TIME ZONE 'UTC')::date BETWEEN ${r.firstDay}::date AND ${r.lastDay}::date
     )
     SELECT to_char(days.d, 'YYYY-MM-DD') AS day,
       count(c.id)::int AS cohort,
@@ -21579,12 +22159,12 @@ async function listPlayers(sql2, opts) {
            COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec,
            (count(*) OVER ())::int AS total
     FROM users u LEFT JOIN profiles p ON p.user_id = u.id
-    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL ${filter}
+    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player ${filter}
     ORDER BY ${col} ${order} NULLS LAST, u.id
     LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`;
   let total = rows[0]?.total ?? 0;
   if (rows.length === 0 && page > 1) {
-    const [c] = await sql2`SELECT count(*)::int AS n FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL ${filter}`;
+    const [c] = await sql2`SELECT count(*)::int AS n FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player ${filter}`;
     total = c.n;
   }
   return { rows: rows.map(toPlayerRow), total, page, pageSize, sort, dir };
@@ -21640,7 +22220,7 @@ async function errorGroups(sql2, r, limit = 200) {
 async function dailyMetrics(sql2, r) {
   const rows = await sql2`
     SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
-      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS registrations,
+      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS registrations,
       (SELECT count(*) FROM user_daily_activity a WHERE a.day = g.day::date)::int AS dau,
       (SELECT count(*) FROM matches m WHERE m.started_at >= (g.day AT TIME ZONE 'UTC') AND m.started_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS matches_started,
       (SELECT count(*) FROM matches m WHERE m.status = 'completed' AND m.ended_at >= (g.day AT TIME ZONE 'UTC') AND m.ended_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS matches_completed,
@@ -21667,7 +22247,7 @@ async function funnel(sql2, r) {
     u AS (
       SELECT u.id, u.email, (u.created_at AT TIME ZONE 'UTC')::date AS d,
              EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed) AS played
-      FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.id IN (SELECT user_id FROM v WHERE user_id IS NOT NULL)
+      FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player AND u.id IN (SELECT user_id FROM v WHERE user_id IS NOT NULL)
     )
     SELECT (SELECT count(*) FROM v)::int AS entered,
            (SELECT count(*) FROM u)::int AS registered,
@@ -21679,7 +22259,7 @@ async function funnel(sql2, r) {
     WITH u AS (
       SELECT u.id, u.email, (u.created_at AT TIME ZONE 'UTC')::date AS d,
              EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed) AS played
-      FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}
+      FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player AND u.created_at BETWEEN ${from} AND ${to}
     )
     SELECT (SELECT count(*) FROM u)::int AS entered,
            (SELECT count(*) FROM u)::int AS registered,
@@ -21695,7 +22275,7 @@ async function funnel(sql2, r) {
     SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
       (SELECT count(*) FROM visitor_days vd WHERE vd.day = g.day::date)::int AS unique_visitors,
       (SELECT count(*) FROM visitors x WHERE x.first_seen_at >= (g.day AT TIME ZONE 'UTC') AND x.first_seen_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS new_visitors,
-      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL
+      (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player
          AND u.created_at >= (g.day AT TIME ZONE 'UTC') AND u.created_at < ((g.day + interval '1 day') AT TIME ZONE 'UTC'))::int AS registrations
     FROM generate_series(${r.firstDay}::date, ${r.lastDay}::date, interval '1 day') AS g(day)
     ORDER BY g.day`;
@@ -21730,7 +22310,7 @@ async function economy(sql2, r, now = /* @__PURE__ */ new Date()) {
   const [bal] = await sql2`
     SELECT COALESCE(sum(p.tokens), 0)::int AS tokens, COALESCE(sum(p.diamonds), 0)::int AS diamonds,
            count(*) FILTER (WHERE p.tokens > 0)::int AS token_holders, count(*) FILTER (WHERE p.diamonds > 0)::int AS diamond_holders
-    FROM profiles p JOIN users u ON u.id = p.user_id WHERE u.deleted_at IS NULL`;
+    FROM profiles p JOIN users u ON u.id = p.user_id WHERE u.deleted_at IS NULL AND NOT u.house_player`;
   const [rev] = await sql2`
     SELECT count(*) FILTER (WHERE status IN ('paid', 'refunded') AND paid_at BETWEEN ${from} AND ${to})::int AS payments,
            count(DISTINCT user_id) FILTER (WHERE status IN ('paid', 'refunded') AND paid_at BETWEEN ${from} AND ${to})::int AS payers,
@@ -22182,7 +22762,7 @@ var registerAdminRoutes = (router, deps) => {
              COALESCE(p.level, 1) AS level, COALESCE(p.xp, 0) AS xp, COALESCE(p.matches_played, 0) AS matches_played,
              COALESCE(p.wins, 0) AS wins, COALESCE(p.losses, 0) AS losses, COALESCE(p.kills, 0) AS kills,
              COALESCE(p.assists, 0) AS assists, COALESCE(p.deaths, 0) AS deaths, COALESCE(p.playtime_sec, 0) AS playtime_sec
-      FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.deleted_at IS NULL AND u.merged_at IS NULL ORDER BY u.created_at`;
+      FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player ORDER BY u.created_at`;
     await audit(p.sql, deps.log, { adminId: currentAdmin(ctx).id, action: "export_players", details: { rows: rows.length }, ip: ctx.ip });
     csv(
       ctx,
@@ -22290,6 +22870,21 @@ var registerShopRoutes = (router, deps) => {
   router.get("/api/me/ledger", auth, async (ctx) => {
     const limit = Math.min(100, Math.max(1, Number(ctx.query.get("limit") ?? 30) || 30));
     ctx.json(200, { entries: await pg().economy.ledger(currentUser(ctx).userId, limit) });
+  });
+  const promoLimiter = new RateLimiter(8, 8 / 600);
+  const promoIpLimiter = new RateLimiter(30, 30 / 600);
+  router.post("/api/promo", auth, rateLimit(promoIpLimiter), rateLimit(promoLimiter, byUser), async (ctx) => {
+    const user = currentUser(ctx);
+    const body = await ctx.body(PromoRedeemRequest, 1024);
+    const r = await redeemPromo(pg().sql, user.userId, body.code);
+    if (!r.ok) {
+      if (r.reason === "unknown") throw new HttpError(404, "promo_unknown", "There is no such promo code");
+      if (r.reason === "used") throw new HttpError(409, "promo_used", "This promo code has already been used on your account");
+      throw new HttpError(410, "promo_expired", "This promo code no longer works");
+    }
+    deps.log.info("promo code redeemed", { code: r.code, userId: user.userId, diamonds: r.gained });
+    const res = { code: r.code, diamonds: r.gained, balance: r.balance };
+    ctx.json(200, res);
   });
   router.post("/api/shop/buy", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
     const user = currentUser(ctx);
@@ -22419,10 +23014,13 @@ function toMessage(r) {
   return { id: Number(r.id), from: r.sender_id, to: r.recipient_id, text: r.body, at: r.created_at.toISOString(), read: r.read_at !== null };
 }
 var SocialRepo = class {
-  constructor(sql2) {
+  /** @param house v0.2.20: the house players (social/housePlayers.ts) are in the tables (HOUSE_PLAYERS > 0). */
+  constructor(sql2, house = true) {
     this.sql = sql2;
+    this.house = house;
   }
   sql;
+  house;
   async card(userId) {
     const rows = await this.sql`
       SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder
@@ -22562,7 +23160,7 @@ var SocialRepo = class {
       SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder, row_number() OVER (ORDER BY ${order}) AS rank,
              p.rating, p.kills, p.wins, p.matches_completed AS matches
       FROM profiles p JOIN users u ON u.id = p.user_id
-      WHERE p.matches_completed > 0 AND u.deleted_at IS NULL
+      WHERE p.matches_completed > 0 AND u.deleted_at IS NULL AND (${this.house} OR NOT u.house_player)
       ORDER BY ${order}
       LIMIT ${limit}`;
     return rows.map((r) => ({ ...toCard(r), rank: Number(r.rank), rating: r.rating, kills: r.kills, wins: r.wins, matches: r.matches }));
@@ -22579,7 +23177,7 @@ var SocialRepo = class {
     const key = by === "rating" ? this.sql`(-p.rating, -p.xp, u.created_at, u.id)` : by === "level" ? this.sql`(-p.xp, -p.rating, u.created_at, u.id)` : this.sql`(-p.kills, -p.rating, u.created_at, u.id)`;
     const [c] = await this.sql`
       SELECT count(*)::int AS n FROM profiles p JOIN users u ON u.id = p.user_id
-      WHERE p.matches_completed > 0 AND u.deleted_at IS NULL
+      WHERE p.matches_completed > 0 AND u.deleted_at IS NULL AND (${this.house} OR NOT u.house_player)
         AND ${key} < (${-a}::int, ${-b2}::int, ${me.created_at}::timestamptz, ${me.id}::uuid)`;
     return { ...toCard(me), rank: c.n + 1, rating: me.rating, kills: me.kills, wins: me.wins, matches: me.matches };
   }
@@ -22713,10 +23311,10 @@ var registerSocialRoutes = (router, deps) => {
   const readLimiter = new RateLimiter(120, 2);
   const repo = () => {
     if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
-    return new SocialRepo(deps.sql);
+    return new SocialRepo(deps.sql, deps.env.HOUSE_PLAYERS > 0);
   };
   if (deps.sql) {
-    const store = new SocialRepo(deps.sql);
+    const store = new SocialRepo(deps.sql, deps.env.HOUSE_PLAYERS > 0);
     const sql2 = deps.sql;
     hub.attachStore({ friendIds: (id) => store.friendIds(id), counts: (id) => store.counts(id), touch: async (id) => void await sql2`UPDATE users SET last_seen_at = now() WHERE id = ${id}` });
   }
@@ -23562,9 +24160,10 @@ var registerOAuthRoutes = (router, deps) => {
     if (h.is_new) deps.services.analytics.server("profile_created", { method: "oauth" }, evCtx);
     await attachSource(sql2, deps.log, h.user_id, h.is_new, void 0, { referral: false, telegram: false });
     if (h.linked) deps.services.analytics.server("identity_linked", { provider: h.provider }, evCtx);
+    const welcome = h.is_new || h.linked ? await welcomeAfterRegistration(sql2, deps.log, h.user_id, env2.WELCOME_BONUS_BLATS, h.provider) : 0;
     const profile = await pg.profiles.get(h.user_id);
     if (!profile) throw new HttpError(401, "login_expired", "The sign-in has expired \u2014 try again");
-    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: h.is_new, linked: h.linked, provider: h.provider };
+    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile: welcome ? { ...profile, welcomeCredited: welcome } : profile, isNew: h.is_new, linked: h.linked, provider: h.provider };
     ctx.json(200, res);
   });
   router.post("/api/auth/telegram/web", rateLimit(telegramLimiter), async (ctx) => {
@@ -23609,9 +24208,10 @@ var registerOAuthRoutes = (router, deps) => {
     if (isNew) deps.services.analytics.server("profile_created", { method: "telegram" }, evCtx);
     if (linked) deps.services.analytics.server("identity_linked", { provider: "telegram", via: "widget" }, evCtx);
     await attachSource(sql2, deps.log, userId, isNew, void 0, { referral: false, telegram: true });
+    const welcome = isNew || linked ? await welcomeAfterRegistration(sql2, deps.log, userId, env2.WELCOME_BONUS_BLATS, "telegram") : 0;
     const profile = await pg.profiles.get(userId);
     if (!profile) throw new HttpError(500, "internal", "Profile not found");
-    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew, linked, provider: "telegram" };
+    const res = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile: welcome ? { ...profile, welcomeCredited: welcome } : profile, isNew, linked, provider: "telegram" };
     ctx.json(200, res);
   });
 };
@@ -24263,17 +24863,17 @@ var MatchRoom = class {
     const lang = Math.random() < (cyrillic ? 0.8 : 0.45) ? "ru" : "en";
     const taken = /* @__PURE__ */ new Set();
     for (const p of this.world.players.values()) taken.add(p.name.toLowerCase());
-    const persona = fillPersona(Math.random, { lang, aroundLevel: people ? levels / people : 1, taken });
+    const persona2 = fillPersona(Math.random, { lang, aroundLevel: people ? levels / people : 1, taken });
     const id = randomUUID3();
-    this.world.addPlayer(id, persona.name, persona.character, true, persona.loadout, team ?? void 0);
+    this.world.addPlayer(id, persona2.name, persona2.character, true, persona2.loadout, team ?? void 0);
     const seat = {
       id,
-      name: persona.name,
-      character: persona.character,
-      level: persona.level,
-      avatar: persona.avatar,
-      skins: persona.loadout.skins ?? {},
-      difficulty: persona.difficulty,
+      name: persona2.name,
+      character: persona2.character,
+      level: persona2.level,
+      avatar: persona2.avatar,
+      skins: persona2.loadout.skins ?? {},
+      difficulty: persona2.difficulty,
       addedAt: this.clock(),
       brain: null,
       brainWorld: null,

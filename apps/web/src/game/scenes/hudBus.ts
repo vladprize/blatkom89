@@ -64,7 +64,7 @@ export interface HudLayout {
   /** The chat log: its left edge, width and either top (phones, under the kill feed) or bottom (computers, above the health panel). */
   chat: { left: number; width: number; top?: number; bottom?: number };
   /** A story mission's objective line: centred on `x`, its top at `y` (under the score and health panels). */
-  goal: { x: number; y: number };
+  goal: { x: number; y: number; align?: 'center' | 'left' };
 }
 
 let lastLayout: HudLayout | null = null;

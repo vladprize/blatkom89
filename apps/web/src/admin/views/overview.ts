@@ -66,6 +66,8 @@ export async function renderOverview(root: HTMLElement): Promise<void> {
       tile('BLATS за уровни', o.blatsForLevels === undefined ? 'нет данных' : num(o.blatsForLevels), '10 за каждый новый уровень'),
       tile('Тех. ошибки', num(o.errorCount)),
     ),
+    // v0.2.20: the house players — in the game's player tables, never in these numbers
+    o.housePlayers ? h('p', { class: 'note' }, `Витринные игроки (боты в таблицах игроков): ${num(o.housePlayers)} — в метриках, таблице игроков и выгрузках не учитываются.`) : '',
   );
   const days = c.registrations.map((r) => shortDay(r.day));
   body.append(

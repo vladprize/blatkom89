@@ -30,7 +30,13 @@ export function fill(el: Element, ...children: Child[]): void {
 
 export function toast(text: string): void {
   const t = h('div', { class: 'toast', role: 'status' }, text);
-  document.body.append(t);
+  // v0.2.20: over a match turned sideways (app/landscape.ts) the note turns with it
+  const turned = document.documentElement.classList.contains('rot') ? document.getElementById('ui') : null;
+  const host = turned ?? document.body;
+  // v0.2.20: a second note at the same moment stands above the first instead of over it
+  const live = host.querySelectorAll(':scope > .toast').length;
+  if (live) t.style.bottom = `calc(${24 + live * 54}px + var(--safe-bottom, 0px))`;
+  host.append(t);
   setTimeout(() => t.remove(), 2700);
 }
 

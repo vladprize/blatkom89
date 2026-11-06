@@ -79,12 +79,14 @@ import type { Sheet } from '../sheet.js';
 import { animateLiveIcon, skinIconReady, skinIconUrl } from '../../game/render/skins.js';
 import { blatsCoin, fmtNum } from '../coin.js';
 import { blatsBanner, blatsSale, coinPile, packHint } from '../blats.js';
+import { promoForm } from '../promo.js';
 
 export type ArsenalTab = 'loadout' | 'weapons' | 'gear' | 'characters' | 'case' | 'diamonds';
 type ShopTab = Exclude<ArsenalTab, 'loadout'>;
 
 /** Phones get their own Arsenal: the wallet and the kit/shop switch on top, every tab on one screen. */
-const PHONE_QUERY = '(max-width: 560px)';
+/** Phones (and, v0.2.20, phones held sideways): the Arsenal's phone layout (laid out in width when sideways). */
+const PHONE_QUERY = '(max-width: 560px), (max-height: 500px) and (orientation: landscape)';
 
 /** What to try on: a weapon (optionally with modifications) and/or equipment. */
 export interface TryOn {
@@ -433,9 +435,11 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           { class: 'dressing__info col' },
           h('div', { class: 'row', style: 'gap:8px' }, h('span', { class: 'chiplabel' }, tagText), status),
           h('div', { class: 'h2 dressing__name', 'data-testid': 'dressing-name' }, name),
-          h('div', { class: 'muted' }, g ? gadgetBlurb(g) : weaponBlurb(w)),
+          h('div', { class: 'muted dressing__blurb' }, g ? gadgetBlurb(g) : weaponBlurb(w)),
           getIt,
           !g && mods.length ? h('div', { class: 'modfit' }, t('With:'), ...mods.map((m) => h('span', { class: 'chip' }, modImg(m, 'small'), modText(m).name))) : null,
+          // v0.2.20 (the owner: the empty space by the portrait): what the thing in hand does
+          h('div', { class: 'dressing__stats' }, g ? h('ul', { class: 'gfacts' }, ...gadgetFacts(g).map((f) => h('li', null, f))) : statBars(w, mods)),
           !g ? skinRow(w, finish) : null,
           h(
             'div',
@@ -1247,6 +1251,12 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       ...(stars ? [starsButton(p.id, stars)] : methods.length ? methods.map(([m, label]) => h('button', { class: 'btn btn--small btn--red', onclick: () => buyPack(p.id, m) }, label)) : [h('button', { class: 'btn btn--small', disabled: true }, t('Soon'))]),
     );
   };
+  /** v0.2.20: the promo code field (BLATNOY…); the wallet follows the new balance. */
+  const promoPaid = (): HTMLElement =>
+    promoForm(online!, (balance) => {
+      if (inv) inv = { ...inv, diamonds: balance };
+      draw();
+    });
   const diamondsTab = (): HTMLElement => {
     if (!online) return h('div', { class: 'panel' }, t('Buying BLATS works in the online version of the game.'));
     // inside Telegram the packs are sold for Telegram Stars (Telegram's rule for digital goods)
@@ -1272,6 +1282,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       { class: 'col blatsshop', 'data-testid': 'blats-tab' },
       head,
       h('div', { class: 'packs' }, ...(cfg?.packs ?? []).map((p, i) => packCard(p, i, methods))),
+      promoPaid(),
       h('div', { class: 'muted', style: 'font-size:13px' }, t('Purchases belong to your account. To keep them when you change devices, link an email in your profile.'), ' ', stars || methods.length ? termsLink() : null),
     );
   };
@@ -1728,6 +1739,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           );
         }),
       ),
+      promoPaid(),
       h('div', { class: 'muted arsnote' }, t('Purchases belong to your account. To keep them when you change devices, link an email in your profile.'), ' ', !o.inTelegram && methods.length ? termsLink() : null),
     );
   };

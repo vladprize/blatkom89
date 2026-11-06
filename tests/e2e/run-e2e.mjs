@@ -237,6 +237,9 @@ try {
   console.log('\n[e2e] v0.2.19: the owner\'s pre-final edits — the menu\'s corner and art, one-word aliases, the Arsenal\'s cases and skins, no tutorial, the touch sticks, the prologue on a phone');
   const v0219 = spawnSync(process.execPath, ['tests/e2e/v0219.mjs', base, join(out, 'v0219')], { stdio: 'inherit' });
   if (v0219.status !== 0) failed = true;
+  console.log('\n[e2e] v0.2.20: the owner\'s final edits — the welcome BLATS, the promo code, the screens centred and sideways, a match sideways from its first frame, static sticks and the sprint, the story\'s pairs');
+  const v0220 = spawnSync(process.execPath, ['tests/e2e/v0220.mjs', base, join(out, 'v0220')], { stdio: 'inherit' });
+  if (v0220.status !== 0) failed = true;
   console.log('\n[e2e] v0.2.17 part 3: gang against gang, a friend called to a duel (two browsers, two socket players)');
   const battle = spawnSync(process.execPath, ['tests/e2e/battle.mjs', base, join(out, 'battle')], { stdio: 'inherit' });
   if (battle.status !== 0) failed = true;

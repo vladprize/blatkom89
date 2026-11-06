@@ -85,7 +85,6 @@ export const RU: Record<string, string> = {
   'Trying on: {label} — G key': 'Примерка: {label} — клавиша G',
   'Trying on: {label}': 'Примерка: {label}',
   ' and ': ' и ',
-  'Turn your phone sideways': 'Поверни телефон горизонтально',
   'Pause': 'Пауза',
   'Menu': 'Меню',
   'Practice is paused.': 'Тренировка на паузе.',
@@ -256,7 +255,6 @@ export const RU: Record<string, string> = {
   'Account created — progress and purchases are tied to {email}': 'Аккаунт создан — прогресс и покупки привязаны к {email}',
   'Create an account': 'Создать аккаунт',
   'Keep your progress': 'Сохрани прогресс',
-  'Register an email: your level, talons, diamonds and everything you buy stay with you on any device. As a guest, the account lives only in this browser.': 'Привяжи почту — уровень, талоны, алмазы и всё купленное останутся с тобой на любом устройстве. У гостя аккаунт живёт только в этом браузере.',
   'I already have an account — sign in': 'У меня уже есть аккаунт — войти',
   'Continue as guest': 'Продолжить как гость',
   'Skin on: {name}': 'Скин надет: {name}',
@@ -528,7 +526,6 @@ export const RU: Record<string, string> = {
   'No': 'Нет',
   'Yes': 'Да',
   'Stick size': 'Размер стиков',
-  'Computer: WASD — move, mouse — aim, left click — fire, R — reload, Q / wheel / 1-3 — weapons, G / middle click — equipment, E — pick up, Shift — walk quietly, Tab — score, Esc — menu.': 'Компьютер: WASD — движение, мышь — прицел, ЛКМ — огонь, R — перезарядка, Q / колесо / 1-3 — оружие, G / средняя кнопка — снаряжение, E — подобрать, Shift — тихий шаг, Tab — счёт, Esc — меню.',
   'In-game name': 'Имя в игре',
   'A name may contain letters, digits, spaces and _ . -': 'В имени могут быть буквы, цифры, пробелы и _ . -',
   'Name saved': 'Имя сохранено',
@@ -874,7 +871,6 @@ export const RU: Record<string, string> = {
   'It comes in one of the next updates — the missions you finish now stay yours.': 'Она выйдет в одном из следующих обновлений — пройденные миссии останутся за тобой.',
   'For the chapter: {rewards}': 'За главу: {rewards}',
   'In 2089 the city’s disputes go to BLATKOM: both sides wake up in a simulation of 1989, half human, half beast — and whoever holds the district there is right out here.': 'В 2089-м споры города решает БЛАТКОМ: обе стороны просыпаются в симуляции 1989-го, наполовину люди, наполовину звери, — и кто удержит район там, тот прав здесь.',
-  'Prologue ▶': 'Пролог ▶',
   'Card index · {n}/{all}': 'Картотека · {n}/{all}',
   'Finale': 'Финал',
   '«The Building Site» — the two of them against Arkadich': '«Стройка» — вдвоём против Аркадича',
@@ -1072,6 +1068,17 @@ export const RU: Record<string, string> = {
   'One word: a–z, 0–9 and _ . - · {min}–{max} characters': 'Одно слово: a–z, 0–9 и _ . - · от {min} до {max} символов',
   'At least {n} characters.': 'Не короче {n} символов.',
   'At most {n} characters.': 'Не длиннее {n} символов.',
+  // ── v0.2.20: the owner’s final edits
+  'Computer: WASD — move, Shift — sprint (while your breath lasts), mouse — aim, left click — fire, R — reload, Q / wheel / 1-3 — weapons, G / middle click — equipment, E — pick up, C — walk quietly, Tab — score, Esc — menu.': 'Компьютер: WASD — движение, Shift — спринт (пока хватает дыхалки), мышь — прицел, ЛКМ — огонь, R — перезарядка, Q / колесо / 1-3 — оружие, G / средняя кнопка — снаряжение, E — подобрать, C — тихий шаг, Tab — счёт, Esc — меню.',
+  'Phone: pull the move stick past its ring to sprint — the blue bar under your health is your breath.': 'Телефон: дотяни левый джойстик за край кольца — побежишь спринтом; голубая полоска под здоровьем — твоя дыхалка.',
+  '+{n} BLATS — the welcome bonus for registering': '+{n} БЛАТ — бонус за регистрацию',
+  'The welcome bonus: credited as soon as you register': 'Приветственный бонус: зачислим сразу после регистрации',
+  'Promo code': 'Промокод',
+  'Enter a promo code': 'Введи промокод',
+  'Promo code {code}: +{n} BLATS': 'Промокод {code}: +{n} БЛАТ',
+  'Activate': 'Активировать',
+  'Have a promo code?': 'Есть промокод?',
+  'Register an email: your level, talons, BLATS and everything you buy stay with you on any device. As a guest, the account lives only in this browser.': 'Привяжи почту — уровень, талоны, БЛАТ и всё купленное останутся с тобой на любом устройстве. У гостя аккаунт живёт только в этом браузере.',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)
@@ -1161,6 +1168,9 @@ export const RU: Record<string, string> = {
   'No such player': 'Такого игрока нет',
   'Inside Telegram, BLATS are sold for Telegram Stars': 'В Telegram БЛАТ продаются за звёзды Telegram',
   'Telegram Stars are paid inside Telegram — open the game there': 'Звёздами платят в Telegram — откройте игру там',
+  'There is no such promo code': 'Такого промокода нет',
+  'This promo code has already been used on your account': 'Этот промокод уже активирован на твоём аккаунте',
+  'This promo code no longer works': 'Этот промокод больше не действует',
 };
 
 /** Russian plural forms [one, few, many] keyed by the English singular passed to plural() / count(). */

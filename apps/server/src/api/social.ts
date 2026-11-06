@@ -27,10 +27,10 @@ export const registerSocialRoutes: RouteModule = (router, deps) => {
   const readLimiter = new RateLimiter(120, 2);
   const repo = () => {
     if (!deps.sql) throw new HttpError(503, 'persistence_unavailable', 'The service is temporarily unavailable');
-    return new SocialRepo(deps.sql);
+    return new SocialRepo(deps.sql, deps.env.HOUSE_PLAYERS > 0);
   };
   if (deps.sql) {
-    const store = new SocialRepo(deps.sql);
+    const store = new SocialRepo(deps.sql, deps.env.HOUSE_PLAYERS > 0);
     const sql = deps.sql;
     hub.attachStore({ friendIds: (id) => store.friendIds(id), counts: (id) => store.counts(id), touch: async (id) => void (await sql`UPDATE users SET last_seen_at = now() WHERE id = ${id}`) });
   }

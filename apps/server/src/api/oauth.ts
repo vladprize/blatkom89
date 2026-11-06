@@ -25,6 +25,7 @@ import type { OAuthProvider } from '../auth/oauth.js';
 import { TelegramLoginData, botIdOf, validateTelegramLogin } from '../auth/telegramLogin.js';
 import type { Sql } from '../database/db.js';
 import { attachSource } from '../analytics/growth.js';
+import { welcomeAfterRegistration } from '../economy/bonuses.js';
 
 const NONCE_COOKIE = 'blk_oauth';
 const HANDOFF_TTL_MS = 5 * 60_000;
@@ -138,9 +139,11 @@ export const registerOAuthRoutes: RouteModule = (router, deps) => {
     if (h.is_new) deps.services.analytics.server('profile_created', { method: 'oauth' }, evCtx);
     await attachSource(sql, deps.log, h.user_id, h.is_new, undefined, { referral: false, telegram: false });
     if (h.linked) deps.services.analytics.server('identity_linked', { provider: h.provider }, evCtx);
+    // v0.2.20: registered through the provider (a guest that linked it, or a new account) — the welcome bonus
+    const welcome = h.is_new || h.linked ? await welcomeAfterRegistration(sql, deps.log, h.user_id, env.WELCOME_BONUS_BLATS, h.provider) : 0;
     const profile = await pg.profiles.get(h.user_id);
     if (!profile) throw new HttpError(401, 'login_expired', 'The sign-in has expired — try again');
-    const res: AuthResponse & { linked: boolean; provider: string } = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: h.is_new, linked: h.linked, provider: h.provider };
+    const res: AuthResponse & { linked: boolean; provider: string } = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile: welcome ? { ...profile, welcomeCredited: welcome } : profile, isNew: h.is_new, linked: h.linked, provider: h.provider };
     ctx.json(200, res);
   });
 
@@ -186,9 +189,10 @@ export const registerOAuthRoutes: RouteModule = (router, deps) => {
     if (isNew) deps.services.analytics.server('profile_created', { method: 'telegram' }, evCtx);
     if (linked) deps.services.analytics.server('identity_linked', { provider: 'telegram', via: 'widget' }, evCtx);
     await attachSource(sql, deps.log, userId, isNew, undefined, { referral: false, telegram: true });
+    const welcome = isNew || linked ? await welcomeAfterRegistration(sql, deps.log, userId, env.WELCOME_BONUS_BLATS, 'telegram') : 0;
     const profile = await pg.profiles.get(userId);
     if (!profile) throw new HttpError(500, 'internal', 'Profile not found');
-    const res: AuthResponse & { linked: boolean; provider: string } = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew, linked, provider: 'telegram' };
+    const res: AuthResponse & { linked: boolean; provider: string } = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile: welcome ? { ...profile, welcomeCredited: welcome } : profile, isNew, linked, provider: 'telegram' };
     ctx.json(200, res);
   });
 };

@@ -20,11 +20,11 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
 1. `POST /api/rooms` (create, private → invite code) or `POST /api/rooms/quick` → `roomId`.
 2. WebSocket `GET /ws` (same origin; foreign `Origin` → 403; ≤48 sockets per IP — a game and a social socket per app window; 4 KB max frame).
 3. First message must be JSON `hello {protocol, token, roomId, character, clientVersion}` within 8 s
-   (`PROTOCOL_VERSION` = 9: v2 assists and supply drops, v3 loadouts, rockets, medkits, v4 the arsenal,
+   (`PROTOCOL_VERSION` = 10: v2 assists and supply drops, v3 loadouts, rockets, medkits, v4 the arsenal,
    modifications and equipment, v5 ten players and team matches, v6 capture the flag and base capture,
    v7 ten more characters (an older client could not draw them) and the room chat, v8 three more maps
    (an older client has neither their geometry nor their art), v9 «Черкизон» and «Воркута» (v0.2.18
-   part 3, the same reason);
+   part 3, the same reason), v10 the sprint (v0.2.20: a button in the input, the breath in the snapshot);
    older clients get `version_mismatch` and are asked to reload).
    The session token is verified exactly like the REST bearer token. Wrong protocol → `error
    version_mismatch` + close 1008; bad token → 4001; unknown room → 4004; full → 4005; finished → 4010.
@@ -111,6 +111,17 @@ itself — `BotBrain` (the practice AI) producing one input frame per tick throu
   `matches.player_count` holds the people and `matches.bot_count` (migration 008) the filled players; the
   match history shows the whole lineup; `match_started`/`match_completed` analytics carry `players`
   (people) and `fill`; the admin's live-rooms table has a «Добор» column.
+* **Playing like people (v0.2.20,** the owner: «ты убиваешь одного бота, чаще всего на второй раз тебя обязательно
+  убьёт бот — сделать поведение ботов похожим на реальных игроков»**):** a bot used to see 470 px all round —
+  more than a person sees of a phone held sideways (±125 px up and down) — and went straight for the nearest
+  enemy wherever it was, so a person was often shot from beyond the screen's edge. Now a bot sees what a
+  person's screen shows (`BOT_VIEW`, ±250 × ±135 px around it, a little less for an easy bot), goes where it
+  last saw someone (4 s), else towards gunfire it heard (2.5 s, 1000 px; a silenced shot is not heard), else
+  roams; it doesn't turn and aim at once (an aim that settles over 0.7 s, a lag of 0.08–0.14 s); hurt (35 HP)
+  against a healthier enemy it runs for a medkit; it answers whoever shoots it, also from beyond its screen,
+  and sprints like people, its breath and all (`packages/shared/src/sim/bots.ts`). Measured with a bot in the
+  person's place, 8 free-for-all matches on each of 4 maps: deaths to someone off the screen fell from 44 % (30
+  of 68) to 15 % (7 of 46).
 * **Cost:** a room with 3–5 filled players takes 0.04–0.09 ms per tick in all (0.25–0.5 % of one core,
   measured on every mode). Navigation grids are built once per map and shared by all rooms; the A*
   search space is reused between searches (no allocation), a bot searches for a way at most four times
@@ -190,11 +201,12 @@ results and the match record, and give XP (`XP_RULES.perObjective`, 15 each).
 ```
 u8 type=2 | u32 tick | u32 serverTimeMs | u8 phase | u32 phaseRemainingMs | u16 teamScoreRed | u16 teamScoreBlue
    | u8 playerCount                                                                         (19 B)
-player × N (48 B): u8 slot | u8 flags(alive,connected,reloading,invulnerable,walking,hasHeavy,laser)
+player × N (50 B, protocol 10): u8 slot | u8 flags(alive,connected,reloading,invulnerable,walking,hasHeavy,laser,sprinting)
    | u16 x*4 | u16 y*4 | i16 vx*8 | i16 vy*8 | u16 aim | u8 hp | u8 weapon | u8 sideMag | u8 heavy(255=none)
    | u8 heavyMag | u8 heavyReserve | u16 kills | u16 deaths | u16 score | u32 ackSeq | u16 reloadLeft
    | u16 cooldownLeft | u16 spreadHeat*1e4 | u16 shotCounter | u16 respawnIn | u16 assists | u8 sidearm
    | u8 melee | u8 gadget(255 none) | u8 gadgetCharges | u16 flashedMs | u8 team(255 none) | u8 objectives
+   | u8 stamina*255/100 | u8 staminaRegenInMs/10
 u8 pickupCount, pickup × N (8 B): u16 id | u8 weapon | u8 flags(active,dropped,supply,medkit) | u16 x*4 | u16 y*4
 u16 shotCount, shot × N: u8 shooter | u8 arms | u16 shotId | u16 ox*4 | u16 oy*4 | u8 pellets | u8 flags(turret,silenced)
    | pellet × n (6 B): u16 angle | u16 dist*4 | u8 hitSlot(255 none) | u8 kind(0 miss,1 wall,2 player)
@@ -208,8 +220,15 @@ u8 baseCount (0–8), base × N (4 B): u8 owner(255) | u8 capturer(255) | u8 pro
 ```
 Flag stands and base centres are not sent: both sides read them from the shared map. A carried flag is
 drawn on its carrier (the local carrier immediately, others on the interpolated timeline).
-Input frame (14 B): `u32 seq | i8 moveX | i8 moveY | u16 aim | u8 buttons(FIRE,RELOAD,WALK,INTERACT,NEXT)
-| u8 slot | u32 viewTimeMs`, batch header `u8 type=1 | u8 count`.
+Input frame (14 B): `u32 seq | i8 moveX | i8 moveY | u16 aim | u8 buttons(FIRE,RELOAD,WALK,INTERACT,NEXT,…,
+SPRINT=64; anything above BTN_MASK 0x7f refused) | u8 slot | u32 viewTimeMs`, batch header `u8 type=1 | u8 count`.
+
+**The sprint (v0.2.20, protocol 10).** The `SPRINT` button (Shift on a computer; on a phone the move stick
+pulled past its ring, `HudScene`) runs at ×1.36 while the breath lasts: `SPRINT` in `constants/game.ts` —
+100 points, −32 a second (≈ 3 s), +22 a second after 0.7 s of rest, 18 needed to start again; never while
+firing, walking quietly or with a light touch of the stick. The `World` decides it like the rest of the
+movement (the server online, the prediction the same way), the snapshot carries the breath and the rest
+left, a respawn refills it. The HUD draws it as a blue bar under the health.
 
 ## 6. Verification
 
@@ -222,6 +241,9 @@ Input frame (14 B): `u32 seq | i8 moveX | i8 moveY | u16 aim | u8 buttons(FIRE,R
   replace, grace-period expiry and empty-room cleanup, rematch with separately recorded matches and the
   roster refreshed with the earned level, owned gear, the room chat (everybody, team only, cleaning, the
   rate limit).
+* `packages/shared/src/__tests__/sprint.test.ts` (v0.2.20) — faster than a run while the breath lasts, out
+  of breath after ≈ 3 s, the rest and the refill, the breath needed to start again, firing / walking / a light
+  stick don't sprint, the button and the breath on the wire, a respawn refills it.
 * `packages/shared/src/__tests__/` — codec round-trips and malformed input rejection, lag compensation,
   walls blocking shots, movement normalisation, sliding, weapons timing, assists (window, minimum damage,
   reaching the limit), supply drops (free point away from players, full ammo, expiry), teams

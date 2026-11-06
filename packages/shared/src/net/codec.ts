@@ -10,6 +10,8 @@ import type { WeaponId } from '../game-rules/weapons.js';
 import { GADGETS, GADGET_IDS, armsAt, armsIndex } from '../game-rules/gadgets.js';
 import type { ArmsId, GadgetId } from '../game-rules/gadgets.js';
 import type { BaseState, FlagState, FlagStatus, GadgetState, InputFrame, PelletResult, PickupState, PlayerState, WorldEvent } from '../sim/world.js';
+import { BTN_MASK } from '../sim/world.js';
+import { SPRINT } from '../constants/game.js';
 import { clamp, dequantizeAngle, quantizeAngle } from '../sim/math.js';
 
 export const MSG_INPUT = 1;
@@ -32,7 +34,7 @@ export function encodeInputs(inputs: readonly InputFrame[]): ArrayBuffer {
     v.setInt8(o + 4, clamp(Math.round(f.moveX), -127, 127));
     v.setInt8(o + 5, clamp(Math.round(f.moveY), -127, 127));
     v.setUint16(o + 6, f.aim & 0xffff, true);
-    v.setUint8(o + 8, f.buttons & 0x3f);
+    v.setUint8(o + 8, f.buttons & BTN_MASK);
     v.setUint8(o + 9, clamp(f.slot | 0, 0, 3));
     v.setUint32(o + 10, Math.max(0, Math.round(f.viewTime)) >>> 0, true);
     o += INPUT_BYTES;
@@ -54,7 +56,7 @@ export function decodeInputs(data: ArrayBuffer | Uint8Array): InputFrame[] {
   for (let i = 0; i < n; i++) {
     const buttons = v.getUint8(o + 8);
     const slot = v.getUint8(o + 9);
-    if (buttons > 0x3f || slot > 3) throw new ProtocolError('bad input flags');
+    if (buttons > BTN_MASK || slot > 3) throw new ProtocolError('bad input flags');
     const mx = v.getInt8(o + 4);
     const my = v.getInt8(o + 5);
     if (mx === -128 || my === -128) throw new ProtocolError('bad move axis');
@@ -116,6 +118,10 @@ export interface NetPlayer {
   team: Team | null;
   /** Capture the flag: flags captured; base capture: bases captured. */
   objectives: number;
+  /** v0.2.20: breath for the sprint (0..SPRINT.max, to 0.4), sprinting now, ms until it starts coming back. */
+  stamina: number;
+  sprinting: boolean;
+  staminaRegenIn: number;
 }
 
 /** Capture the flag: one per team. */
@@ -224,7 +230,7 @@ export interface SnapshotSource {
 }
 
 const HEADER_BYTES = 19;
-const PLAYER_BYTES = 48;
+const PLAYER_BYTES = 50;
 const FLAG_BYTES = 9;
 const BASE_BYTES = 4;
 const FLAG_STATUSES: readonly FlagStatus[] = ['home', 'carried', 'dropped'];
@@ -268,7 +274,8 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
       (src.now < p.invulnUntil ? 8 : 0) |
       (p.walking ? 16 : 0) |
       (p.heavy ? 32 : 0) |
-      (p.mods[p.weapon]?.includes('laser') ? 64 : 0);
+      (p.mods[p.weapon]?.includes('laser') ? 64 : 0) |
+      (p.sprinting ? 128 : 0);
     v.setUint8(o, p.slot);
     v.setUint8(o + 1, flags);
     v.setUint16(o + 2, u16(p.x * POS_SCALE), true);
@@ -299,6 +306,8 @@ export function encodeSnapshot(src: SnapshotSource): ArrayBuffer {
     v.setUint16(o + 44, u16(Math.max(0, p.flashedUntil - src.time)), true);
     v.setUint8(o + 46, p.team === null ? 255 : p.team);
     v.setUint8(o + 47, u8c(p.objectives));
+    v.setUint8(o + 48, u8c((p.stamina / SPRINT.max) * 255));
+    v.setUint8(o + 49, u8c(Math.max(0, p.staminaRegenAt - p.clock) / 10));
     o += PLAYER_BYTES;
   }
   v.setUint8(o, pickups.length);
@@ -469,6 +478,9 @@ export function decodeSnapshot(data: ArrayBuffer | Uint8Array): Snapshot {
       laser: (flags & 64) !== 0,
       team: teamAt(v.getUint8(o + 46)),
       objectives: v.getUint8(o + 47),
+      stamina: (v.getUint8(o + 48) / 255) * SPRINT.max,
+      sprinting: (flags & 128) !== 0,
+      staminaRegenIn: v.getUint8(o + 49) * 10,
     });
     o += PLAYER_BYTES;
   }

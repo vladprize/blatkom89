@@ -37,6 +37,8 @@ interface ProfileRow {
   club_emblem?: unknown;
   identities?: string[] | null;
   founder?: boolean;
+  /** v0.2.20: the registration bonus is paid (only in `get`). */
+  welcome_paid?: boolean;
 }
 
 export function toPublicProfile(r: ProfileRow): PublicProfile {
@@ -75,7 +77,11 @@ export function toPublicProfile(r: ProfileRow): PublicProfile {
 }
 
 export class ProfileRepo {
-  constructor(private readonly sql: Sql) {}
+  /** @param welcomeBonus v0.2.20: BLATS a guest gets for registering (WELCOME_BONUS_BLATS; 0: off). */
+  constructor(
+    private readonly sql: Sql,
+    private readonly welcomeBonus = 0,
+  ) {}
 
   /**
    * The player's own profile. v0.2.18: levels not paid in BLATS yet — the levels reached before BLATS
@@ -91,6 +97,9 @@ export class ProfileRepo {
       row.diamonds = r.balance;
     }
     const profile = toPublicProfile(row);
+    // v0.2.20: a guest (no email, Telegram or provider) is offered the registration bonus until it is paid
+    const guest = !row.email && row.telegram_id === null && (row.identities?.length ?? 0) === 0;
+    if (this.welcomeBonus > 0 && guest && !row.welcome_paid) profile.welcomeBonus = this.welcomeBonus;
     return credited > 0 ? { ...profile, blatsCredited: credited } : profile;
   }
 
@@ -106,6 +115,7 @@ export class ProfileRepo {
              p.preferred_character, p.avatar, COALESCE(p.tokens, 0) AS tokens, COALESCE(p.diamonds, 0) AS diamonds, u.email,
              COALESCE(p.blats_level, 0) AS blats_level, p.user_id IS NOT NULL AS has_profile,
              COALESCE(p.rating, 1000) AS rating, u.founder,
+             EXISTS (SELECT 1 FROM currency_ledger l WHERE l.user_id = u.id AND l.reason = 'welcome') AS welcome_paid,
              c.id AS club_id, c.tag AS club_tag, c.name AS club_name, c.flag AS club_flag, c.emblem AS club_emblem,
              (SELECT array_agg(i.provider ORDER BY i.provider) FROM user_identities i WHERE i.user_id = u.id) AS identities
       FROM users u LEFT JOIN profiles p ON p.user_id = u.id

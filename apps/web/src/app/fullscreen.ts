@@ -26,13 +26,17 @@ function apiFullscreen(): boolean {
 /**
  * Opened from the home screen (an installed web app): no browser bars to hide. The Fullscreen API's own
  * full screen matches «display-mode: fullscreen» as well — that one is the button's, not an installed app.
+ * v0.2.20 (the owner: «не вижу кнопку» on a Mac): a computer's browser window in its own full screen (macOS's
+ * green button, F11) matches «display-mode: fullscreen» too while the tabs and the address bar are still
+ * there — only a touch device's installed app counts as one.
  */
 export function isStandalone(): boolean {
   const nav = navigator as Navigator & { standalone?: boolean };
   if (nav.standalone === true) return true;
   if (typeof window.matchMedia !== 'function') return false;
   if (window.matchMedia('(display-mode: standalone)').matches) return true;
-  return !apiFullscreen() && window.matchMedia('(display-mode: fullscreen)').matches;
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+  return touch && !apiFullscreen() && window.matchMedia('(display-mode: fullscreen)').matches;
 }
 
 /** An iPhone (or an iPod) — its browsers can't put a page in full screen. */

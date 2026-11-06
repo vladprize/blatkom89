@@ -23,8 +23,12 @@ test('codec: malformed inputs are rejected', () => {
   const badSlot = new Uint8Array(encodeInputs([input({})]));
   badSlot[11] = 9; // slot > 3
   assert.throws(() => decodeInputs(badSlot), ProtocolError);
+  // v0.2.20: 0x40 is the sprint now; 0x80 is still no button
+  const sprint = new Uint8Array(encodeInputs([input({})]));
+  sprint[10] = 0x40;
+  assert.equal(decodeInputs(sprint)[0]!.buttons, BTN.SPRINT);
   const badButtons = new Uint8Array(encodeInputs([input({})]));
-  badButtons[10] = 0x40;
+  badButtons[10] = 0x80;
   assert.throws(() => decodeInputs(badButtons), ProtocolError);
   const badAxis = new Uint8Array(encodeInputs([input({})]));
   badAxis[6] = 0x80; // -128

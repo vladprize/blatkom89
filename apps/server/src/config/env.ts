@@ -75,6 +75,16 @@ const EnvSchema = z.object({
    * owner sets the date when the window should close; players who got the gift keep it.
    */
   WELCOME_GIFT_UNTIL: z.coerce.date().optional(),
+  /**
+   * v0.2.20: BLATS a guest account gets for registering (an email, or a sign-in provider on the website),
+   * once per account (economy/bonuses.ts). 0 switches the bonus off.
+   */
+  WELCOME_BONUS_BLATS: z.coerce.number().int().min(0).max(10_000).default(199),
+  /**
+   * v0.2.20: house players — accounts the game keeps itself so the player tables are never empty
+   * (social/housePlayers.ts). 0: none are added, and the ones there are leave the tables.
+   */
+  HOUSE_PLAYERS: z.coerce.number().int().min(0).max(500).default(240),
   /** Card payments for BLATS (Stripe Checkout). Both keys are required to enable them. */
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),

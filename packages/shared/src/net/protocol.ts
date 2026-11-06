@@ -23,7 +23,8 @@ import type { GangBattle } from '../game-rules/gangBattle.js';
  * v9 (v0.2.18 part 3): two more maps («Черкизон», «Воркута») — an older page would not know them, so it is
  * asked to reload.
  */
-export const PROTOCOL_VERSION = 9;
+/** 10 (v0.2.20): the sprint button and the breath in every player's snapshot. */
+export const PROTOCOL_VERSION = 10;
 
 /** Room chat: a line is at most `maxLength` characters; `burst` lines at once, then one per `refillMs`. */
 export const CHAT_RULES = Object.freeze({ maxLength: 140, maxRaw: 400, burst: 4, refillMs: 2500, repeatMs: 4000 });

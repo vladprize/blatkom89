@@ -490,7 +490,7 @@ test('email: link an email, sign in from another device, refuse taken emails and
   r = await api(app.base, '/api/auth/email/login', { method: 'POST', body: { email: 'DONATER@example.com', password: 'короткий', platform: 'browser_mobile' } });
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.profile.id, a.userId, 'the same account on the new device');
-  assert.equal(r.body.profile.diamonds, 300);
+  assert.equal(r.body.profile.diamonds, 300 + 199, 'its BLATS — and, v0.2.20, the welcome bonus registering the email paid');
   const [u] = await app.db.sql<Array<{ password_hash: string }>>`SELECT password_hash FROM users WHERE id = ${a.userId}`;
   assert.ok(u!.password_hash.startsWith('scrypt$') && !u!.password_hash.includes('короткий'));
   // password change

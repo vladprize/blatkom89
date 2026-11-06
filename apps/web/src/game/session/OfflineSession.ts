@@ -185,6 +185,8 @@ export class OfflineSession implements GameSession {
     return {
       hp: me.hp,
       alive: me.alive,
+      stamina: me.stamina,
+      sprinting: me.sprinting,
       respawnInMs: me.alive ? 0 : Math.max(0, me.respawnAt - w.time),
       weapon: me.weapon,
       sidearm: me.sidearm,

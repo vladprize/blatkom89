@@ -252,6 +252,36 @@ a unique index makes a second write of the same level impossible, also under ret
 requests; `profiles.blats_level` (migration 023) remembers how far the levels are paid. The founder's
 level 87 (§7) is paid by the same rule.
 
+## 5b. The welcome bonus and promo codes (v0.2.20)
+
+**The welcome bonus** (the owner: «велком бонус новым пользователям за регистрацию почты — 199 кристаллов BLATS,
+показываем вместе с окном регистрации»): `WELCOME_BONUS_BLATS` (199 by default; 0 switches it off) BLATS when a
+guest account registers — links an email, or a sign-in provider on the website (Google, Facebook, Discord,
+Reddit, Telegram), or is created through one. An account that already had a way to sign in (an email,
+Telegram, a provider) is registered already and gets nothing: Telegram players are not offered it (they can't
+earn it by adding an email either). Paid once per account (`creditWelcomeBonus`, `apps/server/src/economy/
+bonuses.ts`): ledger reason `welcome`, a unique index on it (migration 027), so retries and concurrent
+registrations pay once; a database hiccup is logged and never fails the registration. The guest's own profile
+carries `welcomeBonus` (the amount on offer) — the welcome window and the profile's account panel show it as a
+red «+199 BLATS» strip — and the request that pays it `welcomeCredited` («+199 BLATS — the welcome bonus for
+registering»). Accounts that registered before v0.2.20 are not paid retroactively.
+
+**Promo codes** (the owner: «промо код на кристаллы — BLATNOY — 500 кристаллов, это для моих друзей»): `POST
+/api/promo {code}` (signed in; 8 tries per player and 30 per address in 10 minutes). The code is spelled out
+by the server (`normalizePromoCode`: any case, spaces, Russian letters — «блатной» is BLATNOY) and looked up in
+`promo_codes` (migration 027): its BLATS, `active`, an optional `expires_at` and `max_uses`. Each code once per
+account (ledger reason `promo`, ref `promo:<CODE>`, unique per player); the code's row is locked while it is
+redeemed, so a cap holds under concurrent requests. Answers: 404 `promo_unknown`, 409 `promo_used`, 410
+`promo_expired` (switched off, past its date or used up). The field is in the Arsenal's «Buy BLATS» tab. A new
+code, or BLATNOY switched off, is one SQL statement:
+
+```sql
+INSERT INTO promo_codes (code, diamonds, max_uses, expires_at, note) VALUES ('NEWYEAR', 300, 1000, '2027-01-15T00:00:00Z', 'New Year');
+UPDATE promo_codes SET active = false WHERE code = 'BLATNOY';
+```
+
+The dashboard's economy page lists both as «Бонус за регистрацию» and «Промокоды» among the flows by reason.
+
 ## 6. Invitations (talons)
 
 Every player has a link `https://<domain>/?ref=<code>` (Friends → «Invite to the game · +150 talons»,
@@ -283,6 +313,12 @@ nothing of the kind). Nothing was deleted from the database: `profiles.blat`, th
 talons (§6).
 
 ## 9. Tests
+
+v0.2.20: `apps/server/src/economy/bonuses.test.ts` (the welcome bonus offered to a guest and paid once for an
+email, concurrent registrations, nothing for a Telegram account, `WELCOME_BONUS_BLATS=0`; BLATNOY in any
+spelling, once per account also concurrently, unknown / switched off / past its date / used up, guests signed
+in only); browser: `tests/e2e/v0220.mjs` (the welcome window's strip and the 199 paid, «блатной» in the
+Arsenal → +500, the second try refused).
 
 `apps/server/src/economy/economy.test.ts` (wallet, purchases and refusals, concurrency, loadout
 validation, characters by grade, skins bought directly — free finishes refused as owned, the skin case

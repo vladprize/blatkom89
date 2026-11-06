@@ -101,7 +101,7 @@ export async function growth(sql: Sql, r: AdminRange, now = new Date()): Promise
   const to = new Date(r.to);
   const [pl] = await sql<Array<{ registered: number; unique: number; first: number; completed: number }>>`
     SELECT
-      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND created_at BETWEEN ${from} AND ${to})::int AS registered,
+      (SELECT count(*) FROM users WHERE deleted_at IS NULL AND merged_at IS NULL AND NOT house_player AND created_at BETWEEN ${from} AND ${to})::int AS registered,
       (SELECT count(DISTINCT mp.user_id) FROM match_participants mp JOIN matches m ON m.id = mp.match_id WHERE m.started_at BETWEEN ${from} AND ${to})::int AS unique,
       (SELECT count(*) FROM (
          SELECT mp.user_id, min(m.started_at) AS first FROM match_participants mp JOIN matches m ON m.id = mp.match_id GROUP BY mp.user_id
@@ -113,7 +113,7 @@ export async function growth(sql: Sql, r: AdminRange, now = new Date()): Promise
            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM match_participants mp WHERE mp.user_id = u.id AND mp.completed))::int AS completed,
            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM user_daily_activity a WHERE a.user_id = u.id AND a.day > (u.created_at AT TIME ZONE 'UTC')::date))::int AS returned
     FROM users u
-    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}
+    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player AND u.created_at BETWEEN ${from} AND ${to}
     GROUP BY 1, 2 ORDER BY accounts DESC, channel, detail LIMIT 50`;
   const visits = await sql<Array<{ kind: AdminVisitSourceRow['kind']; key: string; visitors: number; registered: number }>>`
     SELECT CASE WHEN v.partner_id IS NOT NULL THEN 'partner' WHEN v.utm_source IS NOT NULL THEN 'utm' WHEN COALESCE(v.referrer, '') <> '' THEN 'referrer' ELSE 'direct' END AS kind,
@@ -136,7 +136,7 @@ export async function growth(sql: Sql, r: AdminRange, now = new Date()): Promise
       (SELECT count(*) FROM referrals WHERE attached_at BETWEEN ${from} AND ${to} AND status = 'confirmed')::int AS confirmed`;
   const levelRows = await sql<Array<{ level: number; players: number }>>`
     SELECT p.level, count(*)::int AS players FROM profiles p JOIN users u ON u.id = p.user_id
-    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL GROUP BY p.level`;
+    WHERE u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player GROUP BY p.level`;
   const reached = await sql<Array<{ level: number; players: number }>>`
     SELECT substring(ref FROM 7)::int AS level, count(DISTINCT user_id)::int AS players FROM currency_ledger
     WHERE currency IN ('blat', 'diamonds') AND reason = 'level' AND ref ~ '^level:[0-9]{1,6}$' AND created_at BETWEEN ${from} AND ${to}
@@ -199,7 +199,7 @@ export async function partnersWithStats(sql: Sql, r: AdminRange, env: { PUBLIC_U
       (SELECT count(*) FROM match_participants mp JOIN matches m ON m.id = mp.match_id JOIN users x ON x.id = mp.user_id
          WHERE x.partner_id = p.id AND mp.completed AND m.ended_at BETWEEN ${from} AND ${to})::int AS matches
     FROM partners p
-    LEFT JOIN users u ON u.partner_id = p.id AND u.deleted_at IS NULL AND u.merged_at IS NULL AND u.created_at BETWEEN ${from} AND ${to}
+    LEFT JOIN users u ON u.partner_id = p.id AND u.deleted_at IS NULL AND u.merged_at IS NULL AND NOT u.house_player AND u.created_at BETWEEN ${from} AND ${to}
     GROUP BY p.id ORDER BY p.created_at DESC, p.code`;
   return rows.map((x) => ({
     id: x.id,

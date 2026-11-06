@@ -75,6 +75,7 @@ export class PreviewScene extends Phaser.Scene {
         reloading: false,
         invulnerable: false,
         walking: i % 2 === 1,
+        sprinting: false,
         connected: true,
         kills: 0,
         assists: 0,

@@ -10,6 +10,7 @@ import { CHAT_RULES } from '@blatkom/shared';
 import type { ChatLine } from '../net/OnlineClient.js';
 import { hudBus, hudLayout } from '../game/scenes/hudBus.js';
 import type { HudLayout } from '../game/scenes/hudBus.js';
+import { boxOf, layerHeight } from '../app/landscape.js';
 
 export interface ChatSource {
   lines(): readonly ChatLine[];
@@ -342,7 +343,7 @@ export class ChatOverlay {
       this.el.style.visibility = 'hidden';
       return;
     }
-    const r = canvas.getBoundingClientRect();
+    const r = boxOf(canvas);
     if (!r.width || !r.height) return;
     const k = r.width / l.W;
     this.el.style.visibility = '';
@@ -363,7 +364,7 @@ export class ChatOverlay {
         s.top = `${Math.round(r.top + l.chat.top * k)}px`;
         s.bottom = '';
       } else {
-        s.bottom = `${Math.round(window.innerHeight - r.bottom + (l.chat.bottom ?? 0) * k)}px`;
+        s.bottom = `${Math.round(layerHeight() - r.bottom + (l.chat.bottom ?? 0) * k)}px`;
         s.top = '';
       }
     }

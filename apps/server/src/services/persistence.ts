@@ -16,6 +16,7 @@ import { PgAnalytics } from '../analytics/writer.js';
 import { AdminAuth } from '../admin/auth.js';
 import { bootstrapAdmin } from '../admin/bootstrap.js';
 import { scheduleRetention } from '../analytics/retention.js';
+import { scheduleHousePlayers } from '../social/housePlayers.js';
 import { EconomyRepo } from '../economy/repo.js';
 import { EmailAuth } from '../auth/email.js';
 import { PaymentService } from '../payments/service.js';
@@ -103,7 +104,7 @@ export function pgContext(sql: Sql, env: Env, log: Logger): PgContext {
     activity,
     users: new UserRepo(sql),
     sessions: new SessionStore(sql, env.SESSION_SECRET, env.SESSION_TTL_HOURS, activity, log),
-    profiles: new ProfileRepo(sql),
+    profiles: new ProfileRepo(sql, env.WELCOME_BONUS_BLATS),
     recorder: new PgMatchRecorder(sql, log),
     invites: new PgInvites(sql),
     analytics,
@@ -147,11 +148,14 @@ export async function createPersistence(deps: { sql: Sql; env: Env; log: Logger 
   await bootstrapAdmin(deps.sql, ctx.adminAuth, deps.log, deps.env.ADMIN_BOOTSTRAP_USERNAME, deps.env.ADMIN_BOOTSTRAP_PASSWORD);
   // Retention purge (docs/PRIVACY.md): first run 5 min after start, then daily; unref'd timers.
   const stopRetention = deps.env.NODE_ENV === 'test' ? () => {} : scheduleRetention(deps.sql, deps.log);
+  // v0.2.20: the house players (social/housePlayers.ts): in the tables from the first start, then they play on
+  const stopHouse = deps.env.NODE_ENV === 'test' || deps.env.HOUSE_PLAYERS === 0 ? () => {} : scheduleHousePlayers(deps.sql, deps.log, deps.env.HOUSE_PLAYERS);
   return {
     services: { sessions: ctx.sessions, recorder: ctx.recorder, invites: ctx.invites, analytics: ctx.analytics, economy: ctx.economy, gangs: pgGangs(deps.sql) },
     recorder: ctx.recorder,
     close: async () => {
       stopRetention();
+      stopHouse();
       await ctx.analytics.close();
     },
   };

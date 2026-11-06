@@ -36,6 +36,7 @@ export function toRenderPlayer(p: PlayerState, isLocal: boolean, now: number): R
     reloading: p.reloadWeapon !== null,
     invulnerable: now < p.invulnUntil,
     walking: p.walking,
+    sprinting: p.sprinting,
     connected: p.connected,
     kills: p.kills,
     assists: p.assists,

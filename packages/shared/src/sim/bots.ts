@@ -10,7 +10,7 @@ import { mulberry32 } from './rng.js';
 import type { NavGrid } from './nav.js';
 import type { InputFrame, PlayerState, World } from './world.js';
 import { BTN } from './world.js';
-import { TICK_DT } from '../constants/game.js';
+import { SPRINT, TICK_DT } from '../constants/game.js';
 import { BASE_RULES } from '../game-rules/match.js';
 
 /**
@@ -26,11 +26,25 @@ interface Objective {
 
 export type BotDifficulty = 'easy' | 'normal' | 'hard';
 
+/**
+ * v0.2.20 (the owner: «убиваешь одного бота — на второй раз тебя обязательно убьёт бот… сделай поведение ботов
+ * похожим на реальных игроков»): a bot sees what a player sees — a screen held sideways, 250 world px tall and
+ * about twice as wide — instead of a circle reaching far past the player's screen (it shot from off the top
+ * and the bottom of a phone held sideways). `vision` scales that screen.
+ */
+export const BOT_VIEW = Object.freeze({ halfW: 250, halfH: 135 });
+
 const DIFFICULTY: Record<BotDifficulty, { reaction: number; aimError: number; turnRate: number; tolerance: number; vision: number }> = {
-  easy: { reaction: 560, aimError: 0.17, turnRate: 4.5, tolerance: 0.28, vision: 420 },
-  normal: { reaction: 360, aimError: 0.1, turnRate: 7, tolerance: 0.18, vision: 520 },
-  hard: { reaction: 230, aimError: 0.055, turnRate: 10, tolerance: 0.11, vision: 620 },
+  easy: { reaction: 560, aimError: 0.17, turnRate: 4.5, tolerance: 0.28, vision: 0.9 },
+  normal: { reaction: 360, aimError: 0.1, turnRate: 7, tolerance: 0.18, vision: 1 },
+  hard: { reaction: 230, aimError: 0.055, turnRate: 10, tolerance: 0.11, vision: 1.12 },
 };
+
+/** Gunfire a bot hears (what the minimap shows a player): this recent, this near. */
+const HEARD_MS = 2500;
+const HEARD_RANGE = 1000;
+/** A bot this hurt, facing someone healthier, backs off — to a first-aid kit when one is near. */
+const RETREAT_HP = 35;
 
 /**
  * v0.2.17 — the owner: «practice and the story about 30 % easier, the bots are far too strong». The bots
@@ -84,6 +98,8 @@ export class BotBrain {
   /** Fire in bursts (BOT_EASE.fireDuty): shooting until `burstUntil`, then a pause until `pauseUntil`. */
   private burstUntil = 0;
   private pauseUntil = 0;
+  /** The last hit this bot reacted to (world time): being shot from off its screen, it turns to look. */
+  private hitSeen = -1e9;
 
   constructor(
     readonly id: string,
@@ -129,11 +145,14 @@ export class BotBrain {
       const dx = target.x - me.x;
       const dy = target.y - me.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
+      // v0.2.20: like a player — the first look is rough and settles over 0.7 s, and the aim trails a moving target
+      const settle = Math.max(0, 1 - (now - this.targetSeenAt) / 700);
       if (now > this.aimNoiseAt) {
-        this.aimNoise = (this.rng() * 2 - 1) * this.d.aimError;
+        this.aimNoise = (this.rng() * 2 - 1) * this.d.aimError * (1 + settle);
         this.aimNoiseAt = now + 250 + this.rng() * 300;
       }
-      desiredAim = Math.atan2(dy, dx) + this.aimNoise;
+      const lag = this.ease ? 0.14 : 0.08;
+      desiredAim = Math.atan2(dy - target.vy * lag, dx - target.vx * lag) + this.aimNoise;
       // weapon choice
       const meleeInHand = me.weapon === me.melee;
       const heavyDef = me.heavy ? WEAPONS[me.heavy] : null;
@@ -153,6 +172,9 @@ export class BotBrain {
       }
       const nx = dx / (dist || 1);
       const ny = dy / (dist || 1);
+      // hurt and facing someone healthier: back off (to a first-aid kit when one is near), sprinting
+      const retreat = !obj?.urgent && me.hp <= RETREAT_HP && target.hp > me.hp + 15 && dist > 40;
+      if (retreat) fwd = -1;
       moveX = nx * fwd + -ny * this.strafeDir * 0.7;
       moveY = ny * fwd + nx * this.strafeDir * 0.7;
       if (!this.nav.isWalkable(me.x + moveX * 18, me.y + moveY * 18)) {
@@ -160,6 +182,18 @@ export class BotBrain {
         moveX = nx * fwd + -ny * this.strafeDir * 0.7;
         moveY = ny * fwd + nx * this.strafeDir * 0.7;
       }
+      if (retreat) {
+        const kit = this.nearPickup(me, 700, 'medkit');
+        const wp = kit ? this.followPath(me, kit, now) : null;
+        if (wp) {
+          const ox = wp.x - me.x;
+          const oy = wp.y - me.y;
+          const od = Math.sqrt(ox * ox + oy * oy) || 1;
+          moveX = ox / od;
+          moveY = oy / od;
+        }
+        if (me.stamina > 0) frame.buttons |= BTN.SPRINT;
+      } else if (fwd === 1 && dist > pref + 160 && me.stamina > 60) frame.buttons |= BTN.SPRINT;
       if (obj?.urgent) {
         // carrying a flag (or saving our own): run for it and shoot on the way
         const wp = this.followPath(me, obj, now);
@@ -228,6 +262,8 @@ export class BotBrain {
         moveX = dx / d;
         moveY = dy / d;
         desiredAim = Math.atan2(moveY, moveX);
+        // a long way to go: sprint while the breath is good (and keep some for a fight)
+        if (Math.hypot(goal.x - me.x, goal.y - me.y) > 260 && me.stamina > 55 + SPRINT.minToStart) frame.buttons |= BTN.SPRINT;
       }
       const ammo = me.weapon === me.sidearm ? me.sideMag : me.heavyMag;
       const mag = WEAPONS[me.weapon].magazine;
@@ -261,11 +297,11 @@ export class BotBrain {
     return frame;
   }
 
-  private nearPickup(me: PlayerState, within: number): { x: number; y: number } | null {
+  private nearPickup(me: PlayerState, within: number, kind: 'weapon' | 'medkit' = 'weapon'): { x: number; y: number } | null {
     let best: { x: number; y: number } | null = null;
     let bestD = within;
     for (const pk of this.world.pickups) {
-      if (!pk.active || pk.kind !== 'weapon') continue;
+      if (!pk.active || pk.kind !== kind) continue;
       const d = Math.abs(pk.x - me.x) + Math.abs(pk.y - me.y);
       if (d < bestD) {
         bestD = d;
@@ -327,19 +363,31 @@ export class BotBrain {
     return null;
   }
 
+  /** On this bot's screen (a sideways screen like a player's, scaled by the difficulty). */
+  private onScreen(me: PlayerState, p: PlayerState): boolean {
+    return Math.abs(p.x - me.x) <= BOT_VIEW.halfW * this.d.vision && Math.abs(p.y - me.y) <= BOT_VIEW.halfH * this.d.vision;
+  }
+
   private pickTarget(me: PlayerState, now: number): PlayerState | null {
     let best: PlayerState | null = null;
-    let bestD = this.d.vision;
+    let bestD = Infinity;
     // blinded by a flashbang: nobody is visible
-    if (now < me.flashedUntil) bestD = 0;
+    const blind = now < me.flashedUntil;
+    // who hit it last (and recently) gets its attention first, as a player turns on whoever shoots them
+    const attacker = now - me.lastHitAt < 1500 ? me.lastDamagedBy : null;
     for (const p of this.world.players.values()) {
-      if (p === me || !p.alive || !this.world.hostile(me, p)) continue;
-      const d = Math.sqrt((p.x - me.x) ** 2 + (p.y - me.y) ** 2);
-      const sticky = p.id === this.targetId ? 80 : 0;
-      if (d - sticky < bestD && this.world.collision.lineOfSight(me.x, me.y, p.x, p.y) && !this.world.smokeBlocks(me.x, me.y, p.x, p.y)) {
-        bestD = d - sticky;
+      if (blind || p === me || !p.alive || !this.world.hostile(me, p) || !this.onScreen(me, p)) continue;
+      const d = Math.sqrt((p.x - me.x) ** 2 + (p.y - me.y) ** 2) - (p.id === this.targetId ? 80 : 0) - (p.id === attacker ? 120 : 0);
+      if (d < bestD && this.world.collision.lineOfSight(me.x, me.y, p.x, p.y) && !this.world.smokeBlocks(me.x, me.y, p.x, p.y)) {
+        bestD = d;
         best = p;
       }
+    }
+    // shot from off its screen: it turns to look where the shots came from
+    if (!best && attacker && me.lastHitAt > this.hitSeen) {
+      this.hitSeen = me.lastHitAt;
+      const a = this.world.players.get(attacker);
+      if (a?.alive) this.lastSeen = { x: a.x, y: a.y, at: now };
     }
     if (best) {
       if (best.id !== this.targetId) {
@@ -368,17 +416,18 @@ export class BotBrain {
       if (best) return best;
     }
     if (this.lastSeen && now - this.lastSeen.at < 4000) return this.lastSeen;
-    let nearestEnemy: PlayerState | null = null;
-    let nd = Infinity;
+    // v0.2.20: no wallhack — only gunfire it could hear (the minimap's blips) leads it to someone
+    let heard: PlayerState | null = null;
+    let hd = HEARD_RANGE;
     for (const p of this.world.players.values()) {
-      if (p === me || !p.alive || !this.world.hostile(me, p)) continue;
-      const d = Math.abs(p.x - me.x) + Math.abs(p.y - me.y);
-      if (d < nd) {
-        nd = d;
-        nearestEnemy = p;
+      if (p === me || !p.alive || !this.world.hostile(me, p) || now - p.heardAt > HEARD_MS) continue;
+      const d = Math.hypot(p.x - me.x, p.y - me.y);
+      if (d < hd) {
+        hd = d;
+        heard = p;
       }
     }
-    if (nearestEnemy && this.rng() < 0.6) return { x: nearestEnemy.x, y: nearestEnemy.y };
+    if (heard) return { x: heard.x, y: heard.y };
     if (!this.roamGoal || Math.abs(this.roamGoal.x - me.x) + Math.abs(this.roamGoal.y - me.y) < 40) {
       const pts = [...this.world.map.spawns, ...this.world.map.pickups];
       const pt = pts[Math.floor(this.rng() * pts.length)]!;

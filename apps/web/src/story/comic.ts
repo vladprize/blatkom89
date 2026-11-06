@@ -1,12 +1,15 @@
 /**
- * The comic before and after a story mission (and the prologue), one page at a time.
+ * The comic before and after a story mission (and the prologue), one line at a time.
  *
  * Where the place has its big picture (story/scenes.ts — every map, and 2089's hall) the page is that
- * scene on the whole screen — the camera slowly pushing in — with the speaker's portrait and speech
- * bubble along the bottom, or the narrator's caption; a new place fades in. Without a picture: the
- * speaker's art as a card beside the bubble over the place's map, alternating sides when the speaker
- * changes. 2089 in neon, 1989 on tape. The soundtrack plays very quietly behind the pages. A tap, a click,
- * Space, Enter or → turns the page; «Skip» ends it.
+ * scene on the whole screen — the camera slowly pushing in — or the place's map faint behind; a new place
+ * fades in. v0.2.20 (the owner: «сначала сверху первая, снизу вторая, потом они стираются…; по два
+ * персонажа с репликами, расположены по центру»): the lines come two to a page, in the middle of the
+ * screen — the first speaker on top (portrait on the left, the bubble on its right), the next speaker's
+ * reply under it, mirrored (the bubble, then the portrait on the right); the next tap clears both. A line
+ * by the same speaker, the narrator's caption or a new place starts a new page. 2089 in neon, 1989 on
+ * tape. The soundtrack plays very quietly behind the pages. A tap, a click, Space, Enter or → shows the
+ * next line; «Skip» ends it.
  */
 import type { MapId } from '@blatkom/shared';
 import { t } from '../i18n/index.js';
@@ -15,7 +18,7 @@ import { music } from '../game/audio/Music.js';
 import { line } from './script.js';
 import type { Beat } from './script.js';
 import { speakerArt, speakerName } from './overlay.js';
-import { SCENE_ART_SIDE, SCENE_FOCUS, beatScene, sceneUrl } from './scenes.js';
+import { SCENE_FOCUS, beatScene, sceneUrl } from './scenes.js';
 import type { SceneId } from './scenes.js';
 
 export interface ComicOptions {
@@ -41,8 +44,8 @@ export function playComic(root: HTMLElement, beats: readonly Beat[], o: ComicOpt
   for (const sc of scenes) new Image().src = sceneUrl(sc);
   let i = -1;
   let closed = false;
-  let side: 'left' | 'right' = 'right';
-  let lastWho: Beat['who'] | null = null;
+  /** The speaker of the page's first line while the page has room for a reply (null: the next line starts a page). */
+  let opener: Beat['who'] | null = null;
   let shown: SceneId | null = null;
   const stage = h('div', { class: 'comic__stage' });
   const backdrop = h('div', { class: 'comic__scenes', 'aria-hidden': 'true' });
@@ -96,24 +99,30 @@ export function playComic(root: HTMLElement, beats: readonly Beat[], o: ComicOpt
     showScene(sc);
     [...dots.children].forEach((d, k) => d.classList.toggle('on', k <= i));
     const art = b.who === 'caption' ? null : (b.art ?? speakerArt(b.who));
-    // v0.2.17: a caption page sits in the middle of the screen, big; v0.2.18: a speaker's page too (the owner)
+    // v0.2.17: a caption page sits in the middle of the screen, big
     el.classList.toggle('comic--captionpage', !art);
+    const prev = i > 0 ? beats[i - 1]! : null;
+    // a reply joins the page: another speaker, straight after a speaker's line, in the same place and look
+    const reply = !!art && opener !== null && opener !== b.who && !!prev && beatScene(prev, o.scene) === sc && (prev.fx ?? null) === fx;
     let panel: HTMLElement;
     if (!art) {
       panel = h('figure', { class: 'comic__panel comic__panel--caption', 'data-testid': 'comic-panel' }, h('div', { class: 'comic__caption' }, line(b.say)));
     } else {
-      if (lastWho !== null && lastWho !== b.who) side = side === 'left' ? 'right' : 'left';
-      lastWho = b.who;
-      // over a big picture: the side where the place has no face low down (scenes.ts)
-      const at = sc ? SCENE_ART_SIDE[sc] : side;
       panel = h(
         'figure',
-        { class: `comic__panel comic__panel--${at}`, 'data-testid': 'comic-panel', 'data-who': b.who },
+        { class: `comic__panel comic__panel--${reply ? 'right' : 'left'}`, 'data-testid': 'comic-panel', 'data-who': b.who },
         h('img', { class: 'comic__art', src: asset(`assets/heroes/${art}.jpg`), alt: '', draggable: 'false' }),
         h('figcaption', { class: 'comic__bubble' }, h('b', { class: 'comic__who' }, speakerName(b.who)), h('span', null, line(b.say))),
       );
     }
-    stage.replaceChildren(panel);
+    if (reply) {
+      stage.append(panel);
+      opener = null;
+    } else {
+      stage.replaceChildren(panel);
+      opener = art ? b.who : null;
+    }
+    el.classList.toggle('comic--pair', stage.children.length > 1);
   };
   const onKey = (e: KeyboardEvent) => {
     if (closed) return;

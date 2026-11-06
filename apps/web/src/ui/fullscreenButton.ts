@@ -9,6 +9,7 @@ import { openSheet } from './sheet.js';
 import { fullscreenIcon, fullscreenWay, isFullscreen, onFullscreenChange, toggleFullscreen } from '../app/fullscreen.js';
 import { hudBus, hudLayout } from '../game/scenes/hudBus.js';
 import type { HudLayout } from '../game/scenes/hudBus.js';
+import { boxOf } from '../app/landscape.js';
 
 /** «Share → Add to Home Screen» — the iPhone's way to play without the browser's bars. */
 export function showHomescreenHint(root: HTMLElement): void {
@@ -100,7 +101,7 @@ export class MatchFullscreenButton {
       b.style.visibility = 'hidden';
       return;
     }
-    const r = canvas.getBoundingClientRect();
+    const r = boxOf(canvas);
     if (!r.width || !r.height) return;
     const k = r.width / l.W;
     const size = Math.round(Math.max(30, l.fsBtn.size * k));

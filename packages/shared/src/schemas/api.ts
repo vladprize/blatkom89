@@ -133,6 +133,14 @@ export const EmailLinkRequest = z.object({ email: emailSchema, password: passwor
 export const PasswordChangeRequest = z.object({ current: z.string().min(1).max(128), password: passwordSchema }).strict();
 export const PasswordResetRequest = z.object({ email: emailSchema }).strict();
 export const PasswordResetConfirm = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/), password: passwordSchema }).strict();
+/** v0.2.20: a promo code for BLATS, as typed (the server spells it out: game-rules/promo.ts). */
+export const PromoRedeemRequest = z.object({ code: z.string().trim().min(1).max(64) }).strict();
+/** POST /api/promo — the code's BLATS are on the account. */
+export interface PromoRedeemResponse {
+  code: string;
+  diamonds: number;
+  balance: number;
+}
 /** Anonymous visit (before any sign-up): a random per-browser id, nothing else identifying. */
 export const VisitRequest = z
   .object({ visitorId: visitorIdSchema, platform: PlatformSchema.optional(), referrer: z.string().max(120).optional(), source: FirstTouchSchema.optional() })
@@ -223,7 +231,7 @@ export interface LedgerEntry {
   currency: Currency;
   delta: number;
   balanceAfter: number;
-  reason: 'match' | 'purchase' | 'mod' | 'case' | 'topup' | 'grant' | 'refund' | 'level' | 'referral' | 'story';
+  reason: 'match' | 'purchase' | 'mod' | 'case' | 'topup' | 'grant' | 'refund' | 'level' | 'referral' | 'story' | 'welcome' | 'promo';
   ref: string | null;
 }
 
@@ -267,6 +275,13 @@ export interface PublicProfile {
   diamonds: number;
   /** v0.2.18: BLATS paid by this very request for levels not paid before (10 a level, once). */
   blatsCredited?: number;
+  /**
+   * v0.2.20: the BLATS a guest account gets for registering — an email, or a sign-in provider on the
+   * website (once per account; absent once paid, for a registered account, or when the bonus is off).
+   */
+  welcomeBonus?: number;
+  /** v0.2.20: the registration bonus paid by this very request. */
+  welcomeCredited?: number;
   /** Email sign-in is set up (the account can be restored on another device). */
   email: string | null;
   /** Rating (the Top-100 table; starts at 1000). */
@@ -428,6 +443,8 @@ export interface AdminOverview {
   firstMatchPlayers?: number;
   /** v0.2.18: BLATS paid for levels in the period. */
   blatsForLevels?: number;
+  /** v0.2.20: house players in the player tables (social/housePlayers.ts) — never counted above. */
+  housePlayers?: number;
 }
 
 export interface AdminCharts {

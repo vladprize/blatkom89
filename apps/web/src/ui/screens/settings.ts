@@ -97,7 +97,9 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
       [true, t('Yes')],
     ], 'leftHanded'),
     slider(t('Stick size'), 'stickScale', 0.7, 1.4, 0.05),
-    h('div', { class: 'muted', style: 'font-size:14px' }, t('Computer: WASD — move, mouse — aim, left click — fire, R — reload, Q / wheel / 1-3 — weapons, G / middle click — equipment, E — pick up, Shift — walk quietly, Tab — score, Esc — menu.')),
+    // v0.2.20: the sprint (Shift; the move stick past its ring) and walking quietly on C
+    h('div', { class: 'muted', style: 'font-size:14px' }, t('Phone: pull the move stick past its ring to sprint — the blue bar under your health is your breath.')),
+    h('div', { class: 'muted', style: 'font-size:14px' }, t('Computer: WASD — move, Shift — sprint (while your breath lasts), mouse — aim, left click — fire, R — reload, Q / wheel / 1-3 — weapons, G / middle click — equipment, E — pick up, C — walk quietly, Tab — score, Esc — menu.')),
   );
   const chat = opts.online
     ? h(

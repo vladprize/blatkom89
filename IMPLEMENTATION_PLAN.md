@@ -317,9 +317,36 @@ about the admin panel. My defaults, announced back: aliases `a–z 0–9 _ . -`,
 | — | «выдать админку, чтобы задеплоить» | answered: `/admin` on the same site, login `admin`, the password in Render → Environment → `ADMIN_BOOTSTRAP_PASSWORD`; more admins with `node admin-cli.js create` in Render's Shell | ✅ answered |
 
 
+## 2l. v0.2.20 (2026-11-05) — «ФИНАЛЬНЫЕ правки БЛАТКОМ 89’» (the owner's final edits)
+
+Eleven items in text, three «доп правки», 19 annotated screenshots (phones and the owner's MacBook) and a sketch of
+the story's two speakers. My defaults, said back in the report: the welcome bonus is for a guest becoming
+registered (an email, or a sign-in provider on the website; not paid retroactively); BLATNOY once per account;
+the house players are flagged and never counted anywhere but the player tables.
+
+| # | Request (owner) | Implementation | Status |
+|---|---|---|---|
+| 1 | Static sticks on a phone | the sticks rest in their corners and never move: a thumb anywhere on its half drives the knob from the stick's centre (`HudScene.onPointerDown` / `driveStick`) | ✅ e2e `v0220` |
+| 2 | A sprint with a breath: the move stick pulled hard on a phone, Shift on a computer | `BTN.SPRINT` (protocol 10), `SPRINT` rules in the shared `World` (×1.36 for ≈ 3 s, rest 0.7 s, refill), the breath in the snapshot and as a blue bar under the health, dust behind a sprinter; on a phone a pull past the ring (started inside it); C walks quietly now | ✅ unit `sprint` (4), e2e `v0220` |
+| 3 | The story's lines: the first on top, the second below (another speaker), cleared, again | `story/comic.ts`: a reply by another speaker joins the page mirrored (bubble left, portrait right), the pair centred; the next line clears the page; the cards bigger on a computer | ✅ e2e `v0220` (phone), screenshots |
+| 4 | 199 BLATS for registering an email, shown with the registration window | `WELCOME_BONUS_BLATS`, `creditWelcomeBonus` (ledger `welcome`, once per account, migration 027) at an email link, a provider link or sign-up on the website, Telegram linked to a website guest; the welcome window and the profile's account panel show «+199 BLATS» to a guest | ✅ unit `bonuses`, e2e `v0220` |
+| 5 | Promo code BLATNOY → +500 | `promo_codes` (migration 027, BLATNOY = 500), `POST /api/promo`, any spelling («блатной»), once per account, end dates and caps; the field in the Arsenal's «Buy BLATS» | ✅ unit `bonuses`, e2e `v0220` |
+| 6 | No full-screen button in the browser | a Mac's browser in its own full screen (green button) matched «display-mode: fullscreen» and was taken for an installed app — only a touch device's installed app counts now | ✅ (logic); ⛔ not on the owner's Mac |
+| 7 | The home-screen app's bottom is cut on an iPhone | `html.ios-sa` (navigator.standalone): the page and its layers 100vh tall (WebKit bug 237961) | 🟡 the code path; ⛔ no real iPhone here |
+| 8 | Sideways on a phone: everything fits without scrolling; upright home-screen app scrolls a little | the overlay is a size container (`.ui { container: ui / size }`): every menu screen has a sideways layout (menu, characters, the Arsenal in its phone layout, practice, friends, profile, settings, tournament, gangs, results, Top-100, story) | ✅ e2e `v0220` at 844×390 and 667×375 with a notch; the iPhone part ⛔ |
+| 9 | Every section symmetric and centred; quotes and button labels balanced | `text-wrap: balance` for labels, headings, quotes; `pretty` for texts; screens shorter than a computer's window in its middle (`wrap--vcenter`); the shop's last row in the middle | ✅ screenshots |
+| 10 | The Arsenal's empty space by the portrait (computer) | the weapon's numbers (damage, rate, range, accuracy, magazine, reload, mobility) by the portrait; equipment's facts | ✅ e2e `v0220` |
+| 11 | Four «?» cards in the character screen (computer) | «?» cards («Скоро») finish the crew's last row of eight | ✅ e2e `v0220` |
+| — | A match sideways at once; after it the lobby sideways too | `app/landscape.ts`: an upright phone gets the page turned a quarter for the match, the results and the room after it (Phaser's parent size, centring and pointer patched); the menu upright again | ✅ e2e `v0220` (touch through the turn, the results, a tap on the turned page) |
+| — | Bots: «the second time a bot surely kills you» | confirmed: bots saw 470 px all round and hunted omnisciently; now a person's screen of sight, hearing, settling aim, retreats, sprint (NETCODE.md §2a) — off-screen deaths 44 % → 15 % in a simulation | ✅ simulation, unit |
+| — | A couple hundred fake accounts with natural aliases | house players (`HOUSE_PLAYERS` = 240, migration 028): «ironace», «sniper_ekb», «katya1986»…, histories that add up, a few matches an hour; out of the dashboard, exports, tournament, rewards; a friend request to one stays unanswered | ✅ unit `housePlayers` |
+| screens | Phone menu: the logo up, the dossier smaller; «Skins» the colour of «Cases»; no icon by «Prologue»; the alias in one line in the profile; PC: practice one centred column, «Play with friends» centred, the menu's columns end on one line, the prologue's card larger; in-match card and goal top-left on a phone held sideways | as asked (`styles.css`, `profile.ts`, `story.ts`, `App.ts`) | ✅ e2e `v0220`, screenshots |
+
+
 ## 3. Open risks / next steps
 
-- After v0.2.19 (above, §2k; unit 333 / 333, every browser stage passes on the release bundle): the owner's final edits; an Instagram address (`SOCIAL_INSTAGRAM_URL`); a look at the 19 new skins and the four live ones on a real phone.
+- After v0.2.20 (above, §2l; unit 348 / 348, every browser stage passes on the release bundle — docs/TESTING.md §3): the owner's look on a real iPhone — the home-screen app's height, a match turned sideways with the rotation lock on, the sprint by the stick; on his Mac — the full-screen button; whether 240 house players are the right number (`HOUSE_PLAYERS`), and the welcome bonus for accounts registered before the release (not paid now).
+- After v0.2.19 (above, §2k; unit 333 / 333, every browser stage passes on the release bundle): an Instagram address (`SOCIAL_INSTAGRAM_URL`); a look at the 19 new skins and the four live ones on a real phone.
 - After v0.2.18 part 3 (above, §2j), the owner's: the Xsolla keys and its store items, then a sandbox purchase and `XSOLLA_SANDBOX=false`; a real Telegram Stars purchase and refund; `COPYRIGHT_HOLDER`, `PAY_SUPPORT` and the operator's name and contact in the privacy and terms pages; his verdict on the music; the starter pack once he picks one; the welcome gift's end date (`WELCOME_GIFT_UNTIL`); the grades of the twelve new characters. Invitations: watch the held queue in `/admin → Приглашения` — several guest accounts from different browsers can still farm talons slowly.
 
 - Run `npm install` once with registry access and commit `package-lock.json`; run `npm run lint` and `npm run format:check` (never executed here).

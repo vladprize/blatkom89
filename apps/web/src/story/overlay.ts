@@ -7,6 +7,7 @@
 import { STORY_RULES } from '@blatkom/shared';
 import { hudBus, hudLayout } from '../game/scenes/hudBus.js';
 import type { HudLayout } from '../game/scenes/hudBus.js';
+import { boxOf, layerHeight } from '../app/landscape.js';
 import { sfx } from '../game/audio/Sfx.js';
 import { charName } from '../i18n/content.js';
 import { getLang, t } from '../i18n/index.js';
@@ -129,7 +130,7 @@ export class StoryOverlay {
       this.el.style.visibility = 'hidden';
       return;
     }
-    const r = canvas.getBoundingClientRect();
+    const r = boxOf(canvas);
     if (!r.width || !r.height) return;
     const k = r.width / l.W;
     this.el.style.visibility = '';
@@ -137,6 +138,8 @@ export class StoryOverlay {
     const gs = this.goalEl.style;
     gs.left = `${Math.round(r.left + l.goal.x * k)}px`;
     gs.top = `${Math.round(r.top + l.goal.y * k)}px`;
+    // v0.2.20: on a phone held sideways the goal sits in the top-left corner under the player's card
+    gs.transform = l.goal.align === 'left' ? 'none' : '';
     gs.fontSize = `${l.touch ? 13 : Math.round(Math.min(18, Math.max(13, 10 * k)))}px`;
     const bs = this.barkBox.style;
     bs.left = `${Math.round(r.left + l.chat.left * k)}px`;
@@ -145,7 +148,7 @@ export class StoryOverlay {
       bs.top = `${Math.round(r.top + l.chat.top * k)}px`;
       bs.bottom = '';
     } else {
-      bs.bottom = `${Math.round(window.innerHeight - r.bottom + (l.chat.bottom ?? 0) * k)}px`;
+      bs.bottom = `${Math.round(layerHeight() - r.bottom + (l.chat.bottom ?? 0) * k)}px`;
       bs.top = '';
     }
   }

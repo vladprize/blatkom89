@@ -123,6 +123,14 @@ Since V2.0 part E, «total players», «new players», the cohorts and the playe
 first-launch Telegram profiles merged into a player's account (`users.merged_at`, [TELEGRAM.md](TELEGRAM.md) §4):
 they are the same person.
 
+Since v0.2.20 every count of people also leaves out the **house players** (`users.house_player`, migration 028):
+accounts the game keeps itself in the player tables ([DEPLOYMENT.md](DEPLOYMENT.md) §2, `HOUSE_PLAYERS`) —
+«total players», «new players», registrations by day, first-match conversion, the D1/D7 cohorts, the funnel's
+and the sources' registrations, the level distribution, the economy's people, the player list and the players'
+CSV. They never sign in, play a recorded match or hold a wallet, so the activity, match and money numbers never
+saw them. The overview says how many there are, under its tiles. The ledger's `welcome` (registration bonus) and
+`promo` (promo codes) rows appear among the economy's flows by reason ([ECONOMY.md](ECONOMY.md) §5b).
+
 Charts: registrations per day; DAU per day; matches started vs completed per day; D1/D7 per
 registration cohort day; session-duration and match-duration histograms; map popularity (matches
 started per `map_id`); game modes (matches started per `matches.mode`: free-for-all, red vs blue,

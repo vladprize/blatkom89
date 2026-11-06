@@ -9,6 +9,7 @@ import { HudScene } from './scenes/HudScene.js';
 import { PreviewScene } from './scenes/PreviewScene.js';
 import { VhsPipeline } from './render/VhsPipeline.js';
 import { internalSize } from './viewSize.js';
+import { isRotated, patchPhaser } from '../app/landscape.js';
 
 export { internalSize };
 import type { GameSession } from './session/types.js';
@@ -18,7 +19,10 @@ export class GameHost {
   private readyPromise: Promise<void>;
 
   constructor(parent: HTMLElement) {
-    const size = internalSize(window.innerWidth, window.innerHeight);
+    // v0.2.20: while a match turns an upright phone sideways (app/landscape.ts) the game is as wide as the screen is tall
+    const view = () => (isRotated() ? { w: parent.clientWidth, h: parent.clientHeight } : { w: window.innerWidth, h: window.innerHeight });
+    const v0 = view();
+    const size = internalSize(v0.w, v0.h);
     this.game = new Phaser.Game({
       type: Phaser.AUTO,
       parent,
@@ -38,8 +42,10 @@ export class GameHost {
       banner: false,
     });
     this.readyPromise = new Promise((res) => this.game.events.once('assets-ready', () => res()));
+    patchPhaser(this.game);
     const onResize = () => {
-      const s = internalSize(window.innerWidth, window.innerHeight);
+      const v = view();
+      const s = internalSize(v.w, v.h);
       if (s.width !== this.game.scale.gameSize.width || s.height !== this.game.scale.gameSize.height) this.game.scale.setGameSize(s.width, s.height);
       this.game.scale.refresh();
     };

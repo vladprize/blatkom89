@@ -12,6 +12,28 @@ export const WALK_SPEED = 72;
 export const ACCELERATION = 1400;
 export const DECELERATION = 1900;
 
+/**
+ * v0.2.20 (the owner: «добавь игрокам спринт с запасом дыхалки — на мобильном бежишь, если сильно тянешь
+ * джойстик бега, на ПК — зажимая Shift»): a sprint that costs breath. Held with the move stick past its ring
+ * or Shift; it runs out after about three seconds and comes back after a short rest; firing stops it.
+ */
+export const SPRINT = Object.freeze({
+  /** × the run speed. */
+  speed: 1.36,
+  /** A full breath. */
+  max: 100,
+  /** Spent per second of sprint (≈3.1 s from full). */
+  drainPerSec: 32,
+  /** Back per second once rested (≈4.5 s to full). */
+  regenPerSec: 22,
+  /** The rest before the breath starts coming back (ms). */
+  regenDelayMs: 700,
+  /** A new sprint needs at least this much (no stutter at the bottom of the bar). */
+  minToStart: 18,
+  /** The stick's share of a full pull it takes (a sprint is a run, not a creep). */
+  minStick: 0.6,
+});
+
 /** Lag compensation: how far back (ms) the server may rewind targets for hit detection. */
 export const MAX_REWIND_MS = 250;
 export const HISTORY_MS = 600;

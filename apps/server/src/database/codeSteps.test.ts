@@ -119,7 +119,7 @@ test('010 keeps every alias with its oldest living holder and numbers the later 
       extraIds.push(x!.id);
     }
     const last = await migrate(sql);
-    assert.deepEqual(last, ['026_nicknames.sql']);
+    assert.equal(last[0], '026_nicknames.sql', 'the migrations after 025, 026 first');
     const nick = new Map((await sql<Array<{ id: string; display_name: string; name_key: string; old_display_name: string | null }>>`SELECT id, display_name, name_key, old_display_name FROM users`).map((r) => [r.id, r]));
     assert.deepEqual(
       ids.map((id) => nick.get(id)!.display_name),

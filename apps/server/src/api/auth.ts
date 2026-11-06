@@ -14,6 +14,7 @@ import { sendResetMail } from '../auth/email.js';
 import type { Sql } from '../database/db.js';
 import { ReferralRepo } from '../referrals/repo.js';
 import { attachSource, partnerFromStartParam, recordVisitSource } from '../analytics/growth.js';
+import { welcomeAfterRegistration } from '../economy/bonuses.js';
 
 /**
  * V2.0: a NEW account opened through a referral link is attached to its inviter (it counts once the new
@@ -106,9 +107,11 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     if (up.isNew) services.analytics.server('profile_created', { method: 'telegram' }, evCtx);
     if (link?.outcome === 'linked') services.analytics.server('identity_linked', { provider: 'telegram', via: 'code', merged: !!link.released }, evCtx);
     if (up.isNew && body.visitorId) await linkVisitor(deps.sql, body.visitorId, up.userId, platform, body.source);
+    // v0.2.20: a website guest that has just linked Telegram is registered now — the welcome bonus
+    const welcome = link?.outcome === 'linked' ? await welcomeAfterRegistration(deps.sql, deps.log, up.userId, env.WELCOME_BONUS_BLATS, 'telegram') : 0;
     const profile = await pg.profiles.get(up.userId);
     if (!profile) throw new HttpError(500, 'internal', 'Profile not found');
-    const res: AuthResponse = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile, isNew: up.isNew, ...(link ? { telegramLink: link.outcome } : {}) };
+    const res: AuthResponse = { token: s.token, expiresAt: s.expiresAt.toISOString(), profile: welcome ? { ...profile, welcomeCredited: welcome } : profile, isNew: up.isNew, ...(link ? { telegramLink: link.outcome } : {}) };
     ctx.json(200, res);
   });
 
@@ -226,7 +229,10 @@ export const registerAuthRoutes: RouteModule = (router, deps) => {
     if (r === 'already_linked') throw new HttpError(409, 'already_linked', 'An email is already registered to this account');
     if (r === 'email_taken') throw new HttpError(409, 'email_taken', 'This email is already registered to another account');
     services.analytics.server('email_linked', {}, user);
-    ctx.json(200, await pg.profiles.get(user.userId));
+    // v0.2.20: the welcome bonus for registering an email (a guest's first way to sign in)
+    const welcome = await welcomeAfterRegistration(deps.sql, deps.log, user.userId, env.WELCOME_BONUS_BLATS, 'email');
+    const profile = await pg.profiles.get(user.userId);
+    ctx.json(200, profile && welcome ? { ...profile, welcomeCredited: welcome } : profile);
   });
 
   router.post('/api/auth/email/password', requireUser(services.sessions), rateLimit(emailUserLimiter, byUser), async (ctx) => {

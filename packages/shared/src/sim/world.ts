@@ -18,6 +18,7 @@ import {
   ACCELERATION,
   DECELERATION,
   MOVE_AXIS_MAX,
+  SPRINT,
 } from '../constants/game.js';
 import type { CharacterId } from '../game-rules/characters.js';
 import type { MatchConfig, MatchPhase, Team } from '../game-rules/match.js';
@@ -43,7 +44,12 @@ export const BTN = {
   NEXT_WEAPON: 16,
   /** Throw / place / deploy the equipment (slot 4); detonates a placed C4. */
   GADGET: 32,
+  /** v0.2.20: sprint while the breath lasts (Shift; the move stick pulled past its ring). */
+  SPRINT: 64,
 } as const;
+
+/** Every button bit a client may send. */
+export const BTN_MASK = 0x7f;
 
 export interface InputFrame {
   seq: number;
@@ -124,6 +130,12 @@ export interface PlayerState {
   lastSeq: number;
   lastButtons: number;
   walking: boolean;
+  /** v0.2.20: breath for the sprint (0..SPRINT.max), sprinting this tick, and when it starts coming back (player clock). */
+  stamina: number;
+  sprinting: boolean;
+  staminaRegenAt: number;
+  /** v0.2.20: world time of this player's last shot that others could hear (not silenced) — what the minimap shows. */
+  heardAt: number;
   lastShotAt: number;
   lastHitAt: number;
   lastDamagedBy: string | null;
@@ -370,6 +382,10 @@ export function createPlayerState(id: string, slot: number, name: string, charac
     lastSeq: 0,
     lastButtons: 0,
     walking: false,
+    stamina: SPRINT.max,
+    sprinting: false,
+    staminaRegenAt: 0,
+    heardAt: -1e9,
     lastShotAt: -1e9,
     lastHitAt: -1e9,
     lastDamagedBy: null,
@@ -391,7 +407,17 @@ export function stepMovement(p: PlayerState, input: InputFrame, collision: Colli
     mag = 1;
   }
   const walking = (input.buttons & BTN.WALK) !== 0;
-  const maxSpeed = (walking ? WALK_SPEED : RUN_SPEED) * WEAPONS[p.weapon].moveSpeed;
+  // v0.2.20: the sprint — held, moving at a run, not firing, and while the breath lasts (a new one needs a little)
+  const wantSprint = (input.buttons & BTN.SPRINT) !== 0 && (input.buttons & BTN.FIRE) === 0 && !walking && mag >= SPRINT.minStick;
+  const sprint = wantSprint && p.stamina > 0 && (p.sprinting || p.stamina >= SPRINT.minToStart);
+  if (sprint) {
+    p.stamina = Math.max(0, p.stamina - SPRINT.drainPerSec * TICK_DT);
+    p.staminaRegenAt = p.clock + SPRINT.regenDelayMs;
+  } else if (p.clock >= p.staminaRegenAt) {
+    p.stamina = Math.min(SPRINT.max, p.stamina + SPRINT.regenPerSec * TICK_DT);
+  }
+  p.sprinting = sprint;
+  const maxSpeed = (walking ? WALK_SPEED : RUN_SPEED * (sprint ? SPRINT.speed : 1)) * WEAPONS[p.weapon].moveSpeed;
   const tx = mx * maxSpeed;
   const ty = my * maxSpeed;
   let dvx = tx - p.vx;
@@ -967,6 +993,9 @@ export class World {
     p.gadgetCharges = p.gadget ? GADGETS[p.gadget].charges : 0;
     p.gadgetReadyAt = 0;
     p.flashedUntil = 0;
+    p.stamina = SPRINT.max;
+    p.sprinting = false;
+    p.staminaRegenAt = 0;
     this.events.push({ t: 'respawn', slot: p.slot, x: p.x, y: p.y });
   }
 
@@ -1020,6 +1049,7 @@ export class World {
 
   private doShot(p: PlayerState, w: WeaponDef, spread: number, viewTime: number) {
     p.invulnUntil = Math.min(p.invulnUntil, this.time);
+    if (!w.silenced) p.heardAt = this.time;
     if (w.kind === 'projectile' && w.projectile) return this.launch(p, w, spread);
     const targets = this.targetsAt(viewTime, p);
     const turrets = this.gadgets.filter((g) => g.kind === 'turret' && g.ownerId !== p.id && (!this.teams || g.ownerTeam !== p.team));
@@ -1216,6 +1246,7 @@ export class World {
     victim.respawnAt = this.time + this.config.respawnDelayMs;
     victim.vx = 0;
     victim.vy = 0;
+    victim.sprinting = false;
     victim.reloadWeapon = null;
     if (victim.heavy) this.dropHeavy(victim);
     const carried = this.flags.find((f) => f.carrierId === victim.id);

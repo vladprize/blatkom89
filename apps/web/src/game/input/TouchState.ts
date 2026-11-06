@@ -12,6 +12,8 @@ export interface TouchState {
   interactTap: boolean;
   /** Equipment (grenade, mine, C4, turret): one press per tap. */
   gadgetTap: boolean;
+  /** v0.2.20: the move stick pulled past its ring — sprint. */
+  sprint: boolean;
 }
 
 export const touchState: TouchState = {
@@ -26,6 +28,7 @@ export const touchState: TouchState = {
   swapTap: false,
   interactTap: false,
   gadgetTap: false,
+  sprint: false,
 };
 
 export function isTouchDevice(): boolean {

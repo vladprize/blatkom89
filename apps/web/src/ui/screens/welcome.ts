@@ -12,6 +12,7 @@ import { apiErrorText } from '../../net/errors.js';
 import { storageGet, storageSet } from '../../app/settings.js';
 import { openEmailLogin } from './account.js';
 import { providerButtons } from './signin.js';
+import { bonusRibbon } from '../coin.js';
 
 /** When the player last chose «continue as guest» (ms since epoch). */
 export const WELCOME_KEY = 'blatkom89.welcome.v1';
@@ -65,7 +66,7 @@ export function openWelcome(root: HTMLElement, online: OnlineClient, onDone: (o:
     'div',
     { class: 'muted' },
     REAL_MONEY
-      ? t('Register an email: your level, talons, diamonds and everything you buy stay with you on any device. As a guest, the account lives only in this browser.')
+      ? t('Register an email: your level, talons, BLATS and everything you buy stay with you on any device. As a guest, the account lives only in this browser.')
       : t('Register an email: your level, talons and everything you unlock stay with you on any device. As a guest, the account lives only in this browser.'),
   );
   void online.providers().then((info) => {
@@ -83,6 +84,8 @@ export function openWelcome(root: HTMLElement, online: OnlineClient, onDone: (o:
       { class: 'panel modal col welcome' },
       h('span', { class: 'tag' }, t('Account')),
       h('div', { class: 'h2', style: 'margin-top:8px' }, t('Keep your progress')),
+      // v0.2.20 (the owner): the welcome bonus is shown with the registration window
+      online.profile?.welcomeBonus ? bonusRibbon(online.profile.welcomeBonus, t('The welcome bonus: credited as soon as you register'), 'welcome-bonus') : null,
       intro,
       quick,
       email,

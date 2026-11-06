@@ -68,12 +68,15 @@ export function fitTextGroup(els: readonly HTMLElement[], o: FitOptions): number
  * An alias (the element holds one .fit-text child with the text): one line, shrunk down to `min` with
  * `margin` px to spare; one still too long goes onto two lines (class `fit-wrap`) at the largest size that fits.
  */
-export function fitAlias(el: HTMLElement, o: { max: number | (() => number); min: number; minTwoLines: number; margin?: number }): void {
+export function fitAlias(el: HTMLElement, o: { max: number | (() => number); min: number; minTwoLines: number; margin?: number; wrap?: boolean }): void {
   if (!el.isConnected || el.clientWidth === 0) return;
-  el.classList.remove('fit-wrap');
+  el.classList.remove('fit-wrap', 'fit-clip');
   const margin = o.margin ?? 6;
   fitTextGroup([el], { max: o.max, min: o.min, margin });
   if (fits(el, 1, margin)) return;
+  // v0.2.20 (the owner: «seasoned_ba / dger»): an alias is one word — where it may not break, it stays on one
+  // line and ends in «…» at the smallest size
+  if (o.wrap === false) return void el.classList.add('fit-clip');
   el.classList.add('fit-wrap');
   fitTextGroup([el], { max: o.max, min: o.minTwoLines, lines: 2 });
 }

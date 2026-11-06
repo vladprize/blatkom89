@@ -2153,6 +2153,22 @@ import { fileURLToPath } from "node:url";
 var TICK_RATE = 60;
 var TICK_MS = 1e3 / TICK_RATE;
 var TICK_DT = 1 / TICK_RATE;
+var SPRINT = Object.freeze({
+  /** × the run speed. */
+  speed: 1.36,
+  /** A full breath. */
+  max: 100,
+  /** Spent per second of sprint (≈3.1 s from full). */
+  drainPerSec: 32,
+  /** Back per second once rested (≈4.5 s to full). */
+  regenPerSec: 22,
+  /** The rest before the breath starts coming back (ms). */
+  regenDelayMs: 700,
+  /** A new sprint needs at least this much (no stutter at the bottom of the bar). */
+  minToStart: 18,
+  /** The stick's share of a full pull it takes (a sprint is a run, not a creep). */
+  minStick: 0.6
+});
 var MAX_NAME_LENGTH = 24;
 
 // packages/shared/src/game-rules/characters.ts
@@ -8328,6 +8344,7 @@ var PROP_TYPES = Object.keys(PROP_DEFS);
 var TAU = Math.PI * 2;
 
 // packages/shared/src/sim/bots.ts
+var BOT_VIEW = Object.freeze({ halfW: 250, halfH: 135 });
 var BOT_EASE = Object.freeze({ reaction: 1.35, aimError: 1.45, turnRate: 0.78, vision: 0.9, fireDuty: 0.75 });
 
 // packages/shared/src/sim/fill.ts
@@ -8350,7 +8367,7 @@ var FILL_RULES = Object.freeze({
 });
 
 // packages/shared/src/net/protocol.ts
-var PROTOCOL_VERSION = 9;
+var PROTOCOL_VERSION = 10;
 var CHAT_RULES = Object.freeze({ maxLength: 140, maxRaw: 400, burst: 4, refillMs: 2500, repeatMs: 4e3 });
 var roomId = external_exports.string().regex(/^[A-Za-z0-9_-]{4,32}$/);
 var ClientMessageSchema = external_exports.discriminatedUnion("type", [
@@ -8506,6 +8523,7 @@ var EmailLinkRequest = external_exports.object({ email: emailSchema, password: p
 var PasswordChangeRequest = external_exports.object({ current: external_exports.string().min(1).max(128), password: passwordSchema }).strict();
 var PasswordResetRequest = external_exports.object({ email: emailSchema }).strict();
 var PasswordResetConfirm = external_exports.object({ token: external_exports.string().regex(/^[A-Za-z0-9_-]{20,64}$/), password: passwordSchema }).strict();
+var PromoRedeemRequest = external_exports.object({ code: external_exports.string().trim().min(1).max(64) }).strict();
 var VisitRequest = external_exports.object({ visitorId: visitorIdSchema, platform: PlatformSchema.optional(), referrer: external_exports.string().max(120).optional(), source: FirstTouchSchema.optional() }).strict();
 var BuyRequest = external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget"]), id: external_exports.string().regex(/^[a-z0-9_]{2,24}$/) }).strict();
 var ModBuyRequest = external_exports.object({ weapon: external_exports.enum(WEAPON_IDS), mod: external_exports.enum(MOD_IDS) }).strict();

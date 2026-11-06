@@ -44,7 +44,11 @@ function toMessage(r: DmRow): DirectMessage {
 export type RequestOutcome = 'sent' | 'accepted' | 'not_found' | 'self' | 'already_friends' | 'already_sent' | 'too_many';
 
 export class SocialRepo {
-  constructor(private readonly sql: Sql) {}
+  /** @param house v0.2.20: the house players (social/housePlayers.ts) are in the tables (HOUSE_PLAYERS > 0). */
+  constructor(
+    private readonly sql: Sql,
+    private readonly house = true,
+  ) {}
 
   async card(userId: string): Promise<PlayerCard | null> {
     const rows = await this.sql<CardRow[]>`
@@ -203,7 +207,7 @@ export class SocialRepo {
       SELECT u.id, u.display_name, p.avatar, p.preferred_character, p.level, u.founder, row_number() OVER (ORDER BY ${order}) AS rank,
              p.rating, p.kills, p.wins, p.matches_completed AS matches
       FROM profiles p JOIN users u ON u.id = p.user_id
-      WHERE p.matches_completed > 0 AND u.deleted_at IS NULL
+      WHERE p.matches_completed > 0 AND u.deleted_at IS NULL AND (${this.house} OR NOT u.house_player)
       ORDER BY ${order}
       LIMIT ${limit}`;
     return rows.map((r) => ({ ...toCard(r), rank: Number(r.rank), rating: r.rating, kills: r.kills, wins: r.wins, matches: r.matches }));
@@ -222,7 +226,7 @@ export class SocialRepo {
     const key = by === 'rating' ? this.sql`(-p.rating, -p.xp, u.created_at, u.id)` : by === 'level' ? this.sql`(-p.xp, -p.rating, u.created_at, u.id)` : this.sql`(-p.kills, -p.rating, u.created_at, u.id)`;
     const [c] = await this.sql<Array<{ n: number }>>`
       SELECT count(*)::int AS n FROM profiles p JOIN users u ON u.id = p.user_id
-      WHERE p.matches_completed > 0 AND u.deleted_at IS NULL
+      WHERE p.matches_completed > 0 AND u.deleted_at IS NULL AND (${this.house} OR NOT u.house_player)
         AND ${key} < (${-a}::int, ${-b}::int, ${me.created_at}::timestamptz, ${me.id}::uuid)`;
     return { ...toCard(me), rank: c!.n + 1, rating: me.rating, kills: me.kills, wins: me.wins, matches: me.matches };
   }
