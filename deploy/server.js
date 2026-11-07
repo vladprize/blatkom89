@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.20"),
+  SERVER_VERSION: external_exports.string().default("0.2.21"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -11809,6 +11809,10 @@ function levelForXp(xp) {
   }
   return { level, intoLevel: remaining, nextLevelCost: level >= LEVEL_CAP ? 0 : levelStepCost(level) };
 }
+var LATE_JOIN = Object.freeze({ quickMinLeftMs: 9e4, ratedShare: 0.25 });
+function joinedLate(joinedAfterMs, durationMs) {
+  return joinedAfterMs > Math.max(0, durationMs) * LATE_JOIN.ratedShare;
+}
 function isWin(p) {
   if (p.teamOutcome) return p.completed && p.teamOutcome === "win" && p.playersAtEnd >= 2;
   return p.completed && p.place === 1 && !p.sharedPlace && p.playersAtEnd >= 2;
@@ -11824,6 +11828,7 @@ function rankPlaces(sorted) {
 var RATING_RULES = Object.freeze({ start: 1e3, k: 32, team: 16, leaver: -16, floor: 0 });
 function ratingDelta(p) {
   if (!p.completed) return RATING_RULES.leaver;
+  if (p.lateJoin) return 0;
   if (p.teamOutcome) return p.teamOutcome === "win" ? RATING_RULES.team : p.teamOutcome === "loss" ? -RATING_RULES.team : 0;
   if (p.playersAtEnd < 2) return 0;
   const score = Math.min(1, Math.max(0, (p.playersAtEnd - p.place) / (p.playersAtEnd - 1)));
@@ -19592,7 +19597,7 @@ var PgMatchRecorder = class {
           SELECT xp, level, matches_completed, wins, current_win_streak, best_win_streak, rating FROM profiles WHERE user_id = ${p.userId} FOR UPDATE`;
         const withFriends = m.isPrivate && p.viaInvite && people >= 2;
         const sharedPlace = p.completed && m.participants.some((o) => o.userId !== p.userId && o.completed && o.place === p.place);
-        const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends, sharedPlace, ...p.teamOutcome ? { teamOutcome: p.teamOutcome } : {}, objectives: p.objectives ?? 0 };
+        const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends, sharedPlace, ...p.teamOutcome ? { teamOutcome: p.teamOutcome } : {}, objectives: p.objectives ?? 0, ...p.lateJoin ? { lateJoin: true } : {} };
         const ownedRows = await tx`SELECT achievement_id FROM player_achievements WHERE user_id = ${p.userId}`;
         const prev = { xp: prof.xp, level: prof.level, matchesCompleted: prof.matches_completed, wins: prof.wins, currentWinStreak: prof.current_win_streak };
         const { won, lost, streak, unlocked, xpGained: xp, totalXp, level } = applyMatchProgress(prev, perf, new Set(ownedRows.map((r) => r.achievement_id)));
@@ -19630,7 +19635,7 @@ var PgMatchRecorder = class {
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
             tokens_awarded = EXCLUDED.tokens_awarded, rating_delta = EXCLUDED.rating_delta, left_at = EXCLUDED.left_at`;
-        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating, blatsGained: blats.gained, totalBlats: blats.balance });
+        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating, blatsGained: blats.gained, totalBlats: blats.balance, ...p.lateJoin && p.completed && !m.kon ? { lateJoin: true } : {} });
         clubDeltas.push({ userId: p.userId, delta: rDelta });
       }
       await moveClubRatings(tx, clubDeltas);
@@ -24456,6 +24461,10 @@ var MatchRoom = class {
   get phase() {
     return this.world.phase;
   }
+  /** v0.2.21: what is left of the match being played (the whole length before it starts). */
+  get matchTimeLeftMs() {
+    return this.world.matchTimeLeftMs;
+  }
   get mode() {
     return this.config.mode;
   }
@@ -24564,6 +24573,7 @@ var MatchRoom = class {
       lastQueuedSeq: 0,
       reconnectToken: randomBytes11(18).toString("base64url"),
       joinedAt: Date.now(),
+      joinedAfterMs: this.world.phase === "active" ? Math.max(0, this.world.time - this.world.matchStartedAt) : 0,
       matchTimeMs: 0,
       violations: 0,
       msgWindowStart: Date.now(),
@@ -24990,6 +25000,7 @@ var MatchRoom = class {
     }
     this.emptySideSince = 0;
     this.world.beginMatch();
+    for (const c of this.clients.values()) c.joinedAfterMs = 0;
     this.konLineup.clear();
     if (this.kon) {
       for (const c of this.clients.values()) {
@@ -25069,7 +25080,9 @@ var MatchRoom = class {
         objectives: s.objectives ?? 0,
         completed: c.connected,
         viaInvite: c.viaInvite,
-        playtimeMs: Math.round(c.matchTimeMs)
+        playtimeMs: Math.round(c.matchTimeMs),
+        // v0.2.21: came into the match after its first quarter — the rating stays (LATE_JOIN)
+        ...!this.kon && joinedLate(c.joinedAfterMs, this.config.durationMs) ? { lateJoin: true } : {}
       };
     });
     if (this.kon) {
@@ -25422,9 +25435,13 @@ var RoomManager = class {
     this.services.analytics.server("lobby_created", { roomId: id, mapId, isPrivate, mode: room.mode }, { userId: hostUserId });
     return room;
   }
-  /** Finds a public joinable room of the mode (preferring the requested map and fuller rooms) or creates one. */
+  /**
+   * Finds a public joinable room of the mode (preferring the requested map and fuller rooms) or creates one.
+   * v0.2.21: never a match about to end (LATE_JOIN.quickMinLeftMs) — unless the player is already in that room.
+   */
   quickMatch(userId, mapId, mode = "ffa") {
-    const candidates = this.list().filter((r) => !r.isPrivate && r.kon === null && r.mode === mode && r.isJoinable(userId) && (!mapId || r.mapId === mapId)).sort((a, b2) => b2.occupancy - a.occupancy);
+    const timeEnough = (r) => r.hasMember(userId) || r.phase !== "active" || r.matchTimeLeftMs >= LATE_JOIN.quickMinLeftMs;
+    const candidates = this.list().filter((r) => !r.isPrivate && r.kon === null && r.mode === mode && r.isJoinable(userId) && timeEnough(r) && (!mapId || r.mapId === mapId)).sort((a, b2) => b2.occupancy - a.occupancy);
     if (candidates[0]) return candidates[0];
     const map = mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)];
     return this.create(map, false, null, null, mode);

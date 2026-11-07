@@ -9,6 +9,7 @@ import { MapRenderer } from '../render/MapRenderer.js';
 import { Lighting } from '../render/Lighting.js';
 import { Effects } from '../render/Effects.js';
 import { CharacterView } from '../render/CharacterView.js';
+import { whenSprites } from '../lazyAssets.js';
 import type { RenderPlayer } from '../session/types.js';
 import { VhsPipeline, vhsIntensity } from '../render/VhsPipeline.js';
 import { getSettings } from '../../app/settings.js';
@@ -106,6 +107,13 @@ export class PreviewScene extends Phaser.Scene {
 
   setFocus(c: CharacterId | null): void {
     this.focus = c;
+    // v0.2.21: a character whose sprites are still loading takes the stage once they are in
+    if (c && !this.textures.exists(`char_${c}`)) {
+      void whenSprites().then(() => {
+        if (this.focus === c && this.sys.isActive()) this.setFocus(c);
+      });
+      return;
+    }
     // characters beyond the four backdrop actors borrow the first actor's body
     if (c && !this.actors.some((a) => a.p.character === c) && this.actors[0]) this.actors[0].p.character = c;
   }

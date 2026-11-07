@@ -91,6 +91,8 @@ export function renderResults(o: {
               h('b', null, String(personal.rating)),
               ' ',
               h('span', { class: (personal.ratingDelta ?? 0) > 0 ? 'up' : (personal.ratingDelta ?? 0) < 0 ? 'down' : 'muted' }, signed(personal.ratingDelta ?? 0)),
+              // v0.2.21: a late join keeps the rating — say why it did not move
+              personal.lateJoin ? h('span', { class: 'muted', 'data-testid': 'rating-late' }, ' · ', t('joined mid-match — no change')) : null,
             )
           : null,
         personal.tokensGained !== undefined

@@ -342,9 +342,36 @@ the house players are flagged and never counted anywhere but the player tables.
 | — | A couple hundred fake accounts with natural aliases | house players (`HOUSE_PLAYERS` = 240, migration 028): «ironace», «sniper_ekb», «katya1986»…, histories that add up, a few matches an hour; out of the dashboard, exports, tournament, rewards; a friend request to one stays unanswered | ✅ unit `housePlayers` |
 | screens | Phone menu: the logo up, the dossier smaller; «Skins» the colour of «Cases»; no icon by «Prologue»; the alias in one line in the profile; PC: practice one centred column, «Play with friends» centred, the menu's columns end on one line, the prologue's card larger; in-match card and goal top-left on a phone held sideways | as asked (`styles.css`, `profile.ts`, `story.ts`, `App.ts`) | ✅ e2e `v0220`, screenshots |
 
+## 2m. v0.2.21 (2026-11-07) — the usability pass («дотянуть до 8,5–9 и на телефоне, и на ПК»)
+
+After the usability audit (Project doc `research/usability-audit-2026-11.md`: phone 6.5/10, computer 7.5/10) the
+owner asked for every fix in one release. My calls on the two questions that were his, said back in the report:
+the first game comes before any registration («keep your progress +199 BLATS» after the first match), and a mild
+aim assist on touch screens with a switch in the settings (on by default).
+
+| # | Problem (audit) | Implementation | Status |
+|---|---|---|---|
+| 1 | Phone HUD captions 5–9 px | the HUD camera is zoomed on touch screens (`HudScene.zoomFor`: ≈ one HUD unit per CSS px, at least 726 × 320 units; a denser card under 665), text rendered at the zoom (crisp), every caption ≥ 11 px; a compact score group and card; a tablet's HUD (667 units wide, card over the score) fixed the same way | ✅ e2e `v0221`, `ux/hudgeo` on 12 screens |
+| 2 | Sticks small for aiming | the zoom makes them 85–116 px across on phones (were 79–90) | ✅ measured |
+| 3 | Nothing told a newcomer the controls | first two matches (`blatkom89.hints.v1`): a hint over each stick on a phone («ТЯНИ — ИДИ / за кольцо — спринт», «ТЯНИ — ЦЕЛЬСЯ / до упора — огонь»), a line of keys on a computer; each goes once its action is done, all after 45 s | ✅ e2e `v0221` |
+| 4 | Android's «back» / the iPhone's edge swipe left the page mid-match | `app/backGuard.ts`: one extra history entry (armed on the first tap — Chrome skips untouched ones); «back» closes a sheet, steps a screen back, pauses / resumes a match, leaves a room; on the bare menu it says a second one leaves. Not in Telegram (its own button). A computer's tab asks before closing during an online match | ✅ e2e `v0221` (back); beforeunload by code |
+| 5 | Quick match put players into a match 1:24 before its end; the latecomer lost rating | `LATE_JOIN` (shared): quick match skips matches with < 90 s left (a new room instead); whoever joined after the first quarter of a match keeps their rating (XP and talons as usual), the results say why | ✅ unit `latejoin` (3) |
+| 6 | Thumbs against mice | `GameScene.aimAssist`: on touch the aim leans ≤ 7° towards the visible enemy nearest the stick's line (12° cone, 340 px, never through walls or smoke, never to teammates); the switch in Settings → Controls | ✅ e2e `v0221`; ⛔ feel on a real phone |
+| 7 | Registration form as the first screen; the keyboard popped up; a toast covered «Continue as guest» | the window waits for the first finished match (`blatkom89.matches-done.v1`); no autofocus on touch; over a dialog a note goes to the top | ✅ e2e `online`, `v0221` |
+| 8 | Quick match: the mode chosen twice | a newcomer's first quick match goes straight into a free-for-all; the mode sheet from the second time on | ✅ e2e `fill` |
+| 9 | Laptop windows (1366×625, 1280×600, 1536×730, 1440×790) scrolled: menu, characters («ВЫБРАТЬ» cut), Arsenal, settings | compact rules under 680–700 px tall; the Arsenal's columns never outgrow the window (the dressing room scrolls inside itself); the settings show a computer's keys only | ✅ e2e `v0221`, `ux/fit` on 10 window sizes |
+| 10 | Small tap targets on phones | invisible hit margins (`::after`, zero specificity) — buttons, tabs, the corner icons, links, the lobby's «+ Позвать»/«Правила», the Top-100 «+»; finger-thick sliders | ✅ `ux/screens` |
+| 11 | 9–11 px captions in menus | ≥ 12 px for the level badge, the footer, coins, the characters' names, stats, the story's chapters, the Arsenal's numbers (map thumbnails' captions on a computer stay 9–10 px: twelve in a row) | ✅ `ux/screens` |
+| 12 | The system cursor over the crosshair | hidden over the canvas while the crosshair is drawn | ✅ e2e `v0221` |
+| 13 | First visit 3.6 MB / 174 files before the menu | the menu waits for the backdrop's four characters and the player's own; the other sprites and every portrait load in the background, a match waits for the sprites behind its loading screen (`game/lazyAssets.ts`); the unused Phaser logo is gone | ✅ 1.6 MB / 41 files (`ux/weight`) |
+| 14 | Upright phones: the profile pressed to the top; sideways: profile, invitations, settings scrolled | the dossier centred; one-row stats, side-by-side invitation, one-line sliders | ✅ `ux/fit` |
+
+The same audit scripts after the release: phone **8.7 / 10**, computer **8.9 / 10** (before / after numbers in the
+Project doc). Not measured on real phones: frame rate, iOS's swipe, the assist's feel, Telegram's clients.
 
 ## 3. Open risks / next steps
 
+- After v0.2.21 (above, §2m; unit 351 / 351, every browser stage passes on the release bundle — docs/TESTING.md §3): the feel of the aim assist and of the bigger sticks on real phones; whether the hints should come back after a long break; a real iPhone's swipe «back» and Android's button with the history guard; the map thumbnails' 9–10 px captions on computers (twelve in a row).
 - After v0.2.20 (above, §2l; unit 348 / 348, every browser stage passes on the release bundle — docs/TESTING.md §3): the owner's look on a real iPhone — the home-screen app's height, a match turned sideways with the rotation lock on, the sprint by the stick; on his Mac — the full-screen button; whether 240 house players are the right number (`HOUSE_PLAYERS`), and the welcome bonus for accounts registered before the release (not paid now).
 - After v0.2.19 (above, §2k; unit 333 / 333, every browser stage passes on the release bundle): an Instagram address (`SOCIAL_INSTAGRAM_URL`); a look at the 19 new skins and the four live ones on a real phone.
 - After v0.2.18 part 3 (above, §2j), the owner's: the Xsolla keys and its store items, then a sandbox purchase and `XSOLLA_SANDBOX=false`; a real Telegram Stars purchase and refund; `COPYRIGHT_HOLDER`, `PAY_SUPPORT` and the operator's name and contact in the privacy and terms pages; his verdict on the music; the starter pack once he picks one; the welcome gift's end date (`WELCOME_GIFT_UNTIL`); the grades of the twelve new characters. Invitations: watch the held queue in `/admin → Приглашения` — several guest accounts from different browsers can still farm talons slowly.

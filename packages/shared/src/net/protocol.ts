@@ -133,6 +133,8 @@ export interface PersonalResult {
   /** Rating change in this match and the rating after it (the Top-100 table). */
   ratingDelta?: number;
   rating?: number;
+  /** v0.2.21: joined a match well under way — the rating did not move (LATE_JOIN). */
+  lateJoin?: boolean;
   /** v0.2.18: BLATS for the levels reached in this match (10 a level), and the balance after it. */
   blatsGained?: number;
   totalBlats?: number;

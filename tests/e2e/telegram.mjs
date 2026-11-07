@@ -314,12 +314,13 @@ try {
   // the safe areas reach the HUD: Telegram's buttons over the top, the phone's edges at the sides
   const hud = await TA2.page.evaluate(() => {
     const h = window.__blatkom.game.scene.getScene('hud');
-    const k = h.scale.displayScale.x;
+    // v0.2.21: the HUD is laid out in its own units (its camera is zoomed on touch screens): CSS px → units
+    const k = h.scale.displayScale.x / (h.uiZoom ?? 1);
     const css = getComputedStyle(document.documentElement);
     const fire = h.buttons[0];
-    return { inset: h.inset, k, tgTop: css.getPropertyValue('--tg-top').trim(), tgLeft: css.getPropertyValue('--tg-left').trim(), mmY: h.mm.y, fireX: fire?.x ?? null, W: h.scale.width };
+    return { inset: h.inset, k, tgTop: css.getPropertyValue('--tg-top').trim(), tgLeft: css.getPropertyValue('--tg-left').trim(), mmY: h.mm.y, fireX: fire?.x ?? null, W: h.lw ?? h.scale.width };
   });
-  check(hud.tgTop === '36px' && hud.tgLeft === '28px' && hud.inset.top === Math.round(36 * hud.k) && hud.inset.left === Math.round(28 * hud.k), `the safe areas reach the page and the HUD (${JSON.stringify(hud.inset)}, ×${hud.k.toFixed(2)})`);
+  check(hud.tgTop === '36px' && hud.tgLeft === '28px' && Math.abs(hud.inset.top - 36 * hud.k) <= 1 && Math.abs(hud.inset.left - 28 * hud.k) <= 1, `the safe areas reach the page and the HUD (${JSON.stringify(hud.inset)}, ×${hud.k.toFixed(2)})`);
   check(hud.mmY >= 14 + hud.inset.top && hud.fireX !== null && hud.fireX <= hud.W - hud.inset.right - 88 + 0.5, `the minimap clears Telegram’s buttons (y ${hud.mmY}), the fire button clears the edge (x ${hud.fireX} of ${hud.W})`);
   // the pushed-down top leaves less room: the buttons stay apart and under the minimap with its status line
   const geo = await TA2.page.evaluate(() => {
@@ -329,7 +330,7 @@ try {
     for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) if (Math.hypot(bs[i].x - bs[j].x, bs[i].y - bs[j].y) < bs[i].r + bs[j].r) overlaps.push(`${i}-${j}`);
     const mmBottom = h.mm.y + h.mmH + 4 + 22;
     const clear = bs.every((b) => b.y - b.r >= mmBottom - 0.5 || b.x + b.r <= h.mm.x);
-    const inside = bs.every((b) => b.y + b.r <= h.scale.height - h.inset.bottom + 0.5 && b.x + b.r <= h.scale.width - h.inset.right + 0.5);
+    const inside = bs.every((b) => b.y + b.r <= (h.lh ?? h.scale.height) - h.inset.bottom + 0.5 && b.x + b.r <= (h.lw ?? h.scale.width) - h.inset.right + 0.5);
     return { overlaps, clear, inside, squeeze: +h.btnScaleY.toFixed(2) };
   });
   check(geo.overlaps.length === 0 && geo.clear && geo.inside, `the touch buttons keep apart, under the minimap and inside the safe area (${JSON.stringify(geo)})`);

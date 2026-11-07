@@ -62,6 +62,12 @@
 //      server); the Arsenal's «Cases» button and the bright «Skins», the skins' cards; no tutorial card; the
 //      touch sticks mirrored and clear of their buttons; the prologue covering a phone, its characters in
 //      colour (tests/e2e/v0219.mjs). The skins' cards, the 41 finishes and a live skin's frames: tests/e2e/skins.mjs.
+//  v0.2.20: the owner's final edits — the welcome BLATS, the promo code, the screens centred and sideways, a
+//      match sideways from its first frame, static sticks and the sprint (tests/e2e/v0220.mjs)
+//  v0.2.21: the usability pass — a phone's first launch without a registration window, the browser's «back»
+//      inside the game, the zoomed phone HUD (no caption under 11 px), first-match hints gone once used, the
+//      aim assist, «keep your progress» after the first match; laptop windows (1366×625, 1280×600) without
+//      scrolling, the hidden system cursor, the key line (tests/e2e/v0221.mjs). Late joins: unit tests.
 //  21. v0.2.17 part 3: a gang calls another out from its page — the battle room of the two gangs, the
 //      call's card live to both gangs' people, sides by gang, nobody else let in (a stranger's link is
 //      turned away), the battle played and counted for both gangs; a friend's «To battle» → a duel room
@@ -240,6 +246,9 @@ try {
   console.log('\n[e2e] v0.2.20: the owner\'s final edits — the welcome BLATS, the promo code, the screens centred and sideways, a match sideways from its first frame, static sticks and the sprint, the story\'s pairs');
   const v0220 = spawnSync(process.execPath, ['tests/e2e/v0220.mjs', base, join(out, 'v0220')], { stdio: 'inherit' });
   if (v0220.status !== 0) failed = true;
+  console.log('\n[e2e] v0.2.21: the usability pass — no registration before the first match, the browser\'s «back», the phone HUD zoomed, first-match hints, the aim assist, laptop windows without scrolling, the hidden cursor');
+  const v0221 = spawnSync(process.execPath, ['tests/e2e/v0221.mjs', base, join(out, 'v0221')], { stdio: 'inherit' });
+  if (v0221.status !== 0) failed = true;
   console.log('\n[e2e] v0.2.17 part 3: gang against gang, a friend called to a duel (two browsers, two socket players)');
   const battle = spawnSync(process.execPath, ['tests/e2e/battle.mjs', base, join(out, 'battle')], { stdio: 'inherit' });
   if (battle.status !== 0) failed = true;

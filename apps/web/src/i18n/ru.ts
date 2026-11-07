@@ -1079,6 +1079,20 @@ export const RU: Record<string, string> = {
   'Activate': 'Активировать',
   'Have a promo code?': 'Есть промокод?',
   'Register an email: your level, talons, BLATS and everything you buy stay with you on any device. As a guest, the account lives only in this browser.': 'Привяжи почту — уровень, талоны, БЛАТ и всё купленное останутся с тобой на любом устройстве. У гостя аккаунт живёт только в этом браузере.',
+  // ── v0.2.21: usability — phones and computers
+  'TEAMS · TO {n}': 'КОМАНДЫ · ДО {n}',
+  'TO {n} {points}': 'ДО {n} {points}',
+  'DRAG — WALK': 'ТЯНИ — ИДИ',
+  'past the ring — sprint': 'за кольцо — спринт',
+  'DRAG — AIM': 'ТЯНИ — ЦЕЛЬСЯ',
+  'all the way — fire': 'до упора — огонь',
+  'the bullet button — fire': 'кнопка с пулей — огонь',
+  'WASD — walk · Shift — sprint · mouse — aim · left click — fire': 'WASD — ходить · Shift — спринт · мышь — прицел · ЛКМ — огонь',
+  'R — reload · Q / wheel — weapons · G — equipment · E — pick up · Tab — score · Esc — pause': 'R — перезарядка · Q / колесо — оружие · G — снаряжение · E — подобрать · Tab — счёт · Esc — пауза',
+  'Aim assist': 'Помощь в прицеливании',
+  'Press «back» once more to leave the game': 'Нажми «назад» ещё раз, чтобы выйти из игры',
+  'Loading the fighters…': 'Подгружаем бойцов…',
+  'joined mid-match — no change': 'вход в идущий матч — без изменений',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)

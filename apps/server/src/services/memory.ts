@@ -31,7 +31,7 @@ export class MemoryRecorder implements MatchRecorder {
     const first = !this.completed.has(m.matchId);
     if (first) this.completed.set(m.matchId, m);
     for (const p of m.participants) {
-      const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends: p.viaInvite && (m.peopleAtEnd ?? m.playersAtEnd) > 1, ...(p.teamOutcome ? { teamOutcome: p.teamOutcome } : {}), objectives: p.objectives ?? 0 };
+      const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends: p.viaInvite && (m.peopleAtEnd ?? m.playersAtEnd) > 1, ...(p.teamOutcome ? { teamOutcome: p.teamOutcome } : {}), objectives: p.objectives ?? 0, ...(p.lateJoin ? { lateJoin: true } : {}) };
       const gained = first ? xpForMatch(perf) : 0;
       const total = (this.xp.get(p.userId) ?? 0) + gained;
       this.xp.set(p.userId, total);
@@ -41,7 +41,7 @@ export class MemoryRecorder implements MatchRecorder {
       const before = this.ratings.get(p.userId) ?? RATING_RULES.start;
       const rating = first ? Math.max(RATING_RULES.floor, before + ratingDelta(perf)) : before;
       this.ratings.set(p.userId, rating);
-      out.set(p.userId, { xpGained: gained, totalXp: total, level: levelForXp(total).level, leveledUp: false, newAchievements: [], tokensGained: tok, totalTokens, ratingDelta: rating - before, rating });
+      out.set(p.userId, { xpGained: gained, totalXp: total, level: levelForXp(total).level, leveledUp: false, newAchievements: [], tokensGained: tok, totalTokens, ratingDelta: rating - before, rating, ...(p.lateJoin && p.completed ? { lateJoin: true } : {}) });
     }
     return out;
   }

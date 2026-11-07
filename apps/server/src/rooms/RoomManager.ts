@@ -1,6 +1,6 @@
 /** Owns all rooms, the shared 60 Hz tick loop and room discovery (quick match, invites). */
 import { randomBytes } from 'node:crypto';
-import { MAP_ORDER, TICK_MS } from '@blatkom/shared';
+import { LATE_JOIN, MAP_ORDER, TICK_MS } from '@blatkom/shared';
 import type { FillTiming, GameMode, GangBattle, KonFormat, MapId, MatchConfig } from '@blatkom/shared';
 import { MatchRoom } from './MatchRoom.js';
 import type { Services } from '../services/contracts.js';
@@ -89,10 +89,14 @@ export class RoomManager {
     return room;
   }
 
-  /** Finds a public joinable room of the mode (preferring the requested map and fuller rooms) or creates one. */
+  /**
+   * Finds a public joinable room of the mode (preferring the requested map and fuller rooms) or creates one.
+   * v0.2.21: never a match about to end (LATE_JOIN.quickMinLeftMs) — unless the player is already in that room.
+   */
   quickMatch(userId: string, mapId?: MapId, mode: GameMode = 'ffa'): MatchRoom {
+    const timeEnough = (r: MatchRoom) => r.hasMember(userId) || r.phase !== 'active' || r.matchTimeLeftMs >= LATE_JOIN.quickMinLeftMs;
     const candidates = this.list()
-      .filter((r) => !r.isPrivate && r.kon === null && r.mode === mode && r.isJoinable(userId) && (!mapId || r.mapId === mapId))
+      .filter((r) => !r.isPrivate && r.kon === null && r.mode === mode && r.isJoinable(userId) && timeEnough(r) && (!mapId || r.mapId === mapId))
       .sort((a, b) => b.occupancy - a.occupancy);
     if (candidates[0]) return candidates[0];
     const map = mapId ?? MAP_ORDER[Math.floor(Math.random() * MAP_ORDER.length)]!;

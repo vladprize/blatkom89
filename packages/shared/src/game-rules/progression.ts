@@ -57,6 +57,21 @@ export interface MatchPerformance {
   teamOutcome?: 'win' | 'loss' | 'draw';
   /** Capture the flag / base capture: flags or bases captured. */
   objectives?: number;
+  /** v0.2.21: joined a match already well under way (LATE_JOIN.ratedShare) — the rating stays as it was. */
+  lateJoin?: boolean;
+}
+
+/**
+ * v0.2.21 (the usability audit: a quick match put a newcomer into a match 1:24 before its end, against a leader
+ * with 22 points, and the place-based rating took up to 16 off him): a quick match never seats a player in a
+ * match with less than `quickMinLeftMs` to go, and whoever joined after the first `ratedShare` of a match keeps
+ * the rating they had (experience and talons are earned as usual).
+ */
+export const LATE_JOIN = Object.freeze({ quickMinLeftMs: 90_000, ratedShare: 0.25 });
+
+/** Whether a player who came in `joinedAfterMs` into a match of `durationMs` joined late (see LATE_JOIN). */
+export function joinedLate(joinedAfterMs: number, durationMs: number): boolean {
+  return joinedAfterMs > Math.max(0, durationMs) * LATE_JOIN.ratedShare;
 }
 
 /**
@@ -85,8 +100,10 @@ export function rankPlaces<T extends { score: number; kills: number; deaths: num
  */
 export const RATING_RULES = Object.freeze({ start: 1000, k: 32, team: 16, leaver: -16, floor: 0 });
 
-export function ratingDelta(p: Pick<MatchPerformance, 'place' | 'playersAtEnd' | 'completed' | 'teamOutcome'>): number {
+export function ratingDelta(p: Pick<MatchPerformance, 'place' | 'playersAtEnd' | 'completed' | 'teamOutcome' | 'lateJoin'>): number {
   if (!p.completed) return RATING_RULES.leaver;
+  // v0.2.21: came in late — neither the place nor the team's result was in their hands
+  if (p.lateJoin) return 0;
   if (p.teamOutcome) return p.teamOutcome === 'win' ? RATING_RULES.team : p.teamOutcome === 'loss' ? -RATING_RULES.team : 0;
   if (p.playersAtEnd < 2) return 0;
   const score = Math.min(1, Math.max(0, (p.playersAtEnd - p.place) / (p.playersAtEnd - 1)));

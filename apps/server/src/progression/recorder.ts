@@ -109,7 +109,7 @@ export class PgMatchRecorder implements MatchRecorder {
         // friends are people: players the server filled in don't count
         const withFriends = m.isPrivate && p.viaInvite && people >= 2;
         const sharedPlace = p.completed && m.participants.some((o) => o.userId !== p.userId && o.completed && o.place === p.place);
-        const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends, sharedPlace, ...(p.teamOutcome ? { teamOutcome: p.teamOutcome } : {}), objectives: p.objectives ?? 0 };
+        const perf = { kills: p.kills, assists: p.assists, deaths: p.deaths, place: p.place, playersAtEnd: m.playersAtEnd, completed: p.completed, withFriends, sharedPlace, ...(p.teamOutcome ? { teamOutcome: p.teamOutcome } : {}), objectives: p.objectives ?? 0, ...(p.lateJoin ? { lateJoin: true } : {}) };
         const ownedRows = await tx<Array<{ achievement_id: AchievementId }>>`SELECT achievement_id FROM player_achievements WHERE user_id = ${p.userId}`;
         const prev = { xp: prof!.xp, level: prof!.level, matchesCompleted: prof!.matches_completed, wins: prof!.wins, currentWinStreak: prof!.current_win_streak };
         const { won, lost, streak, unlocked, xpGained: xp, totalXp, level } = applyMatchProgress(prev, perf, new Set(ownedRows.map((r) => r.achievement_id)));
@@ -149,7 +149,7 @@ export class PgMatchRecorder implements MatchRecorder {
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
             tokens_awarded = EXCLUDED.tokens_awarded, rating_delta = EXCLUDED.rating_delta, left_at = EXCLUDED.left_at`;
-        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof!.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating, blatsGained: blats.gained, totalBlats: blats.balance });
+        out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof!.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating, blatsGained: blats.gained, totalBlats: blats.balance, ...(p.lateJoin && p.completed && !m.kon ? { lateJoin: true } : {}) });
         clubDeltas.push({ userId: p.userId, delta: rDelta });
       }
       // the clubs of the people who played (v0.3): their rating moves with their members'

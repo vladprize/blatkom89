@@ -271,6 +271,8 @@ html.rot #game, html.rot .ui { inset: auto; top: 0; left: 0; width: var(--rot-h,
   /* v0.2.20: as wide as its text up to the screen (left: 50% alone squeezed a long note into half of it) */
   width: max-content; max-width: min(560px, calc(100vw - 32px)); text-align: center; }
 @keyframes toast { 0% { opacity: 0; transform: translate(-50%, 10px); } 10%, 85% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+/* v0.2.21: over a dialog or a sheet the note sits at the top, clear of the buttons at their bottom */
+.toast--top { top: calc(16px + var(--safe-top)); bottom: auto; z-index: 95; }
 .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(8,6,5,.72); padding: 16px; }
 .modal { width: min(440px, 100%); }
 .footer { font-size: 13px; color: var(--muted); text-align: center; padding-top: 8px; }
@@ -2620,4 +2622,126 @@ button.blatsban:focus-visible { outline: 2px solid var(--tape); outline-offset: 
   .clubs .clubmine .btn { min-height: 40px; }
   .clubs .input[type=search] { min-height: 36px; padding: 6px 10px; margin: 0 0 4px; }
   .clubrow { padding-top: 4px; padding-bottom: 4px; }
+}
+
+/* ── v0.2.21: the usability pass (7 Nov) ─────────────────────────────────────────────────────────────────
+   1. Laptops' browser windows — 1366 × 768 leaves ~625 px, 1280 × 720 ~600 px — show the main menu, the
+      character screen and the Arsenal without the window scrolling. */
+@media (min-width: 761px) and (max-height: 680px) {
+  .wrap--menu .logo { width: min(260px, 38vw); }
+  .menu-center { gap: 6px; }
+  .menu { margin-top: 2px; }
+  .menu__play { gap: 6px; padding-top: 20px; }
+  .menu__play .btn { min-height: 38px; padding-top: 7px; padding-bottom: 6px; }
+  .menu__play .stile { min-height: 0; padding: 7px 10px; }
+  .menu__play .stile small { display: none; }
+  .menu__side { gap: 10px; }
+  .menu__char { padding-top: 16px; gap: 6px; }
+  .menu__char .charcard img { width: 56px; height: 56px; }
+  .wrap--menu > .footer { padding-top: 4px; }
+}
+@media (min-width: 1000px) and (max-height: 700px) {
+  .screen--chars { --file-poster: clamp(110px, calc((100dvh - 470px) * .75), 250px); }
+  .charsel > .dossier .dossier__text > .lore { font-size: 14px; line-height: 1.25; }
+  .charsel > .dossier .dossier__text > .h1 { font-size: clamp(24px, 2.2vw, 30px); }
+}
+/* the Arsenal on computers: the two columns never grow past the window — the dressing room scrolls inside
+   itself on a short one (its name tag stays over its edge), the tab's list already does */
+@media (min-width: 900px) {
+  .arsenal:not(.arsenal--phone) { grid-template-rows: minmax(0, 1fr); }
+  .arsenal:not(.arsenal--phone) > .dressing { display: flex; flex-direction: column; min-height: 0; }
+  .arsenal:not(.arsenal--phone) > .dressing > .dressing__grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #5a4c3e transparent; padding-right: 4px; }
+  .arsenal:not(.arsenal--phone) > .arsenal__side { min-height: 0; }
+}
+@media (min-width: 900px) and (max-height: 820px) {
+  .arsenal:not(.arsenal--phone) .wstats { gap: 1px; }
+  .arsenal:not(.arsenal--phone) .wstat { line-height: 1.1; }
+  .skinpick--room .skingrid { grid-auto-columns: 112px; }
+  .skinpick--room .skincard { padding: 4px 5px 5px; }
+}
+@media (min-width: 761px) and (max-height: 680px) {
+  .practice { gap: 10px; }
+}
+
+/* 2. No caption under 12 px (the audit found 9–11 px ones on phones and computers) */
+.lvlbadge small { font-size: 12px; letter-spacing: .02em; }
+.charsum__name .grade, .charsum .badge { font-size: 12px; }
+.dossier--sheet .dossier__stamp { font-size: 12px; }
+.kitcard__doll .dressing__label, .kitcard__whotxt small { font-size: 12px; }
+.btn--skins__n { font-size: 12px; }
+.scamp__chapters button small { font-size: 12px; }
+.dressing__stats .wstat span, .arsenal:not(.arsenal--phone) .cell__own, .wbtn__price small { font-size: 12px; }
+.chars__soon { font-size: 12px; }
+.tile--profile .xp { font-size: 12px; }
+.wrap--menu > .footer { font-size: 12px; }
+.blatsart .blatsban__from { font-size: 12px; }
+.coin span, .arsenal--phone .coin span { font-size: 12px; }
+.skincard__grade { font-size: 11px; }
+.dressing__plate span { font-size: clamp(12px, 2.4vw, 14px); }
+.screen--chars .chars button, .charsel > .chars button { font-size: 12px; }
+@media not all and (max-height: 500px) { .screen--profile .stat span { font-size: 12px; letter-spacing: .02em; } }
+.screen--kon .kon__rating small, .screen--kon .kon__rec small { font-size: 12px; }
+@media (min-width: 761px) {
+  .screen--practice .practice__map .maptile__name, .screen--friendsroom .maptile__name { flex-basis: 40%; font-size: 11px; }
+}
+
+/* 3. Finger-sized targets on touch screens: a small control keeps its look and gets an invisible margin that
+   takes the tap (≥ 44 px tall where its neighbours leave room). Everything here is in :where() — no specificity —
+   so a control's own position (an absolute ✎, a fixed chat button) and its own ::after drawing always win;
+   controls that draw with ::after are left out altogether */
+@media (pointer: coarse) {
+  :where(.back, .iconbtn, .seg button, .tabs button, .btn, .tile .edit, .sheet__x, .rchat__qbtn, .kitcard__fire, .addbtn, .topadd):where(:not(.maptile, .panetab--alert, .ava-btn--big, .skincard--live, .tile)) { position: relative; }
+  /* the margin grows upwards only: below the last control of a list it would make that list scroll */
+  :where(.back, .iconbtn, .seg button, .tabs button, .btn, .tile .edit, .sheet__x, .rchat__qbtn, .kitcard__fire, .addbtn, .topadd):where(:not(.maptile, .panetab--alert, .ava-btn--big, .skincard--live, .tile))::after { content: ''; position: absolute; inset: -12px -1px 0; }
+  :where(.btn--small)::after { inset: -18px -2px 0; }
+  :where(.iconbtn, .tile .edit, .sheet__x, .rchat__qbtn)::after { inset: -12px -3px 0; }
+  :where(.lobby__invite-btn, .lobby__rules-btn)::after { inset: -22px -4px 0; }
+  :where(.kitcard__fire, .addbtn, .topadd)::after { inset: -24px -8px 0; }
+  /* the sliders: a track a thumb can take */
+  .range { height: 44px; }
+}
+/* the links in a line of text: a target a finger — and a mouse — can hit, on any screen */
+:where(.linkish, .footer a) { position: relative; }
+:where(.linkish, .footer a)::after { content: ''; position: absolute; inset: -14px -4px -2px; }
+@media (pointer: fine) { .range { height: 24px; } }
+/* a phone held sideways: a slider's caption beside its (finger-thick) track, so the settings stay one screen */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .settings .setslider { flex-direction: row; align-items: center; gap: 10px; }
+  .settings .setslider > .row { flex: 0 0 46%; min-width: 0; font-size: 13px; }
+  .settings .setslider > .row > .grow { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .settings .setslider > .range { flex: 1 1 auto; min-width: 0; margin: 0; height: 38px; }
+  .screen--settings .settings .panel.col { gap: 4px; }
+}
+/* sideways phones: the profile's numbers in one row; the invitation and its list side by side */
+@container ui (orientation: landscape) and (max-height: 500px) {
+  .screen--profile .stats { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .invite.fitcol { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+  .invite__main.panel.col { gap: 6px; padding-top: 10px; padding-bottom: 6px; }
+  .invite__main .invite__link .input { min-height: 0; padding-top: 8px; padding-bottom: 8px; }
+  .invite__main .invstats { margin-top: 0; }
+  .invite__main .invstats__item { padding-top: 3px; padding-bottom: 3px; }
+  .invite__main > .muted { font-size: 13px; line-height: 1.25; }
+}
+/* the smallest phones (360 × 640 and the same held sideways): the settings' rows a little thinner */
+@media (pointer: coarse) and (max-width: 400px) and (max-height: 680px) {
+  .screen--settings .range { height: 34px; }
+}
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 380px) {
+  .screen--settings .seg button { min-height: 30px; padding-top: 2px; padding-bottom: 2px; }
+  .screen--settings .settings .panel.col { gap: 2px; }
+  .settings .setslider > .range { height: 32px; }
+  .screen--settings .settings__controls > .muted { font-size: 13px !important; line-height: 1.2; }
+}
+/* tablets held upright (561–899 px wide): the dressing room gives way to the tab's list and scrolls inside itself */
+@media (min-width: 561px) and (max-width: 899px) {
+  .arsenal:not(.arsenal--phone) > .dressing { flex: 1 1 auto; min-height: 140px; display: flex; flex-direction: column; }
+  .arsenal:not(.arsenal--phone) > .dressing > .dressing__grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #5a4c3e transparent; }
+  .arsenal:not(.arsenal--phone) > .arsenal__side { flex: 0 0 auto; }
+  .arsenal:not(.arsenal--phone) > .arsenal__side > .arsenal__body { flex: 0 0 auto; height: clamp(180px, 40dvh, 480px); min-height: 0; }
+}
+/* a tall phone: the profile's dossier sits in the middle of the room under its tabs (the audit: a third of
+   the screen stayed empty below it) */
+@media (max-width: 760px) and (min-height: 700px) {
+  .screen--profile .profile.panes[data-pane='a'] .profile__dossier { margin-top: auto; }
+  .screen--profile .profile.panes[data-pane='a'] .profile__stats { margin-bottom: auto; }
 }

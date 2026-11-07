@@ -36,6 +36,8 @@ async function open(viewport, o = {}) {
       localStorage.setItem('blatkom89.tutorial.v1', '1');
       localStorage.setItem('blatkom89.story.prologue.v1', '1');
       if (!welcome) localStorage.setItem('blatkom89.welcome.v1', String(Date.now()));
+      // v0.2.21: the welcome window comes after the first match — this guest has played one already
+      else localStorage.setItem('blatkom89.matches-done.v1', '1');
     } catch {}
     window.__toasts = [];
     const watch = () =>
@@ -219,7 +221,8 @@ try {
     const hud = g.scene.getScene('hud');
     const c = g.canvas;
     const rest = hud.stickRest[0];
-    const k = c.clientWidth / g.scale.width;
+    // v0.2.21: HUD units → canvas pixels (the HUD camera's zoom) → CSS pixels
+    const k = (c.clientWidth / g.scale.width) * (hud.uiZoom ?? 1);
     const lx = c.offsetLeft + rest.x * k;
     const ly = c.offsetTop + rest.y * k;
     return { rest, R: hud.stickRadius() * k, page: { x: innerWidth - ly, y: lx } };

@@ -32,6 +32,9 @@ const TEX = 2;
 /** Camera may scroll this far past the map edge so HUD panels never cover a player standing at a wall. */
 const CAM_PAD = 44;
 
+/** v0.2.21: the touch aim's assist — how far it looks, how wide, how hard it pulls (see GameScene.aimAssist). */
+export const AIM_ASSIST = Object.freeze({ range: 340, coneDeg: 12, bodyRadius: 14, strength: 0.6, maxDeg: 7 });
+
 export class GameScene extends Phaser.Scene {
   session!: GameSession;
   private map!: MapDef;
@@ -58,6 +61,8 @@ export class GameScene extends Phaser.Scene {
   private unsubSettings: (() => void) | null = null;
   private lastCountdown = -1;
   private crosshair: Phaser.GameObjects.Image | null = null;
+  /** v0.2.21: the system cursor is hidden over the canvas while the crosshair is drawn. */
+  private cursorHidden = false;
   private lastNow = 0;
   private readonly debug = new URLSearchParams(location.search);
   /** Practice-only debug camera (`?cam=x,y`), used for art review screenshots. */
@@ -106,6 +111,7 @@ export class GameScene extends Phaser.Scene {
     this.collision = getCollision(this.session.mapId);
     this.lasers = this.add.graphics().setDepth(D.FX_ADD - 0.5).setBlendMode(Phaser.BlendModes.ADD);
     this.inputs = new InputManager(this);
+    this.inputs.assist = (aim, me) => this.aimAssist(aim, me);
     this.inputs.onPause = () => hudBus.emit('pause');
     this.inputs.onScoreboard = (show) => hudBus.emit('scoreboard', show);
     this.crosshair = this.add.image(0, 0, 'fx', 'crosshair').setDepth(D.CROSSHAIR).setScale(0.5).setVisible(false);
@@ -131,6 +137,34 @@ export class GameScene extends Phaser.Scene {
     hudBus.on('pause-state', this.onPauseState, this);
     hudBus.on('chat-open', this.onChatOpen, this);
     hudBus.on('chat-say', this.onChatSay, this);
+  }
+
+  /**
+   * v0.2.21 (the usability audit: thumbs play against mice in the same matches): on a touch screen the aim leans
+   * a little towards the visible enemy nearest the line the stick points along — within AIM_ASSIST.coneDeg and
+   * AIM_ASSIST.range, by at most AIM_ASSIST.maxDeg; never through walls or smoke, never towards teammates.
+   */
+  private aimAssist(aim: number, me: { x: number; y: number }): number {
+    const players = this.lastPlayers;
+    const myTeam = players.find((p) => p.isLocal)?.team ?? null;
+    const cone = (AIM_ASSIST.coneDeg * Math.PI) / 180;
+    let best: { diff: number; score: number } | null = null;
+    for (const p of players) {
+      if (p.isLocal || !p.alive || (myTeam !== null && p.team === myTeam)) continue;
+      const dx = p.x - me.x;
+      const dy = p.y - me.y;
+      const d = Math.hypot(dx, dy);
+      if (d < 6 || d > AIM_ASSIST.range) continue;
+      const diff = Math.atan2(Math.sin(Math.atan2(dy, dx) - aim), Math.cos(Math.atan2(dy, dx) - aim));
+      // a near enemy is wider: the cone grows to cover its body
+      const reach = Math.max(cone, Math.atan2(AIM_ASSIST.bodyRadius, d));
+      if (Math.abs(diff) > reach) continue;
+      if (!this.collision.lineOfSight(me.x, me.y, p.x, p.y) || this.gadgetView.concealed(p.x, p.y)) continue;
+      const score = Math.abs(diff) / reach + (d / AIM_ASSIST.range) * 0.5;
+      if (!best || score < best.score) best = { diff, score };
+    }
+    if (!best) return aim;
+    return aim + Math.sign(best.diff) * Math.min(Math.abs(best.diff) * AIM_ASSIST.strength, (AIM_ASSIST.maxDeg * Math.PI) / 180);
   }
 
   private onPauseState(p: boolean) {
@@ -279,6 +313,12 @@ export class GameScene extends Phaser.Scene {
     if (this.crosshair) {
       const show = !this.inputs.usingTouch && !!me?.alive && this.session.phase() !== 'finished';
       this.crosshair.setVisible(show);
+      // v0.2.21 (the usability audit: the system arrow sat over the drawn crosshair): over the canvas the mouse
+      // is the crosshair alone while it is drawn; the arrow comes back with menus, the pause and the results
+      if (show !== this.cursorHidden) {
+        this.cursorHidden = show;
+        this.input.setDefaultCursor(show ? 'none' : 'default');
+      }
       if (show) {
         const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
         this.crosshair.setPosition(wp.x, wp.y);

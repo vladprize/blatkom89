@@ -43,6 +43,8 @@ async function open(name, lang, viewport, url) {
     try {
       localStorage.setItem('blatkom89.lang.v1', l);
       localStorage.setItem('blatkom89.tutorial.v1', '1');
+      // v0.2.21: the window opens after the first match — these guests have played one already
+      localStorage.setItem('blatkom89.matches-done.v1', '1');
     } catch {}
   }, lang);
   // Telegram's page is opened by the game itself: stubbed. Google's comes as the server's redirect, which

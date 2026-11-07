@@ -37,7 +37,7 @@ import { renderAccountPanel, openEmailLogin, openPasswordReset, telegramLinkText
 import { renderFriends, renderTop, friendsInvitePanel, showInviteCard, friendsSub, openFriendBattleSheet } from '../ui/screens/social.js';
 import type { FriendBattle } from '../ui/screens/social.js';
 import type { SocialSignal } from '../net/SocialClient.js';
-import { needsTelegramWelcome, needsWelcome, openTelegramWelcome, openWelcome } from '../ui/screens/welcome.js';
+import { needsTelegramWelcome, needsWelcome, openTelegramWelcome, openWelcome, MATCHES_DONE_KEY, noteMatchDone } from '../ui/screens/welcome.js';
 import { sfx } from '../game/audio/Sfx.js';
 import { music } from '../game/audio/Music.js';
 import { t, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
@@ -49,6 +49,9 @@ import { renderInvite } from '../ui/screens/invite.js';
 import { blatsCoin, fmtNum } from '../ui/coin.js';
 import { blatsArtBanner, blatsSale, setBannerSale, setBannerStars } from '../ui/blats.js';
 import { forceLandscape } from './landscape.js';
+import { initBackGuard, armBackGuard } from './backGuard.js';
+import { spritesReady, whenSprites } from '../game/lazyAssets.js';
+import { isTouchDevice } from '../game/input/TouchState.js';
 import { MatchFullscreenButton, fullscreenAction, fullscreenButton } from '../ui/fullscreenButton.js';
 import { fullscreenWay, isFullscreen } from './fullscreen.js';
 import { renderKon, konLabel, tourneyIcon } from '../ui/screens/kon.js';
@@ -264,6 +267,15 @@ export class App {
     });
     hudBus.on('pause', () => this.togglePause());
     hudBus.on('match-end', () => setTimeout(() => this.onMatchFinished(), 2200));
+    // v0.2.21: the browser's «back» (Android's button, the iPhone's edge swipe) steps back inside the game
+    if (!inTelegram()) initBackGuard({ onBack: () => this.browserBack(), onRoot: () => toast(t('Press «back» once more to leave the game')) });
+    // v0.2.21: closing the tab in the middle of an online match asks first (computers: a phone's browser
+    // never shows the question reliably, and its «back» pauses the match instead)
+    window.addEventListener('beforeunload', (e) => {
+      if (this.screen !== 'game' || this.session?.mode !== 'online' || isTouchDevice()) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
     onLangChange(() => this.relocalize());
     if (ONLINE_AVAILABLE)
       this.updates = watchForUpdates({
@@ -549,7 +561,24 @@ export class App {
       this.chatOverlay = null;
     }
     setBackButton(s !== 'menu' && s !== 'game' && s !== 'loading');
+    if (s !== 'menu') armBackGuard();
     this.host.previewScene()?.setFocus(s === 'characters' ? this.character : null);
+  }
+
+  /**
+   * v0.2.21: the browser's «back»: an open sheet closes, otherwise a step back (a match pauses, the room is
+   * left). False on the bare main menu — there a second «back» leaves the page.
+   */
+  private browserBack(): boolean {
+    const sheets = document.querySelectorAll('.sheetlay');
+    const sheet = sheets[sheets.length - 1];
+    if (sheet) {
+      sheet.dispatchEvent(new Event('sheet-close'));
+      return true;
+    }
+    if (this.screen === 'menu' && !this.pauseEl) return false;
+    this.back();
+    return true;
   }
 
   back(): void {
@@ -1085,6 +1114,8 @@ export class App {
 
   /** A guest in a browser: offer to register an email first, then the alias dialog. */
   private maybeWelcome() {
+    // v0.2.21: a redraw of the menu replaces the page and an open window with it — that window is gone, not open
+    if (this.welcomeClose && !this.root.querySelector('[data-testid="welcome"], [data-testid="tg-welcome"]')) this.welcomeClose = null;
     if (this.screen !== 'menu' || this.welcomeClose || this.nickClose) return;
     const online = this.online;
     // V2.0 part E: a new profile in Telegram — maybe the player already has an account to bring here
@@ -1517,7 +1548,17 @@ export class App {
     // v0.2.20 (the owner): a match is sideways from its first frame — an upright phone gets the page turned
     forceLandscape(true);
     enterGameMode();
-    this.host.startGame(session);
+    // v0.2.21: the characters' sprites load in the background after the menu (game/lazyAssets.ts) — a match
+    // that comes before they are all in waits for them behind its loading screen
+    if (spritesReady()) this.host.startGame(session);
+    else {
+      const wait = h('div', { class: 'screen screen--dim center', 'data-testid': 'assets-wait' }, h('div', { class: 'col center' }, h('div', { class: 'spinner' }), h('div', { class: 'hand' }, t('Loading the fighters…'))));
+      this.root.append(wait);
+      void whenSprites().then(() => {
+        wait.remove();
+        if (this.session === session) this.host.startGame(session);
+      });
+    }
     // a story mission has just shown its place in the comic
     if (!(session instanceof StorySession)) this.closeLoad = showLoadScreen(this.root, session);
     if (session.mode === 'online') this.mountChatOverlay();
@@ -1589,7 +1630,13 @@ export class App {
       this.endSession();
       return this.story.leave();
     }
-    if (this.session?.mode === 'online') void this.online?.leave();
+    if (this.session?.mode === 'online') {
+      this.practiceReturn = null;
+      void this.online?.leave();
+      // v0.2.21: the room's «left» (onLeft) has drawn the menu already; drawing it a second time took away the
+      // window that first drawing opened («keep your progress» after the first online match)
+      if (this.screen === 'menu') return;
+    }
     // v0.2.18: «Try in practice» from the Arsenal or the character screen goes back there
     const back = this.session?.mode !== 'online' ? this.practiceReturn : null;
     this.practiceReturn = null;
@@ -1613,6 +1660,8 @@ export class App {
     if (!this.session || this.resultsShown) return;
     if (this.session instanceof StorySession) {
       this.resultsShown = true;
+      // v0.2.21: the first finished match brings the «keep your progress» window (at the menu)
+      noteMatchDone();
       return this.story.finished(this.session);
     }
     const r = this.session.results();
@@ -1624,6 +1673,9 @@ export class App {
     this.lastResults = r;
     music.setWanted(true);
     const same = this.screen === 'results';
+    // v0.2.21: a match's results shown for the first time — it counts as played here (the «keep your progress»
+    // window waits for the first one); redrawn results (a language switch, the progress coming) don't
+    if (!same) noteMatchDone();
     if (!same) this.go('results', false);
     const offline = this.session?.mode !== 'online';
     const myId = offline ? 'local' : (this.online?.profile?.id ?? '');
@@ -1670,6 +1722,9 @@ export class App {
   /** Quick match: pick a mode (remembered), then find a public room of that mode. */
   private quickMatch() {
     if (!this.online) return;
+    // v0.2.21 (the usability audit: four decisions before the first shot): a newcomer goes straight into a
+    // free-for-all; the choice of modes comes from the second time on
+    if (!storageGet(QUICK_MODE_KEY) && (this.online.profile?.matchesPlayed ?? 0) === 0 && !(Number(storageGet(MATCHES_DONE_KEY) ?? 0) > 0)) return void this.findMatch('ffa');
     const saved = this.savedMode();
     const ov = h('div', { class: 'overlay overlay--top' });
     const close = () => ov.remove();

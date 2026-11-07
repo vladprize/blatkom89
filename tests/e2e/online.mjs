@@ -74,12 +74,11 @@ const RUN = Math.random().toString(36).slice(2, 5);
 const NICK_A = `yard_boss_${RUN}`;
 await A.page.goto(base + '/');
 await pressPlay(A.page);
-// a guest in a browser is first offered to register an email; A carries on as a guest
-await A.page.getByTestId('welcome').waitFor({ timeout: 60000 });
-await A.page.getByTestId('welcome-guest').click();
-step('A was offered to keep the progress with an email and chose «Continue as guest»');
+// v0.2.21: a newcomer plays first — no registration window at the start, only the alias
 const nickInput = A.page.getByRole('textbox', { name: 'Alias' });
 await nickInput.waitFor({ timeout: 60000 });
+if (await A.page.getByTestId('welcome').count()) problems.push('the registration window opened before the first match');
+step('first launch: no registration window, straight to the alias');
 await nickInput.fill(NICK_A);
 await A.page.getByRole('button', { name: 'Done' }).click();
 await A.page.getByTestId('menu-nick').filter({ hasText: NICK_A }).waitFor({ timeout: 20000 });
@@ -293,6 +292,13 @@ await A.page.getByText(/\+\d+ XP/).waitFor({ timeout: 15000 }).catch(() => probl
 report.resultsChat = await A.page.locator('[data-testid=room-chat-panel] [data-testid=room-chat-line]').count();
 step(`results screen: the room chat with ${report.resultsChat} lines`);
 await Promise.all([A.page.screenshot({ path: `${outDir}/online_results_A.png` }), B.page.screenshot({ path: `${outDir}/online_results_B.png` })]);
+// v0.2.21: after the first match the menu offers to keep the progress (+ the welcome BLATS); A stays a guest
+await A.page.getByTestId('results-menu').click();
+await A.page.getByTestId('welcome').waitFor({ timeout: 20000 }).catch(() => problems.push('no «keep your progress» window after the first match'));
+report.welcomeAfterMatch = (await A.page.getByTestId('welcome').count()) > 0;
+await A.page.screenshot({ path: `${outDir}/online_welcome_after_match_A.png` });
+if (report.welcomeAfterMatch) await A.page.getByTestId('welcome-guest').click();
+step(`after the first match, at the menu: the «keep your progress» window ${report.welcomeAfterMatch ? 'opens' : 'did NOT open'}; A carries on as a guest`);
 
 // ── persistence ───────────────────────────────────────────────────────────
 const profileOf = (p) =>
@@ -339,6 +345,8 @@ report.problems = problems;
 console.log(JSON.stringify(report, null, 2));
 await browser.close();
 const ok =
+  problems.length === 0 &&
+  report.welcomeAfterMatch === true &&
   report.resultsIdentical &&
   report.profiles.every((p) => p.matchesPlayed >= 1 && typeof p.assists === 'number') &&
   report.profiles[0].name === NICK_A &&

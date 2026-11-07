@@ -3500,9 +3500,11 @@ var XP_RULES = Object.freeze({
   playedWithFriends: 20,
   maxPerMatch: 400
 });
+var LATE_JOIN = Object.freeze({ quickMinLeftMs: 9e4, ratedShare: 0.25 });
 var RATING_RULES = Object.freeze({ start: 1e3, k: 32, team: 16, leaver: -16, floor: 0 });
 function ratingDelta(p) {
   if (!p.completed) return RATING_RULES.leaver;
+  if (p.lateJoin) return 0;
   if (p.teamOutcome) return p.teamOutcome === "win" ? RATING_RULES.team : p.teamOutcome === "loss" ? -RATING_RULES.team : 0;
   if (p.playersAtEnd < 2) return 0;
   const score = Math.min(1, Math.max(0, (p.playersAtEnd - p.place) / (p.playersAtEnd - 1)));

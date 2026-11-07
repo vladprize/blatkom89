@@ -58,6 +58,8 @@ export interface MatchParticipantResult {
   objectives?: number;
   /** Time actually spent in the match. */
   playtimeMs: number;
+  /** v0.2.21: joined after the first quarter of the match (LATE_JOIN) — no rating change. */
+  lateJoin?: boolean;
 }
 
 export interface MatchCompletion {

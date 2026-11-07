@@ -9,6 +9,7 @@ import { confirmAsync } from '../../telegram/tg.js';
 import { t, getLang, setLang, LANGS } from '../../i18n/index.js';
 import { apiErrorText } from '../../net/errors.js';
 import { inPane, paneTabs } from '../panes.js';
+import { isTouchDevice } from '../../game/input/TouchState.js';
 
 export function renderSettings(opts: { inGame: boolean; online: OnlineClient | null; onResetLocal?: () => void }): HTMLElement {
   const s = getSettings();
@@ -84,22 +85,31 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
     slider(t('Effects volume'), 'sfxVolume', 0, 1, 0.05),
     music.available() ? slider(t('Music volume (menus)'), 'musicVolume', 0, 1, 0.05) : null,
   );
+  // v0.2.21: a computer sees its keys only; a touch screen its sticks' settings (with the aim assist) and its help
+  const touchUi = isTouchDevice();
   const controls = h(
     'div',
     { class: 'panel col settings__controls' },
     h('span', { class: 'tag' }, t('Controls')),
-    seg(t('Right stick fires when pushed all the way'), [
-      [true, t('On')],
-      [false, t('Button only')],
-    ], 'autoFire'),
-    seg(t('Left-handed (swap the sticks)'), [
-      [false, t('No')],
-      [true, t('Yes')],
-    ], 'leftHanded'),
-    slider(t('Stick size'), 'stickScale', 0.7, 1.4, 0.05),
-    // v0.2.20: the sprint (Shift; the move stick past its ring) and walking quietly on C
-    h('div', { class: 'muted', style: 'font-size:14px' }, t('Phone: pull the move stick past its ring to sprint — the blue bar under your health is your breath.')),
-    h('div', { class: 'muted', style: 'font-size:14px' }, t('Computer: WASD — move, Shift — sprint (while your breath lasts), mouse — aim, left click — fire, R — reload, Q / wheel / 1-3 — weapons, G / middle click — equipment, E — pick up, C — walk quietly, Tab — score, Esc — menu.')),
+    ...(touchUi
+      ? [
+          seg(t('Right stick fires when pushed all the way'), [
+            [true, t('On')],
+            [false, t('Button only')],
+          ], 'autoFire'),
+          seg(t('Aim assist'), [
+            [true, t('On')],
+            [false, t('Off')],
+          ], 'aimAssist'),
+          seg(t('Left-handed (swap the sticks)'), [
+            [false, t('No')],
+            [true, t('Yes')],
+          ], 'leftHanded'),
+          slider(t('Stick size'), 'stickScale', 0.7, 1.4, 0.05),
+          // v0.2.20: the sprint (the move stick past its ring)
+          h('div', { class: 'muted', style: 'font-size:14px' }, t('Phone: pull the move stick past its ring to sprint — the blue bar under your health is your breath.')),
+        ]
+      : [h('div', { class: 'muted', style: 'font-size:14px' }, t('Computer: WASD — move, Shift — sprint (while your breath lasts), mouse — aim, left click — fire, R — reload, Q / wheel / 1-3 — weapons, G / middle click — equipment, E — pick up, C — walk quietly, Tab — score, Esc — menu.'))]),
   );
   const chat = opts.online
     ? h(
@@ -110,7 +120,8 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
           [true, t('Shown')],
           [false, t('Hidden')],
         ], 'chat'),
-        h('div', { class: 'muted', style: 'font-size:14px' }, t('Enter — say something to everybody, T — to your team, Tab — switch. Lines go to the players in the room and aren’t stored.')),
+        // v0.2.21: the keys are a computer's; a phone has the chat button
+        touchUi ? null : h('div', { class: 'muted', style: 'font-size:14px' }, t('Enter — say something to everybody, T — to your team, Tab — switch. Lines go to the players in the room and aren’t stored.')),
       )
     : null;
   const items: HTMLElement[] = [language, graphics, sound, controls];

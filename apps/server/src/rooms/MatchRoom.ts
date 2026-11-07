@@ -28,6 +28,7 @@ import {
   FREE_CHARACTERS,
   isMapId,
   isTeamMode,
+  joinedLate,
   rankPlaces,
   NavGrid,
   BotBrain,
@@ -147,6 +148,8 @@ interface Client {
   lastQueuedSeq: number;
   reconnectToken: string;
   joinedAt: number;
+  /** v0.2.21: how far into the match being played (its own clock) the player came in; 0 when there from the start. */
+  joinedAfterMs: number;
   /** Real time spent in the current match (ms). */
   matchTimeMs: number;
   violations: number;
@@ -239,6 +242,11 @@ export class MatchRoom {
 
   get phase() {
     return this.world.phase;
+  }
+
+  /** v0.2.21: what is left of the match being played (the whole length before it starts). */
+  get matchTimeLeftMs(): number {
+    return this.world.matchTimeLeftMs;
   }
 
   get mode(): GameMode {
@@ -363,6 +371,7 @@ export class MatchRoom {
       lastQueuedSeq: 0,
       reconnectToken: randomBytes(18).toString('base64url'),
       joinedAt: Date.now(),
+      joinedAfterMs: this.world.phase === 'active' ? Math.max(0, this.world.time - this.world.matchStartedAt) : 0,
       matchTimeMs: 0,
       violations: 0,
       msgWindowStart: Date.now(),
@@ -829,6 +838,8 @@ export class MatchRoom {
     }
     this.emptySideSince = 0;
     this.world.beginMatch();
+    // v0.2.21: everyone in the room now is there from the start (LATE_JOIN)
+    for (const c of this.clients.values()) c.joinedAfterMs = 0;
     this.konLineup.clear();
     if (this.kon) {
       for (const c of this.clients.values()) {
@@ -920,6 +931,8 @@ export class MatchRoom {
           completed: c.connected,
           viaInvite: c.viaInvite,
           playtimeMs: Math.round(c.matchTimeMs),
+          // v0.2.21: came into the match after its first quarter — the rating stays (LATE_JOIN)
+          ...(!this.kon && joinedLate(c.joinedAfterMs, this.config.durationMs) ? { lateJoin: true } : {}),
         };
       });
     // Kon: those who started the match and are no longer in the room left it — a loss

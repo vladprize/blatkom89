@@ -66,8 +66,49 @@ interface Btn {
   visible: boolean;
 }
 
+/**
+ * v0.2.21: the HUD camera's zoom, which HUD text is rendered at — a zoomed label then lands on the canvas pixel
+ * for pixel (the game draws unsmoothed pixel art, so a label scaled up after rendering would come out ragged).
+ */
+let textRes = 1;
+
 function txt(scene: Phaser.Scene, x: number, y: number, s: string, size: number, color = BEIGE, weight = '600'): Phaser.GameObjects.Text {
-  return scene.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, fontStyle: weight, color, stroke: '#0b0908', strokeThickness: Math.max(2, size / 7) });
+  return scene.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, fontStyle: weight, color, stroke: '#0b0908', strokeThickness: Math.max(2, size / 7), resolution: textRes });
+}
+
+/** Every text object in a display list (containers included). */
+function eachText(list: Phaser.GameObjects.GameObject[], fn: (t: Phaser.GameObjects.Text) => void): void {
+  for (const o of list) {
+    if (o instanceof Phaser.GameObjects.Text) fn(o);
+    else if (o instanceof Phaser.GameObjects.Container) eachText(o.list, fn);
+  }
+}
+
+/**
+ * v0.2.21 (the usability audit: on phones the HUD's labels came out at 5–9 px): the narrowest HUD a touch screen
+ * held sideways is laid out in — the player's card, the score and the minimap still fit in one row there.
+ */
+const TOUCH_MIN_W = 726;
+const TOUCH_MIN_H = 320;
+/** A narrower screen still (640 × 360): the card drops the weapon's picture (the ammo stays), so 665 units do. */
+const TOUCH_DENSE_MIN_W = 665;
+
+/** v0.2.21: the first matches show the controls' hints (counted in this browser). */
+const HINTS_KEY = 'blatkom89.hints.v1';
+const HINT_MATCHES = 2;
+const HINT_MAX_MS = 45_000;
+
+/** Whether this match still shows the hints — and counts it (once per HUD). */
+function takeHintMatch(): boolean {
+  try {
+    const n = Number(localStorage.getItem(HINTS_KEY) ?? '0') || 0;
+    if (n >= HINT_MATCHES) return false;
+    localStorage.setItem(HINTS_KEY, String(n + 1));
+    return true;
+  } catch {
+    // no storage (a private window): hints every time is better than never
+    return true;
+  }
 }
 
 /** Shortens `s` with an ellipsis until the text object fits `maxW` pixels. */
@@ -186,6 +227,26 @@ export class HudScene extends Phaser.Scene {
   private btnScaleY = 1;
   /** Where the move and aim sticks rest (layout()). */
   private stickRest: Array<{ x: number; y: number }> = [];
+  /**
+   * v0.2.21: the HUD camera's zoom — on a touch screen about one HUD unit per CSS pixel (labels read at their
+   * size on any phone); 1 on a computer. Everything in this scene is laid out in HUD units: `lw` × `lh`.
+   */
+  private z = 1;
+  private lw = 0;
+  private lh = 0;
+  /** The score group's geometry: the two score boxes and the timer panel between them (compact on touch). */
+  private sb = { boxW: 50, boxH: 40, gap: 6, timerW: 124 };
+  /** The touch card (portrait, name, health, weapon and ammo) as laid out. */
+  private card = { x: 0, y: 0, w: 300, h: 36 };
+  /** v0.2.21: a very narrow touch screen — the card without the weapon's picture (see TOUCH_DENSE_MIN_W). */
+  private dense = false;
+  /**
+   * v0.2.21 (the usability audit: nothing told a newcomer the controls): small hints in the first HINT_MATCHES
+   * matches — on a phone a label over each stick, on a computer a line of keys — each gone once its action is
+   * done (or after HINT_MAX_MS).
+   */
+  private hints: Array<{ kind: 'move' | 'aim' | 'keys'; root: Phaser.GameObjects.Container; doneAt: number }> = [];
+  private hintTrack = { moveMs: 0, aimMs: 0, fired: false, activeMs: 0, lastMag: -1, lastWeapon: '' };
 
   constructor() {
     super('hud');
@@ -215,12 +276,23 @@ export class HudScene extends Phaser.Scene {
     this.extraTop = this.objMode ? OBJ_STRIP : 0;
     this.storyGoal = !!this.session.hud().story;
     this.objTexts = [];
+    this.hints = [];
+    this.hintTrack = { moveMs: 0, aimMs: 0, fired: false, activeMs: 0, lastMag: -1, lastWeapon: '' };
+  }
+
+  /** v0.2.21: the HUD camera's zoom (tests and tools turn HUD units into page pixels with it). */
+  get uiZoom(): number {
+    return this.z;
   }
 
   create(): void {
     this.touch = isTouchDevice();
     touchState.enabled = this.touch;
     this.input.addPointer(3);
+    if (this.touch) this.sb = { boxW: 46, boxH: 42, gap: 4, timerW: 104 };
+    // the zoom first, so the text built next is rendered at it
+    this.z = this.zoomFor(this.scale.width, this.scale.height);
+    textRes = this.z;
     this.buildScoreBox();
     this.buildMinimap();
     this.buildHealth();
@@ -229,6 +301,7 @@ export class HudScene extends Phaser.Scene {
     this.buildScoreboard();
     this.buildPause();
     if (this.touch) this.buildTouch();
+    this.buildHints();
     // flashbang: the screen goes white and fades back (under the touch controls, over everything else)
     this.flashOverlay = this.add.rectangle(0, 0, 10, 10, 0xffffff, 1).setOrigin(0, 0).setDepth(35).setVisible(false);
     if (getSettings().showFps) this.fpsText = txt(this, 6, 0, '', 11, '#9a9080', '400').setDepth(100);
@@ -285,8 +358,9 @@ export class HudScene extends Phaser.Scene {
     }
   }
 
-  private tape(label: string, size = 11, fill = 0xd9c7a3, ink = '#1a1410'): Phaser.GameObjects.Container {
+  private tape(label: string, size = 11, fill = 0xd9c7a3, ink = '#1a1410', maxW = Infinity): Phaser.GameObjects.Container {
     const t = txt(this, 0, 0, label, size, ink, '600').setStroke('#000', 0).setOrigin(0.5);
+    if (t.width + 16 > maxW) fitText(t, label, maxW - 16);
     const w = t.width + 16;
     const h = t.height + 4;
     const g = this.add.graphics();
@@ -300,14 +374,15 @@ export class HudScene extends Phaser.Scene {
     this.scoreBg = this.add.graphics();
     this.myScore = txt(this, 0, 0, '0', 26, BEIGE, '700').setOrigin(0.5);
     this.leadScore = txt(this, 0, 0, '0', 26, BEIGE, '700').setOrigin(0.5);
-    this.myLabel = txt(this, 0, 0, '', 8, '#d9c7a3', '600').setOrigin(0.5, 0);
-    this.leadLabel = txt(this, 0, 0, '', 8, '#e8c060', '600').setOrigin(0.5, 0);
-    this.timer = txt(this, 0, 0, '00:00', 24, BEIGE, '600').setOrigin(0.5, 0);
-    this.mode = txt(this, 0, 0, '', 10, '#b8a888', '500').setOrigin(0.5, 0);
+    // v0.2.21: on touch screens the captions are 12 HUD units (≈ 12 CSS px) — they were 5–6 px on phones
+    this.myLabel = txt(this, 0, 0, '', this.touch ? 12 : 10, '#d9c7a3', '600').setOrigin(0.5, 0);
+    this.leadLabel = txt(this, 0, 0, '', this.touch ? 12 : 10, '#e8c060', '600').setOrigin(0.5, 0);
+    this.timer = txt(this, 0, 0, '00:00', this.touch ? 22 : 24, BEIGE, '600').setOrigin(0.5, 0);
+    this.mode = txt(this, 0, 0, '', this.touch ? 12 : 10, '#b8a888', '500').setOrigin(0.5, 0);
     this.teamMark = this.add.graphics();
     this.objGfx = this.add.graphics();
-    if (this.objMode === 'ctf') for (let i = 0; i < 2; i++) this.objTexts.push(txt(this, 0, 0, '', 10, BEIGE, '600').setOrigin(0.5, 0.5));
-    else if (this.objMode === 'bases') for (let i = 0; i < Math.max(1, this.map.bases.length); i++) this.objTexts.push(txt(this, 0, 0, BASE_LETTERS[i] ?? '?', 11, BEIGE, '700').setOrigin(0.5, 0.5));
+    if (this.objMode === 'ctf') for (let i = 0; i < 2; i++) this.objTexts.push(txt(this, 0, 0, '', this.touch ? 12 : 10, BEIGE, '600').setOrigin(0.5, 0.5));
+    else if (this.objMode === 'bases') for (let i = 0; i < Math.max(1, this.map.bases.length); i++) this.objTexts.push(txt(this, 0, 0, BASE_LETTERS[i] ?? '?', 12, BEIGE, '700').setOrigin(0.5, 0.5));
   }
 
   private buildMinimap() {
@@ -334,16 +409,24 @@ export class HudScene extends Phaser.Scene {
     this.mm.draw(g, 0, 0);
     g.destroy();
     this.mmDots = this.add.graphics();
-    this.mmLabel = this.tape(mapName(m.id).toUpperCase(), this.touch ? 9 : 10);
+    // v0.2.21: the map's name on its tape, as big as fits over the minimap (never over the menu button beside it)
+    const name = mapName(m.id).toUpperCase();
+    this.mmLabel = this.tape(name, this.touch ? 12 : 10);
+    if (this.touch && this.mmLabel.getBounds().width > this.mmW + 12) {
+      this.mmLabel.destroy();
+      this.mmLabel = this.tape(name, 11, undefined, undefined, this.mmW + 12);
+    }
   }
 
   private buildHealth() {
     this.healthBg = this.add.graphics();
     const me = this.session.players().find((p) => p.isLocal);
     const c = me?.character ?? 'petya';
-    this.portrait = this.add.image(0, 0, this.touch ? `portrait_small_${c}` : `portrait_${c}`).setOrigin(0, 0);
-    this.nameText = txt(this, 0, 0, me?.name ?? charName(c), this.touch ? 12 : 15, BEIGE, '600');
-    this.levelText = txt(this, 0, 0, '', this.touch ? 10 : 12, '#ffd36a', '600');
+    // v0.2.21: portraits load in the background — a blank until it arrives (update() puts it in)
+    const pk = this.touch ? `portrait_small_${c}` : `portrait_${c}`;
+    this.portrait = this.add.image(0, 0, this.textures.exists(pk) ? pk : '__DEFAULT').setOrigin(0, 0);
+    this.nameText = txt(this, 0, 0, me?.name ?? charName(c), this.touch ? 14 : 15, BEIGE, '600');
+    this.levelText = txt(this, 0, 0, '', 12, '#ffd36a', '600');
     this.hpText = txt(this, 0, 0, '100/100', this.touch ? 12 : 15, BEIGE, '500');
     this.hpBar = this.add.graphics();
   }
@@ -351,7 +434,8 @@ export class HudScene extends Phaser.Scene {
   private buildWeapon() {
     this.weaponBg = this.add.graphics();
     this.weaponIcon = this.add.image(0, 0, 'weapons', 'ico_pistol').setOrigin(0.5);
-    this.ammoText = txt(this, 0, 0, '8/∞', this.touch ? 16 : 22, BEIGE, '600').setOrigin(0.5, 0);
+    // touch: the ammo stands at the card's right edge (its width varies: «8/∞», «30/90», «120/240»)
+    this.ammoText = txt(this, 0, 0, '8/∞', this.touch ? 17 : 22, BEIGE, '600').setOrigin(this.touch ? 1 : 0.5, 0);
     this.weaponName = txt(this, 0, 0, '', 10, '#b8a888', '500').setOrigin(0.5, 0);
     this.slotGfx = this.add.graphics();
     for (let i = 0; i < 4; i++) {
@@ -365,8 +449,8 @@ export class HudScene extends Phaser.Scene {
   private buildCentre() {
     this.bigText = txt(this, 0, 0, '', 64, BEIGE, '700').setOrigin(0.5).setDepth(20);
     this.subText = txt(this, 0, 0, '', 16, BEIGE, '500').setOrigin(0.5).setDepth(20);
-    this.promptText = txt(this, 0, 0, '', 14, BEIGE, '600').setOrigin(0.5).setDepth(20);
-    this.statusText = txt(this, 0, 0, '', 11, '#9a9080', '500').setOrigin(1, 0).setDepth(20);
+    this.promptText = txt(this, 0, 0, '', this.touch ? 15 : 14, BEIGE, '600').setOrigin(0.5).setDepth(20);
+    this.statusText = txt(this, 0, 0, '', this.touch ? 12 : 11, '#9a9080', '500').setOrigin(1, 0).setDepth(20);
     this.hitMarker = this.add.graphics().setDepth(21);
   }
 
@@ -379,7 +463,8 @@ export class HudScene extends Phaser.Scene {
     g.fillStyle(PANEL, 0.7).fillRect(-17, -17, 34, 34);
     g.lineStyle(1, 0xd9c7a3, 0.5).strokeRect(-16.5, -16.5, 33, 33);
     const icon = this.add.image(0, 0, 'fx', 'ico_pause').setScale(0.7);
-    this.pauseBtn = this.add.container(0, 0, [g, icon]).setSize(40, 40).setDepth(25);
+    // v0.2.21: a finger-sized hit area on touch screens (the button itself stays 34 units)
+    this.pauseBtn = this.add.container(0, 0, [g, icon]).setSize(this.touch ? 48 : 40, this.touch ? 48 : 40).setDepth(25);
     this.pauseBtn.setInteractive({ useHandCursor: true }).on('pointerdown', (p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
       ev.stopPropagation();
       void p;
@@ -418,12 +503,95 @@ export class HudScene extends Phaser.Scene {
     const gadget = btn('ico_reload', 34, () => (touchState.gadgetTap = true));
     gadget.icon.setTexture('weapons', 'ico_f1');
     this.gadgetBtn = gadget;
-    this.gadgetBtnCount = txt(this, 0, 0, '', 12, BEIGE, '700').setOrigin(0.5).setDepth(42);
+    this.gadgetBtnCount = txt(this, 0, 0, '', 14, BEIGE, '700').setOrigin(0.5).setDepth(42);
     this.buttons = [fire, reload, swap, this.interactBtn, gadget];
     this.input.on('pointerdown', this.onPointerDown, this);
     this.input.on('pointermove', this.onPointerMove, this);
     this.input.on('pointerup', this.onPointerUp, this);
     this.input.on('pointerupoutside', this.onPointerUp, this);
+  }
+
+  // ── first-match hints (v0.2.21) ───────────────────────────────────────────
+  /** A hint: a dark plate with a bold first line and a quieter second one. */
+  private hintPlate(lines: string[], pointDown: boolean): Phaser.GameObjects.Container {
+    const texts = lines.map((s, i) => txt(this, 0, 0, s, i === 0 ? 14 : 12, i === 0 ? '#f2e6c8' : '#d9c7a3', i === 0 ? '700' : '500').setOrigin(0.5, 0));
+    const w = Math.max(...texts.map((t) => t.width)) + 20;
+    let y = 6;
+    for (const t of texts) {
+      t.setY(y);
+      y += t.height - 1;
+    }
+    const h = y + 5;
+    const g = this.add.graphics();
+    g.fillStyle(PANEL, 0.86).fillRect(-w / 2, 0, w, h);
+    g.lineStyle(1, 0xd9c7a3, 0.7).strokeRect(-w / 2 + 0.5, 0.5, w - 1, h - 1);
+    // a little pointer down towards what it explains
+    if (pointDown) g.fillStyle(0xd9c7a3, 0.85).fillTriangle(-7, h, 7, h, 0, h + 7);
+    // the container's origin: the middle of its bottom edge (the pointer's tip when there is one)
+    for (const o of [g, ...texts]) o.setY(o.y - h - (pointDown ? 7 : 0));
+    return this.add.container(0, 0, [g, ...texts]).setDepth(39).setAlpha(0);
+  }
+
+  private buildHints() {
+    if (!takeHintMatch()) return;
+    if (this.touch) {
+      const auto = getSettings().autoFire;
+      this.hints.push({ kind: 'move', root: this.hintPlate([t('DRAG — WALK'), t('past the ring — sprint')], true), doneAt: 0 });
+      this.hints.push({ kind: 'aim', root: this.hintPlate([t('DRAG — AIM'), auto ? t('all the way — fire') : t('the bullet button — fire')], true), doneAt: 0 });
+    } else {
+      this.hints.push({
+        kind: 'keys',
+        root: this.hintPlate([t('WASD — walk · Shift — sprint · mouse — aim · left click — fire'), t('R — reload · Q / wheel — weapons · G — equipment · E — pick up · Tab — score · Esc — pause')], false),
+        doneAt: 0,
+      });
+    }
+  }
+
+  /** Over each stick's ring, a little towards the middle (clear of the button on its outer side); computers: above the panels. */
+  private layoutHints() {
+    if (!this.hints.length) return;
+    const k = getSettings().stickScale * Math.min(1, this.btnScaleY);
+    for (const h of this.hints) {
+      if (h.kind === 'keys') {
+        h.root.setPosition(this.lw / 2, this.lh - 14 - this.inset.bottom - 74 - 14);
+        continue;
+      }
+      const i = h.kind === 'move' ? 0 : 1;
+      const rest = this.stickRest[i];
+      if (!rest) continue;
+      const inward = rest.x < this.lw / 2 ? 1 : -1;
+      h.root.setPosition(rest.x + inward * 56 * k, rest.y - 78 * k - 6);
+    }
+  }
+
+  /** Counts what the player has done; a hint whose action is done (or that has been up long enough) fades out. */
+  private updateHints(time: number, delta: number, hud: ReturnType<GameSession['hud']>, me: RenderPlayer | undefined) {
+    if (!this.hints.length) return;
+    const tr = this.hintTrack;
+    const playing = hud.phase === 'active' || hud.phase === 'countdown' || hud.phase === 'ready';
+    if (hud.phase === 'active') tr.activeMs += delta;
+    if (me && me.alive && Math.hypot(me.vx, me.vy) > 25) tr.moveMs += delta;
+    if (touchState.aimActive) tr.aimMs += delta;
+    if (hud.weapon === tr.lastWeapon && hud.mag < tr.lastMag) tr.fired = true;
+    if (this.touch ? touchState.fireHeld : this.input.activePointer.leftButtonDown() && hud.phase === 'active') tr.fired = true;
+    tr.lastMag = hud.mag;
+    tr.lastWeapon = hud.weapon;
+    const over = tr.activeMs > HINT_MAX_MS || !playing;
+    this.hints = this.hints.filter((h) => {
+      if (!h.doneAt) {
+        const done = over || (h.kind === 'move' ? tr.moveMs > 700 : h.kind === 'aim' ? tr.aimMs > 700 || tr.fired : tr.moveMs > 1500 && tr.fired);
+        if (done) h.doneAt = time;
+      }
+      if (h.doneAt) {
+        const a = 1 - (time - h.doneAt) / 400;
+        if (a <= 0) {
+          h.root.destroy();
+          return false;
+        }
+        h.root.setAlpha(Math.min(h.root.alpha, a));
+      } else h.root.setAlpha(Math.min(1, h.root.alpha + delta / 250));
+      return true;
+    });
   }
 
   // ── touch handling ─────────────────────────────────────────────────────
@@ -438,34 +606,37 @@ export class HudScene extends Phaser.Scene {
 
   private onPointerDown(p: Phaser.Input.Pointer) {
     if (!p.wasTouch) return;
+    // the pointer in HUD units (the camera is zoomed about the top-left corner)
+    const px = p.x / this.z;
+    const py = p.y / this.z;
     for (const b of this.buttons) {
       if (!b.visible) continue;
-      if ((p.x - b.x) ** 2 + (p.y - b.y) ** 2 <= (b.r + 8) ** 2) {
+      if ((px - b.x) ** 2 + (py - b.y) ** 2 <= (b.r + 8) ** 2) {
         b.pointer = p.id;
         b.onDown();
         b.ring.setAlpha(1).setTint(0xffb8a8);
         return;
       }
     }
-    const W = this.scale.width;
-    const left = getSettings().leftHanded ? p.x > W * 0.5 : p.x < W * 0.5;
+    const W = this.lw;
+    const left = getSettings().leftHanded ? px > W * 0.5 : px < W * 0.5;
     const i = left ? 0 : 1;
     const stick = this.sticks[i]!;
     if (stick.id !== null) return;
-    const rest = this.stickRest[i] ?? { x: p.x, y: p.y };
+    const rest = this.stickRest[i] ?? { x: px, y: py };
     stick.id = p.id;
     stick.baseX = rest.x;
     stick.baseY = rest.y;
     const R = this.stickRadius();
-    stick.sprintArmed = Math.hypot(p.x - rest.x, p.y - rest.y) <= R * 1.05;
-    this.driveStick(stick, p.x - rest.x, p.y - rest.y, i === 0);
+    stick.sprintArmed = Math.hypot(px - rest.x, py - rest.y) <= R * 1.05;
+    this.driveStick(stick, px - rest.x, py - rest.y, i === 0);
   }
 
   private onPointerMove(p: Phaser.Input.Pointer) {
     for (const [i, s] of this.sticks.entries()) {
       if (s.id !== p.id) continue;
-      const dx = p.x - s.baseX;
-      const dy = p.y - s.baseY;
+      const dx = p.x / this.z - s.baseX;
+      const dy = p.y / this.z - s.baseY;
       // back inside the ring: the next pull outwards sprints again
       if (Math.hypot(dx, dy) <= this.stickRadius() * 0.9) s.sprintArmed = true;
       this.driveStick(s, dx, dy, i === 0);
@@ -570,14 +741,49 @@ export class HudScene extends Phaser.Scene {
   }
 
   // ── layout ─────────────────────────────────────────────────────────────
+  /** CSS pixels per canvas pixel — from the canvas's layout box, which a quarter-turned page leaves as it is. */
+  private cssPerPx(): number {
+    const c = this.game.canvas;
+    const w = c ? c.clientWidth || parseFloat(c.style.width) || 0 : 0;
+    if (w > 0 && this.scale.width > 0) return w / this.scale.width;
+    return 1 / (this.scale.displayScale.x || 1);
+  }
+
+  /**
+   * v0.2.21: the HUD camera's zoom. A touch screen gets about one HUD unit per CSS pixel — a phone's canvas has
+   * fewer pixels than the screen has CSS pixels, so the HUD's 8–12-unit captions used to come out at 5–9 px —
+   * as long as the HUD keeps at least TOUCH_MIN_W × TOUCH_MIN_H units (a tablet's 667-unit-wide HUD is drawn a
+   * little smaller instead, so its card and score no longer overlap). A computer keeps 1.
+   */
+  private zoomFor(SW: number, SH: number): number {
+    this.dense = false;
+    if (!this.touch || SW <= 0 || SH <= 0) return 1;
+    const cpp = this.cssPerPx();
+    const landscape = SW >= SH;
+    // where even the compact row would bring the 12-unit captions under 11 px, the card gets denser instead
+    this.dense = landscape && SW * cpp * (12 / 11) < TOUCH_MIN_W;
+    const minW = landscape ? (this.dense ? TOUCH_DENSE_MIN_W : TOUCH_MIN_W) : 400;
+    const z = Math.min(Math.max(1, 1 / cpp), SW / minW, SH / (landscape ? TOUCH_MIN_H : 600), 1.6);
+    return Math.max(0.6, Math.round(z * 1000) / 1000);
+  }
+
   private layout() {
-    const W = this.scale.width;
-    const H = this.scale.height;
-    this.layoutW = W;
-    this.layoutH = H;
-    // V2.0 part E: the safe areas (CSS px → game px), so nothing sits under a notch or Telegram's buttons
+    const SW = this.scale.width;
+    const SH = this.scale.height;
+    this.layoutW = SW;
+    this.layoutH = SH;
+    // v0.2.21: the HUD is drawn through its camera, zoomed about the top-left corner; everything below is in HUD units
+    const z = (this.z = this.zoomFor(SW, SH));
+    this.cameras.main.setOrigin(0, 0).setZoom(z).setScroll(0, 0);
+    if (textRes !== z) {
+      textRes = z;
+      eachText(this.children.list, (t) => t.setResolution(z));
+    }
+    const W = (this.lw = SW / z);
+    const H = (this.lh = SH / z);
+    // V2.0 part E: the safe areas (CSS px → HUD units), so nothing sits under a notch or Telegram's buttons
     const css = safeInsets();
-    const k = this.scale.displayScale.x || 1;
+    const k = 1 / (this.cssPerPx() * z);
     const ins = (this.inset = { top: Math.round(css.top * k), right: Math.round(css.right * k), bottom: Math.round(css.bottom * k), left: Math.round(css.left * k) });
     const pad = 14;
     const padT = pad + ins.top;
@@ -585,12 +791,16 @@ export class HudScene extends Phaser.Scene {
     const padL = pad + ins.left;
     // on narrow (portrait) screens centre the score/health group in the space left of the minimap
     const reserved = this.mmW + 4 + padR + 48;
-    const cx = W - reserved < 330 + ins.left ? Math.max(160 + ins.left, (W - reserved + ins.left) / 2) : W / 2;
+    let cx = W - reserved < 330 + ins.left ? Math.max(160 + ins.left, (W - reserved + ins.left) / 2) : W / 2;
+    const mmx = W - padR - this.mmW - 4;
+    // v0.2.21: the touch card — portrait, name and level, health and breath, the weapon and its ammo
+    const CW = this.dense ? 210 : 272;
+    const CH = 40;
     // kill feed sits top-left; on narrow screens it moves below the centred score/health panels (and
     // below a story mission's objective line, which takes its place there)
     const narrow = W < 760;
-    let goalY = this.touch ? padT + 54 + this.extraTop + 36 + 6 : padT + 46 + this.extraTop + 8;
-    this.feedY0 = narrow ? (this.touch ? padT + 100 : padT + 62) + this.extraTop : 14 + ins.top;
+    let goalY = this.touch ? padT + 54 + this.extraTop + CH + 6 : padT + 46 + this.extraTop + 8;
+    this.feedY0 = narrow ? (this.touch ? padT + 54 + CH + 10 : padT + 62) + this.extraTop : 14 + ins.top;
     if (this.storyGoal && narrow) {
       goalY = this.feedY0;
       this.feedY0 += 30;
@@ -601,18 +811,22 @@ export class HudScene extends Phaser.Scene {
     let goalX = cx;
     if (cornerCard) {
       goalX = padL;
-      goalY = padT + 36 + 6;
+      goalY = padT + CH + 6;
       this.feedY0 = goalY + (this.storyGoal ? 30 : 0);
+      // v0.2.21: the score group between the card and the chat button — centred when there is room
+      const half = this.sb.boxW + this.sb.gap + this.sb.timerW / 2;
+      const lo = padL + CW + 8 + half;
+      const hi = mmx - 68 - 17 - 8 - half;
+      cx = lo <= hi ? Math.min(Math.max(W / 2, lo), hi) : (lo + hi) / 2;
     }
     // score box (its colours follow the mode: drawScoreBoxes)
     this.scoreCx = cx;
     this.scorePad = padT;
     this.scoreStyle = null;
     this.drawScoreBoxes(isTeamMode(this.session.hud().gameMode));
-    this.timer.setPosition(cx, padT + 2);
-    this.mode.setPosition(cx, padT + 31);
+    this.timer.setPosition(cx, padT + (this.touch ? 3 : 2));
+    this.mode.setPosition(cx, padT + (this.touch ? 29 : 31));
     // minimap
-    const mmx = W - padR - this.mmW - 4;
     const mmy = padT + 14;
     this.mm.setPosition(mmx, mmy);
     this.mmLabel.setPosition(mmx + this.mmW / 2, mmy - 4);
@@ -620,15 +834,16 @@ export class HudScene extends Phaser.Scene {
     this.pauseBtn.setPosition(mmx - 26, padT + 18);
     // health + weapon panels
     if (this.touch) {
-      const px = cornerCard ? padL : cx - 150;
+      const px = cornerCard ? padL : cx - CW / 2;
       const y = cornerCard ? padT : padT + 54 + this.extraTop;
+      this.card = { x: px, y, w: CW, h: CH };
       this.healthBg.clear();
-      this.panel(this.healthBg, px, y, 300, 36, 0.7);
-      this.portrait.setPosition(px + 3, y + 3).setDisplaySize(30, 30);
-      this.nameText.setPosition(px + 38, y + 2);
-      this.hpText.setPosition(px + 38, y + 17);
-      this.weaponIcon.setPosition(px + 202, y + 18);
-      this.ammoText.setPosition(px + 268, y + 6);
+      this.panel(this.healthBg, px, y, CW, CH, 0.7);
+      this.portrait.setPosition(px + 3, y + 3).setDisplaySize(34, 34);
+      this.nameText.setPosition(px + 42, y + 1);
+      this.hpText.setPosition(px + 42, y + 20);
+      // the weapon icon goes between the health bar and the ammo (update(): the ammo's width varies)
+      this.ammoText.setPosition(px + CW - 7, y + 8);
       this.weaponName.setVisible(false);
       this.weaponBg.clear();
       this.slotGfx.clear();
@@ -718,6 +933,7 @@ export class HudScene extends Phaser.Scene {
     this.bigText.setPosition(cx, H * 0.36);
     this.subText.setPosition(cx, H * 0.36 + 48);
     this.promptText.setPosition(cx, H * 0.7);
+    this.layoutHints();
   }
 
   // ── events ─────────────────────────────────────────────────────────────
@@ -728,7 +944,7 @@ export class HudScene extends Phaser.Scene {
     const k = txt(this, 0, 0, e.killer, 14, teamColor(e.killerTeam, e.killerLocal), '600');
     let right = k.width;
     // assisters ride along after the killer: «Petya + Valyuta [sawn-off] Mikhalych»
-    const a = e.assists.length ? txt(this, right + 5, 3, `+ ${e.assists.join(', ')}`, 11, e.killerTeam === 0 || e.killerTeam === 1 ? TEAM_TEXT[e.killerTeam] : e.assistLocal ? FFA_ME_TEXT : '#b8ab90', '500') : null;
+    const a = e.assists.length ? txt(this, right + 5, 3, `+ ${e.assists.join(', ')}`, this.touch ? 12 : 11, e.killerTeam === 0 || e.killerTeam === 1 ? TEAM_TEXT[e.killerTeam] : e.assistLocal ? FFA_ME_TEXT : '#b8ab90', '500') : null;
     if (a) right = a.x + a.width;
     const icon = fitIcon(this.add.image(right + 8, k.height / 2, 'weapons', `ico_${e.weapon}`).setOrigin(0, 0.5), `ico_${e.weapon}`, 46, 15, 0.8);
     const v = txt(this, icon.x + icon.displayWidth + 8, 0, e.victim, 14, teamColor(e.victimTeam, e.victimLocal), '600');
@@ -759,7 +975,7 @@ export class HudScene extends Phaser.Scene {
   private onPoints(e: PointsEntry) {
     const big = e.points >= SCORING.killPoints;
     const color = e.heal ? '#7cff8a' : big ? '#ffd36a' : BEIGE;
-    const t = txt(this, 0, 0, `+${e.points} ${e.label}`, this.touch ? 15 : 19, color, '700').setOrigin(0.5).setDepth(22).setAlpha(0);
+    const t = txt(this, 0, 0, `+${e.points} ${e.label}`, this.touch ? 16 : 19, color, '700').setOrigin(0.5).setDepth(22).setAlpha(0);
     this.popups.push({ text: t, born: this.time.now });
     while (this.popups.length > 3) this.popups.shift()!.text.destroy();
   }
@@ -775,8 +991,8 @@ export class HudScene extends Phaser.Scene {
     this.banner?.destroy();
     const fill = good === false ? 0xc8312a : good === true ? 0xe8c060 : 0xd9c7a3;
     const ink = good === false ? '#fff4e4' : '#1a1410';
-    const parts: Phaser.GameObjects.GameObject[] = [this.tape(title, this.touch ? 13 : 17, fill, ink)];
-    if (sub) parts.push(txt(this, 0, 16, sub, this.touch ? 11 : 13, BEIGE, '500').setOrigin(0.5, 0));
+    const parts: Phaser.GameObjects.GameObject[] = [this.tape(title, this.touch ? 14 : 17, fill, ink)];
+    if (sub) parts.push(txt(this, 0, 16, sub, this.touch ? 12 : 13, BEIGE, '500').setOrigin(0.5, 0));
     this.banner = this.add.container(0, 0, parts).setDepth(23).setAlpha(0);
     this.bannerUntil = this.time.now + ms;
     this.bannerMs = ms;
@@ -809,8 +1025,8 @@ export class HudScene extends Phaser.Scene {
 
   /** Popups, the supply banner and minimap pings, advanced every frame. */
   private updateTransient(time: number) {
-    const W = this.scale.width;
-    const H = this.scale.height;
+    const W = this.lw;
+    const H = this.lh;
     this.popups = this.popups.filter((p, i, all) => {
       const age = time - p.born;
       if (age > 1700) {
@@ -864,8 +1080,9 @@ export class HudScene extends Phaser.Scene {
     const game = this.scene.get('game');
     const cam = game?.cameras?.main;
     if (!cam) return;
-    const W = this.scale.width;
-    const H = this.scale.height;
+    const W = this.lw;
+    const H = this.lh;
+    const z = this.z;
     const wv = cam.worldView;
     const cx = W / 2;
     const cy = H / 2;
@@ -877,8 +1094,9 @@ export class HudScene extends Phaser.Scene {
     const pulse = 0.65 + Math.sin(time / 140) * 0.35;
     let li = 0;
     for (const pk of marks) {
-      const sx = (pk.x - wv.x) * cam.zoom + cam.x;
-      const sy = (pk.y - wv.y) * cam.zoom + cam.y;
+      // the game camera's screen pixels → HUD units
+      const sx = ((pk.x - wv.x) * cam.zoom + cam.x) / z;
+      const sy = ((pk.y - wv.y) * cam.zoom + cam.y) / z;
       if (sx > 24 && sx < W - 24 && sy > 24 && sy < H - 24) continue;
       const a = Math.atan2(sy - cy, sx - cx);
       const dx = Math.cos(a);
@@ -932,25 +1150,31 @@ export class HudScene extends Phaser.Scene {
     const cx = this.scoreCx;
     const padT = this.scorePad;
     const g = this.scoreBg;
+    const { boxW, boxH, gap, timerW } = this.sb;
+    // the two boxes either side of the timer panel (compact on touch screens: v0.2.21)
+    const lx = cx - timerW / 2 - gap - boxW;
+    const rx = cx + timerW / 2 + gap;
     g.clear();
+    const box = (x: number, fill: number, line: number, alpha: number) => {
+      g.fillStyle(fill, 0.95).fillRect(x, padT, boxW, boxH);
+      g.lineStyle(2, line, alpha).strokeRect(x + 1, padT + 1, boxW - 2, boxH - 2);
+    };
     if (teams) {
-      g.fillStyle(0x8a1a16, 0.95).fillRect(cx - 118, padT, 50, 40);
-      g.lineStyle(2, 0xd8392e, 1).strokeRect(cx - 117, padT + 1, 48, 38);
-      g.fillStyle(0x14304e, 0.95).fillRect(cx + 68, padT, 50, 40);
-      g.lineStyle(2, 0x4a9be0, 1).strokeRect(cx + 69, padT + 1, 48, 38);
+      box(lx, 0x8a1a16, 0xd8392e, 1);
+      box(rx, 0x14304e, 0x4a9be0, 1);
     } else {
-      g.fillStyle(0x2a2620, 0.95).fillRect(cx - 118, padT, 50, 40);
-      g.lineStyle(2, 0xd9c7a3, 0.9).strokeRect(cx - 117, padT + 1, 48, 38);
-      g.fillStyle(0x3a2c10, 0.95).fillRect(cx + 68, padT, 50, 40);
-      g.lineStyle(2, 0xd8a637, 1).strokeRect(cx + 69, padT + 1, 48, 38);
+      box(lx, 0x2a2620, 0xd9c7a3, 0.9);
+      box(rx, 0x3a2c10, 0xd8a637, 1);
     }
-    this.panel(g, cx - 62, padT, 124, 46 + this.extraTop);
-    this.myScore.setPosition(cx - 93, padT + (teams ? 20 : 24));
-    this.leadScore.setPosition(cx + 93, padT + (teams ? 20 : 24));
-    this.myLabel.setPosition(cx - 93, padT + 3).setVisible(!teams);
-    this.leadLabel.setPosition(cx + 93, padT + 3).setVisible(!teams);
-    this.myScore.setFontSize(teams ? 26 : 22);
-    this.leadScore.setFontSize(teams ? 26 : 22);
+    this.panel(g, cx - timerW / 2, padT, timerW, 46 + this.extraTop);
+    // free-for-all: a caption over each score («YOU», «LEADER»); teams: the score alone, bigger
+    const scoreY = teams ? padT + boxH / 2 : padT + (this.touch ? 27 : 25);
+    this.myScore.setPosition(lx + boxW / 2, scoreY);
+    this.leadScore.setPosition(rx + boxW / 2, scoreY);
+    this.myLabel.setPosition(lx + boxW / 2, padT + 2).setVisible(!teams);
+    this.leadLabel.setPosition(rx + boxW / 2, padT + 2).setVisible(!teams);
+    this.myScore.setFontSize(teams ? (this.touch ? 25 : 26) : this.touch ? 21 : 22);
+    this.leadScore.setFontSize(teams ? (this.touch ? 25 : 26) : this.touch ? 21 : 22);
   }
 
   // ── per frame ───────────────────────────────────────────────────────────
@@ -981,6 +1205,8 @@ export class HudScene extends Phaser.Scene {
     const modeSig = `${hud.gameMode}|${hud.scoreLimit}|${hud.teamScoreLimit}|${getLang()}|${hud.story?.label ?? ''}`;
     if (this.modeSig !== modeSig) {
       this.modeSig = modeSig;
+      // v0.2.21: the touch panel is narrower and its caption bigger — the short forms there
+      const short = this.touch;
       this.mode.setText(
         // a story mission: its title instead of the mode's limits
         hud.story
@@ -990,19 +1216,29 @@ export class HudScene extends Phaser.Scene {
           : hud.gameMode === 'bases'
             ? t('BASES · TO {n}', { n: hud.teamScoreLimit })
             : teams
-              ? t('RED VS BLUE · TO {n}', { n: hud.teamScoreLimit })
-              : t('DEATHMATCH · TO {n} {points}', { n: hud.scoreLimit, points: plural(hud.scoreLimit, 'point').toUpperCase() }),
+              ? short
+                ? t('TEAMS · TO {n}', { n: hud.teamScoreLimit })
+                : t('RED VS BLUE · TO {n}', { n: hud.teamScoreLimit })
+              : short
+                ? t('TO {n} {points}', { n: hud.scoreLimit, points: plural(hud.scoreLimit, 'point').toUpperCase() })
+                : t('DEATHMATCH · TO {n} {points}', { n: hud.scoreLimit, points: plural(hud.scoreLimit, 'point').toUpperCase() }),
       );
-      // never wider than the timer panel
-      this.mode.setScale(Math.min(1, 116 / Math.max(1, this.mode.width)));
+      // never wider than the timer panel (a long story title is cut on touch screens rather than shrunk)
+      const room = this.sb.timerW - 8;
+      if (this.touch) {
+        this.mode.setScale(1);
+        if (this.mode.width > room) fitText(this.mode, this.mode.text, room);
+      } else this.mode.setScale(Math.min(1, room / Math.max(1, this.mode.width)));
     }
     this.teamMark.clear();
     if (teams && hud.myTeam !== null) {
       // the local player's side: a light frame and a notch under the box
-      const bx = hud.myTeam === 0 ? this.scoreCx - 118 : this.scoreCx + 68;
+      const { boxW, boxH, gap, timerW } = this.sb;
+      const bx = hud.myTeam === 0 ? this.scoreCx - timerW / 2 - gap - boxW : this.scoreCx + timerW / 2 + gap;
       const by = this.scorePad;
-      this.teamMark.lineStyle(2, 0xf2e6c8, 0.95).strokeRect(bx - 2, by - 2, 54, 44);
-      this.teamMark.fillStyle(0xf2e6c8, 0.95).fillTriangle(bx + 19, by + 44, bx + 31, by + 44, bx + 25, by + 50);
+      const mx = bx + boxW / 2;
+      this.teamMark.lineStyle(2, 0xf2e6c8, 0.95).strokeRect(bx - 2, by - 2, boxW + 4, boxH + 4);
+      this.teamMark.fillStyle(0xf2e6c8, 0.95).fillTriangle(mx - 6, by + boxH + 4, mx + 6, by + boxH + 4, mx, by + boxH + 10);
     }
     // feed
     let fy = this.feedY0;
@@ -1030,12 +1266,13 @@ export class HudScene extends Phaser.Scene {
         this.shownName = me.name;
         this.shownLevel = me.level;
         this.levelText.setText(me.level !== null ? `${t('LVL')} ${me.level}` : '');
-        const room = (this.touch ? 128 : 162) - (me.level !== null ? this.levelText.width + 6 : 0);
+        const room = (this.touch ? 124 : 162) - (me.level !== null ? this.levelText.width + 6 : 0);
         fitText(this.nameText, me.name || charName(me.character), room);
       }
-      this.levelText.setPosition(this.nameText.x + this.nameText.width + 6, this.nameText.y + (this.touch ? 1.5 : 3));
+      this.levelText.setPosition(this.nameText.x + this.nameText.width + 6, this.nameText.y + (this.touch ? 2 : 3));
     }
     this.updateTransient(time);
+    this.updateHints(time, delta, hud, me);
     this.drawSupplyArrows(time, teams ? hud.myTeam : null, me?.slot ?? -1);
     this.drawObjectiveStrip(time, hud.myTeam);
     // health
@@ -1047,10 +1284,12 @@ export class HudScene extends Phaser.Scene {
     const winded = hud.stamina < SPRINT.minToStart && !hud.sprinting;
     const breathCol = winded ? 0x5d6f7d : hud.sprinting ? 0xcfeeff : 0x8cc8f0;
     if (this.touch) {
-      const x = this.nameText.x + 70;
-      const y = this.hpText.y + 6;
-      this.hpBar.fillStyle(0x200a08, 1).fillRect(x, y, 90, 7).fillStyle(hp < 30 ? 0xff3a2a : 0xc8312a, 1).fillRect(x, y, (90 * hp) / 100, 7);
-      this.hpBar.fillStyle(0x0e1820, 1).fillRect(x, y + 9, 90, 3).fillStyle(breathCol, 1).fillRect(x, y + 9, 90 * breath, 3);
+      // v0.2.21: «100/100», then the health bar with the breath under it
+      const x = this.hpText.x + 44;
+      const y = this.hpText.y + 4;
+      const bw = this.dense ? 60 : 76;
+      this.hpBar.fillStyle(0x200a08, 1).fillRect(x, y, bw, 7).fillStyle(hp < 30 ? 0xff3a2a : 0xc8312a, 1).fillRect(x, y, (bw * hp) / 100, 7);
+      this.hpBar.fillStyle(0x0e1820, 1).fillRect(x, y + 9, bw, 3).fillStyle(breathCol, 1).fillRect(x, y + 9, bw * breath, 3);
     } else {
       const x = this.hpText.x;
       const y = this.hpText.y + 24;
@@ -1062,10 +1301,18 @@ export class HudScene extends Phaser.Scene {
     const mySkin = this.session.players().find((p) => p.isLocal)?.skin ?? null;
     setWeaponTexture(this.weaponIcon, `ico_${hud.weapon}`, mySkin);
     const wf = this.weaponIcon.frame;
-    this.weaponIcon.setScale(Math.min(1.1, (this.touch ? 64 : 120) / wf.realWidth, (this.touch ? 24 : 34) / wf.realHeight));
     const def = WEAPONS[hud.weapon];
     this.ammoText.setText(def.kind === 'melee' ? '—' : `${hud.mag}/${hud.reserve < 0 ? '∞' : hud.reserve}`);
     this.ammoText.setColor(def.kind !== 'melee' && hud.mag === 0 ? '#ff6a5a' : BEIGE);
+    if (this.touch) {
+      // v0.2.21: the icon fills the gap between the health bar and the ammo (whose width varies); none on a
+      // very narrow screen
+      this.weaponIcon.setVisible(!this.dense);
+      const l = this.hpText.x + 44 + 76 + 7;
+      const r = this.ammoText.x - this.ammoText.width - 8;
+      const w = Math.max(24, r - l);
+      this.weaponIcon.setPosition(l + w / 2, this.card.y + this.card.h / 2).setScale(Math.min(1.1, w / wf.realWidth, 24 / wf.realHeight));
+    } else this.weaponIcon.setScale(Math.min(1.1, 120 / wf.realWidth, 34 / wf.realHeight));
     this.weaponName.setText(hud.reloading ? t('RELOADING…') : weaponName(hud.weapon).toUpperCase());
     if (!this.touch) this.drawSlots(hud.weapon, [hud.sidearm, hud.melee, hud.heavy]);
     this.updateGadget(hud, time);
@@ -1075,9 +1322,12 @@ export class HudScene extends Phaser.Scene {
     if (fl > 400 && !this.wasFlashed) sfx.play('tinnitus', { volume: Math.min(1, fl / 2000) });
     this.wasFlashed = fl > 0;
     if (hud.reloading) {
-      const x = this.ammoText.x - 40;
-      const y = this.ammoText.y + (this.touch ? 22 : 28);
-      this.hpBar.fillStyle(0x2a241e, 1).fillRect(x, y, 80, 3).fillStyle(0xe8dcc0, 1).fillRect(x, y, 80 * hud.reloadProgress, 3);
+      // under the ammo (touch: right-aligned at the card's edge)
+      const w = this.touch ? 52 : 80;
+      const mid = this.touch ? this.ammoText.x - this.ammoText.width / 2 : this.ammoText.x;
+      const x = mid - w / 2;
+      const y = this.ammoText.y + (this.touch ? 23 : 28);
+      this.hpBar.fillStyle(0x2a241e, 1).fillRect(x, y, w, 3).fillStyle(0xe8dcc0, 1).fillRect(x, y, w * hud.reloadProgress, 3);
     }
     // minimap dots: me always; teammates always (team matches); enemies only when recently firing (no wallhack)
     this.mmDots.clear();
@@ -1133,8 +1383,8 @@ export class HudScene extends Phaser.Scene {
     this.hitMarker.clear();
     if (time < this.hitUntil) {
       const p = this.input.activePointer;
-      const x = this.touch ? this.scale.width / 2 : p.x;
-      const y = this.touch ? this.scale.height / 2 : p.y;
+      const x = this.touch ? this.lw / 2 : p.x / this.z;
+      const y = this.touch ? this.lh / 2 : p.y / this.z;
       const r = this.hitKill ? 11 : 8;
       this.hitMarker.lineStyle(2, this.hitKill ? 0xff4a3a : 0xffffff, 1);
       for (const [dx, dy] of [
@@ -1334,8 +1584,8 @@ export class HudScene extends Phaser.Scene {
    * blue section with the team's eliminations in the header.
    */
   private drawScoreboard(sorted: RenderPlayer[], teamScore: [number, number] | null, mode: import('@blatkom/shared').GameMode) {
-    const W = this.scale.width;
-    const H = this.scale.height;
+    const W = this.lw;
+    const H = this.lh;
     const sig = `${W}|${H}|${getLang()}|${mode}|${teamScore?.join(':') ?? ''}|${sorted.map((p) => `${p.slot}:${p.name}:${p.level}:${p.kills}:${p.assists}:${p.deaths}:${p.score}:${p.isBot}:${p.team}:${p.objectives}`).join('|')}`;
     if (sig === this.sbSig) return;
     this.sbSig = sig;
@@ -1384,7 +1634,8 @@ export class HudScene extends Phaser.Scene {
       const p = row.p;
       if (p.isLocal) g.fillStyle(0x8a1a16, 0.35).fillRect(x + 8, ry - 3, w - 16, rowH);
       const size = Math.min(22, rowH - 4);
-      const portrait = this.add.image(x + 16, ry, `portrait_small_${p.character}`).setOrigin(0, 0).setDisplaySize(size, size);
+      const pk = `portrait_small_${p.character}`;
+      const portrait = this.add.image(x + 16, ry, this.textures.exists(pk) ? pk : '__DEFAULT').setOrigin(0, 0).setDisplaySize(size, size);
       const nameColor = p.team === 0 || p.team === 1 ? TEAM_TEXT[p.team] : p.isLocal ? FFA_ME_TEXT : BEIGE;
       const n = fitText(txt(this, x + 46, ry + 1, '', font, nameColor, p.isLocal ? '700' : '500'), `${row.rank}. ${p.name}${p.isBot ? ` · ${t('bot')}` : ''}`, nameRoom);
       this.scoreboard.add([portrait, n]);

@@ -122,8 +122,10 @@ try {
   await pressPlay(B.page);
   await nickname(B, `Odinochka ${RUN}`);
   await B.page.getByRole('button', { name: /Быстрый матч/ }).click({ timeout: 30000 });
-  await B.page.locator('.quickmode[data-mode="ffa"]').click();
+  // v0.2.21: a newcomer's first quick match goes straight into a free-for-all — no mode sheet
   await B.page.getByText(/Игроки 1\//).waitFor({ timeout: 30000 });
+  const firstQuick = await B.page.evaluate(() => ({ sheet: !!document.querySelector('[data-testid=quick-modes]'), mode: window.__blatkom.app.lastLobby?.mode ?? null }));
+  check(!firstQuick.sheet && firstQuick.mode === 'ffa', `a newcomer's first Quick Match: no mode sheet, straight into a free-for-all (${JSON.stringify(firstQuick)})`);
   const noteB = (await B.page.getByTestId('lobby-note').innerText()).trim();
   check(/Собираем игроков/.test(noteB), `Quick Match lobby: «${noteB}»`);
   await B.page.screenshot({ path: `${outDir}/fill_quick_lobby_B.png` });

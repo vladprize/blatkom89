@@ -21,6 +21,8 @@ export class InputManager {
   enabled = true;
   onPause: (() => void) | null = null;
   onScoreboard: ((show: boolean) => void) | null = null;
+  /** v0.2.21: the touch aim's assist (GameScene: towards a visible enemy next to the stick's line). */
+  assist: ((aim: number, player: { x: number; y: number }) => number) | null = null;
 
   constructor(private readonly scene: Phaser.Scene) {
     const kb = scene.input.keyboard;
@@ -74,7 +76,8 @@ export class InputManager {
         mx = touchState.moveX;
         my = touchState.moveY;
         if (touchState.aimActive) {
-          this.aim = Math.atan2(touchState.aimY, touchState.aimX);
+          const raw = Math.atan2(touchState.aimY, touchState.aimX);
+          this.aim = player && this.assist && getSettings().aimAssist ? this.assist(raw, player) : raw;
           const mag = Math.sqrt(touchState.aimX ** 2 + touchState.aimY ** 2);
           if (getSettings().autoFire && mag > 0.86) buttons |= BTN.FIRE;
         } else if (Math.abs(mx) + Math.abs(my) > 0.2) {

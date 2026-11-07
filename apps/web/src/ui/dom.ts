@@ -33,9 +33,16 @@ export function toast(text: string): void {
   // v0.2.20: over a match turned sideways (app/landscape.ts) the note turns with it
   const turned = document.documentElement.classList.contains('rot') ? document.getElementById('ui') : null;
   const host = turned ?? document.body;
-  // v0.2.20: a second note at the same moment stands above the first instead of over it
-  const live = host.querySelectorAll(':scope > .toast').length;
-  if (live) t.style.bottom = `calc(${24 + live * 54}px + var(--safe-bottom, 0px))`;
+  // v0.2.21 (the usability audit: the note covered «Continue as guest» at the bottom of the welcome window): over
+  // a dialog or a sheet the note goes to the top of the screen, clear of the buttons at their bottom
+  const top = !!document.querySelector('.overlay, .sheetlay');
+  if (top) t.classList.add('toast--top');
+  // v0.2.20: a second note at the same moment stands above the first instead of over it (below it at the top)
+  const live = host.querySelectorAll(`:scope > .toast${top ? '.toast--top' : ':not(.toast--top)'}`).length;
+  if (live) {
+    if (top) t.style.top = `calc(${16 + live * 54}px + var(--safe-top, 0px))`;
+    else t.style.bottom = `calc(${24 + live * 54}px + var(--safe-bottom, 0px))`;
+  }
   host.append(t);
   setTimeout(() => t.remove(), 2700);
 }

@@ -38,6 +38,11 @@ lag-compensated hitscan. Code: `packages/shared/src/net/*`, `apps/server/src/roo
    (or 0.6 s after every connected player marked themselves ready). Switching between team modes keeps the
    teams; coming from free-for-all they are dealt anew, alternating by arrival.
    **Filled lineups** (`MATCH_FILL_BOTS=true`, the default; §2a below) let one person always play.
+   **Late joins** (v0.2.21, shared `LATE_JOIN`): Quick Match never seats a player in a match with less than
+   90 s to go (it takes another room or makes one; an invitation still brings a friend in), and whoever came
+   in after the first quarter of the match (counted on the match's own clock, `Client.joinedAfterMs`) keeps
+   their rating — `lateJoin` in the participant record and in the personal result; experience and talons as
+   usual, leaving early still costs the leaver's rating.
 6. Match phases (server state machine): `waiting → ready → countdown → active → finished → (waiting | closed)`.
 7. Results: `results {matchId, reason, durationMs, standings, mapId, mode, teams?}` is broadcast once, right after the
    deciding events are flushed; personal `progress {xpGained, level, newAchievements}` follows when the

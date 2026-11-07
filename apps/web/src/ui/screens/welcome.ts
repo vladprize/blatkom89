@@ -13,6 +13,7 @@ import { storageGet, storageSet } from '../../app/settings.js';
 import { openEmailLogin } from './account.js';
 import { providerButtons } from './signin.js';
 import { bonusRibbon } from '../coin.js';
+import { isTouchDevice } from '../../game/input/TouchState.js';
 
 /** When the player last chose «continue as guest» (ms since epoch). */
 export const WELCOME_KEY = 'blatkom89.welcome.v1';
@@ -20,10 +21,22 @@ const ASK_AGAIN_MS = 24 * 3600_000;
 
 export type WelcomeOutcome = 'linked' | 'signed_in' | 'guest';
 
-/** A guest account in a browser that hasn't been asked today. */
+/** v0.2.21: matches finished in this browser (the welcome waits for the first one). */
+export const MATCHES_DONE_KEY = 'blatkom89.matches-done.v1';
+
+/** Counts a finished match (any kind: online, practice, a story mission). */
+export function noteMatchDone(): void {
+  storageSet(MATCHES_DONE_KEY, String((Number(storageGet(MATCHES_DONE_KEY) ?? 0) || 0) + 1));
+}
+
+/**
+ * A guest account in a browser that hasn't been asked today. v0.2.21 (the usability audit: a registration form
+ * was the very first screen): a newcomer plays first — the window comes after their first match.
+ */
 export function needsWelcome(online: OnlineClient, inTelegram: boolean): boolean {
   const p = online.profile;
   if (!p || inTelegram || p.email || p.telegramLinked || (p.identities?.length ?? 0) > 0) return false;
+  if ((p.matchesPlayed ?? 0) < 1 && !(Number(storageGet(MATCHES_DONE_KEY) ?? 0) > 0)) return false;
   const later = Number(storageGet(WELCOME_KEY) ?? 0);
   return !(later > 0 && Date.now() - later < ASK_AGAIN_MS);
 }
@@ -119,7 +132,8 @@ export function openWelcome(root: HTMLElement, online: OnlineClient, onDone: (o:
     ),
   );
   root.append(ov);
-  setTimeout(() => email.focus(), 60);
+  // v0.2.21: no keyboard popping up over the window on a phone — the player taps the field when they want it
+  if (!isTouchDevice()) setTimeout(() => email.focus(), 60);
   return () => close('guest');
 }
 

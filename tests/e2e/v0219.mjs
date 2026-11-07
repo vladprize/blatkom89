@@ -178,7 +178,7 @@ try {
     const texts = h.children.list.filter((o) => typeof o.text === 'string').map((o) => o.text).join(' | ');
     const [fire, reload, swap, , gadget] = h.buttons;
     const rest = h.stickRest;
-    const W = h.scale.width;
+    const W = h.lw ?? h.scale.width; // v0.2.21: the HUD's own units (its camera is zoomed on touch screens)
     const ring = 78 * Math.min(1, h.btnScaleY);
     const clear = (b, s) => Math.hypot(b.x - s.x, b.y - s.y) - ring - b.r;
     return {

@@ -30,6 +30,8 @@ async function player(name, lang, viewport) {
     try {
       localStorage.setItem('blatkom89.lang.v1', l);
       localStorage.setItem('blatkom89.tutorial.v1', '1');
+      // v0.2.21: the account window opens after the first match — these guests have played one already
+      localStorage.setItem('blatkom89.matches-done.v1', '1');
     } catch {}
   }, lang);
   const page = await ctx.newPage();

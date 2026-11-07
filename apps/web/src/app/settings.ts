@@ -5,6 +5,8 @@ export interface Settings {
   sfxVolume: number;
   musicVolume: number;
   autoFire: boolean;
+  /** v0.2.21: on a touch screen the aim leans a little towards an enemy next to the stick's line. */
+  aimAssist: boolean;
   stickScale: number;
   leftHanded: boolean;
   showFps: boolean;
@@ -32,6 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sfxVolume: 0.8,
   musicVolume: 0.4,
   autoFire: true,
+  aimAssist: true,
   stickScale: 1,
   leftHanded: false,
   showFps: false,
