@@ -11,7 +11,9 @@ import {
   SHOP_FINISHES,
   SKIN_RARITIES,
   SKIN_RARITY_CHANCE,
+  SIDEARMS,
   WEAPON_IDS,
+  lineSkins,
   allSkins,
   byGrade,
   drawSkin,
@@ -46,6 +48,15 @@ test('v0.2.19: the owner\'s line (22 + the AK sheet\'s 19) and the retired first
   assert.deepEqual(parseSkin(skinId('avtomat', 'hohloma')), { weapon: 'avtomat', finish: 'hohloma' });
   for (const bad of ['avtomat', 'avtomat.', '.hohloma', 'avtomat.gold', 'laser.hohloma', 'avtomat.hohloma.x', 42, null]) assert.equal(isSkinId(bad), false, String(bad));
   for (const id of allSkins()) assert.match(id, /^[a-z0-9_]{2,24}\.[a-z0-9_]{2,24}$/, 'fits the database check');
+});
+
+test('v0.2.22 (the owner: every skin on the pistols too; a skin is bought for one weapon): each of the five sidearms wears the whole line, and a skin is one weapon\'s', () => {
+  assert.equal(SIDEARMS.length, 5);
+  const line = new Set(lineSkins());
+  for (const w of SIDEARMS) for (const f of LINE_FINISHES) assert.ok(line.has(skinId(w, f)), `${w} · ${f}`);
+  // a skin is a weapon and a finish: the Makarov's «Khaki» is not the TT's
+  assert.notEqual(skinId('pistol', 'haki'), skinId('tt', 'haki'));
+  assert.deepEqual(parseSkin(skinId('pistol', 'haki')), { weapon: 'pistol', finish: 'haki' });
 });
 
 test('v0.2.19: the AK sheet — no «Absurd» grade (rare, epic, legendary), four live finishes (a tenth of the line) sold and dropped like any other', () => {

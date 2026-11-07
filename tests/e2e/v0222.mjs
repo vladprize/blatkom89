@@ -4,7 +4,9 @@
 //   and re-uploaded four of them) — on a phone held sideways and on a computer; a computer's short window
 //   (1280 × 600): the twelve maps in two rows of chips with names of 12 px and more, the Arsenal's dressing room
 //   whole — its «Test in practice» in view, nothing scrolling inside it; a phone: the menu's eight corner buttons
-//   44 px wide and tall to a finger (upright on a 390 px phone, sideways), the small captions at 12 px.
+//   44 px wide and tall to a finger (upright on a 390 px phone, sideways), the small captions at 12 px; the phone
+//   Arsenal's skins banner (the owner's, in the page's language) under the kit where there is room, opening the
+//   skins; the Makarov wearing the whole line; a skin bought for one weapon (the Makarov's, not the TT's).
 // Usage: node tests/e2e/v0222.mjs <baseUrl> <outDir>
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -115,7 +117,60 @@ try {
   const cu = await cornerOf(U.page);
   check(cu.length >= 8 && cu.every((c) => c.w >= 44 && c.h >= 44), `a 390 px phone upright: the corner's ${cu.length} buttons 44 px and more (${JSON.stringify([...new Set(cu.map((c) => `${c.w}x${c.h}`))])})`);
   await U.page.screenshot({ path: `${outDir}/phone_menu.png` });
+
+  // ── the phone Arsenal: the skins' banner, the pistols' skins, a skin bought for one weapon ──────────
+  const sheetOf = (page) => page.evaluate(() => { const sh = document.querySelector('[data-testid=skin-sheet]'); return sh ? { title: sh.querySelector('.tag')?.textContent ?? sh.textContent.slice(0, 40), cards: sh.querySelectorAll('.skincard').length } : null; });
+  const closeSheet = async (page) => { await page.keyboard.press('Escape').catch(() => {}); await page.waitForTimeout(400); if (await page.locator('[data-testid=skin-sheet]').count()) await page.locator('.sheet__x').first().click().catch(() => {}); await page.waitForTimeout(400); };
+  await U.page.evaluate(() => window.__blatkom.app.open('arsenal'));
+  await U.page.waitForTimeout(2500);
+  const ban = await U.page.evaluate(() => {
+    const b = document.querySelector('[data-testid=skins-banner]');
+    const r = b?.getBoundingClientRect();
+    const body = document.querySelector('.arsenal__body');
+    const scr = document.querySelector('.ui .screen');
+    return { shown: !!r && r.height > 60 && getComputedStyle(b).display !== 'none', src: b?.querySelector('img')?.currentSrc?.split('/').pop()?.split('?')[0], loaded: !!b?.querySelector('img')?.naturalWidth, size: r ? `${Math.round(r.width)}x${Math.round(r.height)}` : null, inView: !!r && r.bottom <= innerHeight, over: Math.max(body.scrollHeight - body.clientHeight, scr.scrollHeight - scr.clientHeight) };
+  });
+  check(ban.shown && ban.src === 'skins_banner_ru.jpg' && ban.loaded && ban.inView && ban.over <= 0, `a 390×844 phone: the Russian skins banner under the kit, in view, the Arsenal still one screen (${JSON.stringify(ban)})`);
+  await U.page.screenshot({ path: `${outDir}/phone_arsenal_banner.png` });
+  await U.page.getByTestId('skins-banner').click();
+  await U.page.waitForTimeout(1200);
+  const viaBanner = await sheetOf(U.page);
+  check(!!viaBanner && viaBanner.cards === 42, `a tap on the banner opens the skins of the weapon in the dressing room (${JSON.stringify(viaBanner)})`);
+  await closeSheet(U.page);
+  // the pistol: the whole line
+  await U.page.locator('.kitslot[data-slot="1"] .kitslot__main').click();
+  await U.page.waitForTimeout(800);
+  await U.page.getByTestId('kit-skins').click();
+  await U.page.waitForTimeout(1200);
+  const pistolSheet = await sheetOf(U.page);
+  check(!!pistolSheet && /Макаров/.test(pistolSheet.title) && pistolSheet.cards === 42, `the Makarov wears every skin of the line: 41 and the standard paint (${JSON.stringify(pistolSheet)})`);
+  // a skin bought for one weapon: «Khaki» on the Makarov, not on the TT
+  const promo = await U.page.evaluate(() => window.__blatkom.app.online.redeemPromo('BLATNOY').then((r) => r.balance).catch((e) => String(e)));
+  await closeSheet(U.page);
+  await U.page.evaluate(() => window.__blatkom.app.open('arsenal'));
+  await U.page.waitForTimeout(2000);
+  await U.page.locator('.kitslot[data-slot="1"] .kitslot__main').click();
+  await U.page.waitForTimeout(800);
+  await U.page.getByTestId('kit-skins').click();
+  await U.page.waitForTimeout(1200);
+  await U.page.locator('[data-testid=skin-sheet] .skincard[data-finish=haki]').click();
+  await U.page.waitForTimeout(800);
+  const note = (await U.page.getByTestId('skin-one-weapon').textContent({ timeout: 5000 }).catch(() => '')) ?? '';
+  check(/Скин покупается на одно оружие: Макаров/.test(note), `the price says a skin is one weapon's («${note}»)`);
+  await U.page.screenshot({ path: `${outDir}/phone_skin_buy.png` });
+  await U.page.getByTestId('skin-buy').click();
+  await U.page.waitForFunction(() => (window.__blatkom.app.online.inventory?.skins ?? []).includes('pistol.haki'), null, { timeout: 15000 }).catch(() => {});
+  const owned = await U.page.evaluate(() => { const sk = window.__blatkom.app.online.inventory?.skins ?? []; return { pistol: sk.includes('pistol.haki'), tt: sk.includes('tt.haki'), p92: sk.includes('p92.haki'), balance: window.__blatkom.app.online.inventory?.diamonds }; });
+  check(owned.pistol && !owned.tt && !owned.p92 && promo === 500 && owned.balance === 401, `«Khaki» bought for 99 BLATS on the Makarov only — not on the TT or the P92 (${JSON.stringify({ promo, ...owned })})`);
   await U.ctx.close();
+
+  // the smallest phone: no room under the kit — no banner, still one screen; English on a big phone
+  const S = await open({ width: 360, height: 640 }, { phone: true });
+  await S.page.evaluate(() => window.__blatkom.app.open('arsenal'));
+  await S.page.waitForTimeout(2000);
+  const small = await S.page.evaluate(() => { const b = document.querySelector('[data-testid=skins-banner]'); const body = document.querySelector('.arsenal__body'); return { shown: !!b && b.getBoundingClientRect().height > 0 && getComputedStyle(b).display !== 'none', over: body.scrollHeight - body.clientHeight }; });
+  check(!small.shown && small.over <= 0, `a 360×640 phone: no room under the kit — no banner, the Arsenal one screen (${JSON.stringify(small)})`);
+  await S.ctx.close();
 
   // ── a computer's short window ───────────────────────────────────────────
   const C = await open({ width: 1280, height: 600 });

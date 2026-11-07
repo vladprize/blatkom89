@@ -1093,6 +1093,9 @@ export const RU: Record<string, string> = {
   'Press «back» once more to leave the game': 'Нажми «назад» ещё раз, чтобы выйти из игры',
   'Loading the fighters…': 'Подгружаем бойцов…',
   'joined mid-match — no change': 'вход в идущий матч — без изменений',
+  // ── v0.2.22: the skins banner, one weapon a skin
+  'Make your weapon unique — skins': 'Сделай своё оружие уникальным — скины',
+  'A skin is bought for one weapon: {weapon}': 'Скин покупается на одно оружие: {weapon}',
   // ── Validation
   'Check what you entered.': 'Проверь, что введено.',
   // ── server messages (shown when the server explains a refusal in its own words)

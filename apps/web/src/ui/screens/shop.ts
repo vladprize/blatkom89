@@ -550,6 +550,8 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
               ? h('button', { class: 'btn btn--small btn--red', 'data-testid': 'skin-buy', onclick: () => buySkin(current) }, h('span', { class: 'amt buyfor' }, h('span', null, t('Buy for')), priceLabel(price)))
               : h('span', { class: 'muted' }, t('Skins are sold in the online version.')),
             online ? h('button', { class: 'linkish', onclick: () => toTab('case', true) }, t('or try the skin case')) : null,
+            // v0.2.22 (the owner: «покупает его на одно конкретное оружие»): said where the price is
+            h('small', { class: 'muted skinpick__one', 'data-testid': 'skin-one-weapon' }, t('A skin is bought for one weapon: {weapon}', { weapon: weaponName(w) })),
           )
         : null,
     );
@@ -1437,7 +1439,22 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           ),
     );
     const slots = h('div', { class: 'panel kitslots', 'data-testid': 'kit-slots' }, h('span', { class: 'tag' }, t('Kit')), ...([1, 2, 3, 4] as const).map((s) => slotRow(s, l)));
-    return h('div', { class: 'kit' }, card, slots);
+    // v0.2.22 (the owner): the skins' banner in the room the phone leaves under the kit — in the page's language,
+    // a tap opens the skins of the weapon in the dressing room (the primary when the equipment is shown). It
+    // takes only the room that is left: shrinks with it, gone when there is too little (CSS); not in the demo
+    const skinsFor: WeaponId = g ? (l.primary ?? l.sidearm) : w;
+    const promo = online
+      ? h(
+          'div',
+          { class: 'kitpromo' },
+          h(
+            'button',
+            { class: 'kitpromo__btn', type: 'button', 'data-testid': 'skins-banner', 'aria-label': t('Make your weapon unique — skins'), onclick: () => (sfx.play('click'), openSkins(skinsFor)) },
+            h('img', { class: 'kitpromo__img', src: asset(`assets/ui/skins_banner_${getLang() === 'ru' ? 'ru' : 'en'}.jpg`), alt: t('Make your weapon unique — skins'), width: '1290', height: '430', loading: 'lazy', draggable: 'false' }),
+          ),
+        )
+      : null;
+    return h('div', { class: 'kit' }, card, slots, promo);
   };
   const slotRow = (slot: 1 | 2 | 3 | 4, l: Loadout): HTMLElement => {
     const cur = slot === 4 ? l.gadget : slotWeapon(l, slot);

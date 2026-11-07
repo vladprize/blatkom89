@@ -2822,3 +2822,23 @@ button.blatsban:focus-visible { outline: 2px solid var(--tape); outline-offset: 
   :where(.kitslot__main) { position: relative; }
   :where(.kitslot__main)::after { content: ''; position: absolute; inset: -4px 0 0; }
 }
+/* 5. The skins' banner under a phone's kit (the owner): it takes only the room the screen leaves under the
+      kit — shrinks with it, gone when under 64 px; it never adds the kit's gap to a full screen (the negative
+      margin takes the gap back, the picture keeps it). Sideways the kit is a row: no banner */
+.kitpromo { display: none; }
+@media (max-width: 560px) and (orientation: portrait) {
+  .arsenal--phone > .arsenal__body > .kit { flex: 1 0 auto; }
+  .arsenal--phone .kitpromo { display: block; flex: 1 1 0; min-height: 0; margin-top: -14px; container-type: size; }
+  .kitpromo__btn { display: block; margin: 14px auto 0; padding: 0; border: 0; background: none; line-height: 0; cursor: pointer; box-shadow: 0 3px 0 rgba(0, 0, 0, .45); transition: transform .06s; }
+  .kitpromo__btn:active { transform: translateY(2px); }
+  .kitpromo__btn:focus-visible { outline: 2px solid var(--tape); outline-offset: 2px; }
+  .kitpromo__img { display: block; width: auto; height: auto; max-width: 100cqw; max-height: calc(100cqh - 14px); }
+  @container (max-height: 78px) { .kitpromo__btn { display: none; } }
+}
+@media (max-width: 560px) and (orientation: portrait) and (max-height: 700px) {
+  .arsenal--phone .kitpromo { margin-top: -12px; }
+  .kitpromo__btn { margin-top: 12px; }
+  .kitpromo__img { max-height: calc(100cqh - 12px); }
+  @container (max-height: 76px) { .kitpromo__btn { display: none; } }
+}
+.skinpick__one { display: block; flex-basis: 100%; font-size: 12px; line-height: 1.3; }
