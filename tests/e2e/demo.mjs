@@ -183,11 +183,13 @@ try {
     const own = w.flags.find((f) => f.team === me.team);
     const before = { mode: s.gameMode, flags: w.flags.length, team: me.team };
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    // v0.2.22: the world's own clock, not 300 ms of the wall's — on the stand's software GPU the frames that step
+    // the world come in bursts in a match's first seconds (sometimes none for 300 ms)
+    const until = async (ok, ms) => { const t = performance.now(); while (!ok() && performance.now() - t < ms) await wait(50); return ok(); };
     Object.assign(me, { x: enemy.standX, y: enemy.standY, invulnUntil: w.time + 60000 });
-    await wait(300);
-    const carried = enemy.carrierId === 'local';
+    const carried = await until(() => enemy.carrierId === 'local', 4000);
     Object.assign(me, { x: own.standX, y: own.standY });
-    await wait(300);
+    await until(() => w.teamScore[me.team] >= 1, 4000);
     return { ...before, carried, captured: w.teamScore[me.team], strip: window.__blatkom.game.scene.getScene('hud').objTexts.map((x) => x.text) };
   });
   check(ctf.mode === 'ctf' && ctf.flags === 2 && ctf.team === 0, `capture the flag: two flags, the player is red (${JSON.stringify(ctf)})`);

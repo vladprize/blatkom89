@@ -369,8 +369,27 @@ aim assist on touch screens with a switch in the settings (on by default).
 The same audit scripts after the release: phone **8.7 / 10**, computer **8.9 / 10** (before / after numbers in the
 Project doc). Not measured on real phones: frame rate, iOS's swipe, the assist's feel, Telegram's clients.
 
+## 2n. v0.2.22 (2026-11-08) — above 9 (the owner: «Сможешь вытянуть ещё выше?»)
+
+What still cost points after v0.2.21, found by profiling a match and by the audit's scripts:
+
+| # | Problem | Implementation | Status |
+|---|---|---|---|
+| 1 | **The light map was made anew on every frame of every match since the first release** (all devices): Phaser rounds a dynamic texture up to even sizes, the lighting asked for an odd height (127 for the view's 250 px), the sizes never matched — a new texture and framebuffer (with a synchronous framebuffer check) each frame, the old one destroyed. On the stand: 89 % of the main thread in `checkFramebufferStatus` | `Lighting.ensureRT` asks for even sizes; the map is made once (again on a resize) | ✅ e2e `v0222` (0 maps made in 60 frames, was 60); the main thread's scene update on an emulated phone 38 → 0.6 ms a frame (1×), 65 → 2.2 ms (4× slower CPU) |
+| 2 | The HUD redrew and re-uploaded 4–6 texts every frame: Phaser's `setColor` redraws even for the same colour (timer, ammo, status, objectives, the big centre text; the bases' letters at resolution 4) | `render/tint.ts` — the colour set only on a change | ✅ 421 → 6 text redraws in 5 s (e2e `v0222`: ≤ 8 a second) |
+| 3 | Computers ≤ 860 px tall: the twelve map tiles in one row, names 9–10 px | two rows of six chips (the picture left, the name beside it); the practice's title a little lower under 680 px | ✅ names 12.5 px (15 px on taller windows), e2e `v0222`, `demo` |
+| 4 | The Arsenal on a 600–700 px window: the dressing room scrolled inside itself (106 px at 1280×600), «Test in practice» out of sight | the poster's six-row span left three empty rows' gaps (30 px) — gaps by margins now; under 700 px the in-game view 84 px with its buttons two to a row, lower skin cards | ✅ inner scroll 0 at 1280×600, 1366×625, 1024×640 |
+| 5 | Phone menu's corner: eight buttons, 40×44 targets (EN/RU 33–35 wide) | 44×46 where the row has room (upright from 385 px wide, sideways always); the founder's extra ★ keeps the compact row | ✅ e2e `v0222` (390×844 and 844×390) |
+| 6 | The last captions under 12 px on phones (the dossier's XP and the profile's stats sideways) and small targets (the avatar, ✎, the bot counts, the Arsenal's kit rows) | 12 px; larger invisible tap areas | ✅ `ux/screens`: no caption under 12 px on iPhone 14 upright and sideways |
+| 7 | The profile on a phone held sideways: the ten numbers in one row (v0.2.21) cut «устранений», «поражений», «1000» and wrapped the time in play at every size (found when the stats' captions went to 12 px: 1 px over at 667×375 with a notch) | five to a row, every label on one line | ✅ e2e `v0220` (13 screens sideways, notch insets); nothing cut or wrapped at 640×360 … 932×430 |
+
+Not changed: Render compresses responses (brotli / gzip) itself — no compression in the server needed.
+
+The demo's staged flag capture waited 300 ms of wall time; on the stand's software GPU a match's first frames come in bursts (once none for 300 ms) — the test waits on the world's clock now (`demo.mjs`).
+
 ## 3. Open risks / next steps
 
+- After v0.2.22 (above, §2n): the frame rate on real phones after the light-map fix (the stand's GPU is software, its frame rate didn't move); whether the smaller in-game view in the Arsenal on short windows is fine for the owner.
 - After v0.2.21 (above, §2m; unit 351 / 351, every browser stage passes on the release bundle — docs/TESTING.md §3): the feel of the aim assist and of the bigger sticks on real phones; whether the hints should come back after a long break; a real iPhone's swipe «back» and Android's button with the history guard; the map thumbnails' 9–10 px captions on computers (twelve in a row).
 - After v0.2.20 (above, §2l; unit 348 / 348, every browser stage passes on the release bundle — docs/TESTING.md §3): the owner's look on a real iPhone — the home-screen app's height, a match turned sideways with the rotation lock on, the sprint by the stick; on his Mac — the full-screen button; whether 240 house players are the right number (`HOUSE_PLAYERS`), and the welcome bonus for accounts registered before the release (not paid now).
 - After v0.2.19 (above, §2k; unit 333 / 333, every browser stage passes on the release bundle): an Instagram address (`SOCIAL_INSTAGRAM_URL`); a look at the 19 new skins and the four live ones on a real phone.

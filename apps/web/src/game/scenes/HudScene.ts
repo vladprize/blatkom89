@@ -18,6 +18,7 @@ import { getSettings } from '../../app/settings.js';
 import { sfx } from '../audio/Sfx.js';
 import { t, plural, getLang } from '../../i18n/index.js';
 import { charName, mapName, weaponName } from '../../i18n/content.js';
+import { tint } from '../render/tint.js';
 
 /** Team colours: names / text and fills (red 0, blue 1). */
 const TEAM_TEXT = ['#ff8a7a', '#8cc8f6'] as const;
@@ -1201,7 +1202,7 @@ export class HudScene extends Phaser.Scene {
     }
     const left = hud.phase === 'active' ? hud.timeLeftMs : hud.phase === 'countdown' || hud.phase === 'ready' ? hud.timeLeftMs : 0;
     this.timer.setText(fmtTime(left));
-    this.timer.setColor(hud.phase === 'active' && left < 30_000 ? '#ff6a5a' : BEIGE);
+    tint(this.timer, hud.phase === 'active' && left < 30_000 ? '#ff6a5a' : BEIGE);
     const modeSig = `${hud.gameMode}|${hud.scoreLimit}|${hud.teamScoreLimit}|${getLang()}|${hud.story?.label ?? ''}`;
     if (this.modeSig !== modeSig) {
       this.modeSig = modeSig;
@@ -1303,7 +1304,7 @@ export class HudScene extends Phaser.Scene {
     const wf = this.weaponIcon.frame;
     const def = WEAPONS[hud.weapon];
     this.ammoText.setText(def.kind === 'melee' ? '—' : `${hud.mag}/${hud.reserve < 0 ? '∞' : hud.reserve}`);
-    this.ammoText.setColor(def.kind !== 'melee' && hud.mag === 0 ? '#ff6a5a' : BEIGE);
+    tint(this.ammoText, def.kind !== 'melee' && hud.mag === 0 ? '#ff6a5a' : BEIGE);
     if (this.touch) {
       // v0.2.21: the icon fills the gap between the health bar and the ammo (whose width varies); none on a
       // very narrow screen
@@ -1398,7 +1399,7 @@ export class HudScene extends Phaser.Scene {
     // status
     const conn = hud.connection;
     this.statusText.setText(conn === 'offline' ? (hud.story ? t('STORY') : t('PRACTICE')) : conn === 'reconnecting' ? t('RECONNECTING…') : conn === 'lost' ? t('LINE IS DEAD') : hud.ping !== null ? t('{n} ms', { n: hud.ping }) : '');
-    this.statusText.setColor(conn === 'online' ? ((hud.ping ?? 0) > 150 ? '#e8a040' : '#8fae78') : conn === 'offline' ? '#9a9080' : '#ff6a5a');
+    tint(this.statusText, conn === 'online' ? ((hud.ping ?? 0) > 150 ? '#e8a040' : '#8fae78') : conn === 'offline' ? '#9a9080' : '#ff6a5a');
     // touch interact button only when a weapon can be swapped
     if (this.interactBtn) {
       const v = !!hud.pickupPrompt && hud.alive;
@@ -1439,7 +1440,7 @@ export class HudScene extends Phaser.Scene {
         }
         const label = status === 'home' ? t('HOME') : status === 'carried' ? t('TAKEN') : t('DOWN {s}', { s: Math.ceil((f?.returnInMs ?? 0) / 1000) });
         const tx = this.objTexts[team]!;
-        tx.setText(label).setPosition(x0 + 34, y).setColor(status === 'home' ? '#b8a888' : team === myTeam ? '#ff6a5a' : '#ffd36a');
+        tint(tx.setText(label).setPosition(x0 + 34, y), status === 'home' ? '#b8a888' : team === myTeam ? '#ff6a5a' : '#ffd36a');
       });
       return;
     }
@@ -1457,7 +1458,7 @@ export class HudScene extends Phaser.Scene {
         g.strokePath();
       }
       const tx = this.objTexts[i];
-      tx?.setPosition(bx, y).setColor(b.owner === myTeam && myTeam !== null ? '#fff4e4' : '#e8dcc0');
+      if (tx) tint(tx.setPosition(bx, y), b.owner === myTeam && myTeam !== null ? '#fff4e4' : '#e8dcc0');
     });
   }
 
@@ -1482,7 +1483,7 @@ export class HudScene extends Phaser.Scene {
       gfx.fillStyle(0xd9c7a3, 1).fillRect(icon.x - 7, icon.y + 29, 14, 14);
       if (g) {
         fitIcon(icon, `ico_${g}`, 30, 26, 1).setAlpha(n > 0 || armed ? 1 : 0.3).setVisible(true);
-        this.gadgetCount.setText(armed ? '' : `×${n}`).setColor(n > 0 ? BEIGE : '#8a7a68');
+        tint(this.gadgetCount.setText(armed ? '' : `×${n}`), n > 0 ? BEIGE : '#8a7a68');
       } else {
         icon.setVisible(false);
         this.gadgetCount.setText('');
@@ -1557,7 +1558,7 @@ export class HudScene extends Phaser.Scene {
       color = '#ff5a4a';
     }
     this.bigText.setText(big).setFontSize(big.length > 3 ? (this.touch ? 34 : 44) : 72);
-    this.bigText.setColor(color);
+    tint(this.bigText, color);
     this.subText.setText(sub);
     let prompt = '';
     if (hud.alive && hud.pickupPrompt) prompt = this.touch ? t('Take: {name}', { name: weaponName(hud.pickupPrompt) }) : t('[E] — pick up the {name}', { name: weaponName(hud.pickupPrompt) });

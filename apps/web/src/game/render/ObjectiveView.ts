@@ -10,6 +10,7 @@ import type { Team } from '@blatkom/shared';
 import type { RenderBase, RenderFlag, RenderPlayer } from '../session/types.js';
 import type { Lighting } from './Lighting.js';
 import { D } from './depth.js';
+import { tint } from './tint.js';
 
 /** Cloth, darker fold and light (star, rim) per team: red 0, blue 1. */
 export const TEAM_CLOTH = [0xd8392e, 0x3d8ee0] as const;
@@ -89,7 +90,7 @@ export class ObjectiveView {
           .setDepth(D.LIGHT + 0.7);
         this.letters.push(label);
       }
-      label.setVisible(true).setPosition(b.x, b.y + R - 10).setColor(own === null ? '#f2e6c8' : own === 0 ? '#ff9a8a' : '#a8d4ff');
+      tint(label.setVisible(true).setPosition(b.x, b.y + R - 10), own === null ? '#f2e6c8' : own === 0 ? '#ff9a8a' : '#a8d4ff');
     });
     for (let i = bases.length; i < this.letters.length; i++) this.letters[i]!.setVisible(false);
 

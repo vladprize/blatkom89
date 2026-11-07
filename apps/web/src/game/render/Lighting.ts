@@ -200,8 +200,12 @@ export class Lighting {
   }
 
   private ensureRT(w: number, h: number) {
-    const W = Math.ceil(w * LIGHT_RES) + 2;
-    const H = Math.ceil(h * LIGHT_RES) + 2;
+    // v0.2.22: Phaser rounds a dynamic texture up to even sizes. An odd size asked for (the view is 250 px
+    // tall: 127) never matched the texture made (128), so the light map — its texture and framebuffer, with a
+    // synchronous framebuffer check — was made anew and the old one destroyed on every frame since the start
+    const even = (n: number) => n + (n % 2);
+    const W = even(Math.ceil(w * LIGHT_RES) + 2);
+    const H = even(Math.ceil(h * LIGHT_RES) + 2);
     if (this.rt && this.rt.width === W && this.rt.height === H) return this.rt;
     this.rt?.destroy();
     this.rt = this.scene.add
