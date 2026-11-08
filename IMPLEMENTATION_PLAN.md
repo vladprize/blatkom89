@@ -392,7 +392,7 @@ The demo's staged flag capture waited 300 ms of wall time; on the stand's softwa
 
 ## 3. Open risks / next steps
 
-- After v0.2.22 (above, §2n): the frame rate on real phones after the light-map fix (the stand's GPU is software, its frame rate didn't move); whether the smaller in-game view in the Arsenal on short windows is fine for the owner.
+- After v0.2.22 (above, §2n; unit 352 / 352, all 28 browser stages pass on the release bundle — docs/TESTING.md §3): the frame rate on real phones after the light-map fix (the stand's GPU is software, its frame rate didn't move); whether the smaller in-game view in the Arsenal on short windows is fine for the owner.
 - After v0.2.21 (above, §2m; unit 351 / 351, every browser stage passes on the release bundle — docs/TESTING.md §3): the feel of the aim assist and of the bigger sticks on real phones; whether the hints should come back after a long break; a real iPhone's swipe «back» and Android's button with the history guard; the map thumbnails' 9–10 px captions on computers (twelve in a row).
 - After v0.2.20 (above, §2l; unit 348 / 348, every browser stage passes on the release bundle — docs/TESTING.md §3): the owner's look on a real iPhone — the home-screen app's height, a match turned sideways with the rotation lock on, the sprint by the stick; on his Mac — the full-screen button; whether 240 house players are the right number (`HOUSE_PLAYERS`), and the welcome bonus for accounts registered before the release (not paid now).
 - After v0.2.19 (above, §2k; unit 333 / 333, every browser stage passes on the release bundle): an Instagram address (`SOCIAL_INSTAGRAM_URL`); a look at the 19 new skins and the four live ones on a real phone.
