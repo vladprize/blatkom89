@@ -417,7 +417,7 @@ shop four are live (moving paint) — the others are still pictures (their cards
 
 ## 3. Open risks / next steps
 
-- After v0.2.23 (above, §2o): the owner's full-height art (36 pictures; drop into `assets/fullbody/` and list the ids);
+- After v0.2.23 (above, §2o; unit 363 / 363, all 29 browser stages pass on the release bundle — docs/TESTING.md §3): the owner's full-height art (36 pictures; drop into `assets/fullbody/` and list the ids);
   his look at the cards on a real phone (the line-up's 3 s, the killer's card's size sideways); sets' prices and
   pairings are first guesses; «Поделиться» inside a real Telegram client (the share sheet there is untested; the
   long-press fallback is the plan).
