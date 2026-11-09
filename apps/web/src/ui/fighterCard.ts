@@ -1,8 +1,9 @@
 /**
  * v0.2.23 — the fighter card (the owner: «как можно больше портретов, как укомплектованы скины у игроков»):
- * one picture of a player as others see them — the character's art, the weapon in hand painted big in its
- * skin, the skin's grade in the frame and its light behind, the alias, the level and, for a legendary skin,
- * its eliminations. Drawn on a canvas (so it can be shared as a picture) in two shapes:
+ * one picture of a player as others see them — the character's art, the weapon painted in its skin (on a tall
+ * card in the lower right corner, clear of the figure), the skin's grade in the frame and its light, the alias,
+ * the level and, for a legendary skin, its eliminations. Drawn on a canvas (so it can be shared as a picture) in
+ * two shapes:
  * - `tall` — the Arsenal, the line-up before a match, the podium, a friend's page, the shared picture;
  * - `wide` — a strip: the killer's card while the player waits to respawn, «what took you down» after the match.
  * A legendary skin's card has its own moving background (rays and sparks in the skin's colours); a live
@@ -142,6 +143,10 @@ export class FighterCard {
   /** Only a card in view is animated (a row of sets scrolls; a sheet may cover the page). */
   private inView = true;
   private observer: IntersectionObserver | null = null;
+  /** The screen's pixels per CSS pixel (the canvas is drawn at it, at most 3). */
+  private readonly dpr: number;
+  /** The art with its top faded (see fadedTop), kept while the character and the size stay. */
+  private faded: { key: string; c: HTMLCanvasElement } | null = null;
 
   /** `ratio`: height ÷ width (tall 1.42, wide 0.34 by default; the Arsenal's poster is 4 : 3). */
   constructor(d: FighterCardData, o: { shape?: CardShape; width: number; ratio?: number; className?: string }) {
@@ -149,6 +154,7 @@ export class FighterCard {
     this.w = Math.round(o.width);
     this.h = Math.round(o.width * (o.ratio ?? (this.shape === 'tall' ? 1.42 : 0.34)));
     const dpr = Math.min(3, Math.max(1, typeof devicePixelRatio === 'number' ? devicePixelRatio : 1));
+    this.dpr = dpr;
     this.el = document.createElement('canvas');
     this.el.width = Math.round(this.w * dpr);
     this.el.height = Math.round(this.h * dpr);
@@ -208,7 +214,8 @@ export class FighterCard {
     const d = this.d;
     const ct = charText(d.character);
     const skin = d.finish ? `${finishName(d.finish)} (${rarityLabel(FINISHES[d.finish].rarity)})` : t('standard paint');
-    this.el.setAttribute('aria-label', `${d.label ? `${d.label}: ` : ''}${d.name} — ${ct.name}, ${weaponName(d.weapon)}, ${skin}`);
+    const kills = skinPerks(d.finish)?.counter && typeof d.kills === 'number' ? `, ★ ${count(d.kills, 'elimination')}` : '';
+    this.el.setAttribute('aria-label', `${d.label ? `${d.label}: ` : ''}${d.name} — ${ct.name}, ${weaponName(d.weapon)}, ${skin}${kills}`);
     this.el.dataset.character = d.character;
     this.el.dataset.weapon = d.weapon;
     this.el.dataset.finish = d.finish ?? '';
@@ -242,7 +249,7 @@ export class FighterCard {
     if (perks?.glow || isLiveFinish(this.d.finish)) this.draw(now);
   }
 
-  /** A small or squat tall card (the phone's kit, a crowded line-up, the podium): the alias and the skin only. */
+  /** A small or squat tall card (the phone's kit, a crowded line-up, the podium): the portrait, a bigger weapon. */
   private compact(): boolean {
     return this.w < 120 || this.h / this.w < 1.25;
   }
@@ -340,7 +347,12 @@ export class FighterCard {
     ctx.restore();
   }
 
-  private art(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fade: 'bottom' | 'right' | 'full') {
+  /**
+   * The character's art in a box. On a tall card (`full`, `bottom`) the art starts `room` under the box's top
+   * (the owner: «небольшой отступ, чтобы голова не упиралась в верхнюю рамку»), its top edge faded into the card,
+   * and only the alias's strip (`foot`) is darkened.
+   */
+  private art(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fade: 'bottom' | 'right' | 'full', foot = 0, room = 0) {
     const full = fade === 'full';
     const src = artSrc(this.d.character, full);
     const img = loaded.get(src);
@@ -350,13 +362,14 @@ export class FighterCard {
     ctx.rect(x, y, w, h);
     ctx.clip();
     if (full) {
-      // the whole figure: the picture's height fills the space (a little wider than the card is cut evenly; a
-      // little narrower leaves the card's own background at the sides, the picture's edges faded into it)
-      const s = Math.max(h / img.naturalHeight, (w * 0.9) / img.naturalWidth);
+      // the whole figure: the picture's height fills the space under the headroom, its feet on the card's bottom
+      // (narrower than the card, it leaves the card's own background at the sides, its edges faded into it)
+      const s = (h - room) / img.naturalHeight;
       const dw = img.naturalWidth * s;
       const dh = img.naturalHeight * s;
       const dx = x + (w - dw) / 2;
-      ctx.drawImage(img, dx, y + (h - dh) * 0.35, dw, dh);
+      // the pictures keep ~2 % of sky over the head: only that much fades
+      ctx.drawImage(this.fadedTop(img, src, dw, dh, room ? dh * 0.02 : 0), dx, y + h - dh, dw, dh);
       if (dw < w + 1) {
         const edge = Math.min(dw * 0.12, w * 0.12);
         for (const [x0, x1] of [
@@ -373,6 +386,13 @@ export class FighterCard {
         if (dx > x) ctx.fillRect(x, y, dx - x, h);
         if (dx + dw < x + w) ctx.fillRect(dx + dw, y, x + w - dx - dw, h);
       }
+    } else if (room) {
+      // the waist-up hero card covers the space under the headroom (cut at the bottom, not over the head); its
+      // top edge — a comb or a cap cut by the portrait's own frame — fades into the card
+      const s = Math.max(w / img.naturalWidth, (h - room) / img.naturalHeight);
+      const dw = img.naturalWidth * s;
+      const dh = img.naturalHeight * s;
+      ctx.drawImage(this.fadedTop(img, src, dw, dh, room * 0.8), x + (w - dw) / 2, y + room, dw, dh);
     } else {
       // the waist-up hero card covers the space, its head kept in view
       const s = Math.max(w / img.naturalWidth, h / img.naturalHeight);
@@ -381,13 +401,48 @@ export class FighterCard {
       ctx.drawImage(img, x + (w - dw) / 2, y + Math.min(0, (h - dh) * 0.15), dw, dh);
     }
     ctx.restore();
-    // fade into the card (a full-height figure only under its feet, where the alias goes)
-    const g = full ? ctx.createLinearGradient(0, y + h * 0.66, 0, y + h * 0.9) : fade === 'bottom' ? ctx.createLinearGradient(0, y + h * 0.55, 0, y + h) : ctx.createLinearGradient(x + w * 0.45, 0, x + w, 0);
+    if (fade === 'right') {
+      // the wide card: the head and shoulders fade into the card towards the text
+      const g = ctx.createLinearGradient(x + w * 0.45, 0, x + w, 0);
+      g.addColorStop(0, 'rgba(18,14,12,0)');
+      g.addColorStop(1, 'rgba(18,14,12,1)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, w, h);
+      return;
+    }
+    // a tall card: the art stays whole, only the strip under the alias goes dark
+    const top = y + h - foot * 2.8;
+    const g = ctx.createLinearGradient(0, top, 0, y + h);
     g.addColorStop(0, 'rgba(18,14,12,0)');
-    g.addColorStop(full ? 0.55 : 0, full ? 'rgba(18,14,12,0.55)' : 'rgba(18,14,12,0)');
-    g.addColorStop(1, full ? 'rgba(18,14,12,0.94)' : 'rgba(18,14,12,1)');
+    g.addColorStop(0.55, 'rgba(18,14,12,0.5)');
+    g.addColorStop(1, 'rgba(18,14,12,0.92)');
     ctx.fillStyle = g;
-    ctx.fillRect(x, y, w, h);
+    ctx.fillRect(x, top, w, y + h - top);
+  }
+
+  /** The art at its size on the card with its top `fade` px faded out — made once per card and size, then reused. */
+  private fadedTop(img: HTMLImageElement, src: string, dw: number, dh: number, fade: number): CanvasImageSource {
+    if (fade < 0.5) return img;
+    const W = Math.max(1, Math.round(dw * this.dpr));
+    const H = Math.max(1, Math.round(dh * this.dpr));
+    const F = Math.max(1, Math.round(fade * this.dpr));
+    const key = `${src}|${W}|${H}|${F}`;
+    if (this.faded?.key === key) return this.faded.c;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d');
+    if (!g) return img;
+    g.drawImage(img, 0, 0, W, H);
+    // keep the picture where the mask is opaque: transparent at the top, opaque from F down (the gradient pads)
+    g.globalCompositeOperation = 'destination-in';
+    const m = g.createLinearGradient(0, 0, 0, F);
+    m.addColorStop(0, 'rgba(0,0,0,0)');
+    m.addColorStop(1, 'rgba(0,0,0,1)');
+    g.fillStyle = m;
+    g.fillRect(0, 0, W, H);
+    this.faded = { key, c };
+    return c;
   }
 
   private frame(ctx: CanvasRenderingContext2D, now: number) {
@@ -537,39 +592,90 @@ export class FighterCard {
   }
 
   // ── the two shapes ───────────────────────────────────────────────────────
+  /**
+   * The tall card. The owner (v0.2.23, on the first full-height cards): «как раньше — оружие снизу, справа, и без
+   * этих надписей, либо сделай их меньше». So nothing lies across the figure: the art takes the whole card, the
+   * weapon in its skin stands in the lower right corner on its own light, and one small line at the bottom keeps
+   * the alias (and a legendary skin's ★ counter). The grade's ribbon and the level stay in the top corners; the
+   * character, the weapon and the skin by name are only in the card's description (read by a screen reader).
+   */
   private drawTall(ctx: CanvasRenderingContext2D, now: number) {
     const { w, h } = this;
-    // a small or squat card (the phone's kit, a crowded line-up): the alias and the skin only, bigger
+    // a small or squat card (the phone's kit, a crowded line-up, the podium): the portrait, a bigger weapon
     const compact = this.compact();
     const full = this.fullArt();
     const fs = compact ? Math.max(9, w * 0.085) : w * 0.07;
     const head = this.d.label ? fs * 1.7 : 0;
-    this.background(ctx, now, w / 2, h * 0.6, w * 0.95);
-    // the full-height figure takes the whole card under the header (its feet under the alias); the portrait the top
-    if (full) this.art(ctx, 0, head, w, h - head, 'full');
-    else this.art(ctx, 0, head, w, h * (compact ? 0.7 : 0.74) - head, 'bottom');
+    const ns = compact ? Math.max(9, w * 0.095) : Math.max(10, w * 0.056); // the alias's size
+    const foot = ns * 1.75; // its strip at the bottom
+    this.background(ctx, now, w / 2, h * 0.5, w * 0.95);
+    // a little headroom: the head clear of the frame (or of the label's strip)
+    const room = Math.max(4, Math.round(h * 0.045));
+    this.art(ctx, 0, head, w, h - head, full ? 'full' : 'bottom', foot, room);
     if (this.d.label) this.header(ctx, fs);
-    if (!compact) this.ribbon(ctx, 0, head + w * 0.035, Math.max(7, w * 0.052));
-    this.levelBadge(ctx, w - w * 0.035, head + w * 0.035, Math.max(9, w * 0.07));
-    if (compact) {
-      this.weapon(ctx, now, w / 2, h * 0.66, w * 0.92, -0.07);
-      this.text(ctx, this.d.name, w / 2, h * 0.86, Math.max(10, w * 0.11), BEIGE, { weight: 700, align: 'center', max: w * 0.92 });
-      const sl = this.skinLine();
-      this.text(ctx, this.d.finish ? `«${finishName(this.d.finish)}»` : t('standard paint'), w / 2, h * 0.95, Math.max(8, w * 0.075), sl.color, { weight: 600, align: 'center', max: w * 0.92 });
-      this.frame(ctx, now);
-      return;
+    if (!compact) this.ribbon(ctx, 0, head + w * 0.035, Math.max(7, w * 0.046));
+    this.levelBadge(ctx, w - w * 0.035, head + w * 0.035, Math.max(9, w * (compact ? 0.07 : 0.06)));
+    // the weapon: the lower right corner, its butt towards the middle, the muzzle up to the right
+    const ww = w * (compact ? 0.74 : 0.6);
+    const tilt = -0.16;
+    const bh = (ww / 3) * Math.cos(-tilt) + ww * Math.sin(-tilt); // the turned icon's height (the icons are 3:1)
+    const cx = w - w * 0.045 - ww / 2;
+    const cy = h - foot - bh / 2 + bh * 0.08;
+    this.weaponSpot(ctx, now, cx, cy, ww);
+    this.weapon(ctx, now, cx, cy, ww, tilt);
+    // the alias: small, bottom left; a legendary skin's eliminations at the right
+    const y = h - foot * 0.42;
+    const pad = w * 0.06;
+    const counter = skinPerks(this.d.finish)?.counter && typeof this.d.kills === 'number' ? `★ ${this.d.kills}` : '';
+    let max = w - pad * 2;
+    if (counter) {
+      this.text(ctx, counter, w - pad, y, ns * 0.9, '#f2d27a', { weight: 600, align: 'right' });
+      max -= this.measure(ctx, counter, ns * 0.9, 600) + pad * 0.6;
     }
-    // the weapon in front of the figure: at the hips of a full-height one, under the portrait's chest
-    if (full) this.weapon(ctx, now, w / 2, h * 0.66, w * 0.84, -0.07);
-    else this.weapon(ctx, now, w / 2, h * 0.705, w * 0.9, -0.07);
-    const ct = charText(this.d.character);
-    const cg = CHARACTERS[this.d.character].grade;
-    this.text(ctx, this.d.name, w / 2, h * 0.835, w * 0.092, BEIGE, { weight: 700, align: 'center', max: w * 0.92 });
-    this.text(ctx, `${ct.name} «${ct.nickname}»`, w / 2, h * 0.887, w * 0.054, GRADE_COLORS[cg], { weight: 500, align: 'center', max: w * 0.92 });
-    const sl = this.skinLine();
-    this.text(ctx, sl.name, w / 2, h * 0.935, w * 0.054, sl.color, { weight: 600, align: 'center', max: w * 0.92 });
-    if (skinPerks(this.d.finish)?.counter && typeof this.d.kills === 'number') this.text(ctx, `★ ${count(this.d.kills, 'elimination')}`, w / 2, h * 0.977, w * 0.045, '#f2d27a', { weight: 500, align: 'center', max: w * 0.92 });
+    this.text(ctx, this.d.name, pad, y, ns, BEIGE, { weight: 600, max });
     this.frame(ctx, now);
+  }
+
+  /** Under the weapon in the corner: a soft shade off the art and, with a skin, its light (a legendary's sparks). */
+  private weaponSpot(ctx: CanvasRenderingContext2D, now: number, cx: number, cy: number, ww: number) {
+    const g = this.grade();
+    const { glow } = this.glowColors();
+    const r = ww * 0.64;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1, 0.5);
+    const shade = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+    shade.addColorStop(0, 'rgba(10,8,7,0.6)');
+    shade.addColorStop(0.6, 'rgba(10,8,7,0.32)');
+    shade.addColorStop(1, 'rgba(10,8,7,0)');
+    ctx.fillStyle = shade;
+    ctx.fillRect(-r, -r, r * 2, r * 2);
+    if (g) {
+      const strength = g === 'legendary' ? 0.5 : g === 'epic' ? 0.4 : g === 'rare' ? 0.3 : 0.18;
+      ctx.globalCompositeOperation = 'lighter';
+      const light = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+      light.addColorStop(0, rgba(glow, strength));
+      light.addColorStop(0.5, rgba(glow, strength * 0.4));
+      light.addColorStop(1, rgba(glow, 0));
+      ctx.fillStyle = light;
+      ctx.fillRect(-r, -r, r * 2, r * 2);
+    }
+    ctx.restore();
+    if (!skinPerks(this.d.finish)?.cardBg) return;
+    // a legendary skin: sparks twinkle round the weapon (its rays are behind the art, mostly hidden by it)
+    const still = reducedMotion();
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 14; i++) {
+      const a = i * 2.39996;
+      const rr = r * (0.5 + 0.5 * ((Math.sin(i * 12.9898) + 1) / 2));
+      const tw = still ? 0.6 : (Math.sin(now / 380 + i * 1.7) + 1) / 2;
+      if (tw < 0.3) continue;
+      const s = Math.max(1.5, ww * 0.012) * (1 + tw);
+      ctx.fillStyle = rgba(glow, 0.75 * tw);
+      ctx.fillRect(cx + Math.cos(a) * rr - s / 2, cy + Math.sin(a) * rr * 0.55 - s / 2, s, s);
+    }
+    ctx.restore();
   }
 
   private drawWide(ctx: CanvasRenderingContext2D, now: number) {

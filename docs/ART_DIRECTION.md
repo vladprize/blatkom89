@@ -156,7 +156,7 @@ state in a strip under the timer, on the minimap and as edge markers.
 ## 6. Fighter cards and full-height art (v0.2.23)
 
 The fighter card (`apps/web/src/ui/fighterCard.ts`) is the game's portrait of a player: the character's art,
-the weapon in hand painted big in its skin, the grade's ribbon, frame and light, the alias and level. Two shapes:
+the weapon painted in its skin, the grade's ribbon, frame and light, the alias and level. Two shapes:
 **tall** (3 : 4.26 — the line-up, the podium, the Arsenal, the viewer; under 120 px wide a compact version
 without the ribbon) and **wide** (the killer's card and «Тебя уложили этим»: the head and shoulders on the left).
 Drawn on a canvas at the screen's pixel ratio, so «Поделиться» sends exactly the picture on screen.
@@ -172,9 +172,18 @@ Drawn on a canvas at the screen's pixel ratio, so «Поделиться» sends
   1024×1536, on the game's dark red background), made from each character's portrait with
   [FULLBODY_PROMPTS.md](FULLBODY_PROMPTS.md); `tools/make-fullbody.py id=picture …` cuts off their frame line and
   writes `apps/web/public/assets/fullbody/<id>.jpg` (600×914, ~80–170 KB) — then the id goes into `ui/fullbody.ts`
-  (`FULLBODY`; a unit test checks the files). The card fits the figure's height (the sides fade into the card),
-  draws the weapon at the hips and the alias over the boots. v0.2.23: 10 of 36 — the policeman, the bear, the crow,
+  (`FULLBODY`; a unit test checks the files). The card fits the figure's height (the sides fade into the card).
+  v0.2.23: 10 of 36 — the policeman, the bear, the crow,
   the snake, the lizard, the parrot, the pigeon, the cockroach, the rat, the pig; the rooster and the panther wait
   for sneakers without a sports maker's marks.
+* **The layout of a tall card** (the owner, on the first full-height cards: «как раньше — оружие снизу, справа,
+  и без этих надписей, либо сделай их меньше»; then «небольшой отступ, чтобы голова не упиралась в верхнюю рамку»):
+  nothing lies across the figure. The art takes the whole card under a little headroom (4.5 % of its height, the
+  picture's top edge faded into the card; a full-height figure is scaled to fit under it, its feet on the bottom); the
+  weapon in its skin stands in the lower right corner (60 % of the card's width, 74 % on a compact card), its
+  muzzle up to the right, on a soft shade and the skin's own light (a legendary skin: sparks round it); one small
+  line at the bottom — the alias on the left, a legendary skin's ★ eliminations on the right. The grade's ribbon
+  and the level stay in the top corners. The character, the weapon and the skin by name left the card's face
+  (a screen reader still reads them from its description); the wide card keeps its text.
 * The same rules as everywhere: no real brands (two stripes, never three), no prison symbols or tattoos, no
   text in the pictures.

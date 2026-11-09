@@ -156,7 +156,7 @@ table in the shared rules (`SKIN_PERKS`, `game-rules/skins.ts`) that the client 
 
 | Grade (price) | In the match | On the fighter cards |
 |---|---|---|
-| regular ($0.99) | the paint on the weapon in hand; the kill feed's icon painted in it | the card shows the weapon big in the finish |
+| regular ($0.99) | the paint on the weapon in hand; the kill feed's icon painted in it | the card shows the weapon in the finish (a tall card: in its lower right corner, clear of the figure) |
 | rare ($1.99) | + the tracers and the muzzle flash (and its light) in the skin's colours | + the card's glow in its colours |
 | epic ($2.99) | + a glow round the weapon in hand; a burst in the skin's colours at each elimination | + a light running round the card's frame |
 | legendary ($4.99) | + a bigger burst with drifting sparks | + the card's own background (slow rays, sparks), two lights on the frame, the **kill counter** «★ N» |

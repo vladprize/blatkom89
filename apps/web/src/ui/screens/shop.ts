@@ -395,8 +395,8 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   const doll = new Doll(o.textures, o.character, trying.weapon ?? 'pistol', 216);
   // the art and the item image stay the same elements between redraws (no flicker)
   const heroEl = heroImg(o.character, 'dressing__hero');
-  // v0.2.23: the poster is the player's fighter card — the character, the weapon in hand painted big in its
-  // skin, the grade's frame and light, the alias and level; the corner button opens it big (to share)
+  // v0.2.23: the poster is the player's fighter card — the character, the weapon in its skin in the lower right
+  // corner, the grade's frame and light, the alias and level; the corner button opens it big (to share)
   let posterCard: FighterCard | null = null;
   const uiRoot = () => document.getElementById('ui') ?? document.body;
   const cardData = (w: WeaponId, finish: FinishId | null): FighterCardData => ({
