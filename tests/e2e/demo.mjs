@@ -227,8 +227,15 @@ try {
     .waitForFunction(() => {
       const c = document.querySelector('[data-testid="dressing-room"] canvas[data-testid=fighter-card]');
       if (!c || !c.width) return false;
-      const px = c.getContext('2d').getImageData(Math.floor(c.width / 2), Math.floor(c.height * 0.3), 1, 1).data;
-      return px[3] > 0 && px[0] + px[1] + px[2] > 30;
+      // the art fills the card's upper half: most of a grid of points there is lit (one point may hit an eye)
+      const g = c.getContext('2d');
+      let lit = 0;
+      for (let i = 1; i <= 4; i++)
+        for (let j = 1; j <= 4; j++) {
+          const px = g.getImageData(Math.floor((c.width * i) / 5), Math.floor((c.height * 0.5 * j) / 5), 1, 1).data;
+          if (px[0] + px[1] + px[2] > 60) lit++;
+        }
+      return lit >= 8;
     }, null, { timeout: 10000 })
     .then(() => true)
     .catch(() => false);
