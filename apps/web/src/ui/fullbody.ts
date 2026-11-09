@@ -1,8 +1,8 @@
 /**
- * v0.2.23: the characters that have a full-height picture (assets/fullbody/<id>.png, made by the owner from
- * docs/FULLBODY_PROMPTS.md) — the fighter cards show it; the others keep the waist-up hero card. Listed
- * here so the cards never ask the server for a picture that isn't there.
+ * v0.2.23: the characters whose full-height picture exists (apps/web/public/assets/fullbody/<id>.jpg, made by
+ * tools/make-fullbody.py from the owner's pictures). The big tall fighter cards draw them; everyone else — and the
+ * small and wide cards — keep the waist-up hero art.
  */
 import type { CharacterId } from '@blatkom/shared';
 
-export const FULLBODY: ReadonlySet<CharacterId> = new Set<CharacterId>([]);
+export const FULLBODY: ReadonlySet<CharacterId> = new Set<CharacterId>(['uchastkovy', 'mihalych', 'vorona', 'zmeya', 'varan', 'popugay', 'golub', 'tarakan', 'krysa', 'svinya']);

@@ -477,6 +477,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           !g && mods.length ? h('div', { class: 'modfit' }, t('With:'), ...mods.map((m) => h('span', { class: 'chip' }, modImg(m, 'small'), modText(m).name))) : null,
           // v0.2.20 (the owner: the empty space by the portrait): what the thing in hand does
           h('div', { class: 'dressing__stats' }, g ? h('ul', { class: 'gfacts' }, ...gadgetFacts(g).map((f) => h('li', null, f))) : statBars(w, mods)),
+          !g ? skinBuyRow(w, finish) : null,
           !g ? skinRow(w, finish) : null,
           h(
             'div',
@@ -518,6 +519,17 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
    * are worn with a tap (the server keeps the choice); the others are tried on here and bought right away
    * for BLATS (v0.2.18), or come from the skin case.
    */
+  /** A skin bought for BLATS and put on its weapon at once. */
+  const buySkin = (w: WeaponId, f: FinishId) => {
+    if (!online || !inv) return;
+    const why = skinBuyRefusal(inv, w, f);
+    if (why === 'funds') {
+      toast(t('Not enough BLATS'));
+      return toTab('diamonds');
+    }
+    if (why) return void toast(refusalText(why));
+    void act(() => online.buySkin(w, f), t('Skin on: {name}', { name: `${weaponName(w)} · ${finishName(f)}` }));
+  };
   const skinRow = (w: WeaponId, current: FinishId | null, where: 'room' | 'sheet' = 'room'): HTMLElement => {
     const pick = (f: FinishId | null) => {
       trying = { ...trying, weapon: w, finish: f };
@@ -532,17 +544,6 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       sfx.play('click');
       refreshPreview();
     };
-    const buySkin = (f: FinishId) => {
-      if (!online || !inv) return;
-      const why = skinBuyRefusal(inv, w, f);
-      if (why === 'funds') {
-        toast(t('Not enough BLATS'));
-        return toTab('diamonds');
-      }
-      if (why) return void toast(refusalText(why));
-      void act(() => online.buySkin(w, f), t('Skin on: {name}', { name: `${weaponName(w)} · ${finishName(f)}` }));
-    };
-    const price = current ? skinPrice(current) : null;
     // v0.2.19 (the owner: «меню со скинами — более красочное и масштабное по картинкам»): every skin is a card
     // with the weapon painted in it, big, its grade's colour and ribbon, its name and whether it's yours or its
     // price — a strip in the dressing room, a grid in the skins' sheet (the «Skins» button)
@@ -578,20 +579,29 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         where === 'room' ? h('button', { class: 'btn btn--small skinsbtn', 'data-testid': 'skins-all', onclick: () => openSkins(w) }, h('i', { 'aria-hidden': 'true' }, '✦'), t('All skins')) : null,
       ),
       h('div', { class: 'skingrid' }, card(null), ...list.map((f) => card(f))),
-      current && !ownsSkin(w, current) && price
+      where === 'sheet' ? skinBuyRow(w, current) : null,
+    );
+  };
+  /**
+   * The price of a skin tried on and not owned. v0.2.23: in the dressing room it sits in the column beside the
+   * poster (next to the weapon's numbers), not under the skins — the skins' row no longer grows past the poster
+   * and slides over the fighter card.
+   */
+  const skinBuyRow = (w: WeaponId, current: FinishId | null): HTMLElement | null => {
+    const price = current ? skinPrice(current) : null;
+    return current && !ownsSkin(w, current) && price
         ? h(
             'div',
             { class: 'skinpick__buy', 'data-testid': 'skin-buy-row' },
             gradeTag(FINISHES[current].rarity),
             online
-              ? h('button', { class: 'btn btn--small btn--red', 'data-testid': 'skin-buy', onclick: () => buySkin(current) }, h('span', { class: 'amt buyfor' }, h('span', null, t('Buy for')), priceLabel(price)))
+              ? h('button', { class: 'btn btn--small btn--red', 'data-testid': 'skin-buy', onclick: () => buySkin(w, current) }, h('span', { class: 'amt buyfor' }, h('span', null, t('Buy for')), priceLabel(price)))
               : h('span', { class: 'muted' }, t('Skins are sold in the online version.')),
             online ? h('button', { class: 'linkish', onclick: () => toTab('case', true) }, t('or try the skin case')) : null,
             // v0.2.22 (the owner: «покупает его на одно конкретное оружие»): said where the price is
             h('small', { class: 'muted skinpick__one', 'data-testid': 'skin-one-weapon' }, t('A skin is bought for one weapon: {weapon}', { weapon: weaponName(w) })),
           )
-        : null,
-    );
+        : null;
   };
 
   /** «Примерить»: put it on in the dressing room and bring the dressing room into view. */

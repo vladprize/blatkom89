@@ -165,11 +165,16 @@ Drawn on a canvas at the screen's pixel ratio, so «Поделиться» sends
   colour; regular cards stay calm, an epic card has a light running round its frame, a legendary one two
   lights and its own background (slow rays, sparks). Only cards in view are animated (25 frames a second at
   most); with «reduce motion» nothing moves.
-* **The art.** Until full-height pictures exist the cards use the waist-up hero art (`assets/heroes/<id>.jpg`,
-  360×480). Full-height art goes to `apps/web/public/assets/fullbody/<id>.png` (transparent PNG or a flat
-  #BFBFBF background, 2 : 3, about 1024×1536, the figure about 88 % of the height, standing three-quarter,
-  empty hands — the card draws the weapon) and its id into `ui/fullbody.ts` (`FULLBODY`); the card then stands
-  the figure on its floor. The prompts for the 36 characters (each made from that character's existing
-  portrait as the reference): [FULLBODY_PROMPTS.md](FULLBODY_PROMPTS.md).
+* **The art.** A big tall card (the Arsenal's poster, the card opened big and shared, the line-up on a computer,
+  the sets) shows the character at full height when the picture exists; the small cards (a crowded line-up, the
+  podium, the phone's kit) and the wide ones (the killer's card, «Тебя уложили этим») keep the waist-up hero art
+  (`assets/heroes/<id>.jpg`, 360×480) — a face reads better there. The full-height pictures: the owner's (2 : 3,
+  1024×1536, on the game's dark red background), made from each character's portrait with
+  [FULLBODY_PROMPTS.md](FULLBODY_PROMPTS.md); `tools/make-fullbody.py id=picture …` cuts off their frame line and
+  writes `apps/web/public/assets/fullbody/<id>.jpg` (600×914, ~80–170 KB) — then the id goes into `ui/fullbody.ts`
+  (`FULLBODY`; a unit test checks the files). The card fits the figure's height (the sides fade into the card),
+  draws the weapon at the hips and the alias over the boots. v0.2.23: 10 of 36 — the policeman, the bear, the crow,
+  the snake, the lizard, the parrot, the pigeon, the cockroach, the rat, the pig; the rooster and the panther wait
+  for sneakers without a sports maker's marks.
 * The same rules as everywhere: no real brands (two stripes, never three), no prison symbols or tattoos, no
   text in the pictures.

@@ -77,7 +77,8 @@ function image(src: string): Promise<HTMLImageElement> {
   return p;
 }
 
-const artSrc = (c: CharacterId) => (FULLBODY.has(c) ? asset(`assets/fullbody/${c}.png`) : asset(`assets/heroes/${c}.jpg`));
+/** The character's picture: full height (a big tall card, when the art exists) or the waist-up hero card. */
+const artSrc = (c: CharacterId, full: boolean) => (full && FULLBODY.has(c) ? asset(`assets/fullbody/${c}.jpg`) : asset(`assets/heroes/${c}.jpg`));
 const plainWeaponSrc = (w: WeaponId) => asset(`assets/ui/weapons/${w}.png`);
 
 /** The painted weapon's frames (one for a still finish, LIVE_FRAMES for a live one), as they get ready. */
@@ -162,7 +163,7 @@ export class FighterCard {
     this.describe();
     this.draw(performance.now());
     // the art and the painted weapon arrive later: draw again then (and when the fonts are in)
-    void image(artSrc(d.character)).then(() => this.redraw(), () => {});
+    void image(artSrc(d.character, this.fullArt())).then(() => this.redraw(), () => {});
     if (document.fonts?.ready) void document.fonts.ready.then(() => this.redraw());
     live.add(this);
     wake();
@@ -180,7 +181,7 @@ export class FighterCard {
     this.d = d;
     this.describe();
     this.redraw();
-    if (art) void image(artSrc(d.character)).then(() => this.redraw(), () => {});
+    if (art) void image(artSrc(d.character, this.fullArt())).then(() => this.redraw(), () => {});
     live.add(this);
     wake();
   }
@@ -239,6 +240,19 @@ export class FighterCard {
     if (reducedMotion() || !this.inView) return;
     const perks = skinPerks(this.d.finish);
     if (perks?.glow || isLiveFinish(this.d.finish)) this.draw(now);
+  }
+
+  /** A small or squat tall card (the phone's kit, a crowded line-up, the podium): the alias and the skin only. */
+  private compact(): boolean {
+    return this.w < 120 || this.h / this.w < 1.25;
+  }
+
+  /**
+   * v0.2.23: the full-height picture — on a tall card big enough to show the whole figure; small cards and the
+   * wide ones keep the waist-up portrait (a face reads better there).
+   */
+  private fullArt(): boolean {
+    return this.shape === 'tall' && !this.compact() && FULLBODY.has(this.d.character);
   }
 
   private grade(): Grade | null {
@@ -326,19 +340,39 @@ export class FighterCard {
     ctx.restore();
   }
 
-  private art(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fade: 'bottom' | 'right') {
-    const src = artSrc(this.d.character);
+  private art(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fade: 'bottom' | 'right' | 'full') {
+    const full = fade === 'full';
+    const src = artSrc(this.d.character, full);
     const img = loaded.get(src);
     if (!img) return;
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, y, w, h);
     ctx.clip();
-    if (FULLBODY.has(this.d.character)) {
-      // the full-height picture stands on the card's floor, its height filling the space
-      const s = h / img.naturalHeight;
+    if (full) {
+      // the whole figure: the picture's height fills the space (a little wider than the card is cut evenly; a
+      // little narrower leaves the card's own background at the sides, the picture's edges faded into it)
+      const s = Math.max(h / img.naturalHeight, (w * 0.9) / img.naturalWidth);
       const dw = img.naturalWidth * s;
-      ctx.drawImage(img, x + (w - dw) / 2, y, dw, h);
+      const dh = img.naturalHeight * s;
+      const dx = x + (w - dw) / 2;
+      ctx.drawImage(img, dx, y + (h - dh) * 0.35, dw, dh);
+      if (dw < w + 1) {
+        const edge = Math.min(dw * 0.12, w * 0.12);
+        for (const [x0, x1] of [
+          [dx, dx + edge],
+          [dx + dw, dx + dw - edge],
+        ] as const) {
+          const g = ctx.createLinearGradient(x0, 0, x1, 0);
+          g.addColorStop(0, 'rgba(18,14,12,1)');
+          g.addColorStop(1, 'rgba(18,14,12,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(Math.min(x0, x1), y, edge, h);
+        }
+        ctx.fillStyle = 'rgb(18,14,12)';
+        if (dx > x) ctx.fillRect(x, y, dx - x, h);
+        if (dx + dw < x + w) ctx.fillRect(dx + dw, y, x + w - dx - dw, h);
+      }
     } else {
       // the waist-up hero card covers the space, its head kept in view
       const s = Math.max(w / img.naturalWidth, h / img.naturalHeight);
@@ -347,10 +381,11 @@ export class FighterCard {
       ctx.drawImage(img, x + (w - dw) / 2, y + Math.min(0, (h - dh) * 0.15), dw, dh);
     }
     ctx.restore();
-    // fade into the card
-    const g = fade === 'bottom' ? ctx.createLinearGradient(0, y + h * 0.55, 0, y + h) : ctx.createLinearGradient(x + w * 0.45, 0, x + w, 0);
+    // fade into the card (a full-height figure only under its feet, where the alias goes)
+    const g = full ? ctx.createLinearGradient(0, y + h * 0.66, 0, y + h * 0.9) : fade === 'bottom' ? ctx.createLinearGradient(0, y + h * 0.55, 0, y + h) : ctx.createLinearGradient(x + w * 0.45, 0, x + w, 0);
     g.addColorStop(0, 'rgba(18,14,12,0)');
-    g.addColorStop(1, 'rgba(18,14,12,1)');
+    g.addColorStop(full ? 0.55 : 0, full ? 'rgba(18,14,12,0.55)' : 'rgba(18,14,12,0)');
+    g.addColorStop(1, full ? 'rgba(18,14,12,0.94)' : 'rgba(18,14,12,1)');
     ctx.fillStyle = g;
     ctx.fillRect(x, y, w, h);
   }
@@ -505,11 +540,14 @@ export class FighterCard {
   private drawTall(ctx: CanvasRenderingContext2D, now: number) {
     const { w, h } = this;
     // a small or squat card (the phone's kit, a crowded line-up): the alias and the skin only, bigger
-    const compact = w < 120 || h / w < 1.25;
+    const compact = this.compact();
+    const full = this.fullArt();
     const fs = compact ? Math.max(9, w * 0.085) : w * 0.07;
     const head = this.d.label ? fs * 1.7 : 0;
     this.background(ctx, now, w / 2, h * 0.6, w * 0.95);
-    this.art(ctx, 0, head, w, h * (compact ? 0.7 : 0.74) - head, 'bottom');
+    // the full-height figure takes the whole card under the header (its feet under the alias); the portrait the top
+    if (full) this.art(ctx, 0, head, w, h - head, 'full');
+    else this.art(ctx, 0, head, w, h * (compact ? 0.7 : 0.74) - head, 'bottom');
     if (this.d.label) this.header(ctx, fs);
     if (!compact) this.ribbon(ctx, 0, head + w * 0.035, Math.max(7, w * 0.052));
     this.levelBadge(ctx, w - w * 0.035, head + w * 0.035, Math.max(9, w * 0.07));
@@ -521,7 +559,9 @@ export class FighterCard {
       this.frame(ctx, now);
       return;
     }
-    this.weapon(ctx, now, w / 2, h * 0.705, w * 0.9, -0.07);
+    // the weapon in front of the figure: at the hips of a full-height one, under the portrait's chest
+    if (full) this.weapon(ctx, now, w / 2, h * 0.66, w * 0.84, -0.07);
+    else this.weapon(ctx, now, w / 2, h * 0.705, w * 0.9, -0.07);
     const ct = charText(this.d.character);
     const cg = CHARACTERS[this.d.character].grade;
     this.text(ctx, this.d.name, w / 2, h * 0.835, w * 0.092, BEIGE, { weight: 700, align: 'center', max: w * 0.92 });
