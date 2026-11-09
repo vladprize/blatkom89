@@ -82,6 +82,52 @@ function image(src: string): Promise<HTMLImageElement> {
 const artSrc = (c: CharacterId, full: boolean) => (full && FULLBODY.has(c) ? asset(`assets/fullbody/${c}.jpg`) : asset(`assets/heroes/${c}.jpg`));
 const plainWeaponSrc = (w: WeaponId) => asset(`assets/ui/weapons/${w}.png`);
 
+/**
+ * A picture's own background colour at its edges — what a tall card fills around it (the headroom over the head,
+ * the sides of a full-height figure), so the card's red is the picture's red (the owner: «такой же красный фон,
+ * идентичный тому, что внутри карточки»). `top`: the top rows only (a waist-up portrait has only headroom);
+ * else the top rows and both sides. Measured once per picture; the card's own dark if it can't be read.
+ */
+const edgeColors = new Map<string, string>();
+function edgeColor(img: HTMLImageElement, src: string, top: boolean): string {
+  const key = `${src}|${top ? 't' : 'a'}`;
+  let c = edgeColors.get(key);
+  if (c) return c;
+  c = BG;
+  try {
+    const W = 24;
+    const H = 36;
+    const cv = document.createElement('canvas');
+    cv.width = W;
+    cv.height = H;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    if (g) {
+      g.drawImage(img, 0, 0, W, H);
+      const d = g.getImageData(0, 0, W, H).data;
+      let r = 0;
+      let gr = 0;
+      let b = 0;
+      let n = 0;
+      for (let yy = 0; yy < H; yy++) {
+        for (let xx = 0; xx < W; xx++) {
+          const edge = yy < 2 || (!top && (xx < 2 || xx >= W - 2));
+          if (!edge) continue;
+          const i = (yy * W + xx) * 4;
+          r += d[i]!;
+          gr += d[i + 1]!;
+          b += d[i + 2]!;
+          n++;
+        }
+      }
+      if (n) c = `rgb(${Math.round(r / n)},${Math.round(gr / n)},${Math.round(b / n)})`;
+    }
+  } catch {
+    // a picture the canvas may not read: the card's own background
+  }
+  edgeColors.set(key, c);
+  return c;
+}
+
 /** The painted weapon's frames (one for a still finish, LIVE_FRAMES for a live one), as they get ready. */
 const weaponFrames = new Map<string, Array<HTMLImageElement | undefined>>();
 function weaponFrame(w: WeaponId, f: FinishId | null, k: number, onReady: () => void): HTMLImageElement | null {
@@ -145,7 +191,7 @@ export class FighterCard {
   private observer: IntersectionObserver | null = null;
   /** The screen's pixels per CSS pixel (the canvas is drawn at it, at most 3). */
   private readonly dpr: number;
-  /** The art with its top faded (see fadedTop), kept while the character and the size stay. */
+  /** The art with its edges faded (see fadedArt), kept while the character and the size stay. */
   private faded: { key: string; c: HTMLCanvasElement } | null = null;
 
   /** `ratio`: height ÷ width (tall 1.42, wide 0.34 by default; the Arsenal's poster is 4 : 3). */
@@ -362,37 +408,27 @@ export class FighterCard {
     ctx.rect(x, y, w, h);
     ctx.clip();
     if (full) {
-      // the whole figure: the picture's height fills the space under the headroom, its feet on the card's bottom
-      // (narrower than the card, it leaves the card's own background at the sides, its edges faded into it)
+      // the whole figure: the picture's height fills the space under the headroom, its feet on the card's bottom;
+      // round it (the headroom, the sides of a picture narrower than the card) the picture's own red, its edges
+      // faded into it
       const s = (h - room) / img.naturalHeight;
       const dw = img.naturalWidth * s;
       const dh = img.naturalHeight * s;
       const dx = x + (w - dw) / 2;
-      // the pictures keep ~2 % of sky over the head: only that much fades
-      ctx.drawImage(this.fadedTop(img, src, dw, dh, room ? dh * 0.02 : 0), dx, y + h - dh, dw, dh);
-      if (dw < w + 1) {
-        const edge = Math.min(dw * 0.12, w * 0.12);
-        for (const [x0, x1] of [
-          [dx, dx + edge],
-          [dx + dw, dx + dw - edge],
-        ] as const) {
-          const g = ctx.createLinearGradient(x0, 0, x1, 0);
-          g.addColorStop(0, 'rgba(18,14,12,1)');
-          g.addColorStop(1, 'rgba(18,14,12,0)');
-          ctx.fillStyle = g;
-          ctx.fillRect(Math.min(x0, x1), y, edge, h);
-        }
-        ctx.fillStyle = 'rgb(18,14,12)';
-        if (dx > x) ctx.fillRect(x, y, dx - x, h);
-        if (dx + dw < x + w) ctx.fillRect(dx + dw, y, x + w - dx - dw, h);
-      }
+      ctx.fillStyle = edgeColor(img, src, false);
+      ctx.fillRect(x, y, w, h);
+      // the pictures keep ~2 % of sky over the head: only that much fades at the top
+      const side = dw < w - 1 ? Math.min(dw * 0.1, w * 0.1) : 0;
+      ctx.drawImage(this.fadedArt(img, src, dw, dh, room ? dh * 0.02 : 0, side), dx, y + h - dh, dw, dh);
     } else if (room) {
-      // the waist-up hero card covers the space under the headroom (cut at the bottom, not over the head); its
-      // top edge — a comb or a cap cut by the portrait's own frame — fades into the card
+      // the waist-up hero card covers the space under the headroom (cut at the bottom, not over the head); the
+      // headroom is the portrait's own red, its top edge — a comb or a cap cut by the portrait's frame — faded into it
       const s = Math.max(w / img.naturalWidth, (h - room) / img.naturalHeight);
       const dw = img.naturalWidth * s;
       const dh = img.naturalHeight * s;
-      ctx.drawImage(this.fadedTop(img, src, dw, dh, room * 0.8), x + (w - dw) / 2, y + room, dw, dh);
+      ctx.fillStyle = edgeColor(img, src, true);
+      ctx.fillRect(x, y, w, room + 1);
+      ctx.drawImage(this.fadedArt(img, src, dw, dh, room * 0.8, 0), x + (w - dw) / 2, y + room, dw, dh);
     } else {
       // the waist-up hero card covers the space, its head kept in view
       const s = Math.max(w / img.naturalWidth, h / img.naturalHeight);
@@ -410,13 +446,17 @@ export class FighterCard {
     ctx.fillRect(x, y, w, h);
   }
 
-  /** The art at its size on the card with its top `fade` px faded out — made once per card and size, then reused. */
-  private fadedTop(img: HTMLImageElement, src: string, dw: number, dh: number, fade: number): CanvasImageSource {
-    if (fade < 0.5) return img;
+  /**
+   * The art at its size on the card with its top `top` px and its sides `side` px faded out (to the picture's own
+   * red the card fills round it) — made once per card and size, then reused.
+   */
+  private fadedArt(img: HTMLImageElement, src: string, dw: number, dh: number, top: number, side: number): CanvasImageSource {
+    if (top < 0.5 && side < 0.5) return img;
     const W = Math.max(1, Math.round(dw * this.dpr));
     const H = Math.max(1, Math.round(dh * this.dpr));
-    const F = Math.max(1, Math.round(fade * this.dpr));
-    const key = `${src}|${W}|${H}|${F}`;
+    const T = Math.round(top * this.dpr);
+    const S = Math.min(Math.floor(W / 2), Math.round(side * this.dpr));
+    const key = `${src}|${W}|${H}|${T}|${S}`;
     if (this.faded?.key === key) return this.faded.c;
     const c = document.createElement('canvas');
     c.width = W;
@@ -424,13 +464,25 @@ export class FighterCard {
     const g = c.getContext('2d');
     if (!g) return img;
     g.drawImage(img, 0, 0, W, H);
-    // keep the picture where the mask is opaque: transparent at the top, opaque from F down (the gradient pads)
+    // keep the picture where the masks are opaque (each mask fills the whole canvas — destination-in clears
+    // whatever a fill leaves out; the gradients pad with their end colours)
     g.globalCompositeOperation = 'destination-in';
-    const m = g.createLinearGradient(0, 0, 0, F);
-    m.addColorStop(0, 'rgba(0,0,0,0)');
-    m.addColorStop(1, 'rgba(0,0,0,1)');
-    g.fillStyle = m;
-    g.fillRect(0, 0, W, H);
+    if (T > 0) {
+      const m = g.createLinearGradient(0, 0, 0, T);
+      m.addColorStop(0, 'rgba(0,0,0,0)');
+      m.addColorStop(1, 'rgba(0,0,0,1)');
+      g.fillStyle = m;
+      g.fillRect(0, 0, W, H);
+    }
+    if (S > 0) {
+      const m = g.createLinearGradient(0, 0, W, 0);
+      m.addColorStop(0, 'rgba(0,0,0,0)');
+      m.addColorStop(S / W, 'rgba(0,0,0,1)');
+      m.addColorStop(1 - S / W, 'rgba(0,0,0,1)');
+      m.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = m;
+      g.fillRect(0, 0, W, H);
+    }
     this.faded = { key, c };
     return c;
   }

@@ -172,14 +172,16 @@ Drawn on a canvas at the screen's pixel ratio, so «Поделиться» sends
   1024×1536, on the game's dark red background), made from each character's portrait with
   [FULLBODY_PROMPTS.md](FULLBODY_PROMPTS.md); `tools/make-fullbody.py id=picture …` cuts off their frame line and
   writes `apps/web/public/assets/fullbody/<id>.jpg` (600×914, ~80–170 KB) — then the id goes into `ui/fullbody.ts`
-  (`FULLBODY`; a unit test checks the files). The card fits the figure's height (the sides fade into the card).
+  (`FULLBODY`; a unit test checks the files). The card fits the figure's height.
   v0.2.23: 10 of 36 — the policeman, the bear, the crow,
   the snake, the lizard, the parrot, the pigeon, the cockroach, the rat, the pig; the rooster and the panther wait
   for sneakers without a sports maker's marks.
 * **The layout of a tall card** (the owner, on the first full-height cards: «как раньше — оружие снизу, справа,
   и без этих надписей, либо сделай их меньше»; then «небольшой отступ, чтобы голова не упиралась в верхнюю рамку»):
-  nothing lies across the figure. The art takes the whole card under a little headroom (4.5 % of its height, the
-  picture's top edge faded into the card; a full-height figure is scaled to fit under it, its feet on the bottom); the
+  nothing lies across the figure. The art takes the whole card under a little headroom (4.5 % of its height; a
+  full-height figure is scaled to fit under it, its feet on the bottom). The headroom and the sides of a picture
+  narrower than the card are the picture's own red, measured from its edges, the picture's edges faded into it
+  («такой же красный фон, идентичный тому, что внутри карточки» — the card's dark showed there before); the
   weapon in its skin stands in the lower right corner (60 % of the card's width, 74 % on a compact card), its
   muzzle up to the right, on a soft shade and the skin's own light (a legendary skin: sparks round it); a squat
   card (the phone's kit, the portrait cut at the chest, its face low and to the right) has it a little smaller
