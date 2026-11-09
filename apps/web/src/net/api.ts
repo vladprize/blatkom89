@@ -167,6 +167,10 @@ export class Api {
   buySkin(weapon: WeaponId, finish: FinishId) {
     return this.req<Inventory>('POST', '/api/shop/skin', { weapon, finish });
   }
+  /** v0.2.23: a set — a character with their legendary skin on the automatic (BLATS; put on at once). */
+  buyBundle(character: CharacterId) {
+    return this.req<Inventory>('POST', '/api/shop/bundle', { character });
+  }
   /** v0.2.18 part 2: the character case (299 BLATS): a character sold for BLATS, not owned yet. */
   openCharacterCase() {
     return this.req<CharacterCaseResult>('POST', '/api/shop/character-case', { confirmAge: true });

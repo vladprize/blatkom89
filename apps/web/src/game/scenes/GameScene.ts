@@ -3,13 +3,14 @@
  * runs the camera and lighting, and turns session events into feedback (visual, audio, haptics).
  */
 import * as Phaser from 'phaser';
-import { TICK_MS, getMap, getCollision, WEAPONS, SCORING, CTF_RULES, BASE_RULES, isWeaponId } from '@blatkom/shared';
+import { TICK_MS, getMap, getCollision, WEAPONS, SCORING, CTF_RULES, BASE_RULES, isWeaponId, skinPerks } from '@blatkom/shared';
 import type { CollisionWorld, MapDef } from '@blatkom/shared';
 import type { GameSession, RenderPlayer, SessionEvent, RenderPickup } from '../session/types.js';
 import { MapRenderer } from '../render/MapRenderer.js';
 import { Snowfall } from '../render/Weather.js';
 import { Lighting } from '../render/Lighting.js';
 import { Effects, muzzlePoint } from '../render/Effects.js';
+import { finishColors } from '../render/skinColors.js';
 import { CharacterView, spawnCorpse } from '../render/CharacterView.js';
 import { GadgetView } from '../render/GadgetView.js';
 import { ObjectiveView, TEAM_CLOTH } from '../render/ObjectiveView.js';
@@ -22,6 +23,7 @@ import { hudBus } from './hudBus.js';
 import type { ObjectiveEntry } from './hudBus.js';
 import { haptic } from '../../telegram/tg.js';
 import { toast } from '../../ui/dom.js';
+import { killerCardData } from '../../ui/matchCards.js';
 import { t } from '../../i18n/index.js';
 
 export interface GameSceneData {
@@ -454,15 +456,17 @@ export class GameScene extends Phaser.Scene {
         this.views.get(e.shooter)?.onShot(weapon, time);
         // suppressed weapons do not give the shooter away on the minimap radar
         if (!silenced) hudBus.emit('radar', e.shooter);
-        if (!silenced) this.fx.muzzleFlash(ox, oy, aim, weapon);
+        // v0.2.23: a rare-or-better skin paints the shot — its tracers, the muzzle's glow and light
+        const skinLight = shooter?.skin && shooter.weapon === weapon && skinPerks(shooter.skin)?.shots ? finishColors(shooter.skin).glowHex : undefined;
+        if (!silenced) this.fx.muzzleFlash(ox, oy, aim, weapon, skinLight);
         const m = muzzlePoint(ox, oy, aim, weapon);
         for (const pl of e.pellets) {
           const ex = e.ox + Math.cos(pl.angle) * pl.dist;
           const ey = e.oy + Math.sin(pl.angle) * pl.dist;
-          this.fx.tracer(m.x, m.y, ex, ey, weapon);
+          this.fx.tracer(m.x, m.y, ex, ey, weapon, skinLight);
         }
         if (!(isLocal && e.predicted && this.session.mode === 'online')) this.impacts(e);
-        if (!silenced) this.lighting.flash(m.x, m.y, def.flash === 'obrez' || def.sound === 'flame' ? 150 : 110, def.sound === 'flame' ? 0xff8a30 : 0xffb050, 0.9, def.sound === 'flame' ? 120 : 60, time);
+        if (!silenced) this.lighting.flash(m.x, m.y, def.flash === 'obrez' || def.sound === 'flame' ? 150 : 110, def.sound === 'flame' ? 0xff8a30 : (skinLight ?? 0xffb050), 0.9, def.sound === 'flame' ? 120 : 60, time);
         sfx.play(silenced && !def.silenced && def.sound !== 'shotgun' && def.sound !== 'obrez' ? 'silenced' : def.sound, { x: ox, y: oy, volume: isLocal ? 0.9 : silenced ? 0.6 : 1 });
         if (isLocal) this.fx.shake(cam, def.shake);
         break;
@@ -571,10 +575,20 @@ export class GameScene extends Phaser.Scene {
           spawnCorpse(this, victim.character, victim.x, victim.y, victim.aim);
           this.fx.bloodPool(victim.x, victim.y);
           sfx.play('death', { x: victim.x, y: victim.y });
+          // v0.2.23: an elimination with an epic or legendary skin ends in a burst of its colours
+          const kp = killer?.skin && killer.weapon === e.weapon ? skinPerks(killer.skin) : null;
+          if (killer?.skin && kp && kp.killFx !== 'none') {
+            const c = finishColors(killer.skin);
+            const grand = kp.killFx === 'grand';
+            this.fx.skinBurst(victim.x, victim.y, c.mainHex, c.glowHex, grand);
+            this.lighting.flash(victim.x, victim.y, grand ? 190 : 130, c.glowHex, grand ? 1.2 : 0.9, grand ? 320 : 220, time);
+          }
         }
         const helpers = e.assists.map((slot) => bySlot(slot)).filter((p): p is RenderPlayer => !!p);
         const assistLocal = helpers.some((p) => p.isLocal);
-        hudBus.emit('killfeed', { killer: killer?.name ?? '—', killerLocal: !!killer?.isLocal, victim: victim?.name ?? '—', victimLocal: !!victim?.isLocal, weapon: e.weapon, assists: helpers.map((p) => p.name), assistLocal, killerTeam: killer?.team ?? null, victimTeam: victim?.team ?? null });
+        // v0.2.23: the skin that did it — the killer's finish when the kill was made with the weapon in hand
+        const finish = killer && killer.weapon === e.weapon ? killer.skin : null;
+        hudBus.emit('killfeed', { killer: killer?.name ?? '—', killerLocal: !!killer?.isLocal, victim: victim?.name ?? '—', victimLocal: !!victim?.isLocal, weapon: e.weapon, finish, assists: helpers.map((p) => p.name), assistLocal, killerTeam: killer?.team ?? null, victimTeam: victim?.team ?? null });
         if (killer?.isLocal) {
           hudBus.emit('hitmarker', true);
           hudBus.emit('points', { points: SCORING.killPoints, label: t('ELIMINATION') });
@@ -586,10 +600,13 @@ export class GameScene extends Phaser.Scene {
           haptic('impact-light');
         }
         if (victim?.isLocal) haptic('impact-heavy');
+        // v0.2.23: who took the player down, and with what — a card while they wait to respawn (not in the story)
+        if (victim?.isLocal && killer && !killer.isLocal && !this.session.hud().story) hudBus.emit('killer-card', killerCardData(killer, e.weapon));
         break;
       }
       case 'respawn': {
         const p = bySlot(e.slot);
+        if (p?.isLocal) hudBus.emit('killer-card', null);
         if (p?.isLocal) {
           sfx.play('respawn', { volume: 0.6 });
           this.camX = e.x;

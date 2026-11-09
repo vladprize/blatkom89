@@ -207,6 +207,12 @@ try {
   const kas = await A.page.locator('[data-testid=friend-collection] .fcoll__char.chargrade--legendary[data-owned=true]').count();
   const leg = await A.page.locator('[data-testid=friend-collection] .fcoll__skin[data-grade=legendary] b').innerText();
   check(/Characters: 3 of 36/i.test(coll) && kas === 1 && leg.trim() === '1', `A sees B's collection: 3 of 36 characters (the legendary one in colour), 1 legendary skin («${coll.slice(0, 80)}»)`);
+  // v0.2.23: B's fighter card at the top — the main weapon of B's kit
+  const fcard = await A.page.evaluate(() => {
+    const c = document.querySelector('[data-testid=friend-card] canvas[data-testid=fighter-card]');
+    return c ? { character: c.dataset.character, weapon: c.dataset.weapon, w: Math.round(c.getBoundingClientRect().width) } : null;
+  });
+  check(!!fcard && !!fcard.weapon && fcard.w >= 200, `v0.2.23: the collection opens with B's fighter card (${JSON.stringify(fcard)})`);
   await A.page.screenshot({ path: `${outDir}/friend_collection.png` });
   const C = await player('Stranger', 'en', { width: 1280, height: 720 });
   // from outside the page (the page would log the expected 403 as a console error)

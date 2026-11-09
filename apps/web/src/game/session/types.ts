@@ -31,6 +31,8 @@ export interface RenderPlayer {
   laser: boolean;
   /** The finish of the weapon in hand (a weapon skin), null: the plain weapon. */
   skin: FinishId | null;
+  /** v0.2.23: eliminations with that skin so far (the legendary skins' «★ N»); absent/null: not known. */
+  skinKills?: number | null;
   /** Blinded by a flashbang for this many more ms. */
   flashedMs: number;
   /** Team matches: 0 red, 1 blue; null in free-for-all. */

@@ -390,7 +390,37 @@ Not changed: Render compresses responses (brotli / gzip) itself — no compressi
 
 The demo's staged flag capture waited 300 ms of wall time; on the stand's software GPU a match's first frames come in bursts (once none for 300 ms) — the test waits on the world's clock now (`demo.mjs`).
 
+## 2o. v0.2.23 (2026-11-09) — skins you can see (the owner: «оправдать цену скина $1–$10»)
+
+The owner dropped the 3D track and asked for the skins' visibility in the 2D game: portraits of the fighters with
+their skins wherever it makes sense — the Arsenal, before a deathmatch, the one who took you down while you
+respawn. Plan agreed in chat; full-height art comes from the owner later (prompts: docs/FULLBODY_PROMPTS.md).
+
+| # | What | Implementation | Status |
+|---|---|---|---|
+| 1 | One «fighter card» for everything | `ui/fighterCard.ts`: a canvas — the character's art, the weapon in hand big in its skin, the grade's ribbon/frame/light, alias, level; tall and wide shapes; one shared timer animates the live paint and the legendary background, only cards in view | ✅ |
+| 2 | The killer's card while respawning | `GameScene` sends who and with what (`killerCardData`) to `ui/matchCards.ts`; under «ELIMINATED», gone at the respawn; not in the story | ✅ e2e `v0223` (computer and phone sideways) |
+| 3 | The line-up before a match | every fighter's card during the countdown (teams apart), over the loading art | ✅ e2e `v0223` |
+| 4 | The skin in the kill feed | the feed's weapon icon painted in the killer's skin | ✅ e2e `v0223` |
+| 5 | Grade perks in battle (looks only) | `SKIN_PERKS` (shared): rare — tracers, muzzle flash and its light in the skin's colours; epic — a glow round the weapon, a burst at each elimination; legendary — a bigger burst with sparks. Colours from the paint itself (`render/skinColors.ts`) | ✅ unit `skinColors.test.ts`; seen in the e2e screenshots |
+| 6 | Cards by grade | epic: a light runs round the frame; legendary: two lights, its own background (rays, sparks), the kill counter «★ N» | ✅ |
+| 7 | Results | the podium (three cards, the weapon last seen in hand) instead of the winner's banner (team banner stays); «Тебя уложили этим» — each skin that took the player down, «Примерить» → the Arsenal with it on; a table row opens that player's card; the results in two columns when there are cards | ✅ e2e `v0223`: nothing scrolls at 1280×720 or on a phone sideways |
+| 8 | The Arsenal | the dressing room's poster is the player's card (the weapon tried on); the phone kit: card or the old doll view; «Поделиться» — the card as a PNG through the system's share sheet (saved on a computer, shown for a long press in Telegram) | ✅ e2e `v0223`, `skins`, `demo` (updated) |
+| 9 | Practice and filled players wear skins | practice bots: 40 % on the main weapon per match (never the story's people); filled players 40 % (was 30 %) from a wider list: ⅓ regular, ⅓ rare, ⅕ epic, ⅛ legendary | ✅ unit `skins.test.ts` |
+| 10 | The legendary kill counter | `skin_kills` (migration 029, adds a table only); the room counts a person's kills with a skinned weapon, filed with the results once per match (never past the match's kills), the inventory and the roster carry the counters; practice doesn't count; filled players' counters made up like their level | ✅ unit `skinkills.room.test.ts`, `recorder.test.ts`, `economy.test.ts` |
+| 11 | Sets ≈ $10 | `game-rules/bundles.ts`: each of the 9 epic/legendary characters for BLATS with their own legendary skin on the automatic — 899 / 999 BLATS (1 298 / 1 598 apart), sold while neither half is owned; `POST /api/shop/bundle` (one transaction); the Arsenal's «Комплекты» row of cards, confirmation, the set's character in play at once | ✅ unit `bundles.test.ts`, server `economy.test.ts`, e2e `v0223` (bought for 999 on the release bundle's server) |
+| 12 | A friend's card | a friend's collection (Friends → their avatar) opens with their fighter card: the character they play, the main weapon of their kit in its skin, the counter; `GET /api/friends/:id/collection` → `gear` | ✅ server `social.test.ts`, e2e `v0218b` |
+| 13 | Full-height art | the card takes `assets/fullbody/<id>.png` when listed in `ui/fullbody.ts`; until then the waist-up hero art | ⏳ waits for the owner's pictures (36 prompts given) |
+
+Not done: the counter is shown on the cards, not on the weapon sprite in the match; of the nine legendaries in the
+shop four are live (moving paint) — the others are still pictures (their cards and bursts move).
+
 ## 3. Open risks / next steps
+
+- After v0.2.23 (above, §2o): the owner's full-height art (36 pictures; drop into `assets/fullbody/` and list the ids);
+  his look at the cards on a real phone (the line-up's 3 s, the killer's card's size sideways); sets' prices and
+  pairings are first guesses; «Поделиться» inside a real Telegram client (the share sheet there is untested; the
+  long-press fallback is the plan).
 
 - After v0.2.22 (above, §2n; unit 352 / 352, all 28 browser stages pass on the release bundle — docs/TESTING.md §3): the frame rate on real phones after the light-map fix (the stand's GPU is software, its frame rate didn't move); whether the smaller in-game view in the Arsenal on short windows is fine for the owner.
 - After v0.2.21 (above, §2m; unit 351 / 351, every browser stage passes on the release bundle — docs/TESTING.md §3): the feel of the aim assist and of the bigger sticks on real phones; whether the hints should come back after a long break; a real iPhone's swipe «back» and Android's button with the history guard; the map thumbnails' 9–10 px captions on computers (twelve in a row).

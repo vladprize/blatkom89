@@ -7,7 +7,7 @@
  *   4. mark the match completed + results_processed_at
  * Concurrent duplicate calls serialize on the match row lock, so XP is awarded exactly once.
  */
-import { ACHIEVEMENTS, ACHIEVEMENT_IDS, RATING_RULES, applyMatchProgress, ratingDelta, tokensForMatch } from '@blatkom/shared';
+import { ACHIEVEMENTS, ACHIEVEMENT_IDS, RATING_RULES, applyMatchProgress, parseSkin, ratingDelta, tokensForMatch } from '@blatkom/shared';
 import type { AchievementId, PersonalResult } from '@blatkom/shared';
 import type postgres from 'postgres';
 import type { Sql } from '../database/db.js';
@@ -149,6 +149,8 @@ export class PgMatchRecorder implements MatchRecorder {
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
             tokens_awarded = EXCLUDED.tokens_awarded, rating_delta = EXCLUDED.rating_delta, left_at = EXCLUDED.left_at`;
+        // v0.2.23: the skins' kill counters (once per match: this branch runs only before results_processed_at)
+        await addSkinKills(tx, p.userId, p.skinKills, p.kills);
         out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof!.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating, blatsGained: blats.gained, totalBlats: blats.balance, ...(p.lateJoin && p.completed && !m.kon ? { lateJoin: true } : {}) });
         clubDeltas.push({ userId: p.userId, delta: rDelta });
       }
@@ -203,5 +205,21 @@ export class PgMatchRecorder implements MatchRecorder {
       UPDATE matches SET status = 'abandoned', ended_at = now(), end_reason = ${reason.slice(0, 40)}
       WHERE id = ${matchId} AND status = 'active'`;
     this.log.info('match abandoned', { matchId, reason });
+  }
+}
+
+/**
+ * Adds a match's eliminations with each skin to the player's counters. Unknown skins and impossible numbers
+ * are left out; no skin gets more than the player's eliminations in the match.
+ */
+async function addSkinKills(tx: Tx, userId: string, perSkin: Record<string, number> | undefined, matchKills: number): Promise<void> {
+  if (!perSkin) return;
+  for (const [id, n] of Object.entries(perSkin)) {
+    const s = parseSkin(id);
+    const kills = Math.min(Math.floor(n), Math.max(0, matchKills));
+    if (!s || !Number.isFinite(kills) || kills <= 0) continue;
+    await tx`
+      INSERT INTO skin_kills (user_id, weapon, finish, kills) VALUES (${userId}, ${s.weapon}, ${s.finish}, ${kills})
+      ON CONFLICT (user_id, weapon, finish) DO UPDATE SET kills = skin_kills.kills + EXCLUDED.kills, updated_at = now()`;
   }
 }

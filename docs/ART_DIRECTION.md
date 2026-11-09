@@ -152,3 +152,24 @@ state in a strip under the timer, on the minimap and as edge markers.
   starts with their first tap.
   The credits name it and its authors. The single-file demo does not include the music. Every
   asset and its rights: [ASSETS.md](ASSETS.md).
+
+## 6. Fighter cards and full-height art (v0.2.23)
+
+The fighter card (`apps/web/src/ui/fighterCard.ts`) is the game's portrait of a player: the character's art,
+the weapon in hand painted big in its skin, the grade's ribbon, frame and light, the alias and level. Two shapes:
+**tall** (3 : 4.26 — the line-up, the podium, the Arsenal, the viewer; under 120 px wide a compact version
+without the ribbon) and **wide** (the killer's card and «Тебя уложили этим»: the head and shoulders on the left).
+Drawn on a canvas at the screen's pixel ratio, so «Поделиться» sends exactly the picture on screen.
+
+* The colours of a skin's light come from its own paint (`render/skinColors.ts`), the frame from the grade's
+  colour; regular cards stay calm, an epic card has a light running round its frame, a legendary one two
+  lights and its own background (slow rays, sparks). Only cards in view are animated (25 frames a second at
+  most); with «reduce motion» nothing moves.
+* **The art.** Until full-height pictures exist the cards use the waist-up hero art (`assets/heroes/<id>.jpg`,
+  360×480). Full-height art goes to `apps/web/public/assets/fullbody/<id>.png` (transparent PNG or a flat
+  #BFBFBF background, 2 : 3, about 1024×1536, the figure about 88 % of the height, standing three-quarter,
+  empty hands — the card draws the weapon) and its id into `ui/fullbody.ts` (`FULLBODY`); the card then stands
+  the figure on its floor. The prompts for the 36 characters (each made from that character's existing
+  portrait as the reference): [FULLBODY_PROMPTS.md](FULLBODY_PROMPTS.md).
+* The same rules as everywhere: no real brands (two stripes, never three), no prison symbols or tattoos, no
+  text in the pictures.

@@ -77,10 +77,10 @@ export class MemoryAnalytics implements Analytics {
 
 /** Free gear for everyone unless a test sets something else. */
 export class MemoryEconomy implements Economy {
-  readonly gearByUser = new Map<string, { loadout?: Loadout; characters?: CharacterId[] }>();
+  readonly gearByUser = new Map<string, { loadout?: Loadout; characters?: CharacterId[]; skinKills?: Record<string, number> }>();
   async gear(userId: string): Promise<PlayerGear> {
     const g = this.gearByUser.get(userId);
-    return { loadout: g?.loadout ?? DEFAULT_LOADOUT, characters: new Set([...FREE_CHARACTERS, ...(g?.characters ?? [])]) };
+    return { loadout: g?.loadout ?? DEFAULT_LOADOUT, characters: new Set([...FREE_CHARACTERS, ...(g?.characters ?? [])]), ...(g?.skinKills ? { skinKills: g.skinKills } : {}) };
   }
 }
 

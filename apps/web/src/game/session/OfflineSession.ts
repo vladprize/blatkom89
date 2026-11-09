@@ -1,5 +1,5 @@
 /** Offline practice: the shared World + bots running locally (no server). */
-import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS, DEFAULT_LOADOUT, MAX_PLAYERS, PRACTICE_NAMES, weaponAmmo, isTeamMode, teamScoreLimitFor } from '@blatkom/shared';
+import { World, NavGrid, BotBrain, getMap, getCollision, CHARACTER_IDS, TICK_MS, PICKUP_RADIUS, WEAPONS, DEFAULT_LOADOUT, MAX_PLAYERS, PRACTICE_NAMES, FILL_FINISHES, FILL_SKIN_CHANCE, skinId, weaponAmmo, isTeamMode, teamScoreLimitFor } from '@blatkom/shared';
 import type { CharacterId, FinishId, GadgetId, GameMode, InputFrame, MapId, MatchConfig, Standing, BotDifficulty, PlayerState, Loadout, Team, WeaponId, WorldEvent } from '@blatkom/shared';
 import { getLang } from '../../i18n/index.js';
 import type { GameSession, HudState, RenderBase, RenderFlag, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
@@ -42,6 +42,30 @@ export interface OfflineOptions {
   deferStart?: boolean;
   /** The World's random seed (tests); a random one otherwise. */
   seed?: number;
+  /** v0.2.23: the player's skin counters («weapon.finish» → kills, from the inventory; practice adds none). */
+  skinKills?: Readonly<Record<string, number>>;
+}
+
+/**
+ * A practice bot's skin on a weapon: decided by its id and the match's salt (the same all match long, new
+ * next match), main weapons only.
+ */
+function practiceBotSkin(id: string, salt: number, weapon: WeaponId): FinishId | null {
+  if (WEAPONS[weapon].slot !== 3) return null;
+  let h = 2166136261 ^ salt;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  h = Math.imul(h ^ (h >>> 15), 2246822519);
+  h ^= h >>> 13;
+  const u = ((h >>> 0) % 10_000) / 10_000;
+  if (u >= FILL_SKIN_CHANCE) return null;
+  return FILL_FINISHES[Math.floor((u / FILL_SKIN_CHANCE) * FILL_FINISHES.length) % FILL_FINISHES.length]!;
+}
+
+/** A practice bot's counter for its skin (made up, like its level: a few dozen to a few hundred). */
+function practiceBotSkinKills(id: string, salt: number): number {
+  let h = 2166136261 ^ (salt * 31 + 7);
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return 6 + ((h >>> 0) % 300);
 }
 
 export class OfflineSession implements GameSession {
@@ -60,11 +84,12 @@ export class OfflineSession implements GameSession {
   protected killedBy: string | null = null;
   protected readonly levels = new Map<string, number>();
   private matchSeq = 0;
-  /** The local player's weapon skins (from the loadout; practice bots wear none). */
+  /** The local player's weapon skins (from the loadout; practice bots: `practiceBotSkin`). */
   private localSkins: Partial<Record<WeaponId, FinishId>> = {};
 
   constructor(opts: OfflineOptions) {
     this.localSkins = { ...(opts.loadout?.skins ?? {}) };
+    this.localSkinKills = { ...(opts.skinKills ?? {}) };
     this.mapId = opts.mapId;
     this.gameMode = opts.gameMode ?? 'ffa';
     this.world = new World(getMap(opts.mapId), getCollision(opts.mapId), {
@@ -105,6 +130,10 @@ export class OfflineSession implements GameSession {
       const se = worldEventToSession(e, bySlot, false);
       if (se) this.events.push(se);
       if (e.t === 'kill' && e.victim === this.localSlot()) this.killedBy = bySlot.get(e.killer)?.name ?? null;
+      if (e.t === 'kill' && e.killer !== e.victim) {
+        const k = bySlot.get(e.killer);
+        if (k?.isBot) this.botKills.set(`${k.id}|${e.weapon}`, (this.botKills.get(`${k.id}|${e.weapon}`) ?? 0) + 1);
+      }
       if (e.t === 'respawn' && e.slot === this.localSlot()) this.killedBy = null;
       if (e.t === 'matchEnd') {
         this.resultsData = {
@@ -125,6 +154,17 @@ export class OfflineSession implements GameSession {
     this.lastStepAt = performance.now();
   }
 
+  /**
+   * v0.2.23: practice bots carry skins like the people online do (some on the main weapon, now and then a
+   * legendary) — so the line-up, the shots and the killer's card show what skins look like; the story's
+   * enemies don't (StorySession turns it off).
+   */
+  protected botSkins = true;
+  private readonly skinSalt = Math.floor(Math.random() * 0x7fffffff);
+  /** Kills the bots made with each weapon this match (their counters move; the player's don't: practice). */
+  private readonly botKills = new Map<string, number>();
+  private readonly localSkinKills: Readonly<Record<string, number>>;
+
   /** Story missions add their own rules on top of the match (nothing in practice). */
   protected onWorldEvent(_e: WorldEvent): void {}
   protected afterStep(): void {}
@@ -138,7 +178,13 @@ export class OfflineSession implements GameSession {
     for (const p of this.world.players.values()) {
       const r = toRenderPlayer(p, p.id === this.localId, this.world.time);
       r.level = this.levels.get(p.id) ?? null;
-      if (p.id === this.localId) r.skin = this.localSkins[p.weapon] ?? null;
+      if (p.id === this.localId) {
+        r.skin = this.localSkins[p.weapon] ?? null;
+        r.skinKills = r.skin ? (this.localSkinKills[skinId(p.weapon, r.skin)] ?? 0) : null;
+      } else if (p.isBot && this.botSkins) {
+        r.skin = practiceBotSkin(p.id, this.skinSalt, p.weapon);
+        r.skinKills = r.skin ? practiceBotSkinKills(p.id, this.skinSalt) + (this.botKills.get(`${p.id}|${p.weapon}`) ?? 0) : null;
+      }
       const pr = this.prev.get(p.slot);
       if (pr && p.alive) {
         r.x = pr.x + (p.x - pr.x) * this.alpha;
@@ -250,6 +296,7 @@ export class OfflineSession implements GameSession {
     this.world.resetToLobby();
     this.resultsData = null;
     this.killedBy = null;
+    this.botKills.clear();
     this.world.beginMatch(true);
   }
 

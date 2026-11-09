@@ -4,12 +4,13 @@
  * Animation states are driven by session state and events, not random frames.
  */
 import * as Phaser from 'phaser';
-import { angleDiff, isLiveFinish, WEAPONS } from '@blatkom/shared';
+import { angleDiff, isLiveFinish, skinPerks, WEAPONS } from '@blatkom/shared';
 import type { CharacterId, FinishId, WeaponId } from '@blatkom/shared';
 import type { RenderPlayer } from '../session/types.js';
 import { D } from './depth.js';
 import { GRIPS } from './rig.gen.js';
 import { setWeaponTexture } from './skins.js';
+import { finishColors } from './skinColors.js';
 
 const SCALE = 0.5;
 /** Tip of the cigarette / cigar / pipe in body space (forward, side; world px), from the rigs. */
@@ -57,6 +58,8 @@ export class CharacterView {
   private readonly torso: Phaser.GameObjects.Sprite;
   /** Weapon in hand (atlas «weapons», origin = grip). */
   private readonly gun: Phaser.GameObjects.Image;
+  /** v0.2.23: an epic or legendary skin's glow round the weapon in hand (made when first needed). */
+  private aura: Phaser.GameObjects.Image | null = null;
   private readonly label: Phaser.GameObjects.Text;
   /** Chat speech bubble (created on the first line) and when it goes away. */
   private bubble: Phaser.GameObjects.Text | null = null;
@@ -165,6 +168,7 @@ export class CharacterView {
       this.alive = visible;
       for (const o of [this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.setVisible(visible);
       if (!visible) this.bubble?.setVisible(false);
+      if (!visible) this.aura?.setVisible(false);
       if (visible) this.playIdle();
     }
     if (p.team !== this.ringTeam) {
@@ -233,6 +237,7 @@ export class CharacterView {
     const sr = Math.sin(rot);
     const gx = grip[0] - kick;
     this.gun.setPosition(p.x + px + cr * gx - sr * grip[1], p.y + py + sr * gx + cr * grip[1]).setRotation(rot + grip[2]);
+    this.updateAura(now, concealed);
 
     // hit flash / spawn-protection blink
     if (now < this.flashUntil) {
@@ -291,6 +296,28 @@ export class CharacterView {
     }
   }
 
+  /** v0.2.23: the glow of an epic or legendary skin, along the weapon in hand, breathing slowly. */
+  private updateAura(now: number, concealed: boolean) {
+    const perks = skinPerks(this.skin);
+    const on = !!this.skin && !!perks?.glow && WEAPONS[this.weapon].kind !== 'melee' && !concealed;
+    if (!on) {
+      this.aura?.setVisible(false);
+      return;
+    }
+    if (!this.aura) this.aura = this.gun.scene.add.image(0, 0, 'fx', 'glow').setBlendMode(Phaser.BlendModes.ADD).setDepth(this.gun.depth - 0.001);
+    const c = finishColors(this.skin!);
+    const r = this.gun.rotation;
+    const reach = this.gun.frame.realWidth * SCALE * 0.42;
+    const breathe = 0.5 + 0.5 * Math.sin(now / 340 + this.slot);
+    this.aura
+      .setTint(c.glowHex)
+      .setPosition(this.gun.x + Math.cos(r) * reach, this.gun.y + Math.sin(r) * reach)
+      .setRotation(r)
+      .setScale(perks!.killFx === 'grand' ? 0.62 : 0.5, perks!.killFx === 'grand' ? 0.3 : 0.24)
+      .setAlpha((perks!.killFx === 'grand' ? 0.42 : 0.3) + breathe * 0.18)
+      .setVisible(this.gun.visible);
+  }
+
   /** A chat line said by this player: a bubble over the name for a few seconds (long lines cut). */
   say(text: string, now: number): void {
     const cps = Array.from(text);
@@ -309,6 +336,7 @@ export class CharacterView {
   destroy(): void {
     for (const o of [this.ring, this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.destroy();
     this.bubble?.destroy();
+    this.aura?.destroy();
   }
 }
 

@@ -290,7 +290,8 @@ export class Effects {
     return img;
   }
 
-  muzzleFlash(x: number, y: number, aim: number, weapon: WeaponId): void {
+  /** `skin`: v0.2.23 — a rare-or-better skin's light colour (its glow and a spark at the muzzle). */
+  muzzleFlash(x: number, y: number, aim: number, weapon: WeaponId, skin?: number): void {
     const def = WEAPONS[weapon];
     if (def.kind === 'melee') return;
     const m = muzzlePoint(x, y, aim, weapon);
@@ -298,9 +299,10 @@ export class Effects {
       this.flame(m.x, m.y, aim, def.range);
       return;
     }
+    if (skin !== undefined && def.flash !== 'none') this.spawn('glow', m.x + Math.cos(aim) * 4, m.y + Math.sin(aim) * 4, { life: 110, scale: def.flash === 'obrez' ? 0.75 : 0.5, tint: skin, alpha: 0.95, add: true, depth: D.FX_ADD });
     if (def.flash !== 'none') {
       this.spawn(`flash_${def.flash}_${Math.random() < 0.5 ? 0 : 1}`, m.x, m.y, { life: 55, scale: 0.5, rot: aim, add: true, fade: false, depth: D.FX_ADD });
-      this.spawn('glow', m.x, m.y, { life: 70, scale: def.flash === 'obrez' ? 0.9 : 0.6, tint: 0xffb050, alpha: 0.7, add: true, depth: D.FX_ADD });
+      this.spawn('glow', m.x, m.y, { life: 70, scale: def.flash === 'obrez' ? 0.9 : 0.6, tint: skin ?? 0xffb050, alpha: 0.7, add: true, depth: D.FX_ADD });
     } else if (def.silenced) {
       // suppressed: a faint puff instead of a flash
       this.spawn('glow', m.x, m.y, { life: 50, scale: 0.25, tint: 0xd8c8a8, alpha: 0.35, add: true, depth: D.FX_ADD });
@@ -341,7 +343,8 @@ export class Effects {
     }
   }
 
-  tracer(x0: number, y0: number, x1: number, y1: number, weapon: WeaponId): void {
+  /** `skin`: v0.2.23 — a rare-or-better skin's light colour: the tracer glows in it. */
+  tracer(x0: number, y0: number, x1: number, y1: number, weapon: WeaponId, skin?: number): void {
     const dx = x1 - x0;
     const dy = y1 - y0;
     const len = Math.sqrt(dx * dx + dy * dy);
@@ -351,8 +354,31 @@ export class Effects {
     if (def.sound === 'flame') return;
     const pellet = def.pellets > 1;
     const heavy = def.sound === 'rifle' || def.sound === 'lmg' || def.sound === 'bow';
-    const p = this.spawn('tracer', x1, y1, { life: pellet ? 60 : heavy ? 120 : 85, rot: a, add: true, alpha: pellet ? 0.75 : def.silenced ? 0.55 : 0.95, depth: D.FX_ADD, tint: def.sound === 'nail' ? 0xd8dce4 : undefined });
+    const p = this.spawn('tracer', x1, y1, { life: (pellet ? 60 : heavy ? 120 : 85) + (skin !== undefined ? 30 : 0), rot: a, add: true, alpha: pellet ? 0.75 : def.silenced ? 0.55 : 0.95, depth: D.FX_ADD, tint: skin ?? (def.sound === 'nail' ? 0xd8dce4 : undefined) });
     if (p) p.img.setOrigin(1, 0.5).setScale(Math.min(len, heavy ? 360 : 260) / 64, heavy ? 0.6 : pellet ? 0.4 : 0.5);
+  }
+
+  /**
+   * v0.2.23: an elimination made with an epic or legendary skin — a burst in the skin's colours where the
+   * victim fell (`grand`, a legendary one: a bigger burst, two rings and sparks that drift up).
+   */
+  skinBurst(x: number, y: number, main: number, glow: number, grand: boolean): void {
+    this.spawn('glow', x, y, { life: grand ? 320 : 240, scale: grand ? 1.9 : 1.3, tint: glow, alpha: 0.95, add: true, depth: D.FX_ADD });
+    this.spawn('ring', x, y, { life: grand ? 380 : 300, scale: 0.3, grow: grand ? 3.6 : 2.6, tint: glow, alpha: 0.9, add: true, depth: D.FX_ADD });
+    if (grand) this.spawn('ring', x, y, { life: 520, scale: 0.2, grow: 2.2, tint: main, alpha: 0.75, add: true, depth: D.FX_ADD });
+    const n = grand ? 26 : 14;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
+      const sp = (grand ? 80 : 60) + Math.random() * (grand ? 110 : 80);
+      this.spawn('px', x, y, { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 320 + Math.random() * (grand ? 380 : 220), scale: 0.45 + Math.random() * 0.35, tint: i % 3 ? glow : main, add: true, drag: 3.5 });
+    }
+    if (grand) {
+      for (let i = 0; i < 7; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 4 + Math.random() * 12;
+        this.spawn('glow', x + Math.cos(a) * r, y + Math.sin(a) * r, { vx: (Math.random() - 0.5) * 10, vy: -16 - Math.random() * 14, life: 800 + Math.random() * 400, scale: 0.18 + Math.random() * 0.12, tint: glow, alpha: 0.85, add: true, depth: D.FX_ADD });
+      }
+    }
   }
 
   wallHit(x: number, y: number, a: number): void {

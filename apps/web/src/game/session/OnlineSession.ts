@@ -18,7 +18,7 @@ import {
   weaponFor,
   teamScoreLimitFor,
 } from '@blatkom/shared';
-import type { CollisionWorld, GameEvent, GameMode, InputFrame, MapId, MatchConfig, PlayerState, RosterEntry, Snapshot, NetPlayer, Standing, PersonalResult, PelletResult, MatchPhase, Team, TeamResultSummary } from '@blatkom/shared';
+import type { CollisionWorld, GameEvent, GameMode, InputFrame, MapId, MatchConfig, PlayerState, RosterEntry, Snapshot, NetPlayer, Standing, PersonalResult, PelletResult, MatchPhase, Team, TeamResultSummary, WeaponId } from '@blatkom/shared';
 import type { GameSession, HudState, RenderBase, RenderFlag, RenderGadget, RenderPickup, RenderPlayer, ResultsData, SessionEvent } from './types.js';
 import type { GameConnection } from '../../net/GameConnection.js';
 
@@ -46,6 +46,8 @@ export class OnlineSession implements GameSession {
   private events: SessionEvent[] = [];
   private delayed: TimedEvent[] = [];
   private roster = new Map<number, RosterEntry>();
+  /** v0.2.23: eliminations with each skin seen in this match, by slot and weapon. */
+  private readonly liveSkinKills = new Map<number, Map<WeaponId, number>>();
   private renderOffX = 0;
   private renderOffY = 0;
   private resultsData: ResultsData | null = null;
@@ -122,6 +124,13 @@ export class OnlineSession implements GameSession {
     }
   }
 
+  /** v0.2.23: a player's counter for the skin on a weapon (the roster's count and this match's kills). */
+  private skinKillsOf(slot: number, w: WeaponId): number | null {
+    const r = this.roster.get(slot);
+    if (!r?.skins?.[w]) return null;
+    return (r.skinKills?.[w] ?? 0) + (this.liveSkinKills.get(slot)?.get(w) ?? 0);
+  }
+
   onEvents(tick: number, list: GameEvent[]): void {
     const at = tick * TICK_MS;
     for (const e of list) {
@@ -139,6 +148,13 @@ export class OnlineSession implements GameSession {
         (e.t === 'base' && e.slots.includes(this.slot));
       if ((e.t === 'reload' || e.t === 'dry') && e.slot === this.slot) continue; // predicted locally
       if (e.t === 'kill' && e.victim === this.slot) this.killedBy = this.roster.get(e.killer)?.name ?? null;
+      // v0.2.23: the skins' counters move with every elimination seen (on top of the roster's count)
+      if (e.t === 'kill' && e.killer !== e.victim && this.roster.get(e.killer)?.skins?.[e.weapon as WeaponId]) {
+        let m = this.liveSkinKills.get(e.killer);
+        if (!m) this.liveSkinKills.set(e.killer, (m = new Map()));
+        m.set(e.weapon as WeaponId, (m.get(e.weapon as WeaponId) ?? 0) + 1);
+      }
+      if (e.t === 'phase' && (e.phase === 'countdown' || e.phase === 'ready')) this.liveSkinKills.clear();
       if (e.t === 'respawn' && e.slot === this.slot) {
         this.killedBy = null;
         this.renderOffX = this.renderOffY = 0;
@@ -348,6 +364,7 @@ export class OnlineSession implements GameSession {
         level: r?.level ?? null,
         laser: src.laser,
         skin: r?.skins?.[src.weapon] ?? null,
+        skinKills: this.skinKillsOf(src.slot, src.weapon),
         flashedMs: src.flashedRemaining,
         team: pb.team,
         objectives: pb.objectives,
@@ -442,6 +459,7 @@ export class OnlineSession implements GameSession {
         level: r?.level ?? null,
         laser: me.mods[me.weapon]?.includes('laser') ?? false,
         skin: r?.skins?.[me.weapon] ?? null,
+        skinKills: this.skinKillsOf(this.slot, me.weapon),
         flashedMs: this.localFlashMs(),
         team: this.myTeam,
         objectives: this.myObjectives,

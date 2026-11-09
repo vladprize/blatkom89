@@ -2842,3 +2842,61 @@ button.blatsban:focus-visible { outline: 2px solid var(--tape); outline-offset: 
   @container (max-height: 76px) { .kitpromo__btn { display: none; } }
 }
 .skinpick__one { display: block; flex-basis: 100%; font-size: 12px; line-height: 1.3; }
+
+/* ── v0.2.23: fighter cards (ui/fighterCard.ts) and the cards round a match (ui/matchCards.ts) ── */
+.fcard { display: block; flex: none; }
+.mcards { position: fixed; left: 0; right: 0; pointer-events: none; display: flex; justify-content: center; opacity: 0; transition: opacity .35s ease-out, transform .35s ease-out; }
+.mcards--on { opacity: 1; }
+.mcards--lineup { z-index: 31; bottom: calc(96px + var(--safe-bottom, 0px)); transform: translateY(14px); }
+.mcards--lineup.mcards--on { transform: none; }
+.mcards__row { display: flex; gap: 8px; align-items: flex-end; padding: 0 16px; }
+.mcards__gap { width: 16px; flex: none; }
+.mcards .fcard { box-shadow: 0 8px 22px rgba(0,0,0,.6); }
+.mcards--on .fcard { animation: fcard-in .4s ease-out both; }
+/* under the HUD's «ELIMINATED» and its line (the line's middle at 36% of the height + 48 HUD units; its box
+   ends about 85 px under the 36% mark) */
+.mcards--killer { z-index: 26; top: calc(36% + 96px); transform: translateY(8px); }
+.mcards--killer.mcards--on { transform: none; }
+@keyframes fcard-in { from { opacity: 0; transform: translateY(16px) scale(.96); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .mcards--on .fcard { animation: none; } .mcards { transition: none; } }
+.dressing__poster--card::after { display: none; }
+.dressing__poster .dressing__card { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
+.dressing__share { position: absolute; top: 8px; right: 8px; z-index: 3; width: 38px; height: 38px; display: grid; place-items: center; font-size: 20px; line-height: 1; color: var(--beige); background: rgba(13,11,10,.72); border: 1px solid var(--line); cursor: pointer; }
+.dressing__share:hover, .dressing__share:focus-visible { background: rgba(60,44,30,.9); border-color: var(--tape); }
+.sheet--card .cardview { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 4px 0; }
+.cardview__pic { line-height: 0; box-shadow: 0 10px 28px rgba(0,0,0,.6); }
+.cardview__img { display: block; height: auto; max-width: 100%; }
+.cardview__note { font-size: 14px; text-align: center; }
+.kitcard__doll--card { border-color: transparent; box-shadow: none; }
+.kitcard__cardbtn { display: block; padding: 0; margin: 0; border: 0; background: none; cursor: pointer; line-height: 0; width: 100%; }
+.kitcard__doll .kitcard__card { width: 100% !important; height: auto !important; aspect-ratio: 1 / 1; }
+.kitcard__view { z-index: 2; border: 0; cursor: pointer; }
+.kitcard__view i { font-style: normal; opacity: .8; }
+.podium { display: flex; justify-content: center; align-items: flex-end; gap: 10px; padding: 10px 10px 8px; flex: none; }
+.podium__step { line-height: 0; flex: none; }
+.killedby { flex: none; gap: 8px; }
+.killedby__strip { display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 2px; scrollbar-width: thin; scrollbar-color: #5a4c3e transparent; }
+.killedby__item { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.killedby__try { min-height: 36px; }
+@media (max-width: 760px) {
+  .screen--results .podium { gap: 6px; padding: 8px 6px 6px; }
+  .screen--results .killedby { padding: 8px 10px; }
+}
+/* v0.2.23: sets — a row of fighter cards (scrolls sideways when it doesn't fit); a set's offer in a character's card */
+.bundles__row { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; padding: 2px 2px 8px; scrollbar-width: thin; scrollbar-color: #5a4c3e transparent; }
+.bundle { display: flex; flex-direction: column; align-items: stretch; gap: 6px; flex: none; width: min-content; }
+.bundle__card { padding: 0; border: 0; background: none; cursor: pointer; line-height: 0; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+.bundle__card:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px; }
+.bundle__what { font-size: 14px; line-height: 1.2; min-height: 2.4em; }
+.bundle__what b { color: #f2d27a; font-weight: 600; }
+.bundle__price { font-size: 13px; }
+.bundle__price s { text-decoration-thickness: 1.5px; }
+.bundle > .btn { width: 100%; }
+.bundleoffer { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border: 1px dashed rgba(242, 182, 50, .55); }
+/* v0.2.23: a results row opens the player's fighter card */
+.results__table tr.tr--tap { cursor: pointer; }
+.results__table tr.tr--tap:hover td, .results__table tr.tr--tap:focus-visible td { background: rgba(242, 210, 122, .06); }
+.results__table tr.tr--tap:focus-visible { outline: 1px solid rgba(242, 210, 122, .5); outline-offset: -1px; }
+/* v0.2.23: a friend's fighter card at the top of their collection (opens big) */
+.fcoll__card { align-self: center; padding: 0; border: 0; background: none; cursor: pointer; line-height: 0; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+.fcoll__card:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px; }

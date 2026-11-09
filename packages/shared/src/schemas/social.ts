@@ -7,6 +7,8 @@ import { z } from 'zod';
 import type { AvatarId } from '../game-rules/avatars.js';
 import type { CharacterId } from '../game-rules/characters.js';
 import type { Grade } from '../game-rules/grades.js';
+import type { WeaponId } from '../game-rules/weapons.js';
+import type { FinishId } from '../game-rules/skins.js';
 import type { GameMode } from '../game-rules/match.js';
 import type { MapId } from '../maps/types.js';
 import type { ClubSummary } from '../game-rules/clubs.js';
@@ -36,6 +38,8 @@ export interface FriendCollection {
   player: PlayerCard;
   characters: CharacterId[];
   skins: Record<Grade, number>;
+  /** v0.2.23: the main weapon in the friend's kit, its skin and that skin's kill counter (their fighter card). */
+  gear?: { weapon: WeaponId; finish: FinishId | null; kills: number | null };
 }
 
 export interface FriendEntry extends PlayerCard {

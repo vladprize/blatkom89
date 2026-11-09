@@ -148,6 +148,77 @@ its own light animation wherever the weapon is drawn — still only the look, at
   finishes). The room sends everyone's worn skins; the client paints the weapon's pixel art with the
   finish (`apps/web/src/game/render/finish.ts`).
 
+## 4a′. What a skin shows (v0.2.23)
+
+The owner (9 Nov): a skin has to be worth its $1–10 — it has to be *seen*, not only owned. A skin still
+changes only the look (all characters and weapons stay equal in combat); what each grade adds is a
+table in the shared rules (`SKIN_PERKS`, `game-rules/skins.ts`) that the client reads:
+
+| Grade (price) | In the match | On the fighter cards |
+|---|---|---|
+| regular ($0.99) | the paint on the weapon in hand; the kill feed's icon painted in it | the card shows the weapon big in the finish |
+| rare ($1.99) | + the tracers and the muzzle flash (and its light) in the skin's colours | + the card's glow in its colours |
+| epic ($2.99) | + a glow round the weapon in hand; a burst in the skin's colours at each elimination | + a light running round the card's frame |
+| legendary ($4.99) | + a bigger burst with drifting sparks | + the card's own background (slow rays, sparks), two lights on the frame, the **kill counter** «★ N» |
+
+Four legendaries are also live (their paint moves, since v0.2.19). The colours come from the painter itself
+(`apps/web/src/game/render/skinColors.ts` paints a strip with the finish and takes its main and brightest
+colours), so a new finish needs no colour table.
+
+**Fighter cards** (`apps/web/src/ui/fighterCard.ts`, one canvas each): the character's art (waist-up hero art;
+full-height art per character once it exists — [ART_DIRECTION.md](ART_DIRECTION.md) §6), the weapon in hand big
+in its skin, the grade's ribbon and frame, the alias and level. Where they appear:
+
+* **the line-up** — while a match counts down: every fighter's card side by side (teams apart);
+* **the killer's card** — while the player waits to respawn (2.5 s): who took them down and with what, in its skin;
+* **the results** — the podium (the best three with the weapon last seen in their hands) and «Тебя уложили
+  этим» (every *skin* that took the player down this match) with «Примерить» → the Arsenal with that skin on;
+  a row of the table opens that player's card;
+* **the Arsenal** — the dressing room's poster is the player's own card (the weapon tried on, in its skin);
+  it opens big with **«Поделиться»** (the system's share sheet with the picture and the game's address; on a
+  computer the picture is saved; inside Telegram the picture is shown to save by a long press).
+
+Practice bots wear skins too (decided per match from a bot's id: 40 % on the main weapon, the same spread as the
+filled players below; never the story's people), so the cards and perks show offline as well. The players a room
+fills in wear a skin on the main weapon 40 % of the time (was 30 %), drawn from a wider list
+(`FILL_FINISHES`): a third regular, a third rare, a fifth epic, an eighth legendary.
+
+**The kill counter** (legendary perk): every elimination online with a weapon wearing a skin is counted for that
+skin (`skin_kills`, migration 029: player, weapon, finish, kills). The room counts a person's eliminations with
+a skinned weapon (not the filled players'), the match's results file them in the same transaction as the rest
+(once per match: `matches.results_processed_at`; never more than the player's eliminations in the match), the
+inventory returns them (`skinKills`: «weapon.finish» → kills), the roster sends everyone the counters of the
+skins each player has on (`skinKills` by weapon, as of the match's start; the clients add the eliminations they
+see). Practice doesn't count. The filled players' counters are made up with the rest of their persona (like
+their level).
+
+## 4a″. Sets (v0.2.23)
+
+«Комплект» — a character and the legendary skin made for them, cheaper together (`game-rules/bundles.ts`). Every
+epic and legendary character sold for BLATS has one; each legendary finish of the shop is in one set; the skin
+goes on the «Дружба» automatic (everyone's primary, so it is worn at once).
+
+| Character (grade) | Skin | Set | Apart |
+|---|---|---|---|
+| Аркадич (legendary) | «Царский» | 999 BLATS ($9.99) | 1 598 |
+| Касатик (legendary) | «Золотой браток» ✦ | 999 | 1 598 |
+| Пятак (legendary) | «Золотой унитаз» | 999 | 1 598 |
+| Жора (epic) | «Красный алмаз» ✦ | 899 ($8.99) | 1 298 |
+| Самсон (epic) | «Обсидиановый император» ✦ | 899 | 1 298 |
+| Зверь (epic) | «Мастер шашлыка» | 899 | 1 298 |
+| Арах (epic) | «Контора» | 899 | 1 298 |
+| Жнец (epic) | «Кровавый жнец» ✦ | 899 | 1 298 |
+| Игла (epic) | «Ядерная зима» | 899 | 1 298 |
+
+* Sold only while the player owns **neither** half (a half-owned set is bought item by item); refusals
+  `owned`, `funds`, `not_for_sale` (`bundleRefusal`).
+* `POST /api/shop/bundle {character}` — one transaction: the BLATS (a ledger row `bundle:<character>`), both
+  `user_items` rows (`source: diamonds`), the skin put on the automatic — both items or neither. Analytics
+  `shop_purchase` with `kind: bundle`.
+* The Arsenal shows the sets in «Персонажи» as fighter cards (the character with the skin on), with the price apart
+  struck out; a confirmation before buying; a character's card offers its set too. After the purchase the set's
+  character becomes the player's at once and the dressing room shows them with the skin.
+
 ## 4b. Paid cases: the rules
 
 The skin case and the character case cost BLATS, i.e. money, so: **the odds are always shown before the purchase**, **no
@@ -313,6 +384,15 @@ nothing of the kind). Nothing was deleted from the database: `profiles.blat`, th
 talons (§6).
 
 ## 9. Tests
+
+v0.2.23: `packages/shared/src/__tests__/bundles.test.ts` (every epic and legendary character for BLATS has a set,
+each legendary finish once, cheaper than apart, at most 999; refusals), `skins.test.ts` (the filled players'
+wider grades), `apps/web/src/game/render/skinColors.test.ts` (every finish's light colours follow its paint; the
+grades' perks add up), server `economy.test.ts` (a set bought — both or neither, the ledger line, owned and half
+owned refused; the inventory's and a room's counters), `progression/recorder.test.ts` (the counters grow once per
+match, never past the match's kills, unknown skins left out), `rooms/skinkills.room.test.ts` (a room counts a
+person's kills with a skinned weapon, not plain ones or the filled players', the deciding kill too; the roster's
+counters); browser: `tests/e2e/v0223.mjs`.
 
 v0.2.20: `apps/server/src/economy/bonuses.test.ts` (the welcome bonus offered to a guest and paid once for an
 email, concurrent registrations, nothing for a Telegram account, `WELCOME_BONUS_BLATS=0`; BLATNOY in any

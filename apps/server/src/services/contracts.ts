@@ -60,6 +60,8 @@ export interface MatchParticipantResult {
   playtimeMs: number;
   /** v0.2.21: joined after the first quarter of the match (LATE_JOIN) — no rating change. */
   lateJoin?: boolean;
+  /** v0.2.23: eliminations made with each skin this match («weapon.finish» → kills). */
+  skinKills?: Record<string, number>;
 }
 
 export interface MatchCompletion {
@@ -137,6 +139,8 @@ export interface Analytics {
 export interface PlayerGear {
   loadout: Loadout;
   characters: ReadonlySet<CharacterId>;
+  /** v0.2.23: kills with each skin so far («weapon.finish» → kills; the legendary skins' counter). */
+  skinKills?: Readonly<Record<string, number>>;
 }
 
 export interface Economy {

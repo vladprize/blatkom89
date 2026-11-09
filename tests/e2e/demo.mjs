@@ -222,8 +222,17 @@ try {
   await page.evaluate(() => window.__blatkom.app.goMenu());
   await page.getByTestId('arsenal-tile').click();
   await page.getByTestId('dressing-room').waitFor({ timeout: 10000 });
-  const heroOk = await page.locator('[data-testid="dressing-room"] img').first().evaluate((img) => img.complete && img.naturalWidth > 0);
-  check(heroOk, 'the Arsenal dressing room shows the character art');
+  // v0.2.23: the poster is the fighter card (a canvas: the character's art, the weapon in its skin)
+  const heroOk = await page
+    .waitForFunction(() => {
+      const c = document.querySelector('[data-testid="dressing-room"] canvas[data-testid=fighter-card]');
+      if (!c || !c.width) return false;
+      const px = c.getContext('2d').getImageData(Math.floor(c.width / 2), Math.floor(c.height * 0.3), 1, 1).data;
+      return px[3] > 0 && px[0] + px[1] + px[2] > 30;
+    }, null, { timeout: 10000 })
+    .then(() => true)
+    .catch(() => false);
+  check(heroOk, 'the Arsenal dressing room shows the fighter card with the character art');
   // v0.2.18: BLATS are sold in the online game only — the demo (no server) sells nothing: no case banner,
   // no top-up, its BLATS tab says so; the dressing room in two columns; four slot columns of the same
   // height with the same number of rows

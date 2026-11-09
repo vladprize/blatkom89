@@ -92,6 +92,11 @@ export interface RosterEntry {
   mods?: Partial<Record<WeaponId, ModId[]>>;
   /** Equipped weapon skins: everybody sees the finish on the weapon in the player's hands. */
   skins?: Partial<Record<WeaponId, FinishId>>;
+  /**
+   * v0.2.23: the kill counters of the equipped skins as they stood when the match began (the legendary
+   * skins' «★ N»; the clients add the eliminations they see in the match).
+   */
+  skinKills?: Partial<Record<WeaponId, number>>;
   /** V2.0 part D: the Kon rating (shown in «Блатной кон» rooms). */
   konRating?: number;
   /** v0.2.17: the founder's account (a gold badge by the alias). */

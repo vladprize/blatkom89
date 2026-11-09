@@ -7,6 +7,59 @@ import { t, plural, count } from '../../i18n/index.js';
 import { achievementText, mapName } from '../../i18n/content.js';
 import { konLabel } from './kon.js';
 import { modeName } from '../modes.js';
+import { FighterCard } from '../fighterCard.js';
+import type { FighterCardData } from '../fighterCard.js';
+
+/**
+ * v0.2.23: the fighter cards of the results — the podium (the best three, each with the weapon last seen in
+ * their hands, in its skin) and «what took you down» (every skin that took the player down, with «Try on»).
+ */
+export interface ResultsCards {
+  podium: FighterCardData[];
+  killers: FighterCardData[];
+  onTry?: (d: FighterCardData) => void;
+  /** A player's card from the table (tap a row: the card big, to look at or share); null: not known. */
+  cardOf?: (s: Standing) => FighterCardData | null;
+  onOpen?: (d: FighterCardData) => void;
+}
+
+/** The screen the results are laid out on (a match turned sideways turns the page). */
+function viewSize(): { w: number; h: number } {
+  const turned = document.documentElement.classList.contains('rot');
+  return turned ? { w: window.innerHeight, h: window.innerWidth } : { w: window.innerWidth, h: window.innerHeight };
+}
+
+function podiumEl(list: FighterCardData[]): HTMLElement | null {
+  if (list.length < 2) return null;
+  const { h: vh } = viewSize();
+  const base = Math.round(Math.max(60, Math.min(118, (vh * 0.2) / 1.42)));
+  // second, first, third — the winner in the middle, a little bigger
+  const order = [1, 0, 2].filter((i) => i < list.length);
+  return h('div', { class: 'panel podium', 'data-testid': 'podium' }, ...order.map((i) => h('div', { class: `podium__step podium__step--${i + 1}` }, new FighterCard(list[i]!, { shape: 'tall', width: i === 0 ? Math.round(base * 1.16) : base }).el)));
+}
+
+function killedByEl(c: ResultsCards): HTMLElement | null {
+  if (!c.killers.length) return null;
+  const { w: vw } = viewSize();
+  const width = Math.round(Math.max(220, Math.min(400, vw * 0.3)));
+  return h(
+    'div',
+    { class: 'panel col killedby', 'data-testid': 'killed-by' },
+    h('span', { class: 'tag' }, t('What took you down')),
+    h(
+      'div',
+      { class: 'killedby__strip' },
+      ...c.killers.map((d) =>
+        h(
+          'div',
+          { class: 'killedby__item' },
+          new FighterCard(d, { shape: 'wide', width }).el,
+          d.finish && c.onTry ? h('button', { class: 'btn btn--small killedby__try', 'data-testid': 'killedby-try', onclick: () => c.onTry!(d) }, t('Try on')) : null,
+        ),
+      ),
+    ),
+  );
+}
 
 const teamLabel = (team: Team) => (team === 0 ? t('RED TEAM') : t('BLUE TEAM'));
 
@@ -42,6 +95,8 @@ export function renderResults(o: {
   chat?: HTMLElement | null;
   /** V2.0 part D: the match was a «Блатной кон» match of this format. */
   kon?: KonFormat | null;
+  /** v0.2.23: the podium and «what took you down». */
+  cards?: ResultsCards | null;
 }): HTMLElement {
   const r = o.results;
   const mode = r.gameMode ?? 'ffa';
@@ -112,10 +167,28 @@ export function renderResults(o: {
       ),
     );
   };
+  // v0.2.23: a row opens that player's fighter card (what they fought with, in its skin)
+  const tapAttrs = (s: Standing) => {
+    const d = o.cards?.cardOf?.(s) ?? null;
+    const open = o.cards?.onOpen;
+    if (!d || !open) return {};
+    return {
+      'data-testid': 'results-row-card',
+      tabindex: '0',
+      title: t('Show the fighter card'),
+      onclick: () => open(d),
+      onkeydown: (e: Event) => {
+        const k = (e as KeyboardEvent).key;
+        if (k !== 'Enter' && k !== ' ') return;
+        e.preventDefault();
+        open(d);
+      },
+    };
+  };
   const row = (s: Standing, rank: number) =>
     h(
       'tr',
-      { class: `${s.id === o.myId ? 'me' : ''} ${s.team === 0 ? 'tr--red' : s.team === 1 ? 'tr--blue' : ''}` },
+      { class: `${s.id === o.myId ? 'me' : ''} ${s.team === 0 ? 'tr--red' : s.team === 1 ? 'tr--blue' : ''}${o.cards?.cardOf && o.cards.onOpen ? ' tr--tap' : ''}`, ...tapAttrs(s) },
       h('td', null, String(rank)),
       h('td', null, s.isBot ? `${s.name} · ${t('bot')}` : s.name),
       objective ? h('td', { class: 'num' }, String(s.objectives ?? 0)) : null,
@@ -144,7 +217,12 @@ export function renderResults(o: {
             h('div', { class: 'h1' }, teams.winner === 0 ? t('Red team wins') : t('Blue team wins')),
             h('div', { class: 'teamwin__score' }, h('b', { class: 'red' }, String(red)), ' : ', h('b', { class: 'blue' }, String(blue))),
           );
-  } else if (winner) {
+  }
+  const podium = o.cards ? podiumEl(o.cards.podium) : null;
+  if (podium && !teams) banner = null;
+  if (banner) {
+    // the team banner stays (the podium comes under it)
+  } else if (winner && !podium) {
     banner = h(
       'div',
       { class: 'panel row' },
@@ -157,11 +235,11 @@ export function renderResults(o: {
         h('div', { class: 'hand' }, `${count(winner.score, 'point')} · ${count(winner.kills, 'elimination')} · ${count(winner.assists, 'assist')}`),
       ),
     );
-  } else if (draw) banner = h('div', { class: 'panel col' }, h('div', { class: 'h1' }, t('Draw')), h('div', { class: 'hand' }, t('The district is left without a boss — settle it in the rematch.')));
+  } else if (draw && !podium) banner = h('div', { class: 'panel col' }, h('div', { class: 'h1' }, t('Draw')), h('div', { class: 'hand' }, t('The district is left without a boss — settle it in the rematch.')));
   // v0.2.17: the results fit the window — the table scrolls in its panel when the lineup is long; on a
   // computer the match (the banner, the table) and the player's part (experience, the buttons, the chat) sit
   // side by side, so neither squeezes the other
-  const side = !!personal || !!o.chat;
+  const side = !!personal || !!o.chat || !!o.cards;
   return h(
     'div',
     { class: `screen screen--solid screen--fit screen--results${side ? ' screen--results2' : ''}` },
@@ -176,6 +254,7 @@ export function renderResults(o: {
           'div',
           { class: 'results__main' },
           banner,
+          podium,
           h(
             'div',
             { class: 'panel table-scroll fitscroll results__table' },
@@ -202,6 +281,7 @@ export function renderResults(o: {
         h(
           'div',
           { class: 'results__side' },
+          o.cards ? killedByEl(o.cards) : null,
           personal ? xpPanel() : o.offline ? h('div', { class: 'muted' }, o.offlineNote ?? t('Practice doesn’t count towards the online profile, XP or talons.')) : h('div', { class: 'muted' }, me ? t('Filing the results…') : ''),
           h('div', { class: 'row results__buttons' }, h('button', { class: 'btn btn--red grow', onclick: o.onRematch }, o.offline ? t('Again') : t('Rematch')), h('button', { class: 'btn grow', 'data-testid': 'results-menu', onclick: o.onMenu }, o.menuLabel ?? t('To menu'))),
           o.chat ?? null,

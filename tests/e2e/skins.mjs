@@ -94,8 +94,17 @@ try {
   await page.locator(`[data-testid=skin-pick] [data-finish="${finish}"][aria-pressed="true"]`).waitFor({ timeout: 10000 });
   const chip = await page.locator(`[data-testid=skin-pick] [data-finish="${finish}"]`).innerText();
   check(chip.includes('✓'), `the dressing room marks the finish as yours («${chip.trim()}»)`);
-  const painted = await page.waitForFunction(() => document.querySelector('.dressing__item')?.getAttribute('src')?.startsWith('data:image/png'), null, { timeout: 10000 }).then(() => true).catch(() => false);
-  check(painted, 'the big weapon picture is painted with the finish');
+  // v0.2.23: the dressing room's poster is the fighter card — the weapon big in the finish tried on
+  const painted = await page
+    .waitForFunction((f) => {
+      const c = document.querySelector('[data-testid=dressing-room] canvas[data-testid=fighter-card]');
+      if (!c || c.dataset.finish !== f || !c.width) return false;
+      const px = c.getContext('2d').getImageData(Math.floor(c.width / 2), Math.floor(c.height * 0.6), 1, 1).data;
+      return px[3] > 0;
+    }, finish, { timeout: 10000 })
+    .then(() => true)
+    .catch(() => false);
+  check(painted, 'the fighter card shows the weapon painted with the finish');
   const other = finish === 'yadernaya' ? 'kosmos' : 'yadernaya';
   await page.locator(`[data-testid=skin-pick] [data-finish="${other}"]`).click();
   await page.getByTestId('skin-buy-row').waitFor({ timeout: 5000 });

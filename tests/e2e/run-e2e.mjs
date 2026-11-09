@@ -72,6 +72,10 @@
 //      only on a change, on a phone and a computer; a computer's short window: the maps' names readable in two
 //      rows of chips, the Arsenal's dressing room whole; a phone's menu corner 44 px to a finger, no caption
 //      under 12 px (tests/e2e/v0222.mjs)
+//  v0.2.23: skins you can see — the line-up of fighter cards before a match, the killer's card while respawning,
+//      the kill feed's icon in the skin, the podium and «What took you down» with «Try on», a table row's card and
+//      «Share», the Arsenal's card, a set bought (a character with their legendary skin), a phone sideways
+//      (tests/e2e/v0223.mjs)
 //  21. v0.2.17 part 3: a gang calls another out from its page — the battle room of the two gangs, the
 //      call's card live to both gangs' people, sides by gang, nobody else let in (a stranger's link is
 //      turned away), the battle played and counted for both gangs; a friend's «To battle» → a duel room
@@ -256,6 +260,9 @@ try {
   console.log('\n[e2e] v0.2.22: above 9 — one light map a match, the HUD\'s texts redrawn on a change, the maps\' names and the dressing room on a short computer window, the phone menu\'s corner to a finger');
   const v0222 = spawnSync(process.execPath, ['tests/e2e/v0222.mjs', base, join(out, 'v0222')], { stdio: 'inherit' });
   if (v0222.status !== 0) failed = true;
+  console.log('\n[e2e] v0.2.23: skins you can see — the line-up of fighter cards, the killer\'s card, the podium and «What took you down», a row\'s card and «Share», the Arsenal\'s card, a set bought (a character with their legendary skin)');
+  const v0223 = spawnSync(process.execPath, ['tests/e2e/v0223.mjs', base, join(out, 'v0223')], { stdio: 'inherit' });
+  if (v0223.status !== 0) failed = true;
   console.log('\n[e2e] v0.2.17 part 3: gang against gang, a friend called to a duel (two browsers, two socket players)');
   const battle = spawnSync(process.execPath, ['tests/e2e/battle.mjs', base, join(out, 'battle')], { stdio: 'inherit' });
   if (battle.status !== 0) failed = true;

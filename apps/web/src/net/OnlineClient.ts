@@ -380,6 +380,11 @@ export class OnlineClient {
     return this.applyInventory(await this.api.buySkin(weapon, finish), true);
   }
 
+  /** v0.2.23: a set — the character joins the crew and their skin goes on the automatic at once. */
+  async buyBundle(character: CharacterId): Promise<Inventory> {
+    return this.applyInventory(await this.api.buyBundle(character), true);
+  }
+
   /** v0.2.18 part 2: the character case — the new character joins the crew at once. */
   async openCharacterCase() {
     const r = await this.api.openCharacterCase();

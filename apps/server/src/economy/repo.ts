@@ -18,6 +18,8 @@ import {
   MOD_IDS,
   REFUSAL_TEXT,
   buyRefusal,
+  bundleOf,
+  bundleRefusal,
   drawCase,
   drawCharacter,
   isCharacterId,
@@ -86,6 +88,8 @@ export class EconomyRepo implements Economy {
   private async load(tx: Tx, userId: string, wallet: WalletRow): Promise<Inventory> {
     const items = await tx<Array<{ kind: ShopKind | 'skin'; item_id: string }>>`SELECT kind, item_id FROM user_items WHERE user_id = ${userId}`;
     const modRows = await tx<Array<{ weapon_id: string; mod_id: string }>>`SELECT weapon_id, mod_id FROM weapon_mods WHERE user_id = ${userId}`;
+    // v0.2.23: kills with each skin (the legendary skins' counter)
+    const killRows = await tx<Array<{ weapon: string; finish: string; kills: number }>>`SELECT weapon, finish, kills FROM skin_kills WHERE user_id = ${userId} AND kills > 0`;
     const weapons = new Set<WeaponId>(FREE_WEAPONS);
     const characters = new Set<CharacterId>(FREE_CHARACTERS);
     const gadgets = new Set<GadgetId>(FREE_GADGETS);
@@ -118,6 +122,7 @@ export class EconomyRepo implements Economy {
       mods,
       skins: [...skins].sort(),
       loadout,
+      skinKills: skinKillsOf(killRows),
     };
   }
 
@@ -156,7 +161,7 @@ export class EconomyRepo implements Economy {
   /** Loadout and owned characters of a player joining a room. */
   async gear(userId: string): Promise<PlayerGear> {
     const inv = await this.inventory(userId);
-    return { loadout: inv.loadout, characters: new Set(inv.characters) };
+    return { loadout: inv.loadout, characters: new Set(inv.characters), skinKills: inv.skinKills ?? {} };
   }
 
   async buy(userId: string, kind: ShopKind, id: string): Promise<Inventory> {
@@ -194,6 +199,29 @@ export class EconomyRepo implements Economy {
       await tx`UPDATE profiles SET loadout = ${tx.json(loadout as postgres.JSONValue)}, updated_at = now() WHERE user_id = ${userId}`;
       this.log.info('skin purchase', { userId, skin: id, amount: price.amount });
       return this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - price.amount, loadout });
+    });
+  }
+
+  /**
+   * v0.2.23: a set — the character and their legendary skin on the automatic — for BLATS at the set's
+   * price, in one transaction: both items or neither. The skin is put on at once.
+   */
+  async buyBundle(userId: string, character: CharacterId): Promise<Inventory> {
+    const b = bundleOf(character);
+    if (!b) throw new EconomyError('not_for_sale');
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      const refusal = bundleRefusal(inv, character);
+      if (refusal) throw new EconomyError(refusal);
+      const skin = skinId(b.weapon, b.finish);
+      await this.debit(tx, userId, 'diamonds', b.price, wallet.diamonds, 'purchase', `bundle:${b.id}`);
+      await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${b.character}, 'character', 'diamonds'), (${userId}, ${skin}, 'skin', 'diamonds')`;
+      const l = inv.loadout;
+      const loadout = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods, skins: { ...(l.skins ?? {}), [b.weapon]: b.finish } };
+      await tx`UPDATE profiles SET loadout = ${tx.json(loadout as postgres.JSONValue)}, updated_at = now() WHERE user_id = ${userId}`;
+      this.log.info('bundle purchase', { userId, bundle: b.id, skin, amount: b.price });
+      return this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - b.price, loadout });
     });
   }
 
@@ -347,4 +375,14 @@ export async function awardMatchTokens(tx: Tx, userId: string, matchId: string, 
   const total = rows[0]?.tokens ?? 0;
   if (tokens > 0) await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${tokens}, ${total}, 'match', ${matchId})`;
   return total;
+}
+
+/** The rows of skin_kills as «weapon.finish» → kills (unknown weapons/finishes left out). */
+function skinKillsOf(rows: ReadonlyArray<{ weapon: string; finish: string; kills: number }>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    const id = `${r.weapon}.${r.finish}`;
+    if (parseSkin(id)) out[id] = r.kills;
+  }
+  return out;
 }

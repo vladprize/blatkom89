@@ -167,6 +167,8 @@ export const LoadoutRequest = z
 export const CaseOpenRequest = z.object({ confirmAge: z.literal(true).optional() }).strict();
 /** v0.2.18: one weapon's skin for BLATS (the free finishes are everyone's already). */
 export const SkinBuyRequest = z.object({ weapon: z.enum(WEAPON_IDS), finish: z.enum(FINISH_IDS) }).strict();
+/** v0.2.23: POST /api/shop/bundle — a character with their legendary skin (game-rules/bundles.ts). */
+export const BundleBuyRequest = z.object({ character: z.enum(CHARACTER_IDS) }).strict();
 export const CheckoutRequest = z.object({ packId: z.string().regex(/^[a-z0-9]{2,16}$/), method: z.enum(['card']) }).strict();
 /** v0.2.18 part 3: POST /api/pay/stars — a Telegram Stars invoice for a BLATS pack (inside the Mini App). */
 export const StarsInvoiceRequest = z.object({ packId: z.string().regex(/^[a-z0-9]{2,16}$/) }).strict();

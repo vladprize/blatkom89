@@ -63,8 +63,12 @@ import {
   skinBuyRefusal,
   skinCaseOdds,
   skinPrice,
+  skinPerks,
+  BUNDLES,
+  bundleOf,
+  bundleRefusal,
 } from '@blatkom/shared';
-import type { CharacterId, FinishId, GadgetId, Grade, Inventory, Loadout, ModId, ModMount, Rarity, ShopConfig, ShopKind, ShopPrice, SkinRarity, WeaponDef, WeaponId } from '@blatkom/shared';
+import type { Bundle, CharacterId, FinishId, GadgetId, Grade, Inventory, Loadout, ModId, ModMount, Rarity, ShopConfig, ShopKind, ShopPrice, SkinRarity, WeaponDef, WeaponId } from '@blatkom/shared';
 import type * as Phaser from 'phaser';
 import { h, toast, asset, portrait } from '../dom.js';
 import type { OnlineClient } from '../../net/OnlineClient.js';
@@ -74,6 +78,9 @@ import { haptic, openInvoice } from '../../telegram/tg.js';
 import { t, plural, count, num, getLang } from '../../i18n/index.js';
 import { charText, finishName, gadgetBlurb, gadgetName, modText, rarityLabel, refusalText, weaponBlurb, weaponName } from '../../i18n/content.js';
 import { Doll } from '../doll.js';
+import { FighterCard } from '../fighterCard.js';
+import type { FighterCardData } from '../fighterCard.js';
+import { openCardViewer } from '../cardViewer.js';
 import { openSheet } from '../sheet.js';
 import type { Sheet } from '../sheet.js';
 import { animateLiveIcon, skinIconReady, skinIconUrl } from '../../game/render/skins.js';
@@ -113,6 +120,14 @@ export interface ArsenalOptions {
   onCharacter?: (c: CharacterId) => void;
   /** v0.2.18: play a practice match as this character, then come back to the Arsenal's `tab`. */
   onTryCharacter?: (c: CharacterId, tab: ArsenalTab) => void;
+  /** v0.2.23: put this on in the dressing room at once (a skin seen after a match: «Try on»). */
+  initialTry?: TryOn;
+  /** v0.2.23: the alias and level on the fighter card. */
+  /** The player's alias and level for the fighter card (read when drawn: a rename shows at once). */
+  /** v0.2.23: a set was bought — the app makes its character the player's (and redraws the Arsenal). */
+  onSetBought?: (c: CharacterId) => void;
+  playerName?: () => string | null;
+  playerLevel?: () => number | null;
 }
 
 const slotLabel = (slot: 1 | 2 | 3 | 4) => (slot === 1 ? t('Sidearm') : slot === 2 ? t('Melee') : slot === 3 ? t('Primary') : t('Equipment'));
@@ -376,10 +391,23 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
 
   // ── dressing room: the character's art, the item tried on, the in-game look ─────────────
   const startWeapon = (): WeaponId => loadout().primary ?? loadout().sidearm;
-  let trying: TryOn = { weapon: startWeapon(), mods: [...(loadout().mods[startWeapon()] ?? [])] };
+  let trying: TryOn = o.initialTry ? { ...o.initialTry } : { weapon: startWeapon(), mods: [...(loadout().mods[startWeapon()] ?? [])] };
   const doll = new Doll(o.textures, o.character, trying.weapon ?? 'pistol', 216);
   // the art and the item image stay the same elements between redraws (no flicker)
   const heroEl = heroImg(o.character, 'dressing__hero');
+  // v0.2.23: the poster is the player's fighter card — the character, the weapon in hand painted big in its
+  // skin, the grade's frame and light, the alias and level; the corner button opens it big (to share)
+  let posterCard: FighterCard | null = null;
+  const uiRoot = () => document.getElementById('ui') ?? document.body;
+  const cardData = (w: WeaponId, finish: FinishId | null): FighterCardData => ({
+    name: o.playerName?.() || charText(o.character).name,
+    character: o.character,
+    level: o.playerLevel?.() ?? null,
+    weapon: w,
+    finish,
+    kills: finish && skinPerks(finish)?.counter ? (inv?.skinKills?.[skinId(w, finish)] ?? 0) : null,
+  });
+  const openCard = (w: WeaponId, finish: FinishId | null) => openCardViewer(uiRoot(), cardData(w, finish), { inTelegram: o.inTelegram });
   const itemEls = new Map<string, HTMLImageElement>();
   const itemEl = (key: string, make: () => HTMLImageElement) => {
     let el = itemEls.get(key);
@@ -425,10 +453,19 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         { class: 'dressing__grid dressing__grid--two' },
         h(
           'div',
-          { class: 'dressing__poster', role: 'button', tabindex: '0', title: t('Change character'), onclick: () => o.onCharacter?.(c), onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && o.onCharacter?.(c) },
-          heroEl,
-          itemImg,
-          h('div', { class: 'dressing__plate' }, h('b', null, ct.name), h('span', null, `«${ct.nickname}»`)),
+          { class: `dressing__poster${g ? '' : ' dressing__poster--card'}`, role: 'button', tabindex: '0', title: t('Change character'), onclick: () => o.onCharacter?.(c), onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && o.onCharacter?.(c) },
+          ...(g
+            ? [heroEl, itemImg, h('div', { class: 'dressing__plate' }, h('b', null, ct.name), h('span', null, `«${ct.nickname}»`))]
+            : [
+                (() => {
+                  // the level badge would sit under the corner button: the poster leaves it to the big card
+                  const data = { ...cardData(w, finish), level: null };
+                  if (posterCard) posterCard.set(data);
+                  else posterCard = new FighterCard(data, { shape: 'tall', width: 340, ratio: 4 / 3, className: 'dressing__card' });
+                  return posterCard.el;
+                })(),
+                h('button', { class: 'dressing__share', type: 'button', 'data-testid': 'card-open', title: t('Fighter card'), 'aria-label': t('Fighter card'), onclick: (e: Event) => (e.stopPropagation(), openCard(w, finish)) }, '⤢'),
+              ]),
         ),
         h(
           'div',
@@ -836,6 +873,92 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     const rank = (c: CharacterId) => (CHARACTER_PRICES[c]!.currency === 'tokens' ? -1 : 3 - GRADES.indexOf(CHARACTERS[c].grade));
     return [...SHOP_CHARACTERS].sort((a, b) => rank(a) - rank(b));
   };
+  // ── v0.2.23: sets — a character with their legendary skin on the automatic, cheaper together ──
+  const bundlePrice = (b: Bundle): ShopPrice => ({ currency: 'diamonds', amount: b.price, level: 1 });
+  /** «Buy the set» (or why not): one confirmation, then both items at once. */
+  const bundleButton = (b: Bundle, compact = false): HTMLElement => {
+    if (!online || !inv) return h('button', { class: 'btn btn--small', disabled: true }, priceLabel(bundlePrice(b)));
+    const r = bundleRefusal(inv, b.character);
+    if (r === 'owned') return h('span', { class: 'badge badge--ok' }, t('Owned'));
+    return h(
+      'button',
+      {
+        class: 'btn btn--small btn--red',
+        'data-testid': 'bundle-buy',
+        onclick: () => {
+          if (r === 'funds') {
+            toast(t('Not enough BLATS'));
+            toTab('diamonds');
+            return;
+          }
+          confirmBundle(b);
+        },
+      },
+      compact ? priceLabel(bundlePrice(b)) : h('span', { class: 'amt buyfor' }, h('span', null, t('Buy for')), priceLabel(bundlePrice(b))),
+    );
+  };
+  const confirmBundle = (b: Bundle) => {
+    const ov = h('div', { class: 'overlay overlay--top' });
+    const close = () => ov.remove();
+    const what = `${charText(b.character).name} + «${finishName(b.finish)}»`;
+    ov.append(
+      h(
+        'div',
+        { class: 'panel modal col', 'data-testid': 'bundle-confirm' },
+        h('span', { class: 'tag' }, t('Confirmation')),
+        h('div', { style: 'margin-top:8px' }, t('Buy the set «{what}» for {n} BLATS ({usd})?', { what, n: b.price, usd: usd(b.price) })),
+        h('div', { class: 'muted' }, t('{n} BLATS apart. The skin goes on the «Druzhba» automatic at once.', { n: b.separate })),
+        h(
+          'div',
+          { class: 'row', style: 'gap:8px;margin-top:10px' },
+          h(
+            'button',
+            {
+              class: 'btn btn--red grow',
+              'data-testid': 'bundle-confirm-buy',
+              onclick: () => {
+                close();
+                closeSheet();
+                void act(() => online!.buyBundle(b.character), t('{name} joins the business — with the «{skin}» skin', { name: charText(b.character).name, skin: finishName(b.finish) })).then(() => {
+                  if (inv?.characters.includes(b.character)) o.onSetBought?.(b.character);
+                });
+              },
+            },
+            t('Buy'),
+          ),
+          h('button', { class: 'btn grow', onclick: close }, t('Cancel')),
+        ),
+      ),
+    );
+    ov.addEventListener('click', (e) => {
+      if (e.target === ov) close();
+    });
+    (document.getElementById('ui') ?? document.body).append(ov);
+  };
+  /** A set's cell: the fighter card (the character with the skin on), what is in it, the price, buy. */
+  const bundleCell = (b: Bundle, width: number, compact: boolean): HTMLElement => {
+    const card = new FighterCard({ name: charText(b.character).name, character: b.character, level: null, weapon: b.weapon, finish: b.finish, label: t('Set'), labelColor: '#b8862a' }, { shape: 'tall', width });
+    return h(
+      'div',
+      { class: 'bundle', 'data-testid': 'bundle', 'data-character': b.character },
+      h('button', { class: 'bundle__card', 'aria-label': charText(b.character).name, onclick: () => openChar(b.character) }, card.el),
+      h('div', { class: 'bundle__what' }, h('b', null, charText(b.character).name), h('span', null, ` + «${finishName(b.finish)}»`)),
+      h('div', { class: 'bundle__price muted' }, t('apart'), ' ', h('s', null, fmtNum(b.separate))),
+      bundleButton(b, compact),
+    );
+  };
+  /** The sets the player can still buy (a set half owned is bought item by item). */
+  const bundlesGroup = (width: number, compact = false): HTMLElement | null => {
+    const list = BUNDLES.filter((b) => !inv || bundleRefusal(inv, b.character) !== 'owned');
+    if (!list.length) return null;
+    return h(
+      'div',
+      { class: 'col shopgroup bundles' },
+      h('div', { class: 'shopgroup__head' }, h('b', { class: 'shopgroup__title' }, t('Sets')), h('span', { class: 'muted' }, t('a character with their legendary skin — cheaper than apart'))),
+      h('div', { class: 'bundles__row', 'data-testid': 'bundles' }, ...list.map((b) => bundleCell(b, width, compact))),
+    );
+  };
+
   /** «Regular 199 · Rare 399 · Epic 799 · Legendary 1 099» — the grades' prices in one line. */
   const gradePrices = (): HTMLElement =>
     h('div', { class: 'gradeprices' }, ...GRADES.map((g) => h('span', { class: 'gradeprices__item' }, gradeTag(g), priceLabel({ currency: 'diamonds', amount: CHARACTER_GRADE_PRICES[g], level: 1 }))));
@@ -845,6 +968,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       { class: 'col shoptab shoptab--wide', 'data-testid': 'shop-characters' },
       h('div', { class: 'muted arsnote' }, t('All characters have the same stats — they differ in looks and backstory. Two are free, three are unlocked with experience and talons, the rest are sold for BLATS by grade.')),
       gradePrices(),
+      bundlesGroup(132),
       h('div', { class: 'shopgrid shopgrid--wide shopgrid--chars' }, ...shopCharacters().map(charCell)),
     );
 
@@ -1392,6 +1516,24 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   }
   const dollBox = (d: Doll, w: WeaponId) =>
     h('div', { class: 'kitcard__doll' }, d.el, h('span', { class: 'dressing__label' }, t('In the game')), h('button', { class: 'kitcard__fire', 'data-testid': 'doll-fire', onclick: () => d.fire() }, WEAPONS[w].kind === 'melee' ? t('Swing!') : t('Fire!')));
+  // v0.2.23: the phone's dressing room shows the fighter card first (the character with the weapon in its skin);
+  // the label switches to the in-game view and back; a tap on the card opens it big (to share)
+  let kitView: 'card' | 'doll' = 'card';
+  let kitCard: FighterCard | null = null;
+  const viewBox = (d: Doll, w: WeaponId, finish: FinishId | null): HTMLElement => {
+    const showCard = kitView === 'card';
+    const toggle = h(
+      'button',
+      { class: 'dressing__label kitcard__view', type: 'button', 'data-testid': 'kit-view', 'aria-label': showCard ? t('Show it in the game') : t('Show the fighter card'), onclick: () => ((kitView = showCard ? 'doll' : 'card'), sfx.play('click'), draw()) },
+      showCard ? t('Fighter') : t('In the game'),
+      h('i', { 'aria-hidden': 'true' }, ' ⇄'),
+    );
+    if (!showCard) return h('div', { class: 'kitcard__doll', 'data-view': 'doll' }, d.el, toggle, h('button', { class: 'kitcard__fire', 'data-testid': 'doll-fire', onclick: () => d.fire() }, WEAPONS[w].kind === 'melee' ? t('Swing!') : t('Fire!')));
+    const data = { ...cardData(w, finish), level: null };
+    if (kitCard) kitCard.set(data);
+    else kitCard = new FighterCard(data, { shape: 'tall', width: 128, ratio: 1, className: 'kitcard__card' });
+    return h('div', { class: 'kitcard__doll kitcard__doll--card', 'data-view': 'card' }, h('button', { class: 'kitcard__cardbtn', type: 'button', 'data-testid': 'card-open', 'aria-label': t('Fighter card'), onclick: () => openCard(w, finish) }, kitCard.el), toggle);
+  };
 
   // ── «Экипировка»: the dressing room and the four slots ────────────────────
   const kitPhone = (): HTMLElement => {
@@ -1411,7 +1553,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       'div',
       { class: 'panel kitcard', 'data-testid': 'kit-card' },
       h('span', { class: 'tag' }, t('Dressing room')),
-      dollBox(d, w),
+      g ? dollBox(d, w) : viewBox(d, w, finish),
       h(
         'div',
         { class: 'kitcard__info' },
@@ -1641,6 +1783,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       'div',
       { class: 'shoptab' },
       gradePrices(),
+      bundlesGroup(124, true),
       h('div', { class: 'charshop', 'data-testid': 'shop-characters' }, ...shopCharacters().map(charCell)),
       h('div', { class: 'muted arsnote' }, t('Everyone has the same stats — only the looks and the story differ.')),
     );
@@ -1864,6 +2007,12 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           'div',
           { class: 'itemacts' },
           price ? buyButton('character', c, price, true) : null,
+          // v0.2.23: the set — with their legendary skin, cheaper than the two apart
+          (() => {
+            const b = bundleOf(c);
+            if (!b || (inv && bundleRefusal(inv, c) === 'owned')) return null;
+            return h('div', { class: 'bundleoffer', 'data-testid': 'char-sheet-bundle' }, h('span', { class: 'muted' }, t('With the «{skin}» skin', { skin: finishName(b.finish) })), bundleButton(b));
+          })(),
           // v0.2.18 (the owner): try a locked character in practice — and come back here, not to the menu
           !mine && o.onTryCharacter
             ? h(
@@ -1938,7 +2087,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       .then((i) => {
         const first = !inv;
         inv = i;
-        if (first) trying = { weapon: startWeapon(), mods: [...(loadout().mods[startWeapon()] ?? [])] };
+        if (first) trying = o.initialTry ? { ...o.initialTry, mods: [...(loadout().mods[o.initialTry.weapon ?? startWeapon()] ?? [])] } : { weapon: startWeapon(), mods: [...(loadout().mods[startWeapon()] ?? [])] };
         draw();
       })
       .catch((e: unknown) => toast(`${t('Arsenal')}: ${apiErrorText(e)}`));

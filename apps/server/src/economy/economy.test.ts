@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
-import { CASE_CHARACTERS, CASE_PRICE, CASE_TABLE, CHARACTERS, CHARACTER_CASE_PRICE, CHARACTER_IDS, CHARACTER_PRICES, DEFAULT_LOADOUT, DIAMOND_PACKS, FINISHES, FREE_CHARACTERS, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, PROTOCOL_VERSION, REAL_MONEY, SHOP_FINISHES, SKINNABLE_WEAPONS, SKIN_CASE_PRICE, SKIN_PRICES, WEAPON_PRICES, parseSkin, skinId, tokensForMatch, welcomeSkins } from '@blatkom/shared';
+import { BUNDLES, CASE_CHARACTERS, CASE_PRICE, CASE_TABLE, CHARACTERS, CHARACTER_CASE_PRICE, CHARACTER_IDS, CHARACTER_PRICES, DEFAULT_LOADOUT, DIAMOND_PACKS, FINISHES, FREE_CHARACTERS, FREE_GADGETS, FREE_WEAPONS, GADGET_PRICES, MOD_PRICES, PROTOCOL_VERSION, REAL_MONEY, SHOP_FINISHES, SKINNABLE_WEAPONS, SKIN_CASE_PRICE, SKIN_PRICES, WEAPON_PRICES, parseSkin, skinId, tokensForMatch, welcomeSkins } from '@blatkom/shared';
 import { WebSocket } from 'ws';
 import { startTestApp, api, devLogin, TEST_BOT_TOKEN } from '../admin/testkit.js';
 import { signInitData } from '../auth/telegram.js';
@@ -616,4 +616,52 @@ test('economy v0.23: accounts made before the change keep the wolf, the bear and
   const b = await devLogin(app.base, 'Новичок');
   const rb = await api(app.base, '/api/me/inventory', { token: b.token });
   assert.ok(!rb.body.characters.includes('uchastkovy') && !rb.body.weapons.includes('obrez'), 'a new account starts with the free ones only');
+});
+
+test('economy v0.2.23: the inventory and a room’s gear carry the skins’ kill counters', async () => {
+  const a = await quickUser('Счётчик');
+  const fresh = await api(app.base, '/api/me/inventory', { token: a.token });
+  assert.deepEqual(fresh.body.skinKills, {});
+  await app.db.sql`INSERT INTO skin_kills (user_id, weapon, finish, kills) VALUES (${a.userId}, 'avtomat', 'almaz', 41), (${a.userId}, 'pistol', 'zoloto', 0), (${a.userId}, 'nope', 'almaz', 5)`;
+  const inv = await api(app.base, '/api/me/inventory', { token: a.token });
+  // zero rows and unknown weapons are left out
+  assert.deepEqual(inv.body.skinKills, { 'avtomat.almaz': 41 });
+  const gear = await ctx().economy.gear(a.userId);
+  assert.deepEqual(gear.skinKills, { 'avtomat.almaz': 41 });
+});
+
+test('economy v0.2.23: a set — the character and their legendary skin in one purchase, both or neither', async () => {
+  const a = await quickUser('Комплект');
+  const lev = BUNDLES.find((b) => b.character === 'lev')!;
+  // not enough BLATS: nothing changes
+  const poor = await api(app.base, '/api/shop/bundle', { method: 'POST', token: a.token, body: { character: 'lev' } });
+  assert.equal(poor.status, 409);
+  assert.equal(poor.body.error.code, 'funds');
+  await app.db.sql`UPDATE profiles SET diamonds = ${lev.price + 5} WHERE user_id = ${a.userId}`;
+  // a character without a set
+  const none = await api(app.base, '/api/shop/bundle', { method: 'POST', token: a.token, body: { character: 'petya' } });
+  assert.equal(none.status, 409);
+  assert.equal(none.body.error.code, 'not_for_sale');
+  const ok = await api(app.base, '/api/shop/bundle', { method: 'POST', token: a.token, body: { character: 'lev' } });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.ok(ok.body.characters.includes('lev'));
+  assert.ok(ok.body.skins.includes(skinId(lev.weapon, lev.finish)));
+  assert.equal(ok.body.loadout.skins[lev.weapon], lev.finish, 'the skin is put on at once');
+  assert.equal(ok.body.diamonds, 5);
+  const [led] = await app.db.sql<Array<{ delta: number; ref: string }>>`SELECT delta, ref FROM currency_ledger WHERE user_id = ${a.userId} AND reason = 'purchase'`;
+  assert.deepEqual({ delta: led!.delta, ref: led!.ref }, { delta: -lev.price, ref: 'bundle:lev' });
+  // owned: not again
+  await app.db.sql`UPDATE profiles SET diamonds = 5000 WHERE user_id = ${a.userId}`;
+  const again = await api(app.base, '/api/shop/bundle', { method: 'POST', token: a.token, body: { character: 'lev' } });
+  assert.equal(again.status, 409);
+  assert.equal(again.body.error.code, 'owned');
+  // half of a set owned (its skin bought apart): the set isn't sold, the character still is
+  const akula = BUNDLES.find((b) => b.character === 'akula')!;
+  const skin = await api(app.base, '/api/shop/skin', { method: 'POST', token: a.token, body: { weapon: akula.weapon, finish: akula.finish } });
+  assert.equal(skin.status, 200);
+  const half = await api(app.base, '/api/shop/bundle', { method: 'POST', token: a.token, body: { character: 'akula' } });
+  assert.equal(half.status, 409);
+  assert.equal(half.body.error.code, 'owned');
+  const items = await app.db.sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM user_items WHERE user_id = ${a.userId} AND item_id = 'akula'`;
+  assert.equal(items[0]!.n, 0, 'nothing half-bought');
 });

@@ -55,6 +55,8 @@ export class StorySession extends OfflineSession {
   private endedAt = 0;
   /** «clear» and «survive»: falls the hero can still take (0 ends the mission). */
   private livesLeft: number;
+  /** The story's people carry the mission's kits as they are: no skins (v0.2.23). */
+  protected override botSkins = false;
 
   constructor(m: StoryMission, opts: { seed?: number } = {}) {
     const mode = storyGameMode(m.objective);

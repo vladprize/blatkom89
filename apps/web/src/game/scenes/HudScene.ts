@@ -13,7 +13,7 @@ import { onLifecycle } from '../../app/lifecycle.js';
 import { INSETS_EVENT } from '../../telegram/tg.js';
 import type { KillFeedEntry, ObjectiveEntry, PointsEntry, SupplyEntry } from './hudBus.js';
 import { touchState, isTouchDevice } from '../input/TouchState.js';
-import { setWeaponTexture } from '../render/skins.js';
+import { setWeaponTexture, skinTextureKey } from '../render/skins.js';
 import { getSettings } from '../../app/settings.js';
 import { sfx } from '../audio/Sfx.js';
 import { t, plural, getLang } from '../../i18n/index.js';
@@ -947,7 +947,10 @@ export class HudScene extends Phaser.Scene {
     // assisters ride along after the killer: «Petya + Valyuta [sawn-off] Mikhalych»
     const a = e.assists.length ? txt(this, right + 5, 3, `+ ${e.assists.join(', ')}`, this.touch ? 12 : 11, e.killerTeam === 0 || e.killerTeam === 1 ? TEAM_TEXT[e.killerTeam] : e.assistLocal ? FFA_ME_TEXT : '#b8ab90', '500') : null;
     if (a) right = a.x + a.width;
-    const icon = fitIcon(this.add.image(right + 8, k.height / 2, 'weapons', `ico_${e.weapon}`).setOrigin(0, 0.5), `ico_${e.weapon}`, 46, 15, 0.8);
+    // v0.2.23: the icon painted in the killer's skin (a live one: its first frame)
+    const skinKey = e.finish ? skinTextureKey(this.textures, `ico_${e.weapon}`, e.finish, 0) : '';
+    const icon = skinKey ? this.add.image(right + 8, k.height / 2, skinKey).setOrigin(0, 0.5) : fitIcon(this.add.image(right + 8, k.height / 2, 'weapons', `ico_${e.weapon}`).setOrigin(0, 0.5), `ico_${e.weapon}`, 46, 15, 0.8);
+    if (skinKey) icon.setScale(Math.min(0.8, 46 / icon.frame.realWidth, 15 / icon.frame.realHeight));
     const v = txt(this, icon.x + icon.displayWidth + 8, 0, e.victim, 14, teamColor(e.victimTeam, e.victimLocal), '600');
     const bgW = v.x + v.width + 10;
     const bg = this.add.graphics();

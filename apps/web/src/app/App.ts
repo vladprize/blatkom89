@@ -3,7 +3,7 @@
  * (auth → lobby → match → results), pause menu and Telegram back-button integration.
  */
 import { CHARACTERS, CHARACTER_IDS, CHARACTER_PRICES, FREE_CHARACTERS, WEAPONS, DEFAULT_LOADOUT, DEFAULT_MATCH_CONFIG, REAL_MONEY, buyRefusal, isCharacterId, isGameMode, isKonFormat, isMapId, isTeamMode, levelForXp } from '@blatkom/shared';
-import type { AvatarId, CharacterId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonTopResponse, SiteConfig, GangBattle, GangBattleFormat, ShopConfig, Inventory } from '@blatkom/shared';
+import type { AvatarId, CharacterId, FinishId, WeaponId, GameMode, MapId, BotDifficulty, Standing, PersonalResult, Loadout, FriendEntry, LeaderboardBy, NameCheckResponse, RoomInviteEvent, KonFormat, KonTopResponse, SiteConfig, GangBattle, GangBattleFormat, ShopConfig, Inventory } from '@blatkom/shared';
 import type { GameHost } from '../game/GameHost.js';
 import { OfflineSession, MAX_PRACTICE_BOTS, PRACTICE_TEAM_LIMIT } from '../game/session/OfflineSession.js';
 import type { GameSession, ResultsData } from '../game/session/types.js';
@@ -26,6 +26,10 @@ import type { LocalProfile } from '../profile/localProfile.js';
 import { clearLocalProfile, loadLocalProfile, saveLocalProfile } from '../profile/localStore.js';
 import { openNicknameDialog, randomNickname } from '../profile/nickname.js';
 import { renderResults } from '../ui/screens/results.js';
+import { openCardViewer } from '../ui/cardViewer.js';
+import { MatchCards } from '../ui/matchCards.js';
+import type { FighterCardData } from '../ui/fighterCard.js';
+import type { ResultsCards } from '../ui/screens/results.js';
 import { renderLobby, modeSwitch } from '../ui/screens/lobby.js';
 import { mapField } from '../ui/maps.js';
 import { fitAlias, fitTextGroup, whenSized } from '../ui/fit.js';
@@ -241,6 +245,10 @@ export class App {
   private chatOverlay: ChatOverlay | null = null;
   /** v0.2.18: the full-screen button over a match. */
   private matchFs: MatchFullscreenButton | null = null;
+  /** v0.2.23: the line-up and the killer's card over a match, and what they saw (for the results). */
+  private matchCards: MatchCards | null = null;
+  /** v0.2.23: what to open once the room has let the player go («Try on» from the results). */
+  private afterLeft: (() => void) | null = null;
   /** A newer release on the server: reload in the main menu (app/updates.ts). */
   private updates: UpdateWatch | null = null;
   /** The club page on screen (v0.3). */
@@ -387,7 +395,12 @@ export class App {
           if (this.screen === 'results' && this.online?.lastResults) this.showResults(this.online.lastResults);
         },
         onError: (msg, fatal, retry, label) => (fatal ? this.showError(msg, retry ?? true, label) : toast(msg)),
-        onLeft: () => this.goMenu(),
+        onLeft: () => {
+          const next = this.afterLeft;
+          this.afterLeft = null;
+          this.goMenu();
+          next?.();
+        },
         onChat: (line) => this.onChat(line),
       });
       this.online.onEmailSessionExpired = (email) =>
@@ -1412,18 +1425,30 @@ export class App {
   }
 
   // ── arsenal (loadout, shop, case, diamonds) ─────────────────────────────
-  private showArsenal(push = true, tab?: ArsenalTab) {
+  private showArsenal(push = true, tab?: ArsenalTab, initialTry?: TryOn) {
     this.go('arsenal', push);
     const el = renderArsenal({
       online: this.online,
       inTelegram: inTelegram(),
       character: this.character,
       textures: this.host.game.textures,
+      playerName: () => this.playerName(),
+      playerLevel: () => this.playerLevel(),
       ...(tab ? { tab } : {}),
+      ...(initialTry ? { initialTry } : {}),
       onTry: (tryOn, at) => this.startPractice({ ...this.lastPractice, tryOn, returnTo: { screen: 'arsenal', tab: at } }),
       onTryCharacter: (c, at) => this.startPractice({ ...this.lastPractice, character: c, returnTo: { screen: 'arsenal', tab: at } }),
       onWallet: () => this.refreshStrip(),
       onCharacter: (c) => this.showCharacters(true, c),
+      // v0.2.23: a set bought — its character steps in at once, the card shows them with the new skin
+      onSetBought: (c) => {
+        if (!this.ownsCharacter(c)) return;
+        this.character = c;
+        storageSet('blatkom89.character', c);
+        analytics.track('character_selected', { character: c });
+        void this.online?.setPreferredCharacter(c);
+        this.showArsenal(false, 'loadout');
+      },
     });
     // wider than the other screens: the dressing room has columns (sketch v0.23); phones get their own layout
     this.render(h('div', { class: 'screen screen--dim screen--arsenal' }, h('div', { class: 'wrap wrap--wide wrap--arsenal' }, this.topbar(t('Arsenal')), el)));
@@ -1530,6 +1555,7 @@ export class App {
       difficulty: opts.difficulty,
       gameMode: this.lastPractice.gameMode,
       loadout: this.practiceLoadout(opts.tryOn),
+      skinKills: this.online?.inventory?.skinKills ?? {},
     });
     if (opts.tryOn) {
       const label = App.tryOnLabel(opts.tryOn);
@@ -1564,6 +1590,8 @@ export class App {
     if (session.mode === 'online') this.mountChatOverlay();
     this.matchFs?.destroy();
     this.matchFs = new MatchFullscreenButton(this.root, () => this.host.game.canvas);
+    this.matchCards?.destroy();
+    this.matchCards = session instanceof StorySession ? null : new MatchCards(session, this.root);
   }
 
   private endSession(showPreview = true) {
@@ -1577,6 +1605,8 @@ export class App {
     }
     this.matchFs?.destroy();
     this.matchFs = null;
+    this.matchCards?.destroy();
+    this.matchCards = null;
     if (this.session) {
       this.host.stopGame();
       this.session.destroy();
@@ -1692,10 +1722,12 @@ export class App {
       if (this.lastLocalResult?.matchId === r.matchId) r = { ...r, personal: this.lastLocalResult.personal };
     }
     const chat = offline ? null : this.roomChat();
+    const cards = this.resultCards(r);
     const make = () => renderResults({
       results: r,
       myId,
       offline,
+      cards,
       chat: chat?.el ?? null,
       kon: offline ? null : (this.lastLobby?.kon ?? null),
       localProfile: local && !!this.localProfile,
@@ -1716,6 +1748,49 @@ export class App {
       ...(offline && this.practiceReturn ? { menuLabel: this.practiceBackLabel() } : {}),
     });
     this.redraw(same, chat, make);
+  }
+
+  /**
+   * v0.2.23: the results' fighter cards — the best three with the weapon last seen in their hands (in its skin)
+   * and every skin that took the player down this match.
+   */
+  private resultCards(r: ResultsData): ResultsCards | null {
+    const mc = this.matchCards;
+    if (!mc) return null;
+    const team = isTeamMode(r.gameMode ?? 'ffa');
+    const top = [...r.standings].sort((a, b) => (team ? b.score - a.score : a.place - b.place || b.score - a.score)).slice(0, 3);
+    const labels = [t('Boss of the district'), t('2nd place'), t('3rd place')];
+    const podium: FighterCardData[] = top.map((s, i) => {
+      const g = mc.gear(s.slot);
+      return { name: s.name, character: s.character, level: g?.level ?? null, weapon: g?.weapon ?? 'avtomat', finish: g?.finish ?? null, kills: g?.finish ? g.kills : null, bot: s.isBot, label: labels[i]!, labelColor: i === 0 ? '#b8862a' : '#5a4c3e' };
+    });
+    const cardOf = (s: Standing): FighterCardData | null => {
+      const g = mc.gear(s.slot);
+      return g ? { name: s.name, character: s.character, level: g.level, weapon: g.weapon, finish: g.finish, kills: g.finish ? g.kills : null, bot: s.isBot } : null;
+    };
+    return { podium, killers: mc.killers(), onTry: (d) => this.tryFromResults(d.weapon, d.finish), cardOf, onOpen: (d) => openCardViewer(this.root, d, { inTelegram: inTelegram() }) };
+  }
+
+  /** «Try on» a skin seen in the results: out of the match and into the Arsenal with it on. */
+  private tryFromResults(weapon: WeaponId, finish: FinishId | null) {
+    const open = () => this.showArsenal(true, 'loadout', { weapon, finish });
+    if (this.session?.mode === 'online') {
+      this.practiceReturn = null;
+      this.afterLeft = open;
+      void this.online?.leave();
+      // the room's «left» opens it; if that never comes, open it anyway
+      setTimeout(() => {
+        if (this.afterLeft !== open) return;
+        this.afterLeft = null;
+        this.goMenu();
+        open();
+      }, 2500);
+      return;
+    }
+    this.practiceReturn = null;
+    this.endSession();
+    music.setWanted(true);
+    open();
   }
 
   // ── online ──────────────────────────────────────────────────────────────

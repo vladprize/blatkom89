@@ -3,7 +3,7 @@
  * the social hub (`/ws/social`); these routes are the source of truth. Only friends can write to each
  * other or send invitations; every action is rate-limited per player.
  */
-import { DirectMessageBody, FINISHES, FriendRequestBody, GRADES, InviteFriendBody, LEADERBOARD_BY, parseSkin } from '@blatkom/shared';
+import { DirectMessageBody, FINISHES, FriendRequestBody, GRADES, InviteFriendBody, LEADERBOARD_BY, parseSkin, skinId } from '@blatkom/shared';
 import type { FriendCollection, FriendEntry, FriendsResponse, Grade, LeaderboardBy, LeaderboardEntry, LeaderboardResponse, MessagesResponse } from '@blatkom/shared';
 import { pgContext } from '../services/persistence.js';
 import type { RouteModule } from '../app.js';
@@ -63,7 +63,11 @@ export const registerSocialRoutes: RouteModule = (router, deps) => {
       const p = parseSkin(s);
       if (p && !FINISHES[p.finish].gift) skins[FINISHES[p.finish].rarity]++;
     }
-    const res: FriendCollection = { player, characters: inv.characters, skins };
+    // v0.2.23: their fighter card — the main weapon of their kit in its skin, with the skin's counter
+    const weapon = inv.loadout.primary ?? inv.loadout.sidearm;
+    const finish = inv.loadout.skins?.[weapon] ?? null;
+    const gear = { weapon, finish, kills: finish ? (inv.skinKills?.[skinId(weapon, finish)] ?? 0) : null };
+    const res: FriendCollection = { player, characters: inv.characters, skins, gear };
     ctx.json(200, res);
   });
 

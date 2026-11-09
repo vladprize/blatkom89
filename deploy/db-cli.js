@@ -3360,6 +3360,12 @@ var WELCOME_FINISHES = FINISH_IDS.filter((f) => FINISHES[f].gift);
 var SHOP_FINISHES = FINISH_IDS.filter((f) => !FINISHES[f].gift && !FINISHES[f].retired);
 var LINE_FINISHES = FINISH_IDS.filter((f) => !FINISHES[f].retired);
 var LIVE_FINISHES = FINISH_IDS.filter((f) => FINISHES[f].live);
+var SKIN_PERKS = Object.freeze({
+  common: { shots: false, glow: false, killFx: "none", cardBg: false, counter: false },
+  rare: { shots: true, glow: false, killFx: "none", cardBg: false, counter: false },
+  epic: { shots: true, glow: true, killFx: "burst", cardBg: false, counter: false },
+  legendary: { shots: true, glow: true, killFx: "grand", cardBg: true, counter: true }
+});
 var SKIN_PRICES = Object.freeze({ common: 99, rare: 199, epic: 299, legendary: 499 });
 var SKIN_RARITY_CHANCE = Object.freeze({ common: 40, rare: 30, epic: 20, legendary: 10 });
 
@@ -3429,6 +3435,38 @@ var SHOP_WEAPONS = WEAPON_IDS.filter((w) => WEAPON_PRICES[w]);
 var SHOP_CHARACTERS = CHARACTER_IDS.filter((c) => CHARACTER_PRICES[c]);
 var SHOP_GADGETS = GADGET_IDS.filter((g) => GADGET_PRICES[g]);
 var CASE_WEAPONS = CASE_TABLE.map((e) => e.weapon);
+
+// packages/shared/src/game-rules/bundles.ts
+var BUNDLE_WEAPON = "avtomat";
+var BUNDLE_FINISHES = Object.freeze({
+  lev: "carsky",
+  // Arkadich, the lion — the Tsar's finish
+  kasatka: "bratok",
+  // Kasatik, the Soviet gangster — the Golden Mobster
+  zvezda: "unitaz",
+  // Pyatak, the starfish from the drains — the Golden Toilet
+  akula: "almaz",
+  // Zhora, the shark — the Red Diamond
+  gorilla: "obsidian",
+  // Samson — the Obsidian Emperor
+  tigr: "shashlyk",
+  // Zver — the Shashlik Master
+  pauk: "kontora",
+  // Arakh, the spider — the Office
+  bogomol: "krovavy",
+  // Zhnets, «the Reaper» — the Blood Reaper
+  ezh: "yadernaya"
+  // Igla, the mutant hedgehog — Nuclear Winter
+});
+var BUNDLE_PRICES = Object.freeze({ epic: 899, legendary: 999 });
+function bundleOf(c) {
+  const finish = BUNDLE_FINISHES[c];
+  const grade = CHARACTERS[c]?.grade;
+  const charPrice = CHARACTER_PRICES[c];
+  if (!finish || grade !== "epic" && grade !== "legendary" || !charPrice || charPrice.currency !== "diamonds" || !SHOP_FINISHES.includes(finish)) return null;
+  return { id: c, character: c, weapon: BUNDLE_WEAPON, finish, price: BUNDLE_PRICES[grade], separate: charPrice.amount + SKIN_PRICES[FINISHES[finish].rarity] };
+}
+var BUNDLES = Object.freeze(CHARACTER_IDS.map(bundleOf).filter((b2) => b2 !== null));
 
 // packages/shared/src/game-rules/match.ts
 var GAME_MODES = ["ffa", "teams", "ctf", "bases"];
@@ -8364,6 +8402,32 @@ var FILL_RULES = Object.freeze({
   leaveMinMs: 500,
   leaveMaxMs: 2e3
 });
+var FILL_FINISHES = Object.freeze([
+  "akulka",
+  "akulka",
+  "blatkom",
+  "blatkom",
+  "haki",
+  "haki",
+  "iznos",
+  "berezka",
+  "sport",
+  "devyanostye",
+  "cherkizon",
+  "afgan",
+  "video",
+  "malina",
+  "graffiti",
+  "hrom",
+  "kosmos",
+  "hohloma",
+  "neon",
+  "zakat",
+  "kazino",
+  "carsky",
+  "bratok",
+  "almaz"
+]);
 
 // packages/shared/src/net/protocol.ts
 var PROTOCOL_VERSION = 10;
@@ -8441,7 +8505,7 @@ var SERVER_EVENT_PROPS = {
   match_abandoned: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), phase: external_exports.string() }),
   map_played: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS) }),
   invite_created: external_exports.object({ code: external_exports.string(), roomId: external_exports.string() }),
-  shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget", "skin"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
+  shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget", "skin", "bundle"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
   mod_bought: external_exports.object({ weapon: external_exports.string(), mod: external_exports.string(), cost: external_exports.number().int() }),
   /** The weapon case and (v0.23) the skin case: `kind` skin carries the finish. */
   case_opened: external_exports.object({ weapon: external_exports.string().optional(), rarity: external_exports.enum(["common", "rare", "epic", "legendary"]), price: external_exports.number().int(), kind: external_exports.enum(["weapon", "skin", "character"]).optional(), finish: external_exports.string().max(24).optional(), character: external_exports.string().max(24).optional() }),
@@ -8538,6 +8602,7 @@ var LoadoutRequest = external_exports.object({
 }).strict();
 var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true).optional() }).strict();
 var SkinBuyRequest = external_exports.object({ weapon: external_exports.enum(WEAPON_IDS), finish: external_exports.enum(FINISH_IDS) }).strict();
+var BundleBuyRequest = external_exports.object({ character: external_exports.enum(CHARACTER_IDS) }).strict();
 var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card"]) }).strict();
 var StarsInvoiceRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/) }).strict();
 var UpdateProfileRequest = external_exports.object({

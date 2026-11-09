@@ -206,3 +206,21 @@ test('recorder: a filled match — places count everyone, people and filled play
   assert.equal(history[0]!.place, 2);
   assert.equal(history[0]!.players, 4);
 });
+
+test('recorder v0.2.23: the skins’ kill counters grow once per match, never past the match’s kills', async () => {
+  const a = await newUser('Сонька');
+  const b = await newUser('Карлыч');
+  const counters = async (u: string) =>
+    Object.fromEntries((await db.sql<Array<{ weapon: string; finish: string; kills: number }>>`SELECT weapon, finish, kills FROM skin_kills WHERE user_id = ${u} ORDER BY weapon`).map((r) => [`${r.weapon}.${r.finish}`, r.kills]));
+  const m1 = completion([part(a, 1, 5, 1, { skinKills: { 'avtomat.almaz': 4, 'pistol.zoloto': 1, 'nope.almaz': 3, 'avtomat.nope': 2 } }), part(b, 2, 1, 5, { skinKills: { 'ppsh.haki': 9 } })]);
+  await rec.matchCompleted(m1);
+  // unknown skins are left out; no skin gets more than the player's kills in the match
+  assert.deepEqual(await counters(a), { 'avtomat.almaz': 4, 'pistol.zoloto': 1 });
+  assert.deepEqual(await counters(b), { 'ppsh.haki': 1 });
+  // the same match filed again (a retry) counts nothing twice
+  await rec.matchCompleted(m1);
+  assert.deepEqual(await counters(a), { 'avtomat.almaz': 4, 'pistol.zoloto': 1 });
+  // the next match adds up
+  await rec.matchCompleted(completion([part(a, 1, 3, 0, { skinKills: { 'avtomat.almaz': 3 } }), part(b, 2, 0, 3)]));
+  assert.deepEqual(await counters(a), { 'avtomat.almaz': 7, 'pistol.zoloto': 1 });
+});

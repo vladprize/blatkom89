@@ -189,6 +189,41 @@ export function isFreeFinish(f: FinishId): boolean {
   return FREE_FINISHES.includes(f);
 }
 
+/**
+ * v0.2.23 — what a skin's grade brings besides its paint (the owner: «оправдать цену скина $1–$10»). Seen from
+ * above a weapon is a strip a few pixels wide, so a skin shows itself by its light and on the cards:
+ * - every skin is shown on the fighter cards (the killer's card, the line-up before a match, the podium, the
+ *   Arsenal, a friend's page) and painted in the kill feed;
+ * - rare and up: the shots carry its colours (the tracers, the muzzle's glow and light);
+ * - epic and up: a glow round the weapon in hand, and its eliminations end in a burst of its colours;
+ * - legendary: a bigger burst, its own background on the cards, and a counter of its eliminations.
+ * Only the look: the weapon's numbers never change (docs/ECONOMY.md).
+ */
+export interface SkinPerks {
+  /** Tracers, the muzzle's glow and its light in the skin's colours. */
+  shots: boolean;
+  /** A soft glow round the weapon in hand. */
+  glow: boolean;
+  /** What an elimination with it leaves. */
+  killFx: 'none' | 'burst' | 'grand';
+  /** Its own animated background on the fighter cards. */
+  cardBg: boolean;
+  /** Counts the eliminations made with it (shown on the cards). */
+  counter: boolean;
+}
+
+export const SKIN_PERKS: Readonly<Record<Grade, SkinPerks>> = Object.freeze({
+  common: { shots: false, glow: false, killFx: 'none', cardBg: false, counter: false },
+  rare: { shots: true, glow: false, killFx: 'none', cardBg: false, counter: false },
+  epic: { shots: true, glow: true, killFx: 'burst', cardBg: false, counter: false },
+  legendary: { shots: true, glow: true, killFx: 'grand', cardBg: true, counter: true },
+});
+
+/** The perks of a finish (null: the plain weapon). */
+export function skinPerks(f: FinishId | null | undefined): SkinPerks | null {
+  return f && FINISHES[f] ? SKIN_PERKS[FINISHES[f].rarity] : null;
+}
+
 /** v0.2.18: the price of one weapon's skin, in BLATS, by grade (the owner's prices: $0.99 … $4.99). */
 export const SKIN_PRICES: Readonly<Record<Grade, number>> = Object.freeze({ common: 99, rare: 199, epic: 299, legendary: 499 });
 

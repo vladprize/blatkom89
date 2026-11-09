@@ -269,6 +269,8 @@ export interface Inventory {
   skins: string[];
   /** Spawn loadout (validated against ownership). */
   loadout: Loadout;
+  /** v0.2.23: eliminations made in online matches with each legendary skin, «weapon.finish» → count (SKIN_PERKS.counter). */
+  skinKills?: Record<string, number>;
 }
 
 export type ShopKind = 'weapon' | 'character' | 'gadget';

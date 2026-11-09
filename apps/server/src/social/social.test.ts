@@ -166,6 +166,11 @@ test('v0.2.18 part 2: a friend’s collection — characters and skins by grade,
   assert.equal(r.body.player.name, 'collector_two');
   assert.ok(r.body.characters.includes('kasatka') && r.body.characters.includes('petya') && !r.body.characters.includes('lev'));
   assert.deepEqual(r.body.skins, { common: 2, rare: 0, epic: 0, legendary: 1 }, 'the welcome gift isn’t counted');
+  // v0.2.23: their fighter card — the main weapon of their kit in its skin, with the skin's counter
+  assert.deepEqual(r.body.gear, { weapon: 'avtomat', finish: null, kills: null }, 'the plain automatic before a skin is on');
+  await ctx.economy.setLoadout(b.userId, { sidearm: 'pistol', melee: 'montirovka', primary: 'avtomat', skins: { avtomat: 'yadernaya' } });
+  await app.db.sql`INSERT INTO skin_kills (user_id, weapon, finish, kills) VALUES (${b.userId}, 'avtomat', 'yadernaya', 12)`;
+  assert.deepEqual((await look(a.token, b.userId)).body.gear, { weapon: 'avtomat', finish: 'yadernaya', kills: 12 });
   assert.equal((await look(c.token, b.userId)).status, 403, 'a stranger');
   assert.equal((await look(a.token, 'not-a-uuid')).status, 400);
 });

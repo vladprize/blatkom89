@@ -4,7 +4,7 @@
  * All prices and rules come from packages/shared/src/game-rules/economy.ts; the server never trusts
  * client-side ownership, balances or prices.
  */
-import { BuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, CHARACTER_CASE_PRICE, PromoRedeemRequest, REAL_MONEY, SKIN_CASE_PRICE, SkinBuyRequest, StarsInvoiceRequest, priceOf, skinPrice } from '@blatkom/shared';
+import { BuyRequest, BundleBuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, CHARACTER_CASE_PRICE, PromoRedeemRequest, REAL_MONEY, SKIN_CASE_PRICE, SkinBuyRequest, StarsInvoiceRequest, bundleOf, priceOf, skinPrice } from '@blatkom/shared';
 import type { CaseResult, CharacterCaseResult, Loadout, PromoRedeemResponse, ShopConfig, ShopPrice, SkinCaseResult } from '@blatkom/shared';
 import type { RouteModule } from '../app.js';
 import { HttpError, readBody } from '../http/router.js';
@@ -131,6 +131,16 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
     const inv = await guard(() => pg().economy.buySkin(user.userId, body.weapon, body.finish));
     const price = skinPrice(body.finish);
     if (price) deps.services.analytics.server('shop_purchase', { kind: 'skin', item: `${body.weapon}.${body.finish}`, currency: price.currency, amount: price.amount }, user);
+    ctx.json(200, inv);
+  });
+
+  /** v0.2.23: a set — a character with their legendary skin, cheaper than the two apart (game-rules/bundles.ts). */
+  router.post('/api/shop/bundle', auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    const user = currentUser(ctx);
+    const body = await ctx.body(BundleBuyRequest, 1024);
+    const inv = await guard(() => pg().economy.buyBundle(user.userId, body.character));
+    const b = bundleOf(body.character);
+    if (b) deps.services.analytics.server('shop_purchase', { kind: 'bundle', item: `${b.character}+${b.weapon}.${b.finish}`, currency: 'diamonds', amount: b.price }, user);
     ctx.json(200, inv);
   });
 

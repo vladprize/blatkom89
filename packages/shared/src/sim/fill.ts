@@ -64,9 +64,19 @@ const PRIMARIES: WeaponId[] = ['avtomat', 'avtomat', 'obrez', 'ksyuha', 'uzi', '
 const SIDEARMS: WeaponId[] = ['pistol', 'pistol', 'pistol', 'tt', 'p92', 'deagle'];
 const MELEE: WeaponId[] = ['montirovka', 'montirovka', 'bita', 'nozh', 'topor'];
 const GADGETS: GadgetId[] = ['f1', 'f1', 'f1', 'molotov', 'flash', 'smoke'];
-/** Finishes weighted like case drops: common often, legendary rarely. */
-// v0.2.18 part 2: the owner's line — the welcome gift and the regular ones most often, a few rarer ones
-const FILL_FINISHES: FinishId[] = ['akulka', 'akulka', 'blatkom', 'blatkom', 'haki', 'haki', 'iznos', 'sport', 'devyanostye', 'cherkizon', 'afgan', 'video', 'kosmos', 'hohloma', 'carsky'];
+/**
+ * Finishes the filled players (and practice bots) wear, weighted by repetition. v0.2.23: wider than case
+ * drops on purpose — a third common, a third rare, a fifth epic, an eighth legendary (some of them live) —
+ * so a match shows what each grade does (coloured shots, glow, kill burst, the legendary card).
+ */
+export const FILL_FINISHES: readonly FinishId[] = Object.freeze([
+  'akulka', 'akulka', 'blatkom', 'blatkom', 'haki', 'haki', 'iznos', 'berezka',
+  'sport', 'devyanostye', 'cherkizon', 'afgan', 'video', 'malina', 'graffiti', 'hrom',
+  'kosmos', 'hohloma', 'neon', 'zakat', 'kazino',
+  'carsky', 'bratok', 'almaz',
+] as FinishId[]);
+/** How often a filled player's main weapon wears a skin (v0.2.23: up from 0.3). */
+export const FILL_SKIN_CHANCE = 0.4;
 
 const pick = <T>(rnd: () => number, a: readonly T[]): T => a[Math.floor(rnd() * a.length) % a.length]!;
 
@@ -91,7 +101,7 @@ export function fillPersona(rnd: () => number, o: { lang: NickLang; aroundLevel:
   };
   // some carry a skin on the main weapon, like people who opened a case (mostly the common finishes)
   const skins: Partial<Record<WeaponId, FinishId>> = {};
-  if (persona.loadout.primary && rnd() < 0.3) skins[persona.loadout.primary] = pick(rnd, FILL_FINISHES);
+  if (persona.loadout.primary && rnd() < FILL_SKIN_CHANCE) skins[persona.loadout.primary] = pick(rnd, FILL_FINISHES);
   if (rnd() < 0.1) skins[persona.loadout.sidearm] = pick(rnd, FILL_FINISHES);
   persona.loadout.skins = skins;
   return persona;

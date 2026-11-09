@@ -9,6 +9,8 @@ export interface KillFeedEntry {
   victim: string;
   victimLocal: boolean;
   weapon: import('@blatkom/shared').WeaponId;
+  /** v0.2.23: the killer's skin on that weapon (the feed's icon is painted with it). */
+  finish?: import('@blatkom/shared').FinishId | null;
   /** Names of players credited with an assist. */
   assists: string[];
   assistLocal: boolean;

@@ -18,6 +18,9 @@ import { apiErrorText } from '../../net/errors.js';
 import { sfx } from '../../game/audio/Sfx.js';
 import { tourneyIcon } from './kon.js';
 import { openSheet } from '../sheet.js';
+import { FighterCard } from '../fighterCard.js';
+import type { FighterCardData } from '../fighterCard.js';
+import { openCardViewer } from '../cardViewer.js';
 
 const STATUS_ORDER: Record<FriendStatus, number> = { match: 0, lobby: 1, online: 2, offline: 3 };
 
@@ -36,7 +39,12 @@ export function openCollection(root: HTMLElement, online: OnlineClient, f: Playe
       const mine = new Set(c.characters);
       const order = [...CHARACTER_IDS].sort((a, b) => Number(mine.has(b)) - Number(mine.has(a)) || GRADE_RANK[CHARACTERS[b].grade] - GRADE_RANK[CHARACTERS[a].grade]);
       const skinsTotal = GRADES.reduce((n, g) => n + c.skins[g], 0);
+      // v0.2.23: their fighter card — the character they play, the main weapon of their kit in its skin
+      const g = c.gear;
+      const cardData: FighterCardData | null = g ? { name: c.player.name, character: c.player.character ?? 'petya', level: c.player.level, weapon: g.weapon, finish: g.finish, kills: g.kills } : null;
+      const card = cardData ? new FighterCard(cardData, { shape: 'wide', width: Math.min(360, Math.max(240, (root.clientWidth || 360) - 80)) }) : null;
       body.replaceChildren(
+        ...(card && cardData ? [h('button', { class: 'fcoll__card', 'data-testid': 'friend-card', 'aria-label': t('Show the fighter card'), onclick: () => openCardViewer(root, cardData) }, card.el)] : []),
         h('div', { class: 'fcoll__head' }, h('b', null, t('Characters: {n} of {total}', { n: c.characters.length, total: CHARACTER_IDS.length })), h('span', { class: 'muted' }, `${t('lvl')} ${c.player.level}`)),
         h(
           'div',

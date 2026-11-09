@@ -132,14 +132,21 @@ test('equipped skins are sanitised: known weapons and finishes, owned ones only'
 test('filled players sometimes wear a skin on a weapon they carry', () => {
   const rand = rng(99);
   let withSkin = 0;
+  const grades = new Map<string, number>();
   for (let i = 0; i < 400; i++) {
     const p = fillPersona(rand, { lang: 'en', aroundLevel: 5, taken: new Set() });
     const skins = p.loadout.skins ?? {};
     for (const [w, f] of Object.entries(skins)) {
       assert.ok([p.loadout.primary, p.loadout.sidearm].includes(w as WeaponId), 'only on a weapon it carries');
       assert.ok(FINISH_IDS.includes(f as FinishId));
+      const g = FINISHES[f as FinishId].rarity;
+      grades.set(g, (grades.get(g) ?? 0) + 1);
     }
     if (Object.keys(skins).length) withSkin++;
   }
-  assert.ok(withSkin > 80 && withSkin < 200, `${withSkin} of 400`);
+  // v0.2.23: about 46% wear one (40% the main weapon, 10% the sidearm)
+  assert.ok(withSkin > 130 && withSkin < 240, `${withSkin} of 400`);
+  // every grade shows up in matches, the legendary ones least often
+  for (const g of ['common', 'rare', 'epic', 'legendary']) assert.ok((grades.get(g) ?? 0) > 0, `${g} appears`);
+  assert.ok((grades.get('legendary') ?? 0) < (grades.get('common') ?? 0), 'legendary rarer than common');
 });

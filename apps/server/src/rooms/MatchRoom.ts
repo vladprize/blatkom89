@@ -41,6 +41,8 @@ import {
   KON_RULES,
   konConfig,
   konDeal,
+  isWeaponId,
+  skinId,
 } from '@blatkom/shared';
 import type {
   AvatarId,
@@ -63,6 +65,7 @@ import type {
   Standing,
   FinishId,
   WeaponId,
+  PlayerState,
 } from '@blatkom/shared';
 import type { AuthedUser, PlayerGear, Services } from '../services/contracts.js';
 import type { Logger } from '../logging/logger.js';
@@ -105,6 +108,8 @@ interface FillSeat {
   avatar: AvatarId | null;
   /** Weapon skins it wears (like a person who opened cases). */
   skins: Partial<Record<WeaponId, FinishId>>;
+  /** v0.2.23: its skins' kill counters (made up with the rest of the persona, like its level). */
+  skinKills: Partial<Record<WeaponId, number>>;
   difficulty: BotDifficulty;
   addedAt: number;
   /** The AI and the world it plays in (a new world — map or mode change — needs a new brain). */
@@ -165,6 +170,23 @@ interface Client {
 const AUTO_START_DELAY_MS = 4000;
 /** Free gear (used when the economy is unavailable). */
 export const FREE_GEAR: PlayerGear = Object.freeze({ loadout: DEFAULT_LOADOUT, characters: new Set(FREE_CHARACTERS) });
+
+/** v0.2.23: the counters of the skins a player has on (by weapon), from the counters they have. */
+export function equippedSkinKills(gear: PlayerGear): Partial<Record<WeaponId, number>> {
+  const out: Partial<Record<WeaponId, number>> = {};
+  for (const [w, f] of Object.entries(gear.loadout.skins ?? {}) as Array<[WeaponId, FinishId]>) {
+    const n = gear.skinKills?.[skinId(w, f)];
+    if (n) out[w] = n;
+  }
+  return out;
+}
+
+/** A filled player's counters: like someone who has played with the skin a while (more for higher levels). */
+function fillSkinKills(skins: Partial<Record<WeaponId, FinishId>>, level: number): Partial<Record<WeaponId, number>> {
+  const out: Partial<Record<WeaponId, number>> = {};
+  for (const w of Object.keys(skins) as WeaponId[]) out[w] = Math.round(5 + Math.random() * (20 + level * 9));
+  return out;
+}
 const SOLO_ABORT_MS = 20_000;
 const MAX_MSGS_PER_SEC = 150;
 
@@ -184,6 +206,8 @@ export class MatchRoom {
   world: World;
   matchId: string | null = null;
   matchStartedAtWall = 0;
+  /** v0.2.23: this match's eliminations with each skin, per person («weapon.finish» → kills). */
+  private readonly skinKillCounts = new Map<string, Map<string, number>>();
   closed = false;
   private readonly clients = new Map<string, Client>();
   private pendingShots: WorldEvent[] = [];
@@ -708,6 +732,7 @@ export class MatchRoom {
       level: persona.level,
       avatar: persona.avatar,
       skins: persona.loadout.skins ?? {},
+      skinKills: fillSkinKills(persona.loadout.skins ?? {}, persona.level),
       difficulty: persona.difficulty,
       addedAt: this.clock(),
       brain: null,
@@ -850,6 +875,7 @@ export class MatchRoom {
     this.matchId = randomUUID();
     this.matchStartedAtWall = Date.now();
     this.resultsSent = false;
+    this.skinKillCounts.clear();
     const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite, team: this.world.players.get(c.user.userId)?.team ?? null }));
     const fill = this.seats.size;
     this.services.recorder
@@ -933,6 +959,7 @@ export class MatchRoom {
           playtimeMs: Math.round(c.matchTimeMs),
           // v0.2.21: came into the match after its first quarter — the rating stays (LATE_JOIN)
           ...(!this.kon && joinedLate(c.joinedAfterMs, this.config.durationMs) ? { lateJoin: true } : {}),
+          ...(this.skinKillCounts.get(s.id)?.size ? { skinKills: Object.fromEntries(this.skinKillCounts.get(s.id)!) } : {}),
         };
       });
     // Kon: those who started the match and are no longer in the room left it — a loss
@@ -963,6 +990,14 @@ export class MatchRoom {
       })
       .then((personal) => {
         let levelChanged = false;
+        // v0.2.23: the skins' counters now include this match (the next roster shows them)
+        for (const p of participants) {
+          const c = this.clients.get(p.userId);
+          if (!c || !p.skinKills || !personal.has(p.userId)) continue;
+          const sk: Record<string, number> = { ...(c.gear.skinKills ?? {}) };
+          for (const [id, n] of Object.entries(p.skinKills)) sk[id] = (sk[id] ?? 0) + Math.min(n, p.kills);
+          c.gear = { ...c.gear, skinKills: sk };
+        }
         for (const [userId, result] of personal) {
           const c = this.clients.get(userId);
           if (!c) continue;
@@ -1034,6 +1069,7 @@ export class MatchRoom {
       if (e.t === 'shot' || e.t === 'melee') this.pendingShots.push(e);
       else {
         this.pendingEvents.push(e as GameEvent);
+        if (e.t === 'kill') this.countSkinKill(e.killer, e.victim, e.weapon);
         if (e.t === 'phase') {
           this.broadcastRoster();
           // friends see «in a match» / «in the lobby»
@@ -1127,6 +1163,24 @@ export class MatchRoom {
     return abandoned;
   }
 
+  /**
+   * v0.2.23: an elimination made with a weapon wearing a skin counts for that skin (people only — what the
+   * room fills in has made-up counters). Kills of oneself don't count (the match's last kill does: the
+   * world may already be «finished» when its events are read).
+   */
+  private countSkinKill(killerSlot: number, victimSlot: number, weapon: string) {
+    if (killerSlot === victimSlot || !this.matchId || !isWeaponId(weapon)) return;
+    let killer: PlayerState | undefined;
+    for (const p of this.world.players.values()) if (p.slot === killerSlot) killer = p;
+    const c = killer ? this.clients.get(killer.id) : undefined;
+    const finish = c?.gear.loadout.skins?.[weapon];
+    if (!c || !finish) return;
+    const id = skinId(weapon, finish);
+    let m = this.skinKillCounts.get(c.user.userId);
+    if (!m) this.skinKillCounts.set(c.user.userId, (m = new Map()));
+    m.set(id, (m.get(id) ?? 0) + 1);
+  }
+
   // ── Output helpers ──────────────────────────────────────────────────────
   roster(): ServerMessage {
     const finished = this.world.phase === 'finished';
@@ -1150,6 +1204,7 @@ export class MatchRoom {
         team: p?.team ?? null,
         mods: c.gear.loadout.mods,
         skins: c.gear.loadout.skins ?? {},
+        skinKills: equippedSkinKills(c.gear),
         ...(this.kon ? { konRating: c.user.konRating ?? KON_RATING.start } : {}),
         ...(c.user.founder ? { founder: true } : {}),
       };
@@ -1171,6 +1226,7 @@ export class MatchRoom {
         team: p?.team ?? null,
         mods: {},
         skins: seat.skins,
+        skinKills: seat.skinKills,
       };
     });
     const players = [...people, ...filled].sort((a, b) => order(a.id) - order(b.id));

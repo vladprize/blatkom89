@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.22"),
+  SERVER_VERSION: external_exports.string().default("0.2.23"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -11437,6 +11437,12 @@ var LIVE_FINISHES = FINISH_IDS.filter((f2) => FINISHES[f2].live);
 function isFreeFinish(f2) {
   return FREE_FINISHES.includes(f2);
 }
+var SKIN_PERKS = Object.freeze({
+  common: { shots: false, glow: false, killFx: "none", cardBg: false, counter: false },
+  rare: { shots: true, glow: false, killFx: "none", cardBg: false, counter: false },
+  epic: { shots: true, glow: true, killFx: "burst", cardBg: false, counter: false },
+  legendary: { shots: true, glow: true, killFx: "grand", cardBg: true, counter: true }
+});
 var SKIN_PRICES = Object.freeze({ common: 99, rare: 199, epic: 299, legendary: 499 });
 function skinPrice(finish) {
   return SHOP_FINISHES.includes(finish) ? { currency: "diamonds", amount: SKIN_PRICES[FINISHES[finish].rarity], level: 1 } : null;
@@ -11717,6 +11723,45 @@ var CASE_WEAPONS = CASE_TABLE.map((e2) => e2.weapon);
 var PROMO_CODE_RE = /^[A-Z0-9_-]{3,32}$/;
 function normalizePromoCode(raw) {
   return transliterate(raw).replace(/\s+/g, "").toUpperCase();
+}
+
+// packages/shared/src/game-rules/bundles.ts
+var BUNDLE_WEAPON = "avtomat";
+var BUNDLE_FINISHES = Object.freeze({
+  lev: "carsky",
+  // Arkadich, the lion — the Tsar's finish
+  kasatka: "bratok",
+  // Kasatik, the Soviet gangster — the Golden Mobster
+  zvezda: "unitaz",
+  // Pyatak, the starfish from the drains — the Golden Toilet
+  akula: "almaz",
+  // Zhora, the shark — the Red Diamond
+  gorilla: "obsidian",
+  // Samson — the Obsidian Emperor
+  tigr: "shashlyk",
+  // Zver — the Shashlik Master
+  pauk: "kontora",
+  // Arakh, the spider — the Office
+  bogomol: "krovavy",
+  // Zhnets, «the Reaper» — the Blood Reaper
+  ezh: "yadernaya"
+  // Igla, the mutant hedgehog — Nuclear Winter
+});
+var BUNDLE_PRICES = Object.freeze({ epic: 899, legendary: 999 });
+function bundleOf(c) {
+  const finish = BUNDLE_FINISHES[c];
+  const grade = CHARACTERS[c]?.grade;
+  const charPrice = CHARACTER_PRICES[c];
+  if (!finish || grade !== "epic" && grade !== "legendary" || !charPrice || charPrice.currency !== "diamonds" || !SHOP_FINISHES.includes(finish)) return null;
+  return { id: c, character: c, weapon: BUNDLE_WEAPON, finish, price: BUNDLE_PRICES[grade], separate: charPrice.amount + SKIN_PRICES[FINISHES[finish].rarity] };
+}
+var BUNDLES = Object.freeze(CHARACTER_IDS.map(bundleOf).filter((b2) => b2 !== null));
+function bundleRefusal(inv, c) {
+  const b2 = bundleOf(c);
+  if (!b2) return "not_for_sale";
+  if (inv.characters.includes(b2.character) || ownsSkin(inv.skins, b2.weapon, b2.finish)) return "owned";
+  if (inv.diamonds < b2.price) return "funds";
+  return null;
 }
 
 // packages/shared/src/game-rules/match.ts
@@ -16959,7 +17004,33 @@ var PRIMARIES = ["avtomat", "avtomat", "obrez", "ksyuha", "uzi", "ppsh", "mp5", 
 var SIDEARMS2 = ["pistol", "pistol", "pistol", "tt", "p92", "deagle"];
 var MELEE = ["montirovka", "montirovka", "bita", "nozh", "topor"];
 var GADGETS2 = ["f1", "f1", "f1", "molotov", "flash", "smoke"];
-var FILL_FINISHES = ["akulka", "akulka", "blatkom", "blatkom", "haki", "haki", "iznos", "sport", "devyanostye", "cherkizon", "afgan", "video", "kosmos", "hohloma", "carsky"];
+var FILL_FINISHES = Object.freeze([
+  "akulka",
+  "akulka",
+  "blatkom",
+  "blatkom",
+  "haki",
+  "haki",
+  "iznos",
+  "berezka",
+  "sport",
+  "devyanostye",
+  "cherkizon",
+  "afgan",
+  "video",
+  "malina",
+  "graffiti",
+  "hrom",
+  "kosmos",
+  "hohloma",
+  "neon",
+  "zakat",
+  "kazino",
+  "carsky",
+  "bratok",
+  "almaz"
+]);
+var FILL_SKIN_CHANCE = 0.4;
 var pick = (rnd, a) => a[Math.floor(rnd() * a.length) % a.length];
 function fillPersona(rnd, o) {
   let name = fillNickname(rnd, o.lang);
@@ -16977,7 +17048,7 @@ function fillPersona(rnd, o) {
     difficulty
   };
   const skins = {};
-  if (persona2.loadout.primary && rnd() < 0.3) skins[persona2.loadout.primary] = pick(rnd, FILL_FINISHES);
+  if (persona2.loadout.primary && rnd() < FILL_SKIN_CHANCE) skins[persona2.loadout.primary] = pick(rnd, FILL_FINISHES);
   if (rnd() < 0.1) skins[persona2.loadout.sidearm] = pick(rnd, FILL_FINISHES);
   persona2.loadout.skins = skins;
   return persona2;
@@ -17260,7 +17331,7 @@ var SERVER_EVENT_PROPS = {
   match_abandoned: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), phase: external_exports.string() }),
   map_played: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS) }),
   invite_created: external_exports.object({ code: external_exports.string(), roomId: external_exports.string() }),
-  shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget", "skin"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
+  shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget", "skin", "bundle"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
   mod_bought: external_exports.object({ weapon: external_exports.string(), mod: external_exports.string(), cost: external_exports.number().int() }),
   /** The weapon case and (v0.23) the skin case: `kind` skin carries the finish. */
   case_opened: external_exports.object({ weapon: external_exports.string().optional(), rarity: external_exports.enum(["common", "rare", "epic", "legendary"]), price: external_exports.number().int(), kind: external_exports.enum(["weapon", "skin", "character"]).optional(), finish: external_exports.string().max(24).optional(), character: external_exports.string().max(24).optional() }),
@@ -17361,6 +17432,7 @@ var LoadoutRequest = external_exports.object({
 }).strict();
 var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true).optional() }).strict();
 var SkinBuyRequest = external_exports.object({ weapon: external_exports.enum(WEAPON_IDS), finish: external_exports.enum(FINISH_IDS) }).strict();
+var BundleBuyRequest = external_exports.object({ character: external_exports.enum(CHARACTER_IDS) }).strict();
 var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card"]) }).strict();
 var StarsInvoiceRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/) }).strict();
 var UpdateProfileRequest = external_exports.object({
@@ -18524,6 +18596,7 @@ var EconomyRepo = class {
   async load(tx, userId, wallet) {
     const items = await tx`SELECT kind, item_id FROM user_items WHERE user_id = ${userId}`;
     const modRows = await tx`SELECT weapon_id, mod_id FROM weapon_mods WHERE user_id = ${userId}`;
+    const killRows = await tx`SELECT weapon, finish, kills FROM skin_kills WHERE user_id = ${userId} AND kills > 0`;
     const weapons = new Set(FREE_WEAPONS);
     const characters = new Set(FREE_CHARACTERS);
     const gadgets = new Set(FREE_GADGETS);
@@ -18554,7 +18627,8 @@ var EconomyRepo = class {
       gadgets: GADGET_IDS.filter((g) => gadgets.has(g)),
       mods,
       skins: [...skins].sort(),
-      loadout
+      loadout,
+      skinKills: skinKillsOf(killRows)
     };
   }
   async lockWallet(tx, userId) {
@@ -18587,7 +18661,7 @@ var EconomyRepo = class {
   /** Loadout and owned characters of a player joining a room. */
   async gear(userId) {
     const inv = await this.inventory(userId);
-    return { loadout: inv.loadout, characters: new Set(inv.characters) };
+    return { loadout: inv.loadout, characters: new Set(inv.characters), skinKills: inv.skinKills ?? {} };
   }
   async buy(userId, kind, id) {
     if (kind === "weapon" ? !isWeaponId(id) : kind === "character" ? !isCharacterId(id) : !isGadgetId(id)) throw new EconomyError("not_for_sale");
@@ -18623,6 +18697,28 @@ var EconomyRepo = class {
       await tx`UPDATE profiles SET loadout = ${tx.json(loadout)}, updated_at = now() WHERE user_id = ${userId}`;
       this.log.info("skin purchase", { userId, skin: id, amount: price.amount });
       return this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - price.amount, loadout });
+    });
+  }
+  /**
+   * v0.2.23: a set — the character and their legendary skin on the automatic — for BLATS at the set's
+   * price, in one transaction: both items or neither. The skin is put on at once.
+   */
+  async buyBundle(userId, character) {
+    const b2 = bundleOf(character);
+    if (!b2) throw new EconomyError("not_for_sale");
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      const refusal = bundleRefusal(inv, character);
+      if (refusal) throw new EconomyError(refusal);
+      const skin = skinId(b2.weapon, b2.finish);
+      await this.debit(tx, userId, "diamonds", b2.price, wallet.diamonds, "purchase", `bundle:${b2.id}`);
+      await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${b2.character}, 'character', 'diamonds'), (${userId}, ${skin}, 'skin', 'diamonds')`;
+      const l = inv.loadout;
+      const loadout = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods, skins: { ...l.skins ?? {}, [b2.weapon]: b2.finish } };
+      await tx`UPDATE profiles SET loadout = ${tx.json(loadout)}, updated_at = now() WHERE user_id = ${userId}`;
+      this.log.info("bundle purchase", { userId, bundle: b2.id, skin, amount: b2.price });
+      return this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - b2.price, loadout });
     });
   }
   /** Buys a modification for one weapon (tokens) and equips it (replacing the one on the same mount). */
@@ -18765,6 +18861,14 @@ async function awardMatchTokens(tx, userId, matchId, tokens) {
   const total = rows[0]?.tokens ?? 0;
   if (tokens > 0) await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${tokens}, ${total}, 'match', ${matchId})`;
   return total;
+}
+function skinKillsOf(rows) {
+  const out = {};
+  for (const r of rows) {
+    const id = `${r.weapon}.${r.finish}`;
+    if (parseSkin(id)) out[id] = r.kills;
+  }
+  return out;
 }
 
 // apps/server/src/clubs/house.ts
@@ -19635,6 +19739,7 @@ var PgMatchRecorder = class {
             score = EXCLUDED.score, damage_dealt = EXCLUDED.damage_dealt, completed = EXCLUDED.completed, won = EXCLUDED.won,
             via_invite = match_participants.via_invite OR EXCLUDED.via_invite, xp_awarded = EXCLUDED.xp_awarded,
             tokens_awarded = EXCLUDED.tokens_awarded, rating_delta = EXCLUDED.rating_delta, left_at = EXCLUDED.left_at`;
+        await addSkinKills(tx, p.userId, p.skinKills, p.kills);
         out.set(p.userId, { xpGained: xp, totalXp, level, leveledUp: level > prof.level, newAchievements: unlocked, tokensGained: tokens, totalTokens, ratingDelta: rDelta, rating, blatsGained: blats.gained, totalBlats: blats.balance, ...p.lateJoin && p.completed && !m.kon ? { lateJoin: true } : {} });
         clubDeltas.push({ userId: p.userId, delta: rDelta });
       }
@@ -19687,6 +19792,17 @@ var PgMatchRecorder = class {
     this.log.info("match abandoned", { matchId, reason });
   }
 };
+async function addSkinKills(tx, userId, perSkin, matchKills) {
+  if (!perSkin) return;
+  for (const [id, n] of Object.entries(perSkin)) {
+    const s = parseSkin(id);
+    const kills = Math.min(Math.floor(n), Math.max(0, matchKills));
+    if (!s || !Number.isFinite(kills) || kills <= 0) continue;
+    await tx`
+      INSERT INTO skin_kills (user_id, weapon, finish, kills) VALUES (${userId}, ${s.weapon}, ${s.finish}, ${kills})
+      ON CONFLICT (user_id, weapon, finish) DO UPDATE SET kills = skin_kills.kills + EXCLUDED.kills, updated_at = now()`;
+  }
+}
 
 // apps/server/src/analytics/writer.ts
 import { randomUUID } from "node:crypto";
@@ -22941,6 +23057,14 @@ var registerShopRoutes = (router, deps) => {
     if (price) deps.services.analytics.server("shop_purchase", { kind: "skin", item: `${body.weapon}.${body.finish}`, currency: price.currency, amount: price.amount }, user);
     ctx.json(200, inv);
   });
+  router.post("/api/shop/bundle", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    const user = currentUser(ctx);
+    const body = await ctx.body(BundleBuyRequest, 1024);
+    const inv = await guard(() => pg().economy.buyBundle(user.userId, body.character));
+    const b2 = bundleOf(body.character);
+    if (b2) deps.services.analytics.server("shop_purchase", { kind: "bundle", item: `${b2.character}+${b2.weapon}.${b2.finish}`, currency: "diamonds", amount: b2.price }, user);
+    ctx.json(200, inv);
+  });
   router.post("/api/me/loadout", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
     const user = currentUser(ctx);
     const body = await ctx.body(LoadoutRequest, 4096);
@@ -23348,7 +23472,10 @@ var registerSocialRoutes = (router, deps) => {
       const p = parseSkin(s);
       if (p && !FINISHES[p.finish].gift) skins[FINISHES[p.finish].rarity]++;
     }
-    const res = { player, characters: inv.characters, skins };
+    const weapon = inv.loadout.primary ?? inv.loadout.sidearm;
+    const finish = inv.loadout.skins?.[weapon] ?? null;
+    const gear = { weapon, finish, kills: finish ? inv.skinKills?.[skinId(weapon, finish)] ?? 0 : null };
+    const res = { player, characters: inv.characters, skins, gear };
     ctx.json(200, res);
   });
   router.post("/api/friends/request", auth, rateLimit(requestLimiter, byUser), async (ctx) => {
@@ -24389,6 +24516,19 @@ function navFor(mapId, world) {
 }
 var AUTO_START_DELAY_MS = 4e3;
 var FREE_GEAR = Object.freeze({ loadout: DEFAULT_LOADOUT, characters: new Set(FREE_CHARACTERS) });
+function equippedSkinKills(gear) {
+  const out = {};
+  for (const [w, f2] of Object.entries(gear.loadout.skins ?? {})) {
+    const n = gear.skinKills?.[skinId(w, f2)];
+    if (n) out[w] = n;
+  }
+  return out;
+}
+function fillSkinKills(skins, level) {
+  const out = {};
+  for (const w of Object.keys(skins)) out[w] = Math.round(5 + Math.random() * (20 + level * 9));
+  return out;
+}
 var SOLO_ABORT_MS = 2e4;
 var MAX_MSGS_PER_SEC = 150;
 var MatchRoom = class {
@@ -24427,6 +24567,8 @@ var MatchRoom = class {
   world;
   matchId = null;
   matchStartedAtWall = 0;
+  /** v0.2.23: this match's eliminations with each skin, per person («weapon.finish» → kills). */
+  skinKillCounts = /* @__PURE__ */ new Map();
   closed = false;
   clients = /* @__PURE__ */ new Map();
   pendingShots = [];
@@ -24883,6 +25025,7 @@ var MatchRoom = class {
       level: persona2.level,
       avatar: persona2.avatar,
       skins: persona2.loadout.skins ?? {},
+      skinKills: fillSkinKills(persona2.loadout.skins ?? {}, persona2.level),
       difficulty: persona2.difficulty,
       addedAt: this.clock(),
       brain: null,
@@ -25011,6 +25154,7 @@ var MatchRoom = class {
     this.matchId = randomUUID3();
     this.matchStartedAtWall = Date.now();
     this.resultsSent = false;
+    this.skinKillCounts.clear();
     const players = [...this.clients.values()].map((c) => ({ userId: c.user.userId, character: c.character, viaInvite: c.viaInvite, team: this.world.players.get(c.user.userId)?.team ?? null }));
     const fill = this.seats.size;
     this.services.recorder.matchStarted({ matchId: this.matchId, roomId: this.id, mapId: this.mapId, mode: this.config.mode, isPrivate: this.isPrivate, startedAt: /* @__PURE__ */ new Date(), players, fill }).catch((e2) => this.log.error("matchStarted failed", { err: e2 }));
@@ -25082,7 +25226,8 @@ var MatchRoom = class {
         viaInvite: c.viaInvite,
         playtimeMs: Math.round(c.matchTimeMs),
         // v0.2.21: came into the match after its first quarter — the rating stays (LATE_JOIN)
-        ...!this.kon && joinedLate(c.joinedAfterMs, this.config.durationMs) ? { lateJoin: true } : {}
+        ...!this.kon && joinedLate(c.joinedAfterMs, this.config.durationMs) ? { lateJoin: true } : {},
+        ...this.skinKillCounts.get(s.id)?.size ? { skinKills: Object.fromEntries(this.skinKillCounts.get(s.id)) } : {}
       };
     });
     if (this.kon) {
@@ -25110,6 +25255,13 @@ var MatchRoom = class {
       kon: this.kon
     }).then((personal) => {
       let levelChanged = false;
+      for (const p of participants) {
+        const c = this.clients.get(p.userId);
+        if (!c || !p.skinKills || !personal.has(p.userId)) continue;
+        const sk = { ...c.gear.skinKills ?? {} };
+        for (const [id, n] of Object.entries(p.skinKills)) sk[id] = (sk[id] ?? 0) + Math.min(n, p.kills);
+        c.gear = { ...c.gear, skinKills: sk };
+      }
       for (const [userId, result] of personal) {
         const c = this.clients.get(userId);
         if (!c) continue;
@@ -25172,6 +25324,7 @@ var MatchRoom = class {
       if (e2.t === "shot" || e2.t === "melee") this.pendingShots.push(e2);
       else {
         this.pendingEvents.push(e2);
+        if (e2.t === "kill") this.countSkinKill(e2.killer, e2.victim, e2.weapon);
         if (e2.t === "phase") {
           this.broadcastRoster();
           if (e2.phase === "ready" || e2.phase === "finished") {
@@ -25256,6 +25409,23 @@ var MatchRoom = class {
     this.log.info("room closed", { reason });
     return abandoned;
   }
+  /**
+   * v0.2.23: an elimination made with a weapon wearing a skin counts for that skin (people only — what the
+   * room fills in has made-up counters). Kills of oneself don't count (the match's last kill does: the
+   * world may already be «finished» when its events are read).
+   */
+  countSkinKill(killerSlot, victimSlot, weapon) {
+    if (killerSlot === victimSlot || !this.matchId || !isWeaponId(weapon)) return;
+    let killer;
+    for (const p of this.world.players.values()) if (p.slot === killerSlot) killer = p;
+    const c = killer ? this.clients.get(killer.id) : void 0;
+    const finish = c?.gear.loadout.skins?.[weapon];
+    if (!c || !finish) return;
+    const id = skinId(weapon, finish);
+    let m = this.skinKillCounts.get(c.user.userId);
+    if (!m) this.skinKillCounts.set(c.user.userId, m = /* @__PURE__ */ new Map());
+    m.set(id, (m.get(id) ?? 0) + 1);
+  }
   // ── Output helpers ──────────────────────────────────────────────────────
   roster() {
     const finished = this.world.phase === "finished";
@@ -25279,6 +25449,7 @@ var MatchRoom = class {
         team: p?.team ?? null,
         mods: c.gear.loadout.mods,
         skins: c.gear.loadout.skins ?? {},
+        skinKills: equippedSkinKills(c.gear),
         ...this.kon ? { konRating: c.user.konRating ?? KON_RATING.start } : {},
         ...c.user.founder ? { founder: true } : {}
       };
@@ -25298,7 +25469,8 @@ var MatchRoom = class {
         avatar: seat.avatar,
         team: p?.team ?? null,
         mods: {},
-        skins: seat.skins
+        skins: seat.skins,
+        skinKills: seat.skinKills
       };
     });
     const players = [...people, ...filled].sort((a, b2) => order(a.id) - order(b2.id));
