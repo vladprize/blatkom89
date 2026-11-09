@@ -349,10 +349,10 @@ export class FighterCard {
 
   /**
    * The character's art in a box. On a tall card (`full`, `bottom`) the art starts `room` under the box's top
-   * (the owner: «небольшой отступ, чтобы голова не упиралась в верхнюю рамку»), its top edge faded into the card,
-   * and only the alias's strip (`foot`) is darkened.
+   * (the owner: «небольшой отступ, чтобы голова не упиралась в верхнюю рамку»), its top edge faded into the card
+   * (the card darkens its own lower part, see drawTall); on the wide card it fades out to the right.
    */
-  private art(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fade: 'bottom' | 'right' | 'full', foot = 0, room = 0) {
+  private art(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fade: 'bottom' | 'right' | 'full', room = 0) {
     const full = fade === 'full';
     const src = artSrc(this.d.character, full);
     const img = loaded.get(src);
@@ -401,23 +401,13 @@ export class FighterCard {
       ctx.drawImage(img, x + (w - dw) / 2, y + Math.min(0, (h - dh) * 0.15), dw, dh);
     }
     ctx.restore();
-    if (fade === 'right') {
-      // the wide card: the head and shoulders fade into the card towards the text
-      const g = ctx.createLinearGradient(x + w * 0.45, 0, x + w, 0);
-      g.addColorStop(0, 'rgba(18,14,12,0)');
-      g.addColorStop(1, 'rgba(18,14,12,1)');
-      ctx.fillStyle = g;
-      ctx.fillRect(x, y, w, h);
-      return;
-    }
-    // a tall card: the art stays whole, only the strip under the alias goes dark
-    const top = y + h - foot * 2.8;
-    const g = ctx.createLinearGradient(0, top, 0, y + h);
+    if (fade !== 'right') return;
+    // the wide card: the head and shoulders fade into the card towards the text
+    const g = ctx.createLinearGradient(x + w * 0.45, 0, x + w, 0);
     g.addColorStop(0, 'rgba(18,14,12,0)');
-    g.addColorStop(0.55, 'rgba(18,14,12,0.5)');
-    g.addColorStop(1, 'rgba(18,14,12,0.92)');
+    g.addColorStop(1, 'rgba(18,14,12,1)');
     ctx.fillStyle = g;
-    ctx.fillRect(x, top, w, y + h - top);
+    ctx.fillRect(x, y, w, h);
   }
 
   /** The art at its size on the card with its top `fade` px faded out — made once per card and size, then reused. */
@@ -611,15 +601,26 @@ export class FighterCard {
     this.background(ctx, now, w / 2, h * 0.5, w * 0.95);
     // a little headroom: the head clear of the frame (or of the label's strip)
     const room = Math.max(4, Math.round(h * 0.045));
-    this.art(ctx, 0, head, w, h - head, full ? 'full' : 'bottom', foot, room);
+    this.art(ctx, 0, head, w, h - head, full ? 'full' : 'bottom', room);
+    // the card's lower part a little darker, so the weapon in its skin and the alias stand out (the owner:
+    // «оружие / скины сильнее выделить — снизу затемнить градиентом немного карточки»)
+    const squat = h / w < 1.25;
+    const g0 = h * (squat ? 0.56 : full ? 0.55 : 0.48);
+    const shade = ctx.createLinearGradient(0, g0, 0, h);
+    shade.addColorStop(0, 'rgba(10,8,7,0)');
+    shade.addColorStop(0.5, 'rgba(10,8,7,0.5)');
+    shade.addColorStop(1, 'rgba(10,8,7,0.92)');
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, g0, w, h - g0);
     if (this.d.label) this.header(ctx, fs);
     if (!compact) this.ribbon(ctx, 0, head + w * 0.035, Math.max(7, w * 0.046));
     this.levelBadge(ctx, w - w * 0.035, head + w * 0.035, Math.max(9, w * (compact ? 0.07 : 0.06)));
-    // the weapon: the lower right corner, its butt towards the middle, the muzzle up to the right
-    const ww = w * (compact ? 0.74 : 0.6);
+    // the weapon: the lower right corner, its butt towards the middle, the muzzle up to the right; on a squat card
+    // (the phone's kit: the portrait cut at the chest, the face low and to the right) a little smaller, lower left
+    const ww = w * (squat ? 0.66 : compact ? 0.74 : 0.6);
     const tilt = -0.16;
     const bh = (ww / 3) * Math.cos(-tilt) + ww * Math.sin(-tilt); // the turned icon's height (the icons are 3:1)
-    const cx = w - w * 0.045 - ww / 2;
+    const cx = squat ? w * 0.05 + ww / 2 : w - w * 0.045 - ww / 2;
     const cy = h - foot - bh / 2 + bh * 0.08;
     this.weaponSpot(ctx, now, cx, cy, ww);
     this.weapon(ctx, now, cx, cy, ww, tilt);
@@ -651,7 +652,7 @@ export class FighterCard {
     ctx.fillStyle = shade;
     ctx.fillRect(-r, -r, r * 2, r * 2);
     if (g) {
-      const strength = g === 'legendary' ? 0.5 : g === 'epic' ? 0.4 : g === 'rare' ? 0.3 : 0.18;
+      const strength = g === 'legendary' ? 0.6 : g === 'epic' ? 0.5 : g === 'rare' ? 0.4 : 0.26;
       ctx.globalCompositeOperation = 'lighter';
       const light = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
       light.addColorStop(0, rgba(glow, strength));

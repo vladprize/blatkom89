@@ -181,8 +181,13 @@ Drawn on a canvas at the screen's pixel ratio, so «Поделиться» sends
   nothing lies across the figure. The art takes the whole card under a little headroom (4.5 % of its height, the
   picture's top edge faded into the card; a full-height figure is scaled to fit under it, its feet on the bottom); the
   weapon in its skin stands in the lower right corner (60 % of the card's width, 74 % on a compact card), its
-  muzzle up to the right, on a soft shade and the skin's own light (a legendary skin: sparks round it); one small
-  line at the bottom — the alias on the left, a legendary skin's ★ eliminations on the right. The grade's ribbon
+  muzzle up to the right, on a soft shade and the skin's own light (a legendary skin: sparks round it); a squat
+  card (the phone's kit, the portrait cut at the chest, its face low and to the right) has it a little smaller
+  (66 %) in the lower left corner — «оружие прям на лице». The card's lower half darkens a little towards the
+  bottom (from about half its height to 92 % at the edge) so the weapon and its skin stand out — «сильнее выделить,
+  снизу затемнить градиентом». One small line at the bottom — the alias on the left, a legendary skin's ★
+  eliminations on the right. The line-up stands in the middle of the screen, between the loading art's logo and
+  the map's name («поднять выше и симметрично по центру»). The grade's ribbon
   and the level stay in the top corners. The character, the weapon and the skin by name left the card's face
   (a screen reader still reads them from its description); the wide card keeps its text.
 * The same rules as everywhere: no real brands (two stripes, never three), no prison symbols or tattoos, no

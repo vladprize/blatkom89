@@ -2847,8 +2847,10 @@ button.blatsban:focus-visible { outline: 2px solid var(--tape); outline-offset: 
 .fcard { display: block; flex: none; }
 .mcards { position: fixed; left: 0; right: 0; pointer-events: none; display: flex; justify-content: center; opacity: 0; transition: opacity .35s ease-out, transform .35s ease-out; }
 .mcards--on { opacity: 1; }
-.mcards--lineup { z-index: 31; bottom: calc(96px + var(--safe-bottom, 0px)); transform: translateY(14px); }
-.mcards--lineup.mcards--on { transform: none; }
+/* the line-up in the middle of the screen (the owner: «поднять выше и симметрично по центру»), between the
+   loading art's logo and the map's name */
+.mcards--lineup { z-index: 31; top: 50%; transform: translateY(calc(-50% + 14px)); }
+.mcards--lineup.mcards--on { transform: translateY(-50%); }
 .mcards__row { display: flex; gap: 8px; align-items: flex-end; padding: 0 16px; }
 .mcards__gap { width: 16px; flex: none; }
 .mcards .fcard { box-shadow: 0 8px 22px rgba(0,0,0,.6); }
