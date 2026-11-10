@@ -3,7 +3,7 @@
  * portrait, weapon & ammo with slots, centre messages, hit markers, scoreboard and touch controls.
  */
 import * as Phaser from 'phaser';
-import { getMap, PROP_DEFS, propFootprint, WEAPONS, SCORING, BASE_RULES, CTF_RULES, SPRINT, isTeamMode } from '@blatkom/shared';
+import { getMap, PROP_DEFS, propFootprint, WEAPONS, SCORING, BASE_RULES, CTF_RULES, SPRINT, isTeamMode, skinPerks } from '@blatkom/shared';
 import type { MapDef, Team, WeaponId } from '@blatkom/shared';
 import type { GameSession, RenderBase, RenderFlag, RenderPlayer } from '../session/types.js';
 import { hudBus, publishHudLayout } from './hudBus.js';
@@ -192,6 +192,8 @@ export class HudScene extends Phaser.Scene {
   private weaponIcon!: Phaser.GameObjects.Image;
   private ammoText!: Phaser.GameObjects.Text;
   private weaponName!: Phaser.GameObjects.Text;
+  /** v0.2.24: a legendary skin's eliminations on the weapon panel («★ 128»), as on the fighter cards. */
+  private skinCounter!: Phaser.GameObjects.Text;
   private slotGfx!: Phaser.GameObjects.Graphics;
   private slotIcons: Phaser.GameObjects.Image[] = [];
   private slotNums: Phaser.GameObjects.Text[] = [];
@@ -438,6 +440,7 @@ export class HudScene extends Phaser.Scene {
     // touch: the ammo stands at the card's right edge (its width varies: «8/∞», «30/90», «120/240»)
     this.ammoText = txt(this, 0, 0, '8/∞', this.touch ? 17 : 22, BEIGE, '600').setOrigin(this.touch ? 1 : 0.5, 0);
     this.weaponName = txt(this, 0, 0, '', 10, '#b8a888', '500').setOrigin(0.5, 0);
+    this.skinCounter = txt(this, 0, 0, '', this.touch ? 11 : 13, '#f2d27a', '600').setOrigin(1, 0).setVisible(false);
     this.slotGfx = this.add.graphics();
     for (let i = 0; i < 4; i++) {
       this.slotIcons.push(this.add.image(0, 0, 'weapons', 'ico_pistol').setOrigin(0.5));
@@ -845,6 +848,7 @@ export class HudScene extends Phaser.Scene {
       this.hpText.setPosition(px + 42, y + 20);
       // the weapon icon goes between the health bar and the ammo (update(): the ammo's width varies)
       this.ammoText.setPosition(px + CW - 7, y + 8);
+      this.skinCounter.setPosition(px + CW - 7, y + 25);
       this.weaponName.setVisible(false);
       this.weaponBg.clear();
       this.slotGfx.clear();
@@ -911,6 +915,7 @@ export class HudScene extends Phaser.Scene {
       this.panel(this.weaponBg, wx, wy, 170, 74);
       this.weaponIcon.setPosition(wx + 85, wy + 24);
       this.ammoText.setPosition(wx + 85, wy + 40);
+      this.skinCounter.setPosition(wx + 164, wy + 54);
       this.weaponName.setPosition(wx + 85, wy + 4).setVisible(true);
       for (let i = 0; i < 4; i++) {
         const sx = wx + 182 + i * 50;
@@ -1302,7 +1307,13 @@ export class HudScene extends Phaser.Scene {
       this.hpBar.fillStyle(0x0e1820, 1).fillRect(x, y + 13, 150, 4).fillStyle(breathCol, 1).fillRect(x, y + 13, 150 * breath, 4);
     }
     // weapon (with the skin it wears)
-    const mySkin = this.session.players().find((p) => p.isLocal)?.skin ?? null;
+    const meNow = this.session.players().find((p) => p.isLocal);
+    const mySkin = meNow?.skin ?? null;
+    // v0.2.24: a legendary skin's «★ N» on the panel (hidden while reloading: the bar is there on a phone)
+    const kills = mySkin && skinPerks(mySkin)?.counter && typeof meNow?.skinKills === 'number' ? meNow.skinKills : null;
+    const star = kills === null || hud.reloading ? '' : `★ ${kills}`;
+    if (this.skinCounter.text !== star) this.skinCounter.setText(star);
+    this.skinCounter.setVisible(!!star && hud.alive);
     setWeaponTexture(this.weaponIcon, `ico_${hud.weapon}`, mySkin);
     const wf = this.weaponIcon.frame;
     const def = WEAPONS[hud.weapon];
