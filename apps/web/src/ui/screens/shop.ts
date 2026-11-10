@@ -969,7 +969,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     );
   };
 
-  /** «Regular 199 · Rare 399 · Epic 799 · Legendary 1 099» — the grades' prices in one line. */
+  /** «Regular 99 · Rare 299 · Epic 499 · Legendary 699» (v0.2.24) — the grades' prices in one line. */
   const gradePrices = (): HTMLElement =>
     h('div', { class: 'gradeprices' }, ...GRADES.map((g) => h('span', { class: 'gradeprices__item' }, gradeTag(g), priceLabel({ currency: 'diamonds', amount: CHARACTER_GRADE_PRICES[g], level: 1 }))));
   const charactersTab = (): HTMLElement =>

@@ -152,7 +152,7 @@ proxy_read_timeout 1h;`) and set `TRUST_PROXY=true` so rate limits see real clie
       game's papers.
 - [ ] Before selling: the operator's name and contact in `apps/web/public/privacy*.html` and
       `terms*.html` (placeholders), `PAY_SUPPORT`, `COPYRIGHT_HOLDER`.
-- [ ] Xsolla: the project, six store items, the webhook and the four keys ([PAYMENTS.md](PAYMENTS.md) §2);
+- [ ] Xsolla: the project, ten store items (v0.2.24), the webhook and the four keys ([PAYMENTS.md](PAYMENTS.md) §2);
       a sandbox purchase with a test card credits the BLATS once; then `XSOLLA_SANDBOX=false`.
 - [ ] Telegram Stars: a real purchase of the smallest pack (75 ⭐) in the Mini App and its refund from
       `/admin` (TELEGRAM.md §5).

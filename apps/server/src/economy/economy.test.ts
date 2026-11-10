@@ -118,7 +118,7 @@ test('economy v0.2.18: characters — three for level + talons, the rest for BLA
   const r0 = await api(app.base, '/api/me', { method: 'PATCH', token: a.token, body: { preferredCharacter: 'vorona' } });
   assert.equal(r0.status, 409);
   const leopard = CHARACTER_PRICES.leopard!;
-  assert.deepEqual(leopard, { currency: 'diamonds', amount: 399, level: 1 }, 'a rare character: 399 BLATS, no level');
+  assert.deepEqual(leopard, { currency: 'diamonds', amount: 299, level: 1 }, 'a rare character: 299 BLATS (v0.2.24), no level');
   await ctx().economy.grant(a.userId, 'tokens', CHARACTER_PRICES.vorona!.amount + 7, null, 'test');
   let r = await api(app.base, '/api/shop/buy', { method: 'POST', token: a.token, body: { kind: 'character', id: 'vorona' } });
   assert.equal(r.body.error.code, 'level');
@@ -541,15 +541,15 @@ test('economy v0.2.18: two free characters and a free kit; three characters, wea
   const chars = Object.values(CHARACTER_PRICES);
   assert.equal(chars.length, CHARACTER_IDS.length - 2);
   assert.equal(chars.filter((p) => p!.currency === 'tokens').length, 3);
-  assert.ok(chars.filter((p) => p!.currency === 'diamonds').every((p) => [199, 399, 799, 1099].includes(p!.amount) && p!.level === 1));
+  assert.ok(chars.filter((p) => p!.currency === 'diamonds').every((p) => [99, 299, 499, 699].includes(p!.amount) && p!.level === 1));
   assert.deepEqual(CHARACTER_IDS.filter((c) => !CHARACTER_PRICES[c] && !FREE_CHARACTERS.includes(c)), []);
   assert.deepEqual([...FREE_WEAPONS].sort(), ['avtomat', 'montirovka', 'pistol']);
   const weapons = Object.values(WEAPON_PRICES);
   assert.equal(weapons.length, 19);
   assert.ok(weapons.every((p) => p!.currency === 'tokens'), 'weapons are for talons');
   assert.equal(CASE_PRICE.currency, 'tokens', 'the rare-weapon case is opened with talons');
-  assert.deepEqual(SKIN_CASE_PRICE, { currency: 'diamonds', amount: 299, level: 1 });
-  assert.deepEqual(SKIN_PRICES, { common: 99, rare: 199, epic: 299, legendary: 499 });
+  assert.deepEqual(SKIN_CASE_PRICE, { currency: 'diamonds', amount: 199, level: 1 });
+  assert.deepEqual(SKIN_PRICES, { common: 99, rare: 99, epic: 199, legendary: 299 });
   // the free kit is complete: a sidearm, a melee weapon and a primary
   assert.ok(FREE_WEAPONS.includes(DEFAULT_LOADOUT.sidearm) && FREE_WEAPONS.includes(DEFAULT_LOADOUT.melee) && FREE_WEAPONS.includes(DEFAULT_LOADOUT.primary!));
 });

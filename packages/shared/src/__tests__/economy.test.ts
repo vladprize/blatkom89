@@ -39,11 +39,11 @@ import {
 } from '../index.js';
 import type { CharacterId, Inventory } from '../index.js';
 
-test('v0.2.18 roster: 2 free, 3 for talons, the rest for BLATS by grade (199 / 399 / 799 / 1 099)', () => {
+test('v0.2.18 roster: 2 free, 3 for talons, the rest for BLATS by grade (v0.2.24: 99 / 299 / 499 / 699)', () => {
   assert.deepEqual([...FREE_CHARACTERS], ['petya', 'valuta']);
   const talons = CHARACTER_IDS.filter((c) => CHARACTER_PRICES[c]?.currency === 'tokens');
   assert.deepEqual(talons, ['uchastkovy', 'mihalych', 'vorona']);
-  const want = { common: 199, rare: 399, epic: 799, legendary: 1099 } as const;
+  const want = { common: 99, rare: 299, epic: 499, legendary: 699 } as const;
   for (const c of CHARACTER_IDS) {
     if (FREE_CHARACTERS.includes(c) || talons.includes(c)) continue;
     const p = CHARACTER_PRICES[c]!;
@@ -65,7 +65,7 @@ test('v0.2.18 grades: four, coloured grey / red / purple / gold', () => {
   assert.equal(new Set(Object.values(GRADE_COLORS)).size, 4);
 });
 
-test('v0.2.19 skins: the owner\'s line — 39 on sale by grade (99 / 199 / 299 / 499 BLATS), 2 welcome gifts, the first line retired', () => {
+test('v0.2.19 skins: the owner\'s line — 39 on sale by grade (v0.2.24: 99 / 99 / 199 / 299 BLATS), 2 welcome gifts, the first line retired', () => {
   // the line, in the owner's order: 2 regular on sale + the 2 gifts, 10 rare, 5 epic, 3 legendary; then the
   // AK sheet of v0.2.19 (5 rare, 8 epic, 6 legendary)
   assert.deepEqual([...LINE_FINISHES], [
@@ -85,7 +85,7 @@ test('v0.2.19 skins: the owner\'s line — 39 on sale by grade (99 / 199 / 299 /
   assert.deepEqual(parseSkin('avtomat.gzhel'), { weapon: 'avtomat', finish: 'gzhel' });
   // the two free ones of the first line stay free for everyone (whoever wears one keeps it)
   assert.deepEqual([...FREE_FINISHES], ['berezka', 'rzhavchina']);
-  const want = { common: 99, rare: 199, epic: 299, legendary: 499 } as const;
+  const want = { common: 99, rare: 99, epic: 199, legendary: 299 } as const;
   for (const f of SHOP_FINISHES) assert.deepEqual(skinPrice(f), { currency: 'diamonds', amount: want[FINISHES[f].rarity], level: 1 }, f);
   for (const f of WELCOME_FINISHES) assert.equal(skinPrice(f), null, `${f}: a gift, not sold`);
   const inv = { skins: ['avtomat.gzhel', 'avtomat.kosmos'], diamonds: 150 };
@@ -107,22 +107,22 @@ test('v0.2.19 skins: the owner\'s line — 39 on sale by grade (99 / 199 / 299 /
   }
 });
 
-test('v0.2.18 BLATS: on sale, 1 BLATS = 1 cent, packs from 99, 10 for every new level, the skin case 299', () => {
+test('v0.2.18 BLATS: on sale, 1 BLATS = 1 cent, packs from 99, 10 for every new level, the skin case 199 (v0.2.24)', () => {
   assert.equal(REAL_MONEY, true);
   assert.equal(DIAMOND_PACKS[0]!.diamonds, 99);
   for (const p of DIAMOND_PACKS) assert.equal(p.usdCents, p.diamonds, p.id);
   assert.deepEqual([blatsToUsd(199), blatsToUsd(1099), blatsToUsd(99)], ['$1.99', '$10.99', '$0.99']);
   assert.deepEqual([blatsForLevel(1), blatsForLevel(2), blatsForLevel(57), blatsForLevel(0)], [0, BLATS_PER_LEVEL, BLATS_PER_LEVEL, 0]);
   assert.equal(BLATS_PER_LEVEL, 10);
-  assert.deepEqual(SKIN_CASE_PRICE, { currency: 'diamonds', amount: 299, level: 1 });
+  assert.deepEqual(SKIN_CASE_PRICE, { currency: 'diamonds', amount: 199, level: 1 });
   assert.deepEqual([SKIN_RARITY_CHANCE.common, SKIN_RARITY_CHANCE.rare, SKIN_RARITY_CHANCE.epic, SKIN_RARITY_CHANCE.legendary], [40, 30, 20, 10]);
   const inv = (diamonds: number): Inventory => ({ tokens: 0, diamonds, level: 1, weapons: [], characters: ['petya', 'valuta'], gadgets: [], mods: {}, skins: [], loadout: {} as Inventory['loadout'] });
-  assert.equal(buyRefusal(inv(1098), 'character', 'lev'), 'funds');
-  assert.equal(buyRefusal(inv(1099), 'character', 'lev'), null);
+  assert.equal(buyRefusal(inv(698), 'character', 'lev'), 'funds');
+  assert.equal(buyRefusal(inv(699), 'character', 'lev'), null);
 });
 
-test('v0.2.18 part 2 character case: 299 BLATS, grades 40 / 30 / 20 / 10, only the characters for BLATS, never a duplicate', () => {
-  assert.deepEqual(CHARACTER_CASE_PRICE, { currency: 'diamonds', amount: 299, level: 1 });
+test('v0.2.18 part 2 character case: 199 BLATS (v0.2.24), grades 40 / 30 / 20 / 10, only the characters for BLATS, never a duplicate', () => {
+  assert.deepEqual(CHARACTER_CASE_PRICE, { currency: 'diamonds', amount: 199, level: 1 });
   assert.equal(CASE_CHARACTERS.length, CHARACTER_IDS.length - 5, 'all but the two free and the three for talons');
   assert.ok(!CASE_CHARACTERS.includes('petya') && !CASE_CHARACTERS.includes('uchastkovy') && CASE_CHARACTERS.includes('kasatka'));
   const none = new Set<CharacterId>();

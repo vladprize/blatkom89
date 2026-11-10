@@ -210,7 +210,7 @@ try {
   await lev.click();
   await C.page.getByTestId('bundle-confirm').waitFor({ timeout: 5000 });
   const confirmText = (await C.page.getByTestId('bundle-confirm').innerText()).replace(/\s+/g, ' ');
-  check(/999/.test(confirmText) && /1598|1 598/.test(confirmText), `the set's confirmation says the price and the price apart («${confirmText}»)`);
+  check(/799/.test(confirmText) && /998/.test(confirmText), `the set's confirmation says the price (v0.2.24: 799) and the price apart (998) («${confirmText}»)`);
   await C.page.getByTestId('bundle-confirm-buy').click();
   await C.page.waitForFunction(() => window.__blatkom.app.screen === 'arsenal' && window.__blatkom.app.online.inventory?.characters.includes('lev'), null, { timeout: 10000 });
   await C.page.waitForTimeout(1000);
@@ -219,10 +219,10 @@ try {
     const c = document.querySelector('[data-testid=dressing-room] canvas[data-testid=fighter-card]');
     return { diamonds: inv.diamonds, skin: inv.loadout.skins?.avtomat ?? null, owns: inv.skins.includes('avtomat.carsky'), character: window.__blatkom.app.character, card: c ? `${c.dataset.character}:${c.dataset.weapon}.${c.dataset.finish}` : null };
   });
-  check(after.diamonds === 1 && after.owns && after.skin === 'carsky' && after.character === 'lev' && after.card === 'lev:avtomat.carsky', `the set bought for 999: the character and the skin, the skin on the automatic, the character in play, the card shows them (${JSON.stringify(after)})`);
+  check(after.diamonds === 201 && after.owns && after.skin === 'carsky' && after.character === 'lev' && after.card === 'lev:avtomat.carsky', `the set bought for 799: the character and the skin, the skin on the automatic, the character in play, the card shows them (${JSON.stringify(after)})`);
   const rows = await sql`SELECT kind, item_id, source FROM user_items WHERE user_id = ${userId} ORDER BY kind`;
   const led = await sql`SELECT delta, ref FROM currency_ledger WHERE user_id = ${userId} AND reason = 'purchase'`;
-  check(rows.length === 2 && rows.some((r) => r.item_id === 'lev') && rows.some((r) => r.item_id === 'avtomat.carsky') && led.length === 1 && led[0].delta === -999 && led[0].ref === 'bundle:lev', `the server filed both items and one ledger line (${JSON.stringify({ rows, led })})`);
+  check(rows.length === 2 && rows.some((r) => r.item_id === 'lev') && rows.some((r) => r.item_id === 'avtomat.carsky') && led.length === 1 && led[0].delta === -799 && led[0].ref === 'bundle:lev', `the server filed both items and one ledger line (${JSON.stringify({ rows, led })})`);
   await C.page.screenshot({ path: `${outDir}/pc_set_bought.png` });
   await C.ctx.close();
 

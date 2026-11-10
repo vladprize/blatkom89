@@ -177,7 +177,7 @@ try {
   const invA = await A.page.evaluate(() => window.__blatkom.app.online.inventory);
   const got = invA.characters.filter((c) => !['petya', 'valuta'].includes(c));
   const rows = await sql`SELECT kind, character_id, rarity, price, currency FROM case_openings WHERE user_id = ${A.id}`;
-  check(heroOk && got.length === 1 && invA.diamonds === 701 && rows.length === 1 && rows[0].kind === 'character' && rows[0].character_id === got[0] && rows[0].price === 299, `revealed «${reveal.slice(0, 60)}» with the art: ${got[0]} joins the crew, 299 BLATS spent, recorded on the server`);
+  check(heroOk && got.length === 1 && invA.diamonds === 801 && rows.length === 1 && rows[0].kind === 'character' && rows[0].character_id === got[0] && rows[0].price === 199, `revealed «${reveal.slice(0, 60)}» with the art: ${got[0]} joins the crew, 299 BLATS spent, recorded on the server`);
   await A.page.screenshot({ path: `${outDir}/char_reveal.png` });
   // B (phone): the three cases on the case chip; the odds sheet
   await sql`UPDATE profiles SET diamonds = 500 WHERE user_id = ${B.id}`;
@@ -188,7 +188,7 @@ try {
   await B.page.getByTestId('char-case').waitFor({ timeout: 15000 });
   const bCase = (await B.page.getByTestId('char-case').innerText()).replace(/\s+/g, ' ');
   const bFit2 = await fits(B.page);
-  check(/КЕЙС БРАТВЫ|Кейс братвы/.test(bCase) && /299/.test(bCase) && bFit2.v <= 0 && bFit2.h <= 0, `B's phone: the character case in Russian («${bCase.slice(0, 70)}»), the screen fits (${JSON.stringify(bFit2)})`);
+  check(/КЕЙС БРАТВЫ|Кейс братвы/.test(bCase) && /199/.test(bCase) && bFit2.v <= 0 && bFit2.h <= 0, `B's phone: the character case in Russian («${bCase.slice(0, 70)}»), the screen fits (${JSON.stringify(bFit2)})`);
   await B.page.screenshot({ path: `${outDir}/cases_phone.png` });
 
   // ── a friend's collection ────────────────────────────────────────────────

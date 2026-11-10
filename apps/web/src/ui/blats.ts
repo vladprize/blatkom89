@@ -7,7 +7,7 @@
  * on the website `ShopConfig.card` (Xsolla or Stripe), inside Telegram Telegram Stars (`ShopConfig.stars`,
  * v0.2.18 part 3); otherwise «On sale soon».
  */
-import { CHARACTER_GRADE_PRICES, DIAMOND_PACKS, SKIN_PRICES } from '@blatkom/shared';
+import { BUNDLE_PRICES, CHARACTER_GRADE_PRICES, DIAMOND_PACKS, SKIN_PRICES } from '@blatkom/shared';
 import type { ShopConfig } from '@blatkom/shared';
 import { asset, h } from './dom.js';
 import { getLang, t } from '../i18n/index.js';
@@ -53,9 +53,9 @@ export function coinPile(n: number, size = 28): HTMLElement {
 
 /**
  * What a pack is enough for — the biggest single thing it buys, from the price tables (so a price change
- * changes the hint): a regular skin (99), a regular character (199), a rare character (399), a legendary
- * skin (499), an epic character (799), a legendary character (1 099), a legendary and an epic one, or N
- * legendary characters.
+ * changes the hint). v0.2.24 prices: a regular character or skin (99), an epic skin (199), a legendary skin
+ * (299), an epic character (499), a set with an epic one (599), a legendary character (699), a set with a
+ * legendary one (799), a legendary and an epic character, or N legendary characters.
  */
 export function packHint(amount: number): string | null {
   const L = CHARACTER_GRADE_PRICES.legendary;
@@ -64,10 +64,13 @@ export function packHint(amount: number): string | null {
   const C = CHARACTER_GRADE_PRICES.common;
   if (amount >= 2 * L) return t('{n} × legendary character', { n: Math.floor(amount / L) });
   if (amount >= L + E) return t('a legendary and an epic character');
+  if (amount >= BUNDLE_PRICES.legendary) return t('a set with a legendary character');
   if (amount >= L) return t('a legendary character');
+  if (amount >= BUNDLE_PRICES.epic) return t('a set with an epic character');
   if (amount >= E) return t('an epic character');
   if (amount >= SKIN_PRICES.legendary) return t('a legendary skin');
   if (amount >= R) return t('a rare character');
+  if (amount >= SKIN_PRICES.epic) return t('an epic skin');
   if (amount >= C) return t('a regular character');
   if (amount >= SKIN_PRICES.common) return t('a regular skin');
   return null;

@@ -10,7 +10,7 @@
 //    six packs from 99 ($0.99), each with what it is enough for; on the phone in Russian on one screen;
 //  • a weapon skin bought right in the dressing room for its grade's price (regular 99); the free finishes
 //    are the player's without buying;
-//  • a character bought right on the character screen (rare 399); «Try in practice» on a locked one plays
+//  • a character bought right on the character screen (rare 399; v0.2.24: 299); «Try in practice» on a locked one plays
 //    as them and the pause menu's «Back to the characters» returns to the same character; the Arsenal's
 //    «Test in practice» and its character card's «Try in practice» come back to the Arsenal;
 //  • the score by mode: free-for-all — «YOU» and «LEADER» (no red and blue); teams — red and blue, no labels;
@@ -212,9 +212,9 @@ try {
   check((await A.page.getByTestId('blats-balance').innerText()).trim() === '20', 'the BLATS tab: 20 on the account');
   check(/1 BLATS = 1 cent/.test(tabA) && /every new level gives 10 BLATS/.test(tabA), 'the BLATS tab explains: 1 BLATS = 1 cent, 10 BLATS a level');
   check((await A.page.getByTestId('pay-soon').count()) === 1, 'no payment provider on this server: «Payments are being connected — coming soon»');
-  await A.page.waitForFunction(() => document.querySelectorAll('[data-testid=blats-tab] .pack').length >= 6, null, { timeout: 15000 }).catch(() => {});
+  await A.page.waitForFunction(() => document.querySelectorAll('[data-testid=blats-tab] .pack').length >= 10, null, { timeout: 15000 }).catch(() => {});
   const packs = await A.page.locator('[data-testid=blats-tab] .pack').evaluateAll((els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
-  check(packs.length === 6 && /99/.test(packs[0]) && /\$0\.99/.test(packs[0]) && /4,999|4999/.test(packs[5]) && /\$49\.99/.test(packs[5]), `six packs from 99 ($0.99) to 4,999 ($49.99) (${packs.join(' / ')})`);
+  check(packs.length === 10 && /99/.test(packs[0]) && /\$0\.99/.test(packs[0]) && /4,999|4999/.test(packs[9]) && /\$49\.99/.test(packs[9]), `ten packs (v0.2.24) from 99 ($0.99) to 4,999 ($49.99) (${packs.join(' / ')})`);
   check(!NO_CRYPTO.test(tabA) && !/diamond/i.test(tabA), 'the tab says nothing about diamonds, $BLAT or tokens');
   const hints = await A.page.locator('[data-testid=blats-tab] [data-testid=pack-hint]').allInnerTexts();
   check(hints.length === 6 && /regular skin/i.test(hints[0]) && /epic character/i.test(hints[3]) && /4 × legendary character/i.test(hints[5]), `every pack says what it is enough for (${hints.map((x) => x.replace(/\s+/g, ' ')).join(' / ')})`);
@@ -284,13 +284,13 @@ try {
   await A.page.locator('.chars button', { hasText: 'Bugai' }).click();
   const buyBtn = (await A.page.getByTestId('char-buy').innerText()).replace(/\s+/g, ' ');
   const grade = (await A.page.locator('.dossier__grade').innerText()).trim();
-  check(/399/.test(buyBtn) && /\$3\.99/.test(buyBtn) && /Rare/i.test(grade), `a locked character is bought right here: «${buyBtn}», grade «${grade}»`);
+  check(/299/.test(buyBtn) && /\$2\.99/.test(buyBtn) && /Rare/i.test(grade), `a locked character is bought right here (v0.2.24: 299): «${buyBtn}», grade «${grade}»`);
   const b0 = await blats(A.id);
   await A.page.getByTestId('char-buy').click();
   await A.page.waitForFunction(() => window.__toasts.some((t) => /joins the business/.test(t)), null, { timeout: 15000 });
   const b1 = await blats(A.id);
   const chars = await sql`SELECT item_id FROM user_items WHERE user_id = ${A.id} AND kind = 'character'`;
-  check(b0 - b1 === 399 && chars.some((r) => r.item_id === 'buyvol'), `bought: −399 BLATS (${b0} → ${b1}), Bugai is in the crew`);
+  check(b0 - b1 === 299 && chars.some((r) => r.item_id === 'buyvol'), `bought: −299 BLATS (${b0} → ${b1}), Bugai is in the crew`);
   check((await A.page.getByTestId('char-buy').count()) === 0 && (await A.page.locator('.charsel__actions .btn', { hasText: 'Choose' }).count()) === 1, 'the screen offers «Choose» now');
   const tal = (await A.page.locator('.chars button', { hasText: 'Uchastkovy' }).count()) ? 'Uchastkovy' : null;
   if (tal) {
@@ -301,7 +301,7 @@ try {
   }
   await A.page.locator('.chars button', { hasText: 'Arkadich' }).click();
   const legend = (await A.page.locator('.dossier__grade').innerText()).trim();
-  check(/Legendary/i.test(legend) && /1,099|1099/.test(await A.page.getByTestId('char-buy').innerText()), `Arkadich: «${legend}», 1,099 BLATS`);
+  check(/Legendary/i.test(legend) && /699/.test(await A.page.getByTestId('char-buy').innerText()), `Arkadich: «${legend}», 699 BLATS (v0.2.24)`);
   await A.page.screenshot({ path: `${outDir}/characters_A.png` });
   await A.page.getByTestId('char-try').click();
   await active(A.page);

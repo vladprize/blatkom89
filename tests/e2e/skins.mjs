@@ -81,12 +81,12 @@ try {
   const caseSkins = inv.skins.filter((id) => !gift(id));
   const skin = caseSkins[0];
   const [weapon, finish] = skin.split('.');
-  check(caseSkins.length === 1 && inv.diamonds === 701, `one skin from the case in the inventory (${skin}), 299 BLATS spent`);
+  check(caseSkins.length === 1 && inv.diamonds === 801, `one skin from the case in the inventory (${skin}), 199 BLATS spent (v0.2.24)`);
   check(inv.skins.filter(gift).length === 64, `the welcome gift: «Shark» and «Blatkom ’89» on all 32 weapons (${inv.skins.filter(gift).length})`);
   check(inv.loadout.skins[weapon] === finish, 'the new skin went on its weapon at once');
   await page.screenshot({ path: `${outDir}/skins_reveal.png` });
   const rows = await sql`SELECT kind, finish_id, price, currency FROM case_openings WHERE user_id = ${userId}`;
-  check(rows.length === 1 && rows[0].kind === 'skin' && rows[0].finish_id === finish && rows[0].price === 299 && rows[0].currency === 'diamonds', 'the opening is recorded on the server (299 BLATS)');
+  check(rows.length === 1 && rows[0].kind === 'skin' && rows[0].finish_id === finish && rows[0].price === 199 && rows[0].currency === 'diamonds', 'the opening is recorded on the server (199 BLATS)');
   check(!['berezka', 'rzhavchina', 'zima', 'flora', 'gzhel', 'pioner', 'malahit', 'zoloto', 'yantar', 'akulka', 'blatkom'].includes(finish), `the case gives only a finish on sale — never a gift or a retired one (${finish})`);
 
   // the dressing room: try the skin on and see it marked as yours
@@ -109,7 +109,7 @@ try {
   await page.locator(`[data-testid=skin-pick] [data-finish="${other}"]`).click();
   await page.getByTestId('skin-buy-row').waitFor({ timeout: 5000 });
   const note = (await page.getByTestId('skin-buy-row').innerText()).replace(/\s+/g, ' ');
-  check(other === 'yadernaya' ? /Legendary/i.test(note) && /499/.test(note) : /Epic/i.test(note) && /299/.test(note), `an unowned finish can be tried on and offers its grade and price («${note}»)`);
+  check(other === 'yadernaya' ? /Legendary/i.test(note) && /299/.test(note) : /Epic/i.test(note) && /199/.test(note), `an unowned finish can be tried on and offers its grade and price («${note}»)`);
   // the line in the picker: the 39 on sale and the 2 gifts (the retired first line only to those who have it),
   // each a card with the weapon painted in it; the four live ones say so (v0.2.19)
   const chips = await page.locator('[data-testid=skin-pick] .skinchip[data-finish]:not([data-finish=""])').evaluateAll((els) => els.map((e) => e.getAttribute('data-finish')));

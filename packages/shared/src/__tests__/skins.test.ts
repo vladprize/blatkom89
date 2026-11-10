@@ -74,7 +74,7 @@ test('v0.2.19: the AK sheet — no «Absurd» grade (rare, epic, legendary), fou
   assert.equal(Math.round(LINE_FINISHES.length / 10), LIVE_FINISHES.length, 'about a tenth of the line');
   for (const f of LIVE_FINISHES) {
     assert.ok(isLiveFinish(f));
-    assert.equal(skinPrice(f)?.amount, 499, 'a live skin costs its grade\'s price, nothing more');
+    assert.equal(skinPrice(f)?.amount, 299, 'a live skin costs its grade\'s price, nothing more');
   }
   assert.equal(isLiveFinish('haki'), false);
   assert.equal(isLiveFinish(null), false);

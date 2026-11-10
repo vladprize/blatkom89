@@ -6,6 +6,13 @@ Rules and prices live in one place, `packages/shared/src/game-rules/economy.ts` 
 what the server returns. Admin view: «Экономика» in `/admin` ([ADMIN.md](ADMIN.md), metric definitions
 in [ANALYTICS.md](ANALYTICS.md) §7).
 
+**v0.2.24 (the owner: «скины на оружие и персонажей дешевле на 30–40 %, в круглых суммах с окончанием .99»):**
+characters 99 / 299 / 499 / 699 BLATS by grade, skins 99 / 99 / 199 / 299, both cases 199, the sets 599 / 799,
+four more packs (299, 599, 699, 799) so that every price is exactly one pack, and the season pass (§4e, 299).
+Where no .99 price lies 30–40 % under the old one, the nearest is taken (a rare skin and a regular character
+−50 %, a rare character −25 %); a set with a legendary character −20 % (at −30 % it would cost what the
+character alone does). Nobody's purchases change.
+
 **v0.2.18 (the owner's pre-release edits):** BLATS («БЛАТ» in Russian, the red coin) replace diamonds as
 the premium currency and are sold for money (`REAL_MONEY = true`); grades — regular / rare / epic /
 legendary (grey / red / purple / gold) — are shown on every character and skin; skins are bought
@@ -79,7 +86,7 @@ and on the price. Grade colours (`GRADE_COLORS`): regular grey, rare red, epic p
 |---|---|
 | Petya, Valuta | free |
 | Uchastkovy (lvl 1) / Mikhalych (lvl 2) / Karlych (lvl 3) | 150 / 200 / 300 talons |
-| every other character, by grade (`CHARACTER_GRADE_PRICES`): regular / rare / epic / legendary | 199 / 399 / 799 / 1 099 BLATS ($1.99 / $3.99 / $7.99 / $10.99) |
+| every other character, by grade (`CHARACTER_GRADE_PRICES`): regular / rare / epic / legendary | v0.2.24: 99 / 299 / 499 / 699 BLATS ($0.99 / $2.99 / $4.99 / $6.99); were 199 / 399 / 799 / 1 099 |
 
 Today (36 characters, v0.2.18 part 2): regular — Sonka, Tolyan, Gosha, Sizy, Prusak, Sery, Borka, Vityok,
 Slavik, **Cherry, Dlinny**; rare — Bugai, Garik, Lyova, Batya, Murka, Alisa, Rogov, **Vasilisk, Tuz,
@@ -88,7 +95,7 @@ Pyatak**. The twelve in bold are the owner's later sheets (references/65…76), 
 — any grade can be changed in `game-rules/characters.ts`, the price follows it. All characters fight
 with the same numbers (`CHARACTER_BASE_STATS`): the abilities drawn on the sheets (regeneration, webs,
 rage, splitting…) are looks and story only. Besides direct purchase, the character case (§4c) gives a
-missing one for 299 BLATS. A locked character is
+missing one for 199 BLATS (v0.2.24; was 299). A locked character is
 bought right on the character screen or on its card in the Arsenal («Buy for …»; the server decides),
 or tried in practice first — «Try in practice» comes back to where it was pressed (the character screen
 with the same character, or the Arsenal's tab). Characters bought before v0.2.18 stay owned.
@@ -116,9 +123,9 @@ its own light animation wherever the weapon is drawn — still only the look, at
 | Grade | On sale (`SHOP_FINISHES`) | Price each (`SKIN_PRICES`) | In the skin case |
 |---|---|---|---|
 | regular | Khaki, Worn (+ the gift: Shark, Blatkom ’89) | 99 BLATS ($0.99) | 40 % |
-| rare | Spartakiad ’80, Tracksuit, Wild Nineties, Raspberry Jacket, Video Parlour, Cherkizon, Radioactive, Afghan, Tattoo, Film; v0.2.19: Rust King, Street Graffiti, Bone Collector, Blue Chrome, Toxic Waste | 199 BLATS ($1.99) | 30 % |
-| epic | Cosmos ’88, Golden Sunset, Khokhloma, Elektronika, Ice Camo; v0.2.19: Neon District, Hellfire, Canned Fish, Casino Boss, Amethyst, Biohazard X, Pensioner Deluxe, Borscht Edition | 299 BLATS ($2.99) | 20 % |
-| legendary | Tsar’s, The Office, Nuclear Winter; v0.2.19: **Golden Mobster** ✦, Blood Reaper ✦, Red Diamond ✦, Obsidian Emperor ✦, Golden Toilet, Shashlik Master (✦ live) | 499 BLATS ($4.99) | 10 % |
+| rare | Spartakiad ’80, Tracksuit, Wild Nineties, Raspberry Jacket, Video Parlour, Cherkizon, Radioactive, Afghan, Tattoo, Film; v0.2.19: Rust King, Street Graffiti, Bone Collector, Blue Chrome, Toxic Waste | v0.2.24: 99 BLATS ($0.99; was $1.99) | 30 % |
+| epic | Cosmos ’88, Golden Sunset, Khokhloma, Elektronika, Ice Camo; v0.2.19: Neon District, Hellfire, Canned Fish, Casino Boss, Amethyst, Biohazard X, Pensioner Deluxe, Borscht Edition | v0.2.24: 199 BLATS ($1.99; was $2.99) | 20 % |
+| legendary | Tsar’s, The Office, Nuclear Winter; v0.2.19: **Golden Mobster** ✦, Blood Reaper ✦, Red Diamond ✦, Obsidian Emperor ✦, Golden Toilet, Shashlik Master (✦ live) | v0.2.24: 299 BLATS ($2.99; was $4.99) | 10 % |
 
 * **Marks of others are left out** (the owner was told on 2 Nov): no Olympic rings («Спартакиада ’80»,
   the line's «Олимпийский ’80»), no sportswear brand's stripes or logo («Спортивный»: two stripes), no
@@ -138,7 +145,7 @@ its own light animation wherever the weapon is drawn — still only the look, at
   line can be tried on (and taken into practice); a finish the player does not own shows its grade and
   «Buy for …»; the skin is bought and worn at once. Refusals: `owned` (owned, free or gifted),
   `not_for_sale` (retired, or the gift), `funds`.
-* **The skin case** — 299 BLATS ($2.99): first the grade is drawn by the chances above (a grade whose
+* **The skin case** — 199 BLATS ($1.99; v0.2.24, was 299): first the grade is drawn by the chances above (a grade whose
   skins are all owned drops out and the others share its chance — `skinCaseOdds`), then any unowned
   skin of that grade with equal chance (`drawSkin`, OS CSPRNG). No duplicates; only the finishes on sale
   (`CASE_FINISHES`): 39 × 32 weapons = **1 248 skins** (v0.2.18 part 2: 640). The odds open from the
@@ -157,9 +164,9 @@ table in the shared rules (`SKIN_PERKS`, `game-rules/skins.ts`) that the client 
 | Grade (price) | In the match | On the fighter cards |
 |---|---|---|
 | regular ($0.99) | the paint on the weapon in hand; the kill feed's icon painted in it | the card shows the weapon in the finish (a tall card: in its lower right corner, clear of the figure) |
-| rare ($1.99) | + the tracers and the muzzle flash (and its light) in the skin's colours | + the card's glow in its colours |
-| epic ($2.99) | + a glow round the weapon in hand; a burst in the skin's colours at each elimination | + a light running round the card's frame |
-| legendary ($4.99) | + a bigger burst with drifting sparks | + the card's own background (slow rays, sparks), two lights on the frame, the **kill counter** «★ N» |
+| rare ($0.99; was $1.99) | + the tracers and the muzzle flash (and its light) in the skin's colours | + the card's glow in its colours |
+| epic ($1.99; was $2.99) | + a glow round the weapon in hand; a burst in the skin's colours at each elimination | + a light running round the card's frame |
+| legendary ($2.99; was $4.99) | + a bigger burst with drifting sparks | + the card's own background (slow rays, sparks), two lights on the frame, the **kill counter** «★ N» |
 
 Four legendaries are also live (their paint moves, since v0.2.19). The colours come from the painter itself
 (`apps/web/src/game/render/skinColors.ts` paints a strip with the finish and takes its main and brightest
@@ -200,15 +207,15 @@ goes on the «Дружба» automatic (everyone's primary, so it is worn at onc
 
 | Character (grade) | Skin | Set | Apart |
 |---|---|---|---|
-| Аркадич (legendary) | «Царский» | 999 BLATS ($9.99) | 1 598 |
-| Касатик (legendary) | «Золотой браток» ✦ | 999 | 1 598 |
-| Пятак (legendary) | «Золотой унитаз» | 999 | 1 598 |
-| Жора (epic) | «Красный алмаз» ✦ | 899 ($8.99) | 1 298 |
-| Самсон (epic) | «Обсидиановый император» ✦ | 899 | 1 298 |
-| Зверь (epic) | «Мастер шашлыка» | 899 | 1 298 |
-| Арах (epic) | «Контора» | 899 | 1 298 |
-| Жнец (epic) | «Кровавый жнец» ✦ | 899 | 1 298 |
-| Игла (epic) | «Ядерная зима» | 899 | 1 298 |
+| Аркадич (legendary) | «Царский» | 799 BLATS ($7.99) | 998 |
+| Касатик (legendary) | «Золотой браток» ✦ | 799 | 998 |
+| Пятак (legendary) | «Золотой унитаз» | 799 | 998 |
+| Жора (epic) | «Красный алмаз» ✦ | 599 ($5.99) | 798 |
+| Самсон (epic) | «Обсидиановый император» ✦ | 599 | 798 |
+| Зверь (epic) | «Мастер шашлыка» | 599 | 798 |
+| Арах (epic) | «Контора» | 599 | 798 |
+| Жнец (epic) | «Кровавый жнец» ✦ | 599 | 798 |
+| Игла (epic) | «Ядерная зима» | 599 | 798 |
 
 * Sold only while the player owns **neither** half (a half-owned set is bought item by item); refusals
   `owned`, `funds`, `not_for_sale` (`bundleRefusal`).
@@ -231,7 +238,7 @@ currency (`case_openings`).
 
 ## 4c. The character case (v0.2.18 part 2)
 
-`CHARACTER_CASE_PRICE` — **299 BLATS ($2.99)** for a character the player doesn't have, among the 31 sold
+`CHARACTER_CASE_PRICE` — **199 BLATS ($1.99**; v0.2.24, was 299) for a character the player doesn't have, among the 31 sold
 for BLATS (`CASE_CHARACTERS`: never a free one or one of the three for talons). First the grade is drawn
 — **40 / 30 / 20 / 10 %** regular / rare / epic / legendary (`CHARACTER_CASE_CHANCE`); a grade the player
 has complete drops out and the others share its chance (`characterCaseOdds`) — then any missing
@@ -251,8 +258,9 @@ player's character with its grade's colour.
 
 ## 5. Buying BLATS
 
-`DIAMOND_PACKS`: **99 / 199 / 499 / 999 / 1 999 / 4 999 BLATS for $0.99 / $1.99 / $4.99 / $9.99 /
-$19.99 / $49.99** (1 BLATS = 1 cent).
+`DIAMOND_PACKS`: **99 / 199 / 299 / 499 / 599 / 699 / 799 / 999 / 1 999 / 4 999 BLATS for $0.99 / $1.99 /
+$2.99 / $4.99 / $5.99 / $6.99 / $7.99 / $9.99 / $19.99 / $49.99** (1 BLATS = 1 cent; v0.2.24 added 299, 599,
+699 and 799 — every price is exactly one pack).
 
 Where they are sold (the owner, 2 Nov: «раздел для покупки БЛАТ и рекламный баннер»):
 

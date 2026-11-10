@@ -224,8 +224,13 @@ export function skinPerks(f: FinishId | null | undefined): SkinPerks | null {
   return f && FINISHES[f] ? SKIN_PERKS[FINISHES[f].rarity] : null;
 }
 
-/** v0.2.18: the price of one weapon's skin, in BLATS, by grade (the owner's prices: $0.99 … $4.99). */
-export const SKIN_PRICES: Readonly<Record<Grade, number>> = Object.freeze({ common: 99, rare: 199, epic: 299, legendary: 499 });
+/**
+ * The price of one weapon's skin, in BLATS, by grade. v0.2.18: $0.99 / $1.99 / $2.99 / $4.99. v0.2.24 (the owner:
+ * «скины на оружие и персонажей дешевле на 30–40 %, в круглых суммах с окончанием .99»): $0.99 / $0.99 / $1.99 /
+ * $2.99 — a regular one can't go under $0.99 with .99, and a rare one has no .99 price 30–40 % under $1.99, so
+ * the nearest ($0.99, the same as a regular one).
+ */
+export const SKIN_PRICES: Readonly<Record<Grade, number>> = Object.freeze({ common: 99, rare: 99, epic: 199, legendary: 299 });
 
 /** What a skin costs (null: not sold — free for everyone, the welcome gift, or a retired finish). */
 export function skinPrice(finish: FinishId): ShopPrice | null {
@@ -246,9 +251,10 @@ export function isFinishId(v: unknown): v is FinishId {
 /**
  * Price of the skin case (v0.2.18: 299 BLATS — the owner: «эквивалент $2.99»). A case for money asks
  * the player to confirm they are 18 or older, shows the odds and never gives a duplicate; the server's
- * CASES_ENABLED switches every case off where paid cases are not allowed.
+ * CASES_ENABLED switches every case off where paid cases are not allowed. v0.2.24: 199 BLATS ($1.99, −33 %, with
+ * every skin's price — at $2.99 it would cost what a legendary skin bought outright does).
  */
-export const SKIN_CASE_PRICE: ShopPrice = { currency: 'diamonds', amount: 299, level: 1 };
+export const SKIN_CASE_PRICE: ShopPrice = { currency: 'diamonds', amount: 199, level: 1 };
 
 /** Chance of each grade in percent (sums to 100) while every grade still has skins to give (the owner's odds). */
 export const SKIN_RARITY_CHANCE: Readonly<Record<SkinRarity, number>> = Object.freeze({ common: 40, rare: 30, epic: 20, legendary: 10 });

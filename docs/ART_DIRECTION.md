@@ -173,10 +173,13 @@ Drawn on a canvas at the screen's pixel ratio, so «Поделиться» sends
   [FULLBODY_PROMPTS.md](FULLBODY_PROMPTS.md); `tools/make-fullbody.py id=picture …` cuts off their frame line and
   writes `apps/web/public/assets/fullbody/<id>.jpg` (600×914, ~80–170 KB) — then the id goes into `ui/fullbody.ts`
   (`FULLBODY`; a unit test checks the files). The card fits the figure's height.
-  v0.2.23: 19 of 36 — the policeman, the bear, the crow,
+  v0.2.24: all 36 (v0.2.23: 19 of 36 — the policeman, the bear, the crow,
   the snake, the lizard, the parrot, the pigeon, the cockroach, the rat, the pig; then the buffalo, the piranha,
-  the shark, the eagle, the leopard, the elephant, the lobster, the cat and the fox; the rooster and the panther
-  wait for sneakers without a sports maker's marks.
+  the shark, the eagle, the leopard, the elephant, the lobster, the cat and the fox). The last 15 and the rooster's
+  and the panther's first pictures went in at the owner's word («все — абсолютно все»), the sports-maker-like
+  marks on eight pairs of sneakers included (the rooster, the panther, the basilisk, the sloth, the penguin, the
+  tiger, the spider, the mantis); a corrected picture only replaces its file. These last pictures also carry what
+  the prompts had asked to leave out — blood, tattoos, numbers, prison towers: the owner's style, kept as drawn.
 * **The layout of a tall card** (the owner, on the first full-height cards: «как раньше — оружие снизу, справа,
   и без этих надписей, либо сделай их меньше»; then «небольшой отступ, чтобы голова не упиралась в верхнюю рамку»):
   nothing lies across the figure. The art takes the whole card under a little headroom (4.5 % of its height; a

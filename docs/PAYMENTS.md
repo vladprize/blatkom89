@@ -60,9 +60,10 @@ payments in Stars («⭐»), not dollars.
 
 **What the owner sets up in Xsolla's Publisher Account** (keys awaited):
 
-1. A project; in **Store → Virtual items** six items whose **SKUs** are `blats_99`, `blats_199`,
-   `blats_499`, `blats_999`, `blats_1999`, `blats_4999` (`XSOLLA_SKU_PREFIX` + the pack's BLATS), priced
-   $0.99 … $49.99 (Xsolla converts to local currencies).
+1. A project; in **Store → Virtual items** ten items whose **SKUs** are `blats_99`, `blats_199`,
+   `blats_299`, `blats_499`, `blats_599`, `blats_699`, `blats_799`, `blats_999`, `blats_1999`, `blats_4999`
+   (`XSOLLA_SKU_PREFIX` + the pack's BLATS; v0.2.24 added 299, 599, 699 and 799), priced $0.99 … $49.99
+   (Xsolla converts to local currencies).
 2. **Project settings → Webhooks**: on, the URL `https://<domain>/api/pay/xsolla/webhook`; copy the
    **secret key** (`XSOLLA_WEBHOOK_SECRET` — it changes whenever the URL does).
 3. **Company settings → API keys**: a key (`XSOLLA_API_KEY`); the merchant id (`XSOLLA_MERCHANT_ID`) and the

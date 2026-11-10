@@ -7,8 +7,9 @@
  *    (Uchastkovy, Mikhalych, Karlych) are unlocked with talons and experience (a level requirement).
  *  - BLATS («diamonds» in the code and the database; the red coin, 1 BLATS = 1 US cent) — the premium
  *    currency: bought in packs (DIAMOND_PACKS), and 10 for every new level. Characters other than the
- *    free and the talon ones are sold for BLATS by grade (199 / 399 / 799 / 1 099), weapon skins by grade
- *    (99 / 199 / 299 / 499, skins.ts) and the skin case (299). Nothing sold for BLATS changes a number in
+ *    free and the talon ones are sold for BLATS by grade (v0.2.24: 99 / 299 / 499 / 699; were 199 / 399 /
+ *    799 / 1 099), weapon skins by grade (99 / 99 / 199 / 299, skins.ts), the cases (199), the sets
+ *    (599 / 799, bundles.ts) and the season pass (299, pass.ts). Nothing sold for BLATS changes a number in
  *    combat: characters are equal by design, skins only change looks.
  *  - Free for everyone: two characters (the rooster and the panther), a full kit of three weapons
  *    (Makarov, crowbar, the Druzhba rifle), the F-1 grenade and two skin finishes on every weapon.
@@ -55,8 +56,12 @@ export function blatsForLevel(level: number): number {
   return Number.isInteger(level) && level >= 2 ? BLATS_PER_LEVEL : 0;
 }
 
-/** v0.2.18: a character's price in BLATS by grade (the owner's prices: $1.99 … $10.99). */
-export const CHARACTER_GRADE_PRICES: Readonly<Record<Grade, number>> = Object.freeze({ common: 199, rare: 399, epic: 799, legendary: 1099 });
+/**
+ * A character's price in BLATS by grade. v0.2.18: $1.99 / $3.99 / $7.99 / $10.99. v0.2.24, 30–40 % less and
+ * ending in .99: $0.99 / $2.99 / $4.99 / $6.99 (the regular and the rare ones have no .99 price 30–40 % under
+ * theirs — the nearest: −50 % and −25 %).
+ */
+export const CHARACTER_GRADE_PRICES: Readonly<Record<Grade, number>> = Object.freeze({ common: 99, rare: 299, epic: 499, legendary: 699 });
 
 export const FREE_WEAPONS: readonly WeaponId[] = WEAPON_IDS.filter((w) => WEAPONS[w].tier === 'base');
 
@@ -164,8 +169,9 @@ export function drawCase(owned: ReadonlySet<WeaponId>, r: number): CaseEntry | n
  * (the owner's odds 40 / 30 / 20 / 10 — regular / rare / epic / legendary), then any character of that grade
  * the player lacks, all equally likely; a grade already complete drops out and the others share its chance.
  * Like the skin case it asks for the adult confirmation and obeys the server's CASES_ENABLED.
+ * v0.2.24: 199 BLATS ($1.99, −33 %, with every character's price).
  */
-export const CHARACTER_CASE_PRICE: ShopPrice = { currency: 'diamonds', amount: 299, level: 1 };
+export const CHARACTER_CASE_PRICE: ShopPrice = { currency: 'diamonds', amount: 199, level: 1 };
 export const CHARACTER_CASE_CHANCE: Readonly<Record<Grade, number>> = Object.freeze({ common: 40, rare: 30, epic: 20, legendary: 10 });
 /** The characters the case can give: every one sold for BLATS. */
 export const CASE_CHARACTERS: readonly CharacterId[] = CHARACTER_IDS.filter((c) => CHARACTER_PRICES[c]?.currency === 'diamonds');
@@ -203,11 +209,19 @@ export interface DiamondPack {
   /** Price in US cents (1 BLATS = 1 cent, no bulk bonus: the price is the price). */
   usdCents: number;
 }
-/** v0.2.18: BLATS packs, from 99 (the owner: «пакеты от 99 BLATS»). */
+/**
+ * BLATS packs. v0.2.18: from 99 (the owner: «пакеты от 99 BLATS»). v0.2.24: + 299, 599, 699 and 799 — with the
+ * new prices every skin, character, set and the season pass costs exactly one pack (a $2.99 skin wanted the $4.99
+ * pack before, and $1.99 + $0.99 left it one BLAT short).
+ */
 export const DIAMOND_PACKS: readonly DiamondPack[] = [
   { id: 'b99', diamonds: 99, usdCents: 99 },
   { id: 'b199', diamonds: 199, usdCents: 199 },
+  { id: 'b299', diamonds: 299, usdCents: 299 },
   { id: 'b499', diamonds: 499, usdCents: 499 },
+  { id: 'b599', diamonds: 599, usdCents: 599 },
+  { id: 'b699', diamonds: 699, usdCents: 699 },
+  { id: 'b799', diamonds: 799, usdCents: 799 },
   { id: 'b999', diamonds: 999, usdCents: 999 },
   { id: 'b1999', diamonds: 1999, usdCents: 1999 },
   { id: 'b4999', diamonds: 4999, usdCents: 4999 },

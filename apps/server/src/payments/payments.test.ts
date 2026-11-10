@@ -65,7 +65,7 @@ test('stars: the shop config lists each pack in Stars (75 per dollar, rounded to
   const cfg = await api(app.base, '/api/shop/config');
   assert.equal(cfg.body.card, false);
   assert.equal(cfg.body.provider, null);
-  assert.deepEqual(cfg.body.stars, { b99: 75, b199: 150, b499: 375, b999: 750, b1999: 1500, b4999: 3750 });
+  assert.deepEqual(cfg.body.stars, { b99: 75, b199: 150, b299: 225, b499: 375, b599: 450, b699: 525, b799: 600, b999: 750, b1999: 1500, b4999: 3750 });
   assert.equal(Object.keys(cfg.body.stars).length, DIAMOND_PACKS.length);
 });
 

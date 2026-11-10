@@ -15,6 +15,9 @@ test('bundles v0.2.23: every epic and legendary character for BLATS has a set wi
     assert.equal(b.separate, CHARACTER_PRICES[b.character]!.amount + SKIN_PRICES.legendary);
     assert.ok(b.price < b.separate, 'cheaper together');
     assert.ok(b.price <= 999, 'about $10 at most');
+    // v0.2.24: $5.99 with an epic character, $7.99 with a legendary one — more than the character alone
+    assert.equal(b.price, CHARACTERS[b.character].grade === 'legendary' ? 799 : 599, b.id);
+    assert.ok(b.price > CHARACTER_PRICES[b.character]!.amount, `${b.id}: the skin is not given away`);
   }
   assert.equal(bundleOf('petya'), null);
   assert.equal(bundleOf('uchastkovy'), null);

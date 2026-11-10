@@ -7,6 +7,8 @@
  * the skin is worn at once). Each legendary finish of the shop is in exactly one set.
  *
  * Price: 899 BLATS with an epic character (799 + 499 apart), 999 with a legendary one (1099 + 499 apart).
+ * v0.2.24 (every price 30–40 % less, ending in .99): 599 with an epic character (499 + 299 apart, −33 %), 799 with
+ * a legendary one (699 + 299 apart; −20 %: at −30 % the set would cost what its character alone does).
  * A set is sold only while the player owns neither its character nor its skin (a half-owned set is bought
  * item by item).
  */
@@ -35,7 +37,7 @@ export const BUNDLE_FINISHES: Readonly<Partial<Record<CharacterId, FinishId>>> =
 } satisfies Partial<Record<CharacterId, FinishId>>);
 
 /** A set's price in BLATS by its character's grade. */
-export const BUNDLE_PRICES = Object.freeze({ epic: 899, legendary: 999 } as const);
+export const BUNDLE_PRICES = Object.freeze({ epic: 599, legendary: 799 } as const);
 
 export interface Bundle {
   /** The set's id: its character's id. */
