@@ -8,7 +8,7 @@ import { Api, ApiError } from './api.js';
 import { readLoginReturn } from './oauth.js';
 import { captureReferral, captureTelegramLink, clearReferral, pendingReferral } from './referral.js';
 import { captureFirstTouch, firstTouchForRequest } from './firstTouch.js';
-import type { FirstTouch } from '@blatkom/shared';
+import type { FirstTouch, PassClaimResult, PassState } from '@blatkom/shared';
 import type { LoginReturn, ProvidersInfo } from './oauth.js';
 import { GameConnection } from './GameConnection.js';
 import { SocialClient } from './SocialClient.js';
@@ -401,6 +401,28 @@ export class OnlineClient {
 
   async setLoadout(l: Loadout): Promise<Inventory> {
     return this.applyInventory(await this.api.setLoadout(l), true);
+  }
+
+  // ── v0.2.24: the Season Pass ──────────────────────────────────────────────
+  /** The pass as last read (the menu's «a week is ready» mark). */
+  pass: PassState | null = null;
+  async passState(): Promise<PassState> {
+    await this.ensureAuth();
+    this.pass = await this.api.passState();
+    return this.pass;
+  }
+  async buyPass(): Promise<PassState> {
+    const r = await this.api.buyPass();
+    this.applyInventory(r.inventory, false);
+    this.pass = r.state;
+    return r.state;
+  }
+  /** Opens the ready weeks: the new characters join the crew, a new skin goes on a weapon that wore none. */
+  async claimPass(): Promise<PassClaimResult> {
+    const r = await this.api.claimPass();
+    this.applyInventory(r.inventory, true);
+    this.pass = r.state;
+    return r;
   }
 
   private setToken(token: string) {

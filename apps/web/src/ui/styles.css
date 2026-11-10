@@ -2984,3 +2984,40 @@ button.cardslot:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px;
 @media (prefers-reduced-motion: reduce) {
   .chars button.chargrade--legendary::before, .fcoll__char.chargrade--legendary::before, .dossier__hero--legend::after { animation: none; background: none; }
 }
+/* ── v0.2.24: the Season Pass — a card in the cases and by the packs, its weeks, what they gave, the menu's mark ── */
+.passcard { gap: 8px; border-color: #a8761e; background: linear-gradient(180deg, rgba(168, 118, 30, .16), rgba(0, 0, 0, 0) 62%), var(--panel); }
+.passcard > .tag { background: #e2b04a; }
+.passcard__row { display: flex; gap: 12px; align-items: center; margin-top: 6px; min-width: 0; }
+.passcard__badge { flex: none; width: 56px; height: 56px; position: relative; display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #6a4812, #1a120a 72%); color: #ffd36a; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
+.passcard__badge b { font-size: 26px; line-height: 1; text-shadow: 0 0 10px rgba(255, 200, 90, .7); }
+.passcard__badge small { position: absolute; bottom: 7px; font-family: Oswald, sans-serif; font-size: 11px; color: #f2d58a; }
+.passcard__txt { gap: 3px; min-width: 0; }
+.passcard__txt > b { font-family: Oswald, sans-serif; text-transform: uppercase; letter-spacing: .03em; }
+.passcard__acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.passcard__acts .pass__go { flex: 1 1 auto; }
+.passcard__acts .pass__next { flex: 1 1 auto; text-align: center; padding: 8px 10px; font-size: 14px; color: #f2d58a; border-color: #6b5a3a; }
+.passcard--compact .passcard__badge { width: 44px; height: 44px; }
+.passcard--compact .passcard__badge b { font-size: 20px; }
+.passcard--compact .passcard__badge small { bottom: 4px; font-size: 10px; }
+.passweeks { display: grid; grid-template-columns: repeat(var(--weeks, 4), minmax(0, 1fr)); gap: 6px; }
+.passweek { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 5px 6px; border: 1px solid var(--line); background: var(--panel-2); font-size: 12px; line-height: 1.2; }
+.passweek > b { font-family: Oswald, sans-serif; text-transform: uppercase; letter-spacing: .04em; font-size: 12px; }
+.passweek__got { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.passweek__got i { font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.passweek__when { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.passweek--open { border-color: #6b5a3a; }
+.passweek--ready { border-color: #e2b04a; box-shadow: 0 0 0 1px rgba(226, 176, 74, .4) inset, 0 0 10px rgba(226, 176, 74, .3); animation: pass-ready 1.6s ease-in-out infinite; }
+.passweek--ready .passweek__when { color: #ffd36a; }
+@keyframes pass-ready { 50% { box-shadow: 0 0 0 1px rgba(226, 176, 74, .75) inset, 0 0 16px rgba(226, 176, 74, .6); } }
+.passreveal { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; padding: 4px 0 8px; }
+.passdrop { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 240px; min-width: 0; }
+.passdrop canvas { display: block; box-shadow: 0 8px 20px rgba(0, 0, 0, .5); }
+.passdrop__lines { text-align: center; font-size: 14px; line-height: 1.35; }
+.tile--arsenal { position: relative; }
+.tile__pass { position: absolute; top: 6px; right: 6px; z-index: 2; padding: 3px 8px; background: #e2b04a; color: #1a1410; font-family: Oswald, sans-serif; font-weight: 700; font-size: 14px; line-height: 1.2; box-shadow: 0 2px 0 rgba(0, 0, 0, .45); animation: pass-ready 1.6s ease-in-out infinite; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .passweek--ready, .tile__pass { animation: none; } }
+@media (max-width: 560px) {
+  .passweek { padding: 4px; font-size: 11px; }
+  .passweek > b { font-size: 11px; }
+  .passreveal { gap: 10px; }
+}

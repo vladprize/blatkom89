@@ -120,7 +120,8 @@ export type ServerEventName =
   | 'case_opened'
   | 'payment_completed'
   | 'email_linked'
-  | 'identity_linked';
+  | 'identity_linked'
+  | 'pass_week_opened';
 
 export interface EventContext {
   userId?: string | null;

@@ -768,8 +768,19 @@ export class App {
         this.shopCfg = c;
         setBannerStars(c.stars);
         if (this.blatsAd?.isConnected) setBannerSale(this.blatsAd, blatsSale(c, inTelegram()));
+        // v0.2.24: a ready week of the Season Pass marks the Arsenal's tile (read once a session)
+        if (c.pass && online.profile && !online.pass) void online.passState().then(() => this.markPassReady(), () => {});
       })
       .catch(() => {});
+  }
+
+  /** v0.2.24: «a week of the Season Pass is ready» — a mark on the Arsenal's tile; the tile opens the cases then. */
+  private markPassReady() {
+    const tile = this.root.querySelector<HTMLElement>('[data-testid=arsenal-tile]');
+    if (!tile) return;
+    const ready = this.online?.pass?.ready ?? 0;
+    tile.querySelector('.tile__pass')?.remove();
+    if (ready > 0) tile.append(h('span', { class: 'tile__pass', 'data-testid': 'pass-ready', title: t('A week of the Season Pass is ready') }, '★ ', String(ready)));
   }
 
   /** Top-right corner of the menu: language and music switches. */
@@ -919,8 +930,9 @@ export class App {
     const lang = getLang() === 'ru' ? 'ru' : 'en';
     return h(
       'button',
-      { class: 'tile tile--arsenal tile--arsenal-art', onclick: () => this.showArsenal(), 'data-testid': 'arsenal-tile', 'aria-label': t('Arsenal') },
+      { class: 'tile tile--arsenal tile--arsenal-art', onclick: () => this.showArsenal(true, (this.online?.pass?.ready ?? 0) > 0 ? 'case' : undefined), 'data-testid': 'arsenal-tile', 'aria-label': t('Arsenal') },
       h('img', { class: 'tile__art', src: asset(`assets/ui/arsenal_tile_${lang}.jpg`), alt: t('Arsenal'), draggable: 'false', width: 700, height: 586 }),
+      (this.online?.pass?.ready ?? 0) > 0 ? h('span', { class: 'tile__pass', 'data-testid': 'pass-ready', title: t('A week of the Season Pass is ready') }, '★ ', String(this.online!.pass!.ready)) : null,
     );
   }
 

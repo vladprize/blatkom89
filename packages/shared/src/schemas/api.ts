@@ -1,6 +1,7 @@
 /** HTTP API request/response contracts shared by server and client. */
 import type { ClubBadge } from '../game-rules/clubs.js';
 import type { GangBattle } from '../game-rules/gangBattle.js';
+import type { PassSeason } from '../game-rules/pass.js';
 import { z } from 'zod';
 import { CHARACTER_IDS } from '../game-rules/characters.js';
 import type { CharacterId } from '../game-rules/characters.js';
@@ -165,6 +166,8 @@ export const LoadoutRequest = z
 /** Opening a paid case requires an explicit adult confirmation (see docs/ECONOMY.md). */
 /** `confirmAge` is required only while a case costs real money (BLATS); talon cases need none. */
 export const CaseOpenRequest = z.object({ confirmAge: z.literal(true).optional() }).strict();
+/** v0.2.24: POST /api/pass/buy — the Season Pass (random items for BLATS: the adult confirmation, as for cases). */
+export const PassBuyRequest = z.object({ confirmAge: z.literal(true).optional() }).strict();
 /** v0.2.18: one weapon's skin for BLATS (the free finishes are everyone's already). */
 export const SkinBuyRequest = z.object({ weapon: z.enum(WEAPON_IDS), finish: z.enum(FINISH_IDS) }).strict();
 /** v0.2.23: POST /api/shop/bundle — a character with their legendary skin (game-rules/bundles.ts). */
@@ -199,6 +202,8 @@ export interface ShopConfig {
   stars: Record<string, number> | null;
   casesEnabled: boolean;
   packs: DiamondPack[];
+  /** v0.2.24: the Season Pass's season on now or next (null: none configured — the pass is not shown as on sale). */
+  pass?: (PassSeason & { end: string }) | null;
 }
 export interface CaseResult {
   weapon: WeaponId;
@@ -233,7 +238,7 @@ export interface LedgerEntry {
   currency: Currency;
   delta: number;
   balanceAfter: number;
-  reason: 'match' | 'purchase' | 'mod' | 'case' | 'topup' | 'grant' | 'refund' | 'level' | 'referral' | 'story' | 'welcome' | 'promo';
+  reason: 'match' | 'purchase' | 'mod' | 'case' | 'topup' | 'grant' | 'refund' | 'level' | 'referral' | 'story' | 'welcome' | 'promo' | 'pass';
   ref: string | null;
 }
 

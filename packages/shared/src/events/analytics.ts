@@ -36,6 +36,7 @@ export const ANALYTICS_EVENTS = [
   'identity_linked',
   'story_started',
   'story_completed',
+  'pass_week_opened',
 ] as const;
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];
 
@@ -90,7 +91,7 @@ export const SERVER_EVENT_PROPS = {
   match_abandoned: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS), phase: z.string() }),
   map_played: z.object({ matchId: z.string(), mapId: z.enum(MAP_IDS) }),
   invite_created: z.object({ code: z.string(), roomId: z.string() }),
-  shop_purchase: z.object({ kind: z.enum(['weapon', 'character', 'gadget', 'skin', 'bundle']), item: z.string(), currency: z.enum(['tokens', 'diamonds']), amount: z.number().int() }),
+  shop_purchase: z.object({ kind: z.enum(['weapon', 'character', 'gadget', 'skin', 'bundle', 'pass']), item: z.string(), currency: z.enum(['tokens', 'diamonds']), amount: z.number().int() }),
   mod_bought: z.object({ weapon: z.string(), mod: z.string(), cost: z.number().int() }),
   /** The weapon case and (v0.23) the skin case: `kind` skin carries the finish. */
   case_opened: z.object({ weapon: z.string().optional(), rarity: z.enum(['common', 'rare', 'epic', 'legendary']), price: z.number().int(), kind: z.enum(['weapon', 'skin', 'character']).optional(), finish: z.string().max(24).optional(), character: z.string().max(24).optional() }),
@@ -101,6 +102,8 @@ export const SERVER_EVENT_PROPS = {
   /** v0.3 part 4: a story mission started / reported done (first: its rewards were paid now). */
   story_started: z.object({ mission: z.string().max(16) }),
   story_completed: z.object({ mission: z.string().max(16), ms: z.number().int(), first: z.boolean() }),
+  /** v0.2.24: a week of the Season Pass opened — what it gave (a grade, or none: BLATS instead). */
+  pass_week_opened: z.object({ season: z.string().max(16), week: z.number().int(), skinRarity: z.enum(['common', 'rare', 'epic', 'legendary']).nullable(), characterGrade: z.enum(['common', 'rare', 'epic', 'legendary']).nullable(), blats: z.number().int() }),
 } as const;
 
 export const ClientEventEnvelopeSchema = z

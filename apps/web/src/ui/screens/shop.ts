@@ -67,8 +67,10 @@ import {
   BUNDLES,
   bundleOf,
   bundleRefusal,
+  PASS_FALLBACK_BLATS,
+  PASS_PRICE,
 } from '@blatkom/shared';
-import type { Bundle, CharacterId, FinishId, GadgetId, Grade, Inventory, Loadout, ModId, ModMount, Rarity, ShopConfig, ShopKind, ShopPrice, SkinRarity, WeaponDef, WeaponId } from '@blatkom/shared';
+import type { Bundle, CharacterId, FinishId, GadgetId, Grade, Inventory, Loadout, ModId, ModMount, PassClaimResult, PassState, Rarity, ShopConfig, ShopKind, ShopPrice, SkinRarity, WeaponDef, WeaponId } from '@blatkom/shared';
 import type * as Phaser from 'phaser';
 import { h, toast, asset, portrait } from '../dom.js';
 import type { OnlineClient } from '../../net/OnlineClient.js';
@@ -87,6 +89,7 @@ import { animateLiveIcon, skinIconReady, skinIconUrl } from '../../game/render/s
 import { blatsCoin, fmtNum } from '../coin.js';
 import { blatsBanner, blatsSale, coinPile, packHint } from '../blats.js';
 import { promoForm } from '../promo.js';
+import { openPassReveal, passDate, passWeeksTrack } from '../pass.js';
 
 export type ArsenalTab = 'loadout' | 'weapons' | 'gear' | 'characters' | 'case' | 'diamonds';
 type ShopTab = Exclude<ArsenalTab, 'loadout'>;
@@ -990,7 +993,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
    * The confirmation before a case. Paid with BLATS (real money) it needs the adult checkbox; paid with
    * talons (there is no money in it) a plain «open?» is enough.
    */
-  const confirmCase = (price: ShopPrice, inside: string, open: () => Promise<void>) => {
+  const confirmCase = (price: ShopPrice, inside: string, open: () => Promise<void>, wording?: { question: string; button: string }) => {
     if (!online || !inv) return;
     if (inv.level < price.level) return void toast(t('From level {n}', { n: price.level }));
     if (caseFunds(price) < price.amount) {
@@ -1010,7 +1013,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         h(
           'div',
           { style: 'margin-top:8px' },
-          paid ? t('Open the case for {n} BLATS ({usd})?', { n: price.amount, usd: usd(price.amount) }) : t('Open the case for {n} {talons}?', { n: price.amount, talons: tokenWord(price.amount) }),
+          wording ? wording.question : paid ? t('Open the case for {n} BLATS ({usd})?', { n: price.amount, usd: usd(price.amount) }) : t('Open the case for {n} {talons}?', { n: price.amount, talons: tokenWord(price.amount) }),
         ),
         h('div', { class: 'muted' }, inside),
         paid
@@ -1040,7 +1043,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
               void act(open);
             },
           },
-          t('Open'),
+          wording ? wording.button : t('Open'),
         ),
         h('button', { class: 'btn', onclick: close }, t('Cancel')),
       ),
@@ -1068,6 +1071,104 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       sfx.play(r.grade === 'legendary' || r.grade === 'epic' ? 'supply' : 'pickup');
     });
   const charsOwnedFromCase = () => CASE_CHARACTERS.filter((c) => inv?.characters.includes(c)).length;
+
+  // ── v0.2.24: the Season Pass (game-rules/pass.ts) — in the cases (random items for BLATS) and next to the packs ──
+  let passSt: PassState | null = online?.pass ?? null;
+  const showPassDrops = (drops: PassClaimResult['drops']) =>
+    openPassReveal(uiRoot(), drops, { name: o.playerName?.() || charText(o.character).name, character: o.character, level: o.playerLevel?.() ?? null, onClose: () => draw() });
+  const claimPass = () => {
+    if (!online) return;
+    void act(async () => {
+      const r = await online.claimPass();
+      passSt = r.state;
+      if (r.drops.length) {
+        sfx.play(r.drops.some((d) => d.character?.grade === 'legendary' || d.skin?.rarity === 'legendary') ? 'supply' : 'pickup');
+        haptic('notify-success');
+        showPassDrops(r.drops);
+      }
+    });
+  };
+  const buyPass = () =>
+    confirmCase(
+      PASS_PRICE,
+      t('Every week of the season: a skin and a character you don’t have yet, drawn with the cases’ odds (listed below). Bought mid-season, the weeks gone by open at once. The purchase is final.'),
+      async () => {
+        passSt = await online!.buyPass();
+        sfx.play('buy');
+        // the weeks that are ready open straight away
+        if (passSt.ready > 0) {
+          const r = await online!.claimPass();
+          passSt = r.state;
+          if (r.drops.length) showPassDrops(r.drops);
+        }
+      },
+      { question: t('Buy the Season Pass for {n} BLATS ({usd})?', { n: PASS_PRICE.amount, usd: usd(PASS_PRICE.amount) }), button: t('Buy') },
+    );
+  /** The pass's odds: the skin case's and the crew case's, for this player. */
+  const passOddsPanel = (): HTMLElement =>
+    h(
+      'div',
+      { class: 'col', 'data-testid': 'pass-odds', style: 'gap:10px' },
+      h('div', { class: 'muted', style: 'font-size:13px' }, t('Each week gives one skin and one character, each drawn exactly as the skin case and the crew case draw them — the same odds, no repeats. With nothing of a kind left, that half gives {n} BLATS.', { n: PASS_FALLBACK_BLATS })),
+      skinOddsPanel(),
+      charOddsPanel(),
+    );
+  /** The Season Pass card: its season, price and weeks; buy, open the ready weeks, or when the next one opens. */
+  const passCard = (compact: boolean): HTMLElement => {
+    const st = passSt;
+    const season = st?.season ?? cfg?.pass ?? null;
+    const enabled = cfg?.casesEnabled !== false && st?.casesEnabled !== false;
+    const now = Date.now();
+    let action: HTMLElement;
+    if (!online) action = h('button', { class: 'btn', disabled: true }, t('Available in the online version'));
+    else if (st?.owned || (st && st.ready > 0)) {
+      const next = st.weeks.find((w) => !w.due);
+      action =
+        st.ready > 0
+          ? h('button', { class: 'btn btn--red pass__go', 'data-testid': 'pass-claim', onclick: claimPass }, st.ready === 1 ? t('Open the ready week') : t('Open the ready weeks ({n})', { n: st.ready }))
+          : next
+            ? h('span', { class: 'badge pass__next', 'data-testid': 'pass-next' }, t('Next week: {date}', { date: passDate(next.opensAt) }))
+            : h('span', { class: 'badge badge--ok', 'data-testid': 'pass-done' }, t('Every week of the season is yours'));
+    } else if (!season) action = h('button', { class: 'btn', disabled: true, 'data-testid': 'pass-soon' }, t('Soon'));
+    else if (Date.parse(season.start) > now) action = h('button', { class: 'btn', disabled: true, 'data-testid': 'pass-soon' }, t('The season starts {date}', { date: passDate(season.start) }));
+    else if (Date.parse(season.end) <= now) action = h('span', { class: 'badge', 'data-testid': 'pass-over' }, t('The season is over'));
+    else if (!enabled) action = h('div', { class: 'badge badge--off' }, t('Cases are disabled on this server'));
+    else action = h('button', { class: 'btn btn--red pass__go', 'data-testid': 'pass-buy', onclick: buyPass }, h('span', null, `${t('Buy for')} `, amount(PASS_PRICE.amount, PASS_PRICE.currency)));
+    const odds = h(
+      'button',
+      {
+        class: 'btn btn--small',
+        'data-testid': 'pass-odds-open',
+        onclick: () =>
+          openPhoneSheet(t('Season Pass odds'), 'odds-sheet', () => {
+            const p = passOddsPanel();
+            p.classList.add('panel--insheet');
+            return p;
+          }),
+      },
+      t('Odds'),
+    );
+    const sub = season ? t('{weeks} weeks · until {date}', { weeks: season.weeks, date: passDate(season.end) }) : t('The first season is coming');
+    return h(
+      'div',
+      { class: `panel col passcard ${compact ? 'passcard--compact' : ''} ${st?.owned ? 'passcard--owned' : ''}`, 'data-testid': 'pass-card' },
+      h('span', { class: 'tag' }, t('Season Pass')),
+      h(
+        'div',
+        { class: 'passcard__row' },
+        h('div', { class: 'passcard__badge', 'aria-hidden': 'true' }, h('b', null, '★'), h('small', null, season ? `${season.weeks}×` : '')),
+        h(
+          'div',
+          { class: 'col passcard__txt' },
+          h('b', null, `${t('A skin and a character every week')} · `, amount(PASS_PRICE.amount, PASS_PRICE.currency)),
+          h('span', { class: 'muted' }, sub),
+          compact ? null : h('span', { class: 'muted' }, t('No repeats — only what you don’t have yet. Skins and characters change the look, never the numbers.')),
+        ),
+      ),
+      st && st.weeks.length ? passWeeksTrack(st) : null,
+      h('div', { class: 'passcard__acts' }, action, odds),
+    );
+  };
   const openBtn = (price: ShopPrice, onOpen: () => void, testid: string) =>
     h('button', { class: 'btn btn--red', 'data-testid': testid, disabled: !online, onclick: onOpen }, online ? h('span', null, `${t('Open for')} `, amount(price.amount, price.currency)) : t('Available in the online version'));
   const caseNote = () =>
@@ -1267,6 +1368,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       'div',
       { class: 'col' },
       reveal ? revealPanel(reveal) : null,
+      passCard(false),
       h(
         'div',
         { class: 'cases' },
@@ -1418,6 +1520,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       { class: 'col blatsshop', 'data-testid': 'blats-tab' },
       head,
       h('div', { class: 'packs' }, ...(cfg?.packs ?? []).map((p, i) => packCard(p, i, methods))),
+      passCard(true),
       promoPaid(),
       h('div', { class: 'muted', style: 'font-size:13px' }, t('Purchases belong to your account. To keep them when you change devices, link an email in your profile.'), ' ', stars || methods.length ? termsLink() : null),
     );
@@ -1832,6 +1935,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     return h(
       'div',
       { class: 'col arscases' },
+      passCard(true),
       card({
         testid: 'weapon-case',
         tag: t('The Defitsit Case'),
@@ -2105,6 +2209,13 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       .shopConfig()
       .then((c) => {
         cfg = c;
+        draw();
+      })
+      .catch(() => {});
+    void online
+      .passState()
+      .then((st) => {
+        passSt = st;
         draw();
       })
       .catch(() => {});

@@ -4,8 +4,9 @@
  * All prices and rules come from packages/shared/src/game-rules/economy.ts; the server never trusts
  * client-side ownership, balances or prices.
  */
-import { BuyRequest, BundleBuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, CHARACTER_CASE_PRICE, PromoRedeemRequest, REAL_MONEY, SKIN_CASE_PRICE, SkinBuyRequest, StarsInvoiceRequest, bundleOf, priceOf, skinPrice } from '@blatkom/shared';
-import type { CaseResult, CharacterCaseResult, Loadout, PromoRedeemResponse, ShopConfig, ShopPrice, SkinCaseResult } from '@blatkom/shared';
+import { BuyRequest, BundleBuyRequest, CaseOpenRequest, CheckoutRequest, DIAMOND_PACKS, LoadoutRequest, ModBuyRequest, MOD_PRICES, CASE_PRICE, CHARACTER_CASE_PRICE, PASS_PRICE, PassBuyRequest, PromoRedeemRequest, REAL_MONEY, SKIN_CASE_PRICE, SkinBuyRequest, StarsInvoiceRequest, bundleOf, passEnd, priceOf, skinPrice } from '@blatkom/shared';
+import type { CaseResult, CharacterCaseResult, Loadout, PassBuyResult, PassClaimResult, PromoRedeemResponse, ShopConfig, ShopPrice, SkinCaseResult } from '@blatkom/shared';
+import { passSeasonOf } from '../config/env.js';
 import type { RouteModule } from '../app.js';
 import { HttpError, readBody } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
@@ -44,7 +45,16 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
     // v0.2.18: BLATS are on sale (REAL_MONEY); the packs show whether a payment method is connected or not
     // v0.2.18 part 3: Xsolla (or Stripe) on the website, Telegram Stars inside the Mini App
     const web = REAL_MONEY ? (p?.webProvider ?? null) : null;
-    const res: ShopConfig = { card: !!web, provider: web, stars: REAL_MONEY ? (p?.starsPrices() ?? null) : null, casesEnabled: deps.env.CASES_ENABLED, packs: REAL_MONEY ? [...DIAMOND_PACKS] : [] };
+    const season = passSeasonOf(deps.env);
+    const res: ShopConfig = {
+      card: !!web,
+      provider: web,
+      stars: REAL_MONEY ? (p?.starsPrices() ?? null) : null,
+      casesEnabled: deps.env.CASES_ENABLED,
+      packs: REAL_MONEY ? [...DIAMOND_PACKS] : [],
+      // v0.2.24: the Season Pass's season (null: none configured)
+      pass: season ? { ...season, end: passEnd(season).toISOString() } : null,
+    };
     ctx.json(200, res);
   });
 
@@ -121,6 +131,36 @@ export const registerShopRoutes: RouteModule = (router, deps) => {
     const { drop, equipped, inventory } = await guard(() => pg().economy.openSkinCase(user.userId));
     deps.services.analytics.server('case_opened', { weapon: drop.weapon, rarity: drop.rarity, price: SKIN_CASE_PRICE.amount, currency: SKIN_CASE_PRICE.currency, kind: 'skin', finish: drop.finish }, user);
     const res: SkinCaseResult = { weapon: drop.weapon, finish: drop.finish, rarity: drop.rarity, equipped, inventory };
+    ctx.json(200, res);
+  });
+
+  // ── v0.2.24: the Season Pass (game-rules/pass.ts) ─────────────────────────────────────────────────────
+  /** The season, whether the player has its pass, its weeks and how many are ready to open. */
+  router.get('/api/pass', auth, async (ctx) => {
+    ctx.json(200, await pg().economy.passState(currentUser(ctx).userId, passSeasonOf(deps.env), deps.env.CASES_ENABLED));
+  });
+
+  /** Buys the season's pass for BLATS — random items for real money's worth: 18+ and CASES_ENABLED, as the cases. */
+  router.post('/api/pass/buy', auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    if (!deps.env.CASES_ENABLED) throw new HttpError(403, 'cases_disabled', 'Cases are switched off on this server');
+    const user = currentUser(ctx);
+    adultCheck(await ctx.body(PassBuyRequest, 1024), PASS_PRICE);
+    const season = passSeasonOf(deps.env);
+    const inventory = await guard(() => pg().economy.buyPass(user.userId, season));
+    deps.services.analytics.server('shop_purchase', { kind: 'pass', item: `pass:${season!.id}`, currency: PASS_PRICE.currency, amount: PASS_PRICE.amount }, user);
+    const res: PassBuyResult = { state: await pg().economy.passState(user.userId, season, deps.env.CASES_ENABLED), inventory };
+    ctx.json(200, res);
+  });
+
+  /**
+   * Opens every ready week of the player's passes (drawn now). A pass already paid for keeps giving its weeks even
+   * if cases are switched off later — the player has paid for them.
+   */
+  router.post('/api/pass/claim', auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    const user = currentUser(ctx);
+    const { drops, inventory } = await guard(() => pg().economy.claimPass(user.userId));
+    for (const d of drops) deps.services.analytics.server('pass_week_opened', { season: d.season, week: d.week, skinRarity: d.skin?.rarity ?? null, characterGrade: d.character?.grade ?? null, blats: d.blats }, user);
+    const res: PassClaimResult = { drops, state: await pg().economy.passState(user.userId, passSeasonOf(deps.env), deps.env.CASES_ENABLED), inventory };
     ctx.json(200, res);
   });
 

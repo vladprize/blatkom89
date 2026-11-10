@@ -76,6 +76,9 @@
 //      the kill feed's icon in the skin, the podium and «What took you down» with «Try on», a table row's card and
 //      «Share», the Arsenal's card, a set bought (a character with their legendary skin), a phone sideways
 //      (tests/e2e/v0223.mjs)
+//  v0.2.24: the fighter cards in the menu, the wait for a match and the lobby; legendary characters that move; the
+//      Season Pass bought, its weeks opened (a computer; a phone from the menu's mark); the HUD's «★ N», a phone's
+//      44 px targets, an 800×600 window (tests/e2e/v0224.mjs)
 //  21. v0.2.17 part 3: a gang calls another out from its page — the battle room of the two gangs, the
 //      call's card live to both gangs' people, sides by gang, nobody else let in (a stranger's link is
 //      turned away), the battle played and counted for both gangs; a friend's «To battle» → a duel room
@@ -116,6 +119,9 @@ if (!existsSync(serverJs)) {
 }
 
 const base = `http://localhost:${port}`;
+// v0.2.24: a Season Pass season for the tests — started eight days ago, its second week of four (the production
+// server's season is the owner's to set: PASS_SEASON_ID / PASS_SEASON_START / PASS_SEASON_WEEKS)
+const passSeason = { PASS_SEASON_ID: 'e2e', PASS_SEASON_START: new Date(Date.now() - 8 * 86_400_000).toISOString(), PASS_SEASON_WEEKS: '4' };
 const prodEnv = {
   ...process.env,
   NODE_ENV: 'production',
@@ -132,6 +138,7 @@ const prodEnv = {
   MATCH_FILL_BOTS: 'false',
   SESSION_SECRET: randomBytes(32).toString('base64'),
   LOG_LEVEL: 'warn',
+  ...passSeason,
   ...(process.env.E2E_ADMIN_USER ? { ADMIN_BOOTSTRAP_USERNAME: process.env.E2E_ADMIN_USER, ADMIN_BOOTSTRAP_PASSWORD: process.env.E2E_ADMIN_PASS ?? '' } : {}),
 };
 delete prodEnv.PUBLIC_URL;
@@ -147,6 +154,7 @@ const env = prod ? prodEnv : {
   MATCH_FILL_BOTS: 'false',
   SESSION_SECRET: process.env.SESSION_SECRET ?? 'e2e-only-session-secret-0123456789abcdefghijklmnop',
   LOG_LEVEL: 'warn',
+  ...passSeason,
   ...(process.env.E2E_ADMIN_USER ? { ADMIN_BOOTSTRAP_USERNAME: process.env.E2E_ADMIN_USER, ADMIN_BOOTSTRAP_PASSWORD: process.env.E2E_ADMIN_PASS ?? '' } : {}),
 };
 const startServer = (e) =>
@@ -263,6 +271,9 @@ try {
   console.log('\n[e2e] v0.2.23: skins you can see — the line-up of fighter cards, the killer\'s card, the podium and «What took you down», a row\'s card and «Share», the Arsenal\'s card, a set bought (a character with their legendary skin)');
   const v0223 = spawnSync(process.execPath, ['tests/e2e/v0223.mjs', base, join(out, 'v0223')], { stdio: 'inherit' });
   if (v0223.status !== 0) failed = true;
+  console.log('\n[e2e] v0.2.24: the fighter cards in the menu, the wait for a match and the lobby; legendary characters that move; the Season Pass (a computer and a phone); the HUD\'s counter, a phone\'s 44 px targets, an 800×600 window');
+  const v0224 = spawnSync(process.execPath, ['tests/e2e/v0224.mjs', base, join(out, 'v0224')], { stdio: 'inherit' });
+  if (v0224.status !== 0) failed = true;
   console.log('\n[e2e] v0.2.17 part 3: gang against gang, a friend called to a duel (two browsers, two socket players)');
   const battle = spawnSync(process.execPath, ['tests/e2e/battle.mjs', base, join(out, 'battle')], { stdio: 'inherit' });
   if (battle.status !== 0) failed = true;

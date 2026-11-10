@@ -2,6 +2,9 @@
 import type {
   AuthResponse,
   FirstTouch,
+  PassBuyResult,
+  PassClaimResult,
+  PassState,
   TelegramLinkCodeResponse,
   KonFormat,
   KonResponse,
@@ -178,6 +181,18 @@ export class Api {
   /** The skin case (v0.23; v0.2.18: for BLATS): a weapon skin not owned yet. */
   openSkinCase() {
     return this.req<SkinCaseResult>('POST', '/api/shop/skin-case', { confirmAge: true });
+  }
+  /** v0.2.24: the Season Pass — the season, the player's pass and its weeks. */
+  passState() {
+    return this.req<PassState>('GET', '/api/pass');
+  }
+  /** v0.2.24: buys the season's pass (299 BLATS, 18+ confirmed in the dialog). */
+  buyPass() {
+    return this.req<PassBuyResult>('POST', '/api/pass/buy', { confirmAge: true });
+  }
+  /** v0.2.24: opens every ready week (the server draws them now). */
+  claimPass() {
+    return this.req<PassClaimResult>('POST', '/api/pass/claim', {});
   }
   setLoadout(l: Loadout) {
     return this.req<Inventory>('POST', '/api/me/loadout', { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods, skins: l.skins ?? {} });

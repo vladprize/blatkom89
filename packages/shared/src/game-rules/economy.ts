@@ -288,7 +288,7 @@ export interface Inventory {
 }
 
 export type ShopKind = 'weapon' | 'character' | 'gadget';
-export type BuyRefusal = 'owned' | 'level' | 'funds' | 'not_for_sale' | 'not_fit' | 'not_owned' | 'collection_complete';
+export type BuyRefusal = 'owned' | 'level' | 'funds' | 'not_for_sale' | 'not_fit' | 'not_owned' | 'collection_complete' | 'pass_closed';
 
 export function priceOf(kind: ShopKind, id: string): ShopPrice | undefined {
   return kind === 'weapon' ? WEAPON_PRICES[id as WeaponId] : kind === 'character' ? CHARACTER_PRICES[id as CharacterId] : GADGET_PRICES[id as GadgetId];
@@ -351,6 +351,7 @@ export const REFUSAL_TEXT: Record<BuyRefusal, string> = {
   not_fit: 'Doesn’t fit this weapon',
   not_owned: 'Buy the weapon first',
   collection_complete: 'The case collection is complete',
+  pass_closed: 'The Season Pass is not on sale now',
 };
 
 /** Every purchasable item, for catalog screens and tests. */

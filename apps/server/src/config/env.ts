@@ -76,6 +76,14 @@ const EnvSchema = z.object({
    */
   WELCOME_GIFT_UNTIL: z.coerce.date().optional(),
   /**
+   * v0.2.24: the Season Pass (game-rules/pass.ts) — the season's name (a short slug, e.g. s1), its first moment
+   * (ISO 8601, e.g. 2026-12-01T09:00:00Z) and its length in weeks. The pass is sold only while a season with
+   * both a name and a start is on; the owner sets them — no date is invented. A new season is a new name.
+   */
+  PASS_SEASON_ID: z.string().regex(/^[a-z0-9-]{1,16}$/, 'a short slug: a-z, 0-9 and -').optional(),
+  PASS_SEASON_START: z.coerce.date().optional(),
+  PASS_SEASON_WEEKS: z.coerce.number().int().min(1).max(12).default(4),
+  /**
    * v0.2.20: BLATS a guest account gets for registering (an email, or a sign-in provider on the website),
    * once per account (economy/bonuses.ts). 0 switches the bonus off.
    */
@@ -163,4 +171,10 @@ export function matchConfigFromEnv(env: Env): { durationMs: number; scoreLimit: 
     minPlayers: env.MATCH_MIN_PLAYERS,
     maxPlayers: env.MATCH_MAX_PLAYERS,
   };
+}
+
+/** v0.2.24: the Season Pass's season from the configuration (null: not configured — the pass is not sold). */
+export function passSeasonOf(env: Pick<Env, 'PASS_SEASON_ID' | 'PASS_SEASON_START' | 'PASS_SEASON_WEEKS'>): { id: string; start: string; weeks: number } | null {
+  if (!env.PASS_SEASON_ID || !env.PASS_SEASON_START || Number.isNaN(env.PASS_SEASON_START.getTime())) return null;
+  return { id: env.PASS_SEASON_ID, start: env.PASS_SEASON_START.toISOString(), weeks: env.PASS_SEASON_WEEKS };
 }

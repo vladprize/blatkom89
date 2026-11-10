@@ -793,7 +793,8 @@ export const RU_REFUSALS: Record<BuyRefusal, string> = {
   not_for_sale: 'Не продаётся',
   not_fit: 'Не подходит к этому оружию',
   not_owned: 'Сначала купите оружие',
-  collection_complete: 'Коллекция кейса собрана'
+  collection_complete: 'Коллекция кейса собрана',
+  pass_closed: 'Сезонный пропуск сейчас не продаётся'
 };
 
 export const RU_MAPS: Record<MapId, { name: string; blurb: string }> = {

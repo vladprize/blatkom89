@@ -8,7 +8,7 @@ import { refusalText } from '../i18n/content.js';
 import { NICK_RULE } from '@blatkom/shared';
 import type { BuyRefusal } from '@blatkom/shared';
 
-const REFUSALS: ReadonlySet<string> = new Set<BuyRefusal>(['owned', 'level', 'funds', 'not_for_sale', 'not_fit', 'not_owned', 'collection_complete']);
+const REFUSALS: ReadonlySet<string> = new Set<BuyRefusal>(['owned', 'level', 'funds', 'not_for_sale', 'not_fit', 'not_owned', 'collection_complete', 'pass_closed']);
 
 /** Localized text per code (functions: the language can change at run time). */
 const CODE_TEXT: Record<string, () => string> = {

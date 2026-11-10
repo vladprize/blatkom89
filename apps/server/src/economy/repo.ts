@@ -33,14 +33,22 @@ import {
   SKIN_CASE_PRICE,
   WEAPONS,
   drawSkin,
+  drawPassWeek,
   ownsSkin,
   parseSkin,
+  PASS_FALLBACK_BLATS,
+  PASS_PRICE,
+  passEnd,
+  passOnSale,
+  passWeekAt,
+  passWeekStart,
+  passWeeksDue,
   skinBuyRefusal,
   skinId,
   skinPrice,
   welcomeSkins,
 } from '@blatkom/shared';
-import type { BuyRefusal, CaseEntry, CharacterId, Currency, FinishId, GadgetId, Grade, Inventory, LedgerEntry, Loadout, ModId, ShopKind, SkinDrop, WeaponId } from '@blatkom/shared';
+import type { BuyRefusal, CaseEntry, CharacterId, Currency, FinishId, GadgetId, Grade, Inventory, LedgerEntry, Loadout, ModId, PassDrop, PassSeason, PassState, PassWeek, ShopKind, SkinDrop, SkinRarity, WeaponId } from '@blatkom/shared';
 import type postgres from 'postgres';
 import type { Sql } from '../database/db.js';
 import type { Logger } from '../logging/logger.js';
@@ -319,6 +327,120 @@ export class EconomyRepo implements Economy {
     });
   }
 
+  // ── v0.2.24: the Season Pass (packages/shared/src/game-rules/pass.ts) ─────────────────────────────────
+
+  /**
+   * The pass as `userId` sees it: the configured season (`season`, null: none), whether they have its pass, its
+   * weeks (theirs, as bought) and how many weeks are ready to open — this season's and any older pass's.
+   */
+  async passState(userId: string, season: PassSeason | null, casesEnabled: boolean, now = new Date(), tx: Tx = this.sql): Promise<PassState> {
+    const bought = await tx<PassPurchaseRow[]>`SELECT season_id, season_start, weeks FROM pass_purchases WHERE user_id = ${userId}`;
+    const opened = await tx<PassDropRow[]>`SELECT season_id, week, skin_id, skin_rarity, character_id, character_grade, blats FROM pass_drops WHERE user_id = ${userId}`;
+    const mine = season ? bought.find((b) => b.season_id === season.id) : undefined;
+    let ready = 0;
+    for (const b of bought) {
+      const due = passWeeksDue(scheduleOf(b), now);
+      ready += Math.max(0, due - opened.filter((d) => d.season_id === b.season_id && d.week <= due).length);
+    }
+    const schedule = mine ? scheduleOf(mine) : season;
+    const weeks: PassWeek[] = [];
+    if (schedule) {
+      const due = mine ? passWeeksDue(schedule, now) : 0;
+      for (let w = 1; w <= schedule.weeks; w++) {
+        const d = mine ? opened.find((o) => o.season_id === mine.season_id && o.week === w) : undefined;
+        weeks.push({ week: w, opensAt: passWeekStart(schedule, w).toISOString(), due: w <= due, drop: d ? dropOf(d) : null });
+      }
+    }
+    return {
+      season: season ? { ...season, end: passEnd(season).toISOString() } : null,
+      onSale: casesEnabled && !mine && passOnSale(season, now),
+      owned: !!mine,
+      price: PASS_PRICE,
+      week: season ? passWeekAt(season, now) : 0,
+      weeks,
+      ready,
+      fallbackBlats: PASS_FALLBACK_BLATS,
+      casesEnabled,
+    };
+  }
+
+  /** Buys the season's pass for BLATS (once a season, while it is on). Its weeks are opened with claimPass. */
+  async buyPass(userId: string, season: PassSeason | null, now = new Date()): Promise<Inventory> {
+    if (!season || !passOnSale(season, now)) throw new EconomyError('pass_closed');
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      if (inv.level < PASS_PRICE.level) throw new EconomyError('level');
+      const had = await tx`SELECT 1 FROM pass_purchases WHERE user_id = ${userId} AND season_id = ${season.id}`;
+      if (had.length) throw new EconomyError('owned');
+      if (wallet.diamonds < PASS_PRICE.amount) throw new EconomyError('funds');
+      await tx`INSERT INTO pass_purchases (user_id, season_id, season_start, weeks, price) VALUES (${userId}, ${season.id}, ${season.start}, ${season.weeks}, ${PASS_PRICE.amount})`;
+      await this.debit(tx, userId, 'diamonds', PASS_PRICE.amount, wallet.diamonds, 'purchase', `pass:${season.id}`);
+      this.log.info('season pass bought', { userId, season: season.id, amount: PASS_PRICE.amount });
+      return this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - PASS_PRICE.amount });
+    });
+  }
+
+  /**
+   * Opens every week that is ready and not opened yet, of every pass the player has: each gives a skin and a
+   * character they don't own (drawn now, the cases' odds) or BLATS for a half with nothing left. A new skin goes
+   * on its weapon when that weapon wears none. The player's row is locked and each week is a key in pass_drops,
+   * so a week gives once however often (or however concurrently) it is asked for.
+   */
+  async claimPass(userId: string, now = new Date(), rand: () => number = secureRandom): Promise<{ drops: Array<PassDrop & { season: string }>; inventory: Inventory }> {
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      const bought = await tx<PassPurchaseRow[]>`SELECT season_id, season_start, weeks FROM pass_purchases WHERE user_id = ${userId} ORDER BY bought_at, season_id`;
+      const opened = await tx<Array<{ season_id: string; week: number }>>`SELECT season_id, week FROM pass_drops WHERE user_id = ${userId}`;
+      const done = new Set(opened.map((o) => `${o.season_id}#${o.week}`));
+      const skins = new Set(inv.skins);
+      const characters = new Set(inv.characters);
+      const drops: Array<PassDrop & { season: string }> = [];
+      let diamonds = wallet.diamonds;
+      const l = inv.loadout;
+      const wearing: Partial<Record<WeaponId, FinishId>> = { ...(l.skins ?? {}) };
+      let equipped = false;
+      for (const b of bought) {
+        const due = passWeeksDue(scheduleOf(b), now);
+        for (let w = 1; w <= due; w++) {
+          if (done.has(`${b.season_id}#${w}`)) continue;
+          const d = drawPassWeek(w, skins, characters, rand);
+          if (d.skin) {
+            const id = skinId(d.skin.weapon, d.skin.finish);
+            skins.add(id);
+            await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${id}, 'skin', 'pass') ON CONFLICT DO NOTHING`;
+            if (!wearing[d.skin.weapon]) {
+              wearing[d.skin.weapon] = d.skin.finish;
+              equipped = true;
+            }
+          }
+          if (d.character) {
+            characters.add(d.character.character);
+            await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${d.character.character}, 'character', 'pass') ON CONFLICT DO NOTHING`;
+          }
+          await tx`
+            INSERT INTO pass_drops (user_id, season_id, week, skin_id, skin_rarity, character_id, character_grade, blats)
+            VALUES (${userId}, ${b.season_id}, ${w}, ${d.skin ? skinId(d.skin.weapon, d.skin.finish) : null}, ${d.skin?.rarity ?? null}, ${d.character?.character ?? null}, ${d.character?.grade ?? null}, ${d.blats})`;
+          if (d.blats > 0) {
+            diamonds += d.blats;
+            await tx`UPDATE profiles SET diamonds = ${diamonds}, updated_at = now() WHERE user_id = ${userId}`;
+            await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'diamonds', ${d.blats}, ${diamonds}, 'pass', ${`pass:${b.season_id}:w${w}`})`;
+          }
+          done.add(`${b.season_id}#${w}`);
+          drops.push({ ...d, season: b.season_id });
+        }
+      }
+      let loadout: unknown = wallet.loadout;
+      if (equipped) {
+        loadout = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods, skins: wearing };
+        await tx`UPDATE profiles SET loadout = ${tx.json(loadout as postgres.JSONValue)}, updated_at = now() WHERE user_id = ${userId}`;
+      }
+      if (drops.length) this.log.info('season pass weeks opened', { userId, weeks: drops.map((d) => `${d.season}#${d.week}`) });
+      return { drops, inventory: await this.load(tx, userId, { ...wallet, diamonds, loadout }) };
+    });
+  }
+
   /**
    * Stores the spawn loadout. Anything the player does not own falls back to the free default;
    * `gadget`/`mods` left out keep their current values.
@@ -375,6 +497,36 @@ export async function awardMatchTokens(tx: Tx, userId: string, matchId: string, 
   const total = rows[0]?.tokens ?? 0;
   if (tokens > 0) await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${tokens}, ${total}, 'match', ${matchId})`;
   return total;
+}
+
+interface PassPurchaseRow {
+  season_id: string;
+  season_start: Date;
+  weeks: number;
+}
+interface PassDropRow {
+  season_id: string;
+  week: number;
+  skin_id: string | null;
+  skin_rarity: string | null;
+  character_id: string | null;
+  character_grade: string | null;
+  blats: number;
+}
+
+/** The schedule a pass was bought under. */
+const scheduleOf = (b: PassPurchaseRow) => ({ start: b.season_start.toISOString(), weeks: b.weeks });
+
+/** A pass_drops row as the player sees it (anything this build doesn't know is left out). */
+function dropOf(r: PassDropRow): PassDrop {
+  const skin = r.skin_id ? parseSkin(r.skin_id) : null;
+  const character = r.character_id && isCharacterId(r.character_id) ? r.character_id : null;
+  return {
+    week: r.week,
+    skin: skin && r.skin_rarity ? { weapon: skin.weapon, finish: skin.finish, rarity: r.skin_rarity as SkinRarity } : null,
+    character: character && r.character_grade ? { character, grade: r.character_grade as Grade } : null,
+    blats: r.blats,
+  };
 }
 
 /** The rows of skin_kills as «weapon.finish» → kills (unknown weapons/finishes left out). */
