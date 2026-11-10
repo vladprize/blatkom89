@@ -59,7 +59,7 @@ test('v0.2.22 (the owner: every skin on the pistols too; a skin is bought for on
   assert.deepEqual(parseSkin(skinId('pistol', 'haki')), { weapon: 'pistol', finish: 'haki' });
 });
 
-test('v0.2.19: the AK sheet — no «Absurd» grade (rare, epic, legendary), four live finishes (a tenth of the line) sold and dropped like any other', () => {
+test('v0.2.19: the AK sheet — no «Absurd» grade (rare, epic, legendary); v0.2.24: every legendary finish live, sold and dropped like any other', () => {
   const sheet = ['bratok', 'korol', 'neon', 'shashlyk', 'graffiti', 'peklo', 'kilka', 'krovavy', 'kosti', 'kazino', 'hrom', 'pensioner', 'almaz', 'ametist', 'othody', 'biohazard', 'obsidian', 'borsch', 'unitaz'] as const;
   const grades = { rare: 0, epic: 0, legendary: 0, common: 0 };
   for (const f of sheet) {
@@ -70,11 +70,16 @@ test('v0.2.19: the AK sheet — no «Absurd» grade (rare, epic, legendary), fou
   }
   assert.deepEqual(grades, { rare: 5, epic: 8, legendary: 6, common: 0 });
   assert.equal(SHOP_FINISHES.length, 39);
-  assert.deepEqual([...LIVE_FINISHES].sort(), ['almaz', 'bratok', 'krovavy', 'obsidian']);
-  assert.equal(Math.round(LINE_FINISHES.length / 10), LIVE_FINISHES.length, 'about a tenth of the line');
+  // v0.2.24 (the owner: «как и легендарное оружие» — every legendary skin moves): the four of v0.2.19 and the
+  // seven that stood still, the two retired ones among them
+  assert.deepEqual([...LIVE_FINISHES].sort(), ['almaz', 'bratok', 'carsky', 'kontora', 'krovavy', 'obsidian', 'shashlyk', 'unitaz', 'yadernaya', 'yantar', 'zoloto']);
+  assert.deepEqual([...LIVE_FINISHES].sort(), FINISH_IDS.filter((f) => FINISHES[f].rarity === 'legendary').sort(), 'every legendary skin is live, nothing else');
+  assert.equal(LIVE_FINISHES.filter((f) => LINE_FINISHES.includes(f)).length, 9, 'nine of them in the line on sale');
   for (const f of LIVE_FINISHES) {
     assert.ok(isLiveFinish(f));
-    assert.equal(skinPrice(f)?.amount, 299, 'a live skin costs its grade\'s price, nothing more');
+    // the retired two are not sold (kept by those who have them)
+    if (SHOP_FINISHES.includes(f)) assert.equal(skinPrice(f)?.amount, 299, 'a live skin costs its grade\'s price, nothing more');
+    else assert.ok(FINISHES[f].retired, `${f}: not on sale only when retired`);
   }
   assert.equal(isLiveFinish('haki'), false);
   assert.equal(isLiveFinish(null), false);

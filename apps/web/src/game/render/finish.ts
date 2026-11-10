@@ -339,29 +339,42 @@ const PAINTERS: Record<FinishId, Painter> = {
     const n = noise(Math.floor(u / 1.6) * 0.5, Math.floor(v / 1.6) * 0.5, 511);
     return shade(n > 0.66 ? hex('#5a8ab8') : n > 0.45 ? hex('#a8cce8') : hex('#eef6fc'), l, 0.7, 0.4);
   },
-  // «Царский»: rich gold with engraved filigree and dark-red enamel insets
-  carsky: (u, v, l, hv) => {
-    const c = ramp([[0, hex('#3a2406')], [0.45, hex('#b88218')], [0.75, hex('#f0c040')], [1, hex('#fff2b0')]], l);
-    if (Math.abs(v / Math.max(1, hv) - 0.5) < 0.1 && Math.floor(u / 5) % 2 === 0) return shade(hex('#7a0a14'), l, 0.75, 0.5);
+  // «Царский» (live since v0.2.24): rich gold with engraved filigree and dark-red enamel insets; the rubies light
+  // up one after another and a slow wave of light rolls over the gold
+  carsky: (u, v, l, hv, _ly, _th, ph) => {
+    const wave = Math.max(0, Math.sin(2 * Math.PI * (u / 32 - ph))) ** 6;
+    const c = mix(ramp([[0, hex('#3a2406')], [0.45, hex('#b88218')], [0.75, hex('#f0c040')], [1, hex('#fff2b0')]], l), hex('#fff6d6'), wave * 0.45);
+    const k = Math.floor(u / 5);
+    if (Math.abs(v / Math.max(1, hv) - 0.5) < 0.1 && k % 2 === 0) return mix(shade(hex('#7a0a14'), l, 0.75, 0.5), hex('#ff5a6a'), pulse(ph, ((k / 2) % 7) / 7, 0.16) * 0.75);
     return Math.abs(Math.sin(u * 1.1 + Math.sin(v * 1.3) * 2.5) * Math.cos(v * 0.8 - u * 0.3)) < 0.08 ? shade(c, 0.3, 0.6, 0.4) : c;
   },
-  // «Контора»: dark crimson lacquer with gold lines and gold stars
-  kontora: (u, v, l, hv) => {
+  // «Контора» (live since v0.2.24): dark crimson lacquer with gold lines and gold stars; a light runs along the
+  // lines and the two stars twinkle in turn
+  kontora: (u, v, l, hv, _ly, _th, ph) => {
     const y = v / Math.max(1, hv);
-    if (Math.abs(y - 0.2) < 0.03 || Math.abs(y - 0.8) < 0.03) return shade(C.gold, l, 0.75, 0.5);
-    if (star(u, v, 31, hv * 0.5, Math.max(2, hv * 0.26)) || star(u, v, 15, hv * 0.5, Math.max(1.6, hv * 0.2))) return shade(C.gold, l, 0.8, 0.5);
+    if (Math.abs(y - 0.2) < 0.03 || Math.abs(y - 0.8) < 0.03) return mix(shade(C.gold, l, 0.75, 0.5), hex('#fff8d8'), pulse(ph, u / 64, 0.09) * 0.8);
+    if (star(u, v, 31, hv * 0.5, Math.max(2, hv * 0.26))) return mix(shade(C.gold, l, 0.8, 0.5), hex('#fff6c8'), (0.5 + 0.5 * Math.sin(2 * Math.PI * ph)) * 0.6);
+    if (star(u, v, 15, hv * 0.5, Math.max(1.6, hv * 0.2))) return mix(shade(C.gold, l, 0.8, 0.5), hex('#fff6c8'), (0.5 - 0.5 * Math.sin(2 * Math.PI * ph)) * 0.6);
     return shade(mix(hex('#4a0606'), hex('#8e1414'), l), l, 0.65, 0.55);
   },
-  // «Ядерная зима»: frost white with ice-blue cracks and a yellow radiation sign
-  yadernaya: (u, v, l, hv) => {
+  // «Ядерная зима» (live since v0.2.24): frost white with ice-blue cracks and a yellow radiation sign; the sign
+  // turns (a third of a turn a loop: it looks the same after one), the cracks pulse ice-blue, the frost glitters
+  yadernaya: (u, v, l, hv, _ly, _th, ph) => {
     const R = Math.max(2, hv * 0.32);
     const cx = 40;
     const cy = hv * 0.46;
-    if (Math.hypot(u - cx, v - cy) < R * 1.15) return trefoil(u, v, cx, cy, R) ? shade(hex('#141414'), l, 1, 0.5) : shade(hex('#f0d020'), l, 0.8, 0.4);
-    if (Math.abs(noise(u / 2.5, v / 2.5, 521) - 0.5) < 0.03) return shade(hex('#4a7ab0'), l, 0.75, 0.4);
+    if (Math.hypot(u - cx, v - cy) < R * 1.15) {
+      const a = (ph * 2 * Math.PI) / 3;
+      const ru = cx + (u - cx) * Math.cos(a) - (v - cy) * Math.sin(a);
+      const rv = cy + (u - cx) * Math.sin(a) + (v - cy) * Math.cos(a);
+      return trefoil(ru, rv, cx, cy, R) ? shade(hex('#141414'), l, 1, 0.5) : shade(hex('#f0d020'), l, 0.8, 0.4);
+    }
+    if (Math.abs(noise(u / 2.5, v / 2.5, 521) - 0.5) < 0.03) return mix(shade(hex('#4a7ab0'), l, 0.75, 0.4), hex('#a8e4ff'), (0.5 + 0.5 * Math.sin(2 * Math.PI * (ph - u / 64))) * 0.7);
+    const g = hash(Math.floor(u * 1.5), Math.floor(v * 1.5), 523);
+    if (g > 0.95) return mix(shade(hex('#e8f4ff'), l, 0.8, 0.3), [255, 255, 255], pulse(ph, hash(Math.floor(u * 1.5), Math.floor(v * 1.5), 524), 0.1));
     return shade(mix(hex('#cfe2f2'), hex('#ffffff'), noise(u / 1.2, v / 1.2, 522)), l, 0.72, 0.35);
   },
-  // ── v0.2.19: the owner's AK sheet (references/83-skins-ak-sheet.png); the live four take the loop's phase ──
+  // ── v0.2.19: the owner's AK sheet (references/83-skins-ak-sheet.png); the live ones take the loop's phase ──
   // «Золотой браток» (live): polished gold, engraved scrolls and white stones; a glint sweeps along it
   bratok: (u, v, l, _hv, ly, _th, ph) => {
     let c = ramp([[0, hex('#5a3404')], [0.3, hex('#a8700c')], [0.6, hex('#e8b42a')], [0.82, hex('#ffd860')], [1, hex('#fff4c4')]], 0.36 + l * 0.32 + (0.5 - ly) * 0.5);
@@ -392,15 +405,19 @@ const PAINTERS: Record<FinishId, Painter> = {
     const base = shade(hex('#1a0a2c'), l, 0.8, 0.7);
     return mix(mix(mix(base, hex('#c020c0'), Math.max(0, 1 - top / 1.7) * 0.62), hex('#18b0d8'), Math.max(0, 1 - bottom / 1.7) * 0.56), hex('#20c4e8'), Math.max(0, 1 - zig / 0.17) * 0.5);
   },
-  // «Мастер шашлыка»: chunks of grilled meat and rings of onion on a skewer, the length of the weapon
-  shashlyk: (u, v, l, _hv, ly, th) => {
+  // «Мастер шашлыка» (live since v0.2.24): chunks of grilled meat and rings of onion on a skewer, the length of
+  // the weapon; the coals' heat flickers along the meat from below and sparks fly off it
+  shashlyk: (u, v, l, _hv, ly, th, ph) => {
     const dc = (ly - 0.5) * th;
     const p = u % 8;
     if (p < 5.8) {
       const grill = (u + v * 1.1) % 2.4 < 0.45;
       const end = Math.min(p, 5.8 - p) < 0.45;
       const c = ramp([[0, hex('#3a1006')], [0.4, hex('#8a2a10')], [0.7, hex('#b84a1e')], [1, hex('#e88a4a')]], l * 0.7 + noise(u / 1.2, v / 1.2, 681) * 0.35 - (end ? 0.25 : 0));
-      return grill ? shade(c, 0.25) : c;
+      const spark = hash(Math.floor(u * 2), Math.floor(v * 2), 682);
+      if (spark > 0.975) return mix(c, hex('#ffe890'), pulse(ph, hash(Math.floor(u * 2), Math.floor(v * 2), 683), 0.12));
+      const heat = (0.5 + 0.5 * Math.sin(2 * Math.PI * (2 * ph - u / 16))) * Math.max(0, ly - 0.35) * 1.5;
+      return grill ? mix(shade(c, 0.25), hex('#d8400c'), heat * 0.55) : mix(c, hex('#ff8a3a'), heat * 0.35);
     }
     if (p < 6.4 || p > 7.6) return Math.abs(dc) < 0.55 ? shade(hex('#c0c4c8'), l, 0.75, 0.4) : shade(hex('#161210'), l, 0.9, 0.6);
     return shade(Math.abs(p - 7) < 0.24 ? hex('#e8b0cc') : hex('#f8f0e6'), l, 0.85, 0.2);
@@ -546,15 +563,17 @@ const PAINTERS: Record<FinishId, Painter> = {
     if (c.d1 < 0.55 && c.id > 0.5) return shade(hex('#f07040'), l, 0.8, 0.35);
     return shade(mix(hex('#7a0a20'), hex('#c4203a'), noise(u / 2.5, v / 2.5, 673) * 0.6 + l * 0.4), l, 0.62, 0.5);
   },
-  // «Золотой унитаз»: mirror gold with the horizon in it, a roll of paper wound round the front
-  unitaz: (u, v, l, _hv, ly) => {
+  // «Золотой унитаз» (live since v0.2.24): mirror gold with the horizon in it, a roll of paper wound round the
+  // front; the horizon ripples along the mirror and a glint runs over its bright half
+  unitaz: (u, v, l, _hv, ly, _th, ph) => {
     if (u > 49 && u < 57) {
       if (Math.abs(u - 53) > 3.4) return shade(hex('#d8d4cc'), l, 0.8, 0.25);
       return Math.abs(((u - 49) % 2.6) - 1.3) < 0.14 && (v * 2) % 1 < 0.5 ? shade(hex('#c8c4bc'), l, 0.8, 0.25) : shade(hex('#fbfaf6'), l, 0.85, 0.2);
     }
-    const t = ly + Math.sin(u * 0.2) * 0.05;
+    const t = ly + Math.sin(u * 0.2 - 2 * Math.PI * ph) * 0.06;
     const c = t < 0.45 ? ramp([[0, hex('#fffbe0')], [1, hex('#f0c43a')]], t / 0.45) : ramp([[0, hex('#6a4206')], [0.6, hex('#c08a14')], [1, hex('#e8b83a')]], (t - 0.45) / 0.55);
-    return shade(c, l, 0.72, 0.42);
+    const glint = t < 0.4 ? pulse(ph, u / 64, 0.06) : 0;
+    return mix(shade(c, l, 0.72, 0.42), [255, 255, 250], glint * 0.7);
   },
   // ── the first line (v0.23), retired: drawn for those who own them ──
   // «Берёзка»: the light Soviet summer camo — pale olive with dark leaf blotches
@@ -615,16 +634,16 @@ const PAINTERS: Record<FinishId, Painter> = {
     if (s > 0.62) return shade(C.gold, l, 0.7, 0.55);
     return shade(C.black, l, 0.9, 0.9);
   },
-  // «Золото партии»: polished gold with an engraved line pattern
-  zoloto: (u, v, l) => {
-    const c = ramp([[0, hex('#4a3008')], [0.4, hex('#a8771a')], [0.7, hex('#ddb03e')], [1, hex('#fff3b8')]], l);
+  // «Золото партии» (live since v0.2.24): polished gold with an engraved line pattern; a broad sheen sweeps it
+  zoloto: (u, v, l, _hv, _ly, _th, ph) => {
+    const c = mix(ramp([[0, hex('#4a3008')], [0.4, hex('#a8771a')], [0.7, hex('#ddb03e')], [1, hex('#fff3b8')]], l), hex('#fffbe0'), Math.max(0, Math.sin(2 * Math.PI * (u / 48 + v / 30 - ph))) ** 8 * 0.5);
     const engraved = l > 0.25 && l < 0.8 && ((Math.floor((u + v * 0.8) / 2.2) & 3) === 0);
     return engraved ? shade(c, 0.45, 0.62, 0.4) : c;
   },
-  // «Янтарь»: honey-yellow amber, lit from inside, with dark veins
-  yantar: (u, v, l) => {
+  // «Янтарь» (live since v0.2.24): honey-yellow amber with dark veins, lit from inside — the light drifts in it
+  yantar: (u, v, l, _hv, _ly, _th, ph) => {
     const vein = Math.abs(noise(u / 4.5, v / 4.5, 101) - 0.5) < 0.035;
-    const glow = noise(u / 3, v / 3, 103);
+    const glow = noise(u / 3 + Math.cos(2 * Math.PI * ph) * 0.9, v / 3 + Math.sin(2 * Math.PI * ph) * 0.9, 103);
     const c = ramp([[0, hex('#6a3304')], [0.4, hex('#d9790f')], [0.7, hex('#ffb32a')], [1, hex('#fff0b0')]], l * 0.75 + glow * 0.35);
     return vein ? shade(hex('#5a2405'), l, 0.7, 0.4) : c;
   },

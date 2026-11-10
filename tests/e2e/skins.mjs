@@ -111,11 +111,12 @@ try {
   const note = (await page.getByTestId('skin-buy-row').innerText()).replace(/\s+/g, ' ');
   check(other === 'yadernaya' ? /Legendary/i.test(note) && /299/.test(note) : /Epic/i.test(note) && /199/.test(note), `an unowned finish can be tried on and offers its grade and price («${note}»)`);
   // the line in the picker: the 39 on sale and the 2 gifts (the retired first line only to those who have it),
-  // each a card with the weapon painted in it; the four live ones say so (v0.2.19)
+  // each a card with the weapon painted in it; the live ones say so (v0.2.19; every legendary one since v0.2.24)
   const chips = await page.locator('[data-testid=skin-pick] .skinchip[data-finish]:not([data-finish=""])').evaluateAll((els) => els.map((e) => e.getAttribute('data-finish')));
   check(chips.length === 41 && chips.includes('akulka') && chips.includes('blatkom') && chips.includes('bratok') && !chips.includes('zima') && !chips.includes('berezka'), `the dressing room offers the owner's line: 41 finishes, the gifts and the AK sheet's among them, no retired ones (${chips.length}: ${chips.join(', ')})`);
   const cards = await page.locator('[data-testid=skin-pick] .skincard').evaluateAll((els) => ({ n: els.length, pics: els.filter((e) => e.querySelector('.skincard__pic img')).length, live: els.filter((e) => e.querySelector('.skincard__live')).map((e) => e.getAttribute('data-finish')).sort() }));
-  check(cards.n === 42 && cards.pics === 42 && JSON.stringify(cards.live) === JSON.stringify(['almaz', 'bratok', 'krovavy', 'obsidian']), `every skin is a card with its picture, the standard paint first; the live four are marked (${JSON.stringify(cards)})`);
+  // v0.2.24: every legendary skin is live — the nine of the line on sale
+  check(cards.n === 42 && cards.pics === 42 && JSON.stringify(cards.live) === JSON.stringify(['almaz', 'bratok', 'carsky', 'kontora', 'krovavy', 'obsidian', 'shashlyk', 'unitaz', 'yadernaya']), `every skin is a card with its picture, the standard paint first; the live (legendary) ones are marked (${JSON.stringify(cards)})`);
   // a live skin's picture moves: its card's picture changes frames
   const liveSrc = () => page.locator('[data-testid=skin-pick] .skincard[data-finish=almaz] .skincard__pic img').getAttribute('src');
   await page.locator('[data-testid=skin-pick] .skincard[data-finish=almaz]').scrollIntoViewIfNeeded();

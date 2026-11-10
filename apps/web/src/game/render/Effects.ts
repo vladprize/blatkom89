@@ -7,6 +7,8 @@ import { WEAPONS } from '@blatkom/shared';
 import type { WeaponId } from '@blatkom/shared';
 import { D } from './depth.js';
 import { MUZZLES } from './rig.gen.js';
+import { hexOf } from './legendLooks.js';
+import type { LegendLook } from './legendLooks.js';
 
 interface Particle {
   img: Phaser.GameObjects.Image;
@@ -432,6 +434,21 @@ export class Effects {
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2;
       this.spawn('px', x, y, { vx: Math.cos(a) * 70, vy: Math.sin(a) * 70, life: 260, scale: 0.4, tint: 0xffe08a, add: true, drag: 4 });
+    }
+  }
+
+  /**
+   * v0.2.24: one of a legendary character's motes round it (legendLooks.ts): Аркадич's gold dust rising,
+   * Касатик's snow drifting down, Пятак's glints flaring.
+   */
+  legendMote(x: number, y: number, look: LegendLook): void {
+    const tint = hexOf(look.glow);
+    if (look.mote === 'gold') {
+      this.spawn('px', x + (Math.random() - 0.5) * 14, y + (Math.random() - 0.5) * 8, { vx: (Math.random() - 0.5) * 6, vy: -14 - Math.random() * 12, life: 700 + Math.random() * 400, scale: 0.45 + Math.random() * 0.3, tint, add: true, drag: 0.5, depth: D.FX_ADD });
+    } else if (look.mote === 'frost') {
+      this.spawn('px', x + (Math.random() - 0.5) * 22, y - 12 - Math.random() * 6, { vx: -4 + Math.random() * 8, vy: 9 + Math.random() * 7, life: 900 + Math.random() * 300, scale: 0.42 + Math.random() * 0.26, tint, alpha: 0.9, add: true, depth: D.FX_ADD });
+    } else {
+      this.spawn('glow', x + (Math.random() - 0.5) * 18, y + (Math.random() - 0.5) * 18, { life: 380 + Math.random() * 220, scale: 0.1 + Math.random() * 0.06, grow: 0.14, tint, alpha: 0.95, add: true, spin: 3, depth: D.FX_ADD });
     }
   }
 

@@ -2968,3 +2968,19 @@ button.cardslot:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px;
   .sheet--collection .fcoll__top { grid-template-columns: auto minmax(0, 1fr); align-items: start; justify-items: stretch; }
   .sheet--collection .fcoll__tall { width: 214px; }
 }
+/* v0.2.24 (the owner: «легендарные персонажи — с анимацией, как и легендарное оружие»): a light sweeps over a
+   legendary character's portrait now and then — the character grid, a friend's collection, the personal file
+   (the fighter cards draw their own: game/render/legendLooks.ts) */
+.chars button.chargrade--legendary, .fcoll__char.chargrade--legendary { position: relative; }
+.chars button.chargrade--legendary::before, .fcoll__char.chargrade--legendary::before, .dossier__hero--legend::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 228, 156, .42) 50%, transparent 62%) no-repeat;
+  background-size: 300% 100%; background-position: 150% 0;
+  mix-blend-mode: screen;
+  animation: legend-sheen 4.6s ease-in-out infinite;
+}
+.fcoll__char.chargrade--legendary::before { animation-delay: .8s; }
+@keyframes legend-sheen { 0% { background-position: 150% 0; } 40%, 100% { background-position: -50% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .chars button.chargrade--legendary::before, .fcoll__char.chargrade--legendary::before, .dossier__hero--legend::after { animation: none; background: none; }
+}

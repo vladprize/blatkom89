@@ -7,8 +7,10 @@
  * - `tall` — the Arsenal, the line-up before a match, the podium, a friend's page, the shared picture;
  * - `wide` — a strip: the killer's card while the player waits to respawn, «what took you down» after the match.
  * A legendary skin's card has its own moving background (rays and sparks in the skin's colours); a live
- * skin loops its paint on the card as it does in the hand. One shared timer moves every card on the page and
- * forgets the ones that left it.
+ * skin loops its paint on the card as it does in the hand. v0.2.24: a legendary character's card moves too —
+ * a foil sheen sweeps over the picture, the character's motes drift over it (legendLooks.ts) and a light runs
+ * round the frame in the character's colour. One shared timer moves every card on the page and forgets the
+ * ones that left it.
  *
  * The art: the character's full-height picture when there is one (assets/fullbody/<id>.png, FULLBODY), else
  * the waist-up hero card (assets/heroes/<id>.jpg).
@@ -21,6 +23,8 @@ import { t, count } from '../i18n/index.js';
 import { finishColors, rgba } from '../game/render/skinColors.js';
 import type { RGB } from '../game/render/skinColors.js';
 import { LIVE_FRAMES, LIVE_FRAME_MS, skinIconUrl } from '../game/render/skins.js';
+import { legendLook } from '../game/render/legendLooks.js';
+import type { LegendLook } from '../game/render/legendLooks.js';
 import { FULLBODY } from './fullbody.js';
 
 export type CardShape = 'tall' | 'wide';
@@ -54,6 +58,20 @@ const reducedMotion = (): boolean => {
     return false;
   }
 };
+
+const frac = (v: number): number => v - Math.floor(v);
+
+/** A five-pointed star's path round (cx, cy): outer radius R, inner r, turned by `a`. */
+function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, R: number, r: number, a: number) {
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const ang = a - Math.PI / 2 + (k * Math.PI) / 5;
+    const rr = k % 2 ? r : R;
+    if (k) ctx.lineTo(cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr);
+    else ctx.moveTo(cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr);
+  }
+  ctx.closePath();
+}
 
 // ── images, loaded once ───────────────────────────────────────────────────
 const images = new Map<string, Promise<HTMLImageElement>>();
@@ -301,7 +319,7 @@ export class FighterCard {
     }
     if (reducedMotion() || !this.inView) return;
     const perks = skinPerks(this.d.finish);
-    if (perks?.glow || isLiveFinish(this.d.finish)) this.draw(now);
+    if (perks?.glow || isLiveFinish(this.d.finish) || legendLook(this.d.character)) this.draw(now);
   }
 
   /** A small or squat tall card (the phone's kit, a crowded line-up, the podium): the portrait, a bigger weapon. */
@@ -504,9 +522,12 @@ export class FighterCard {
     ctx.strokeStyle = frame;
     ctx.lineWidth = 2;
     ctx.strokeRect(1, 1, w - 2, h - 2);
-    // epic and up: a light runs round the frame in the skin's colours (two, opposite, for a legendary)
+    // epic and up: a light runs round the frame in the skin's colours (two, opposite, for a legendary); v0.2.24:
+    // a legendary character with a plainer skin — one in the character's colour
     const perks = skinPerks(this.d.finish);
-    if (perks?.glow && !reducedMotion()) {
+    const legend = perks?.glow ? null : legendLook(this.d.character);
+    const runGlow = legend ? legend.glow : glow;
+    if ((perks?.glow || legend) && !reducedMotion()) {
       // along a rectangle just inside the edge (a line on the edge itself is half off the canvas)
       const i0 = 2.5;
       const iw = w - 2 * i0;
@@ -522,11 +543,11 @@ export class FighterCard {
         t -= iw;
         return [i0, h - i0 - t];
       };
-      const runs = perks.cardBg ? 2 : 1;
+      const runs = perks?.cardBg ? 2 : 1;
       const len = P * 0.24;
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
-      ctx.shadowColor = rgba(glow, 0.9);
+      ctx.shadowColor = rgba(runGlow, 0.9);
       ctx.shadowBlur = 8;
       for (let r = 0; r < runs; r++) {
         const head = (now / 3200) * P + (r * P) / runs;
@@ -535,7 +556,7 @@ export class FighterCard {
           const [x0, y0] = at(head - (len * i) / steps);
           const [x1, y1] = at(head - (len * (i + 1)) / steps);
           const k = 1 - i / steps;
-          ctx.strokeStyle = i === 0 ? 'rgba(255,255,255,0.95)' : rgba(glow, 0.95 * k);
+          ctx.strokeStyle = i === 0 ? 'rgba(255,255,255,0.95)' : rgba(runGlow, 0.95 * k);
           ctx.lineWidth = 2 + 2 * k;
           ctx.beginPath();
           ctx.moveTo(x0, y0);
@@ -674,6 +695,7 @@ export class FighterCard {
     shade.addColorStop(1, 'rgba(10,8,7,0.92)');
     ctx.fillStyle = shade;
     ctx.fillRect(0, g0, w, h - g0);
+    this.legendFx(ctx, now, 0, head, w, h - head);
     if (this.d.label) this.header(ctx, fs);
     if (!compact) this.ribbon(ctx, 0, head + w * 0.035, Math.max(7, w * 0.046));
     if (!this.mini) this.levelBadge(ctx, w - w * 0.035, head + w * 0.035, Math.max(9, w * (compact ? 0.07 : 0.06)));
@@ -698,6 +720,77 @@ export class FighterCard {
     }
     this.text(ctx, this.d.name, pad, y, ns, BEIGE, { weight: 600, max });
     this.frame(ctx, now);
+  }
+
+  /**
+   * v0.2.24: a legendary character's own light over its picture (the box x, y, w, h): a foil sheen sweeping
+   * across now and then, and the character's motes — Аркадич's gold dust rising, Касатик's snow drifting down,
+   * Пятак's five-pointed glints (legendLooks.ts). Still, with «reduce motion»: the motes where they are, no sheen.
+   */
+  private legendFx(ctx: CanvasRenderingContext2D, now: number, x: number, y: number, w: number, h: number) {
+    const L = legendLook(this.d.character);
+    if (!L) return;
+    const still = reducedMotion();
+    const t = still ? 0 : now;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    ctx.globalCompositeOperation = 'lighter';
+    if (!still) {
+      // the sheen crosses in the first 40 % of a 4.6 s cycle, then rests
+      const k = (now % 4600) / 4600 / 0.4;
+      if (k <= 1) {
+        const bx = x - w * 0.5 + k * w * 2;
+        const g = ctx.createLinearGradient(bx - w * 0.28, y + h * 0.1, bx + w * 0.28, y - h * 0.1);
+        g.addColorStop(0, rgba(L.glow, 0));
+        g.addColorStop(0.5, rgba(L.glow, 0.2));
+        g.addColorStop(1, rgba(L.glow, 0));
+        ctx.fillStyle = g;
+        ctx.fillRect(x, y, w, h);
+      }
+    }
+    const n = Math.min(28, Math.round(10 + w / 12));
+    const unit = Math.max(1, w / 170);
+    for (let i = 0; i < n; i++) this.mote(ctx, L, t, i, x, y, w, h, unit);
+    ctx.restore();
+  }
+
+  /** One of a legendary character's motes (`i` picks where it is in its own slow loop). */
+  private mote(ctx: CanvasRenderingContext2D, L: LegendLook, t: number, i: number, x: number, y: number, w: number, h: number, unit: number) {
+    const r1 = frac(Math.sin(i * 12.9898) * 43758.5453);
+    const r2 = frac(Math.sin(i * 78.233) * 12543.123);
+    const r3 = frac(Math.sin(i * 39.425) * 24634.6345);
+    if (L.mote === 'gold') {
+      // gold dust rising from below, swaying a little, twinkling
+      const p = frac(t / (6000 + r2 * 3000) + r1);
+      const px = x + r3 * w + Math.sin(t / 900 + i) * w * 0.02;
+      const py = y + h * (1.02 - p * 1.06);
+      const tw = 0.45 + 0.55 * Math.max(0, Math.sin(t / 300 + i * 1.9));
+      const s = (1.1 + r2 * 1.6) * unit;
+      ctx.fillStyle = rgba(L.glow, (0.25 + 0.55 * tw) * Math.min(1, p * 4, (1 - p) * 4));
+      ctx.fillRect(px - s / 2, py - s / 2, s, s);
+    } else if (L.mote === 'frost') {
+      // snow drifting down and sideways, a few flakes as little crosses
+      const p = frac(t / (7600 + r2 * 3400) + r1);
+      const px = x + frac(r3 + t / 30000) * w + Math.sin(t / 1100 + i) * w * 0.03;
+      const py = y + h * (p * 1.04 - 0.02);
+      const s = (1 + r2 * 1.5) * unit;
+      ctx.fillStyle = rgba(L.glow, (0.45 + 0.35 * r1) * Math.min(1, p * 5, (1 - p) * 5));
+      if (r2 > 0.7) {
+        ctx.fillRect(px - s * 1.4, py - s / 4, s * 2.8, s / 2);
+        ctx.fillRect(px - s / 4, py - s * 1.4, s / 2, s * 2.8);
+      } else ctx.fillRect(px - s / 2, py - s / 2, s, s);
+    } else {
+      // five-pointed glints flaring and fading where they are
+      const tw = Math.max(0, Math.sin(t / 650 + i * 2.17 + r1 * 6));
+      if (tw < 0.25 && t) return;
+      const k = t ? (tw - 0.25) / 0.75 : 0.6;
+      const R = (2.2 + r2 * 2.6) * unit * (0.5 + k);
+      starPath(ctx, x + r3 * w, y + h * (0.06 + r1 * 0.86), R, R * 0.42, t / 2400 + i);
+      ctx.fillStyle = rgba(i % 3 ? L.glow : ([255, 236, 200] as const), 0.35 + 0.5 * k);
+      ctx.fill();
+    }
   }
 
   /** Under the weapon in the corner: a soft shade off the art and, with a skin, its light (a legendary's sparks). */
@@ -748,6 +841,7 @@ export class FighterCard {
     // the character on the left (its head and shoulders), fading into the card
     const aw = h * 1.05;
     this.art(ctx, 0, 0, aw, h, 'right');
+    this.legendFx(ctx, now, 0, 0, aw * 0.9, h);
     const x0 = aw * 0.86;
     const pad = h * 0.07;
     const label = this.d.label;

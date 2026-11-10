@@ -11,6 +11,8 @@ import { D } from './depth.js';
 import { GRIPS } from './rig.gen.js';
 import { setWeaponTexture } from './skins.js';
 import { finishColors } from './skinColors.js';
+import { hexOf, legendLook } from './legendLooks.js';
+import type { LegendLook } from './legendLooks.js';
 
 const SCALE = 0.5;
 /** Tip of the cigarette / cigar / pipe in body space (forward, side; world px), from the rigs. */
@@ -60,6 +62,9 @@ export class CharacterView {
   private readonly gun: Phaser.GameObjects.Image;
   /** v0.2.23: an epic or legendary skin's glow round the weapon in hand (made when first needed). */
   private aura: Phaser.GameObjects.Image | null = null;
+  /** v0.2.24: a legendary character's halo at its feet (made when first needed). */
+  private halo: Phaser.GameObjects.Image | null = null;
+  private moteAt = 0;
   private readonly label: Phaser.GameObjects.Text;
   /** Chat speech bubble (created on the first line) and when it goes away. */
   private bubble: Phaser.GameObjects.Text | null = null;
@@ -82,6 +87,8 @@ export class CharacterView {
   private kickUntil = 0;
   onFootstep: ((x: number, y: number) => void) | null = null;
   onSmoke: ((x: number, y: number) => void) | null = null;
+  /** v0.2.24: a legendary character gives off its motes (gold dust, snow, glints) — the scene's effects draw them. */
+  onMote: ((x: number, y: number, look: LegendLook) => void) | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -169,6 +176,7 @@ export class CharacterView {
       for (const o of [this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.setVisible(visible);
       if (!visible) this.bubble?.setVisible(false);
       if (!visible) this.aura?.setVisible(false);
+      if (!visible) this.halo?.setVisible(false);
       if (visible) this.playIdle();
     }
     if (p.team !== this.ringTeam) {
@@ -238,6 +246,7 @@ export class CharacterView {
     const gx = grip[0] - kick;
     this.gun.setPosition(p.x + px + cr * gx - sr * grip[1], p.y + py + sr * gx + cr * grip[1]).setRotation(rot + grip[2]);
     this.updateAura(now, concealed);
+    this.updateLegend(p.x, p.y, now, concealed);
 
     // hit flash / spawn-protection blink
     if (now < this.flashUntil) {
@@ -318,6 +327,30 @@ export class CharacterView {
       .setVisible(this.gun.visible);
   }
 
+  /**
+   * v0.2.24: a legendary character's own light (legendLooks.ts) — a halo breathing at its feet and its motes
+   * round it every few tenths of a second; hidden in smoke, like the name.
+   */
+  private updateLegend(x: number, y: number, now: number, concealed: boolean) {
+    const L = legendLook(this.character);
+    if (!L || concealed) {
+      this.halo?.setVisible(false);
+      return;
+    }
+    if (!this.halo) this.halo = this.legs.scene.add.image(x, y, 'fx', 'glow').setBlendMode(Phaser.BlendModes.ADD).setDepth(D.CHAR_SHADOW + 0.02);
+    const breathe = 0.5 + 0.5 * Math.sin(now / 520 + this.slot);
+    this.halo
+      .setTint(hexOf(L.glow))
+      .setPosition(x, y)
+      .setScale(0.86 + breathe * 0.08)
+      .setAlpha(0.24 + breathe * 0.14)
+      .setVisible(this.legs.visible);
+    if (now > this.moteAt) {
+      this.moteAt = now + 150 + Math.random() * 140;
+      this.onMote?.(x, y, L);
+    }
+  }
+
   /** A chat line said by this player: a bubble over the name for a few seconds (long lines cut). */
   say(text: string, now: number): void {
     const cps = Array.from(text);
@@ -337,6 +370,7 @@ export class CharacterView {
     for (const o of [this.ring, this.legs, this.torso, this.gun, this.label, this.levelTag, this.bar]) o.destroy();
     this.bubble?.destroy();
     this.aura?.destroy();
+    this.halo?.destroy();
   }
 }
 

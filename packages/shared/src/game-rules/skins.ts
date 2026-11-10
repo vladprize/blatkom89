@@ -122,13 +122,13 @@ export const FINISHES: Readonly<Record<FinishId, Finish>> = Object.freeze({
   hohloma: { id: 'hohloma', name: 'Khokhloma', rarity: 'epic' },
   elektronika: { id: 'elektronika', name: 'Elektronika', rarity: 'epic' },
   led: { id: 'led', name: 'Ice Camo', rarity: 'epic' },
-  carsky: { id: 'carsky', name: 'Tsar’s', rarity: 'legendary' },
-  kontora: { id: 'kontora', name: 'The Office', rarity: 'legendary' },
-  yadernaya: { id: 'yadernaya', name: 'Nuclear Winter', rarity: 'legendary' },
+  carsky: { id: 'carsky', name: 'Tsar’s', rarity: 'legendary', live: true },
+  kontora: { id: 'kontora', name: 'The Office', rarity: 'legendary', live: true },
+  yadernaya: { id: 'yadernaya', name: 'Nuclear Winter', rarity: 'legendary', live: true },
   bratok: { id: 'bratok', name: 'Golden Mobster', rarity: 'legendary', live: true },
   korol: { id: 'korol', name: 'Rust King', rarity: 'rare' },
   neon: { id: 'neon', name: 'Neon District', rarity: 'epic' },
-  shashlyk: { id: 'shashlyk', name: 'Shashlik Master', rarity: 'legendary' },
+  shashlyk: { id: 'shashlyk', name: 'Shashlik Master', rarity: 'legendary', live: true },
   graffiti: { id: 'graffiti', name: 'Street Graffiti', rarity: 'rare' },
   peklo: { id: 'peklo', name: 'Hellfire', rarity: 'epic' },
   kilka: { id: 'kilka', name: 'Canned Fish', rarity: 'epic' },
@@ -143,7 +143,7 @@ export const FINISHES: Readonly<Record<FinishId, Finish>> = Object.freeze({
   biohazard: { id: 'biohazard', name: 'Biohazard X', rarity: 'epic' },
   obsidian: { id: 'obsidian', name: 'Obsidian Emperor', rarity: 'legendary', live: true },
   borsch: { id: 'borsch', name: 'Borscht Edition', rarity: 'epic' },
-  unitaz: { id: 'unitaz', name: 'Golden Toilet', rarity: 'legendary' },
+  unitaz: { id: 'unitaz', name: 'Golden Toilet', rarity: 'legendary', live: true },
   berezka: { id: 'berezka', name: 'Birch Camo', rarity: 'common', retired: true },
   rzhavchina: { id: 'rzhavchina', name: 'Rust', rarity: 'common', retired: true },
   zima: { id: 'zima', name: 'Winter', rarity: 'common', retired: true },
@@ -151,8 +151,8 @@ export const FINISHES: Readonly<Record<FinishId, Finish>> = Object.freeze({
   gzhel: { id: 'gzhel', name: 'Gzhel', rarity: 'rare', retired: true },
   pioner: { id: 'pioner', name: 'Pioneer', rarity: 'rare', retired: true },
   malahit: { id: 'malahit', name: 'Malachite', rarity: 'epic', retired: true },
-  zoloto: { id: 'zoloto', name: 'Party Gold', rarity: 'legendary', retired: true },
-  yantar: { id: 'yantar', name: 'Amber', rarity: 'legendary', retired: true },
+  zoloto: { id: 'zoloto', name: 'Party Gold', rarity: 'legendary', retired: true, live: true },
+  yantar: { id: 'yantar', name: 'Amber', rarity: 'legendary', retired: true, live: true },
 });
 
 /**
@@ -170,7 +170,10 @@ export const SHOP_FINISHES: readonly FinishId[] = FINISH_IDS.filter((f) => !FINI
 /** The current line as the Arsenal lists it: what is on sale and the gifts. */
 export const LINE_FINISHES: readonly FinishId[] = FINISH_IDS.filter((f) => !FINISHES[f].retired);
 
-/** v0.2.19: the live finishes — each drawn with its own light looping animation. */
+/**
+ * v0.2.19: the live finishes — each drawn with its own light looping animation. v0.2.24 (the owner: «как и
+ * легендарное оружие»): every legendary finish is live.
+ */
 export const LIVE_FINISHES: readonly FinishId[] = FINISH_IDS.filter((f) => FINISHES[f].live);
 
 export function isLiveFinish(f: FinishId | null | undefined): boolean {

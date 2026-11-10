@@ -1324,7 +1324,7 @@ export class App {
     const file = (id: CharacterId, locked: boolean, price: string | null): HTMLElement[] => {
       const c = charText(id);
       return [
-        h('div', { class: `dossier__hero ${locked ? 'dossier__hero--locked' : ''}` }, heroImg(id, 'dossier__img'), h('div', { class: 'dossier__stamp' }, locked ? t('NOT IN THE CREW') : t('IN THE CREW'))),
+        h('div', { class: `dossier__hero ${locked ? 'dossier__hero--locked' : ''} ${CHARACTERS[id].grade === 'legendary' ? 'dossier__hero--legend' : ''}` }, heroImg(id, 'dossier__img'), h('div', { class: 'dossier__stamp' }, locked ? t('NOT IN THE CREW') : t('IN THE CREW'))),
         h(
           'div',
           { class: 'col dossier__text' },

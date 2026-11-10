@@ -143,8 +143,8 @@ test('every finish paints the weapon and leaves its transparency alone', () => {
   }
 });
 
-test('v0.2.19: a live finish moves through its loop and comes back to where it started; the others stand still', () => {
-  assert.equal(LIVE_FINISHES.length, 4);
+test('v0.2.19 / v0.2.24: a live finish (every legendary one) moves through its loop and comes back to where it started; the others stand still', () => {
+  assert.equal(LIVE_FINISHES.length, 11);
   for (const f of FINISH_IDS) {
     const a = painted(f, 0);
     const b = painted(f, 0.37);

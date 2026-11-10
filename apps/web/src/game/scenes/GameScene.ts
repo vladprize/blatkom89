@@ -268,6 +268,7 @@ export class GameScene extends Phaser.Scene {
           if (p.isLocal) sfx.play('step', { volume: 0.25 });
         };
         v.onSmoke = (x, y) => this.fx.cigaretteSmoke(x, y);
+        v.onMote = (x, y, look) => this.fx.legendMote(x, y, look);
         this.views.set(p.slot, v);
       }
       const hidden = !p.isLocal && this.gadgetView.concealed(p.x, p.y);
