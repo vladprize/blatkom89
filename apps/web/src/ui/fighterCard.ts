@@ -50,6 +50,12 @@ const BG = '#120e0c';
 const BEIGE = '#e8dcc0';
 const MUTED = '#a89c86';
 const PLAIN: RGB = [168, 160, 146];
+/** The frame's running light: its glow (how much wider, how bright), then the line itself. */
+const GLOW_PASSES: readonly (readonly [number, number])[] = [
+  [7, 0.14],
+  [3.5, 0.26],
+  [0, 1],
+];
 
 const reducedMotion = (): boolean => {
   try {
@@ -148,6 +154,8 @@ function edgeColor(img: HTMLImageElement, src: string, top: boolean): string {
 
 /** The painted weapon's frames (one for a still finish, LIVE_FRAMES for a live one), as they get ready. */
 const weaponFrames = new Map<string, Array<HTMLImageElement | undefined>>();
+/** v0.2.24: every card waiting on a painted weapon hears each frame arrive (before, only the first one asked). */
+const frameWaiters = new Map<string, Set<() => void>>();
 function weaponFrame(w: WeaponId, f: FinishId | null, k: number, onReady: () => void): HTMLImageElement | null {
   if (!f) {
     const src = plainWeaponSrc(w);
@@ -158,24 +166,41 @@ function weaponFrame(w: WeaponId, f: FinishId | null, k: number, onReady: () => 
   const key = `${w}.${f}`;
   let frames = weaponFrames.get(key);
   if (!frames) {
-    frames = [];
-    weaponFrames.set(key, frames);
+    const list: Array<HTMLImageElement | undefined> = [];
+    frames = list;
+    weaponFrames.set(key, list);
+    const waiters = new Set<() => void>();
+    frameWaiters.set(key, waiters);
     const n = isLiveFinish(f) && !reducedMotion() ? LIVE_FRAMES : 1;
     void (async () => {
       for (let i = 0; i < n; i++) {
         try {
           const url = await skinIconUrl(w, f, false, i);
-          frames![i] = await image(url);
-          onReady();
+          list[i] = await image(url);
+          for (const cb of waiters) cb();
         } catch {
-          return;
+          break;
         }
       }
+      frameWaiters.delete(key);
     })();
   }
+  frameWaiters.get(key)?.add(onReady);
   const n = frames.length;
   if (!n) return null;
   return frames[k % n] ?? frames[0] ?? null;
+}
+
+/** Whether the cards' font (Oswald) is loaded — once it is, it stays. */
+let fontLoaded = false;
+function fontIn(): boolean {
+  if (fontLoaded) return true;
+  try {
+    fontLoaded = typeof document.fonts?.check !== 'function' || document.fonts.check('600 12px Oswald');
+  } catch {
+    fontLoaded = true;
+  }
+  return fontLoaded;
 }
 
 // ── one timer for every card on the page ──────────────────────────────────
@@ -215,6 +240,20 @@ export class FighterCard {
   private readonly forceFull: boolean;
   /** v0.2.24: a thumbnail — no alias, counter or level on it (its owner's name is beside it). */
   private readonly mini: boolean;
+  /**
+   * v0.2.24: a moving tall card's still layers — under the weapon (the card's colours, the art, its shade) and over
+   * it (the label, the grade, the level, the alias, the frame) — drawn once and copied each frame; only the light,
+   * the motes, the sparks and a live skin are drawn anew.
+   */
+  private under: { key: string; c: HTMLCanvasElement } | null = null;
+  private over: { key: string; c: HTMLCanvasElement } | null = null;
+  /**
+   * A painted weapon's frame has arrived (a live skin's come one by one, sixteen of them): a moving card shows it at
+   * its next tick — redrawn the moment each arrived, a row of nine sets redrew 144 times in a burst as it opened.
+   */
+  private readonly onFrame = (): void => {
+    if (!this.moves()) this.redraw();
+  };
 
   /**
    * `ratio`: height ÷ width (tall 1.42, wide 0.34 by default; the Arsenal's poster is 4 : 3). `full`: the
@@ -270,6 +309,40 @@ export class FighterCard {
     live.delete(this);
     this.observer?.disconnect();
     this.observer = null;
+    this.under = null;
+    this.over = null;
+  }
+
+  /** Whether the card is animated: a skin that shines or moves, or a legendary character. */
+  private moves(): boolean {
+    if (reducedMotion()) return false;
+    return !!skinPerks(this.d.finish)?.glow || isLiveFinish(this.d.finish) || !!legendLook(this.d.character);
+  }
+
+  /** One of the still layers at the canvas's own size, made again only when `key` changes. */
+  private layer(slot: 'under' | 'over', key: string, paint: (g: CanvasRenderingContext2D) => void): HTMLCanvasElement | null {
+    const cur = this[slot];
+    // a layer with texts drawn before the game's font arrived is drawn again once it is in
+    const k = `${key}|${slot === 'over' && !fontIn() ? '-' : 'f'}`;
+    if (cur?.key === k) return cur.c;
+    const c = cur?.c ?? document.createElement('canvas');
+    // setting the size clears it
+    c.width = this.el.width;
+    c.height = this.el.height;
+    const g = c.getContext('2d');
+    if (!g) return null;
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    paint(g);
+    this[slot] = { key: k, c };
+    return c;
+  }
+
+  /** Copies a layer onto the card, pixel for pixel. */
+  private paste(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(c, 0, 0);
+    ctx.restore();
   }
 
   /** The card as a PNG (for sharing). */
@@ -403,7 +476,7 @@ export class FighterCard {
 
   private weapon(ctx: CanvasRenderingContext2D, now: number, cx: number, cy: number, width: number, tilt: number) {
     const k = isLiveFinish(this.d.finish) && !reducedMotion() ? Math.floor(now / LIVE_FRAME_MS) % LIVE_FRAMES : 0;
-    const img = weaponFrame(this.d.weapon, this.d.finish, k, () => this.redraw());
+    const img = weaponFrame(this.d.weapon, this.d.finish, k, this.onFrame);
     if (!img) return;
     const iw = img.naturalWidth || 168;
     const ih = img.naturalHeight || 56;
@@ -516,18 +589,47 @@ export class FighterCard {
   }
 
   private frame(ctx: CanvasRenderingContext2D, now: number) {
+    this.frameStill(ctx);
+    this.frameLight(ctx, now);
+  }
+
+  /** The frame in the grade's colour and its corner brackets. */
+  private frameStill(ctx: CanvasRenderingContext2D) {
     const { w, h } = this;
-    const { frame, glow } = this.glowColors();
+    const { frame } = this.glowColors();
     ctx.save();
     ctx.strokeStyle = frame;
     ctx.lineWidth = 2;
     ctx.strokeRect(1, 1, w - 2, h - 2);
-    // epic and up: a light runs round the frame in the skin's colours (two, opposite, for a legendary); v0.2.24:
-    // a legendary character with a plainer skin — one in the character's colour
+    const L = Math.min(w, h) * 0.12;
+    ctx.lineWidth = 3;
+    for (const [x, y, sx, sy] of [
+      [3, 3, 1, 1],
+      [w - 3, 3, -1, 1],
+      [3, h - 3, 1, -1],
+      [w - 3, h - 3, -1, -1],
+    ] as const) {
+      ctx.beginPath();
+      ctx.moveTo(x, y + sy * L);
+      ctx.lineTo(x, y);
+      ctx.lineTo(x + sx * L, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Epic and up: a light runs round the frame in the skin's colours (two, opposite, for a legendary); v0.2.24: a
+   * legendary character with a plainer skin — one in the character's colour.
+   */
+  private frameLight(ctx: CanvasRenderingContext2D, now: number) {
+    const { w, h } = this;
+    const { glow } = this.glowColors();
     const perks = skinPerks(this.d.finish);
     const legend = perks?.glow ? null : legendLook(this.d.character);
     const runGlow = legend ? legend.glow : glow;
     if ((perks?.glow || legend) && !reducedMotion()) {
+      ctx.save();
       // along a rectangle just inside the edge (a line on the edge itself is half off the canvas)
       const i0 = 2.5;
       const iw = w - 2 * i0;
@@ -547,44 +649,27 @@ export class FighterCard {
       const len = P * 0.24;
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
-      ctx.shadowColor = rgba(runGlow, 0.9);
-      ctx.shadowBlur = 8;
+      // v0.2.24: the light's glow is two wider, fainter strokes under it — a shadow blur on each of its 20 pieces
+      // (40 on a legendary skin's card) is 20–40 blur passes a frame on every card that shines
+      const steps = 20;
       for (let r = 0; r < runs; r++) {
         const head = (now / 3200) * P + (r * P) / runs;
-        const steps = 20;
-        for (let i = 0; i < steps; i++) {
-          const [x0, y0] = at(head - (len * i) / steps);
-          const [x1, y1] = at(head - (len * (i + 1)) / steps);
-          const k = 1 - i / steps;
-          ctx.strokeStyle = i === 0 ? 'rgba(255,255,255,0.95)' : rgba(runGlow, 0.95 * k);
-          ctx.lineWidth = 2 + 2 * k;
-          ctx.beginPath();
-          ctx.moveTo(x0, y0);
-          ctx.lineTo(x1, y1);
-          ctx.stroke();
+        for (const [extra, alpha] of GLOW_PASSES) {
+          for (let i = 0; i < steps; i++) {
+            const [x0, y0] = at(head - (len * i) / steps);
+            const [x1, y1] = at(head - (len * (i + 1)) / steps);
+            const k = 1 - i / steps;
+            ctx.strokeStyle = extra ? rgba(runGlow, alpha * k) : i === 0 ? 'rgba(255,255,255,0.95)' : rgba(runGlow, 0.95 * k);
+            ctx.lineWidth = 2 + 2 * k + extra;
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x1, y1);
+            ctx.stroke();
+          }
         }
       }
-      ctx.shadowBlur = 0;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.lineCap = 'butt';
-      ctx.strokeStyle = frame;
+      ctx.restore();
     }
-    // corner brackets
-    const L = Math.min(w, h) * 0.12;
-    ctx.lineWidth = 3;
-    for (const [x, y, sx, sy] of [
-      [3, 3, 1, 1],
-      [w - 3, 3, -1, 1],
-      [3, h - 3, 1, -1],
-      [w - 3, h - 3, -1, -1],
-    ] as const) {
-      ctx.beginPath();
-      ctx.moveTo(x, y + sy * L);
-      ctx.lineTo(x, y);
-      ctx.lineTo(x + sx * L, y);
-      ctx.stroke();
-    }
-    ctx.restore();
   }
 
   private text(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, size: number, color: string, o: { weight?: number; align?: CanvasTextAlign; max?: number; font?: string } = {}) {
@@ -681,24 +766,49 @@ export class FighterCard {
     const head = this.d.label ? fs * 1.7 : 0;
     const ns = compact ? Math.max(9, w * 0.095) : Math.max(10, w * 0.056); // the alias's size
     const foot = ns * 1.75; // its strip at the bottom
-    this.background(ctx, now, w / 2, h * 0.5, w * 0.95);
     // a little headroom: the head clear of the frame (or of the label's strip)
     const room = Math.max(4, Math.round(h * 0.045));
-    this.art(ctx, 0, head, w, h - head, full ? 'full' : 'bottom', room);
-    // the card's lower part a little darker, so the weapon in its skin and the alias stand out (the owner:
-    // «оружие / скины сильнее выделить — снизу затемнить градиентом немного карточки»)
     const squat = h / w < 1.25;
-    const g0 = h * (squat ? 0.56 : full ? 0.55 : 0.48);
-    const shade = ctx.createLinearGradient(0, g0, 0, h);
-    shade.addColorStop(0, 'rgba(10,8,7,0)');
-    shade.addColorStop(0.5, 'rgba(10,8,7,0.5)');
-    shade.addColorStop(1, 'rgba(10,8,7,0.92)');
-    ctx.fillStyle = shade;
-    ctx.fillRect(0, g0, w, h - g0);
+    // under the weapon: the card's colours and the art (which covers them once it is in), its lower part darker
+    const under = (g: CanvasRenderingContext2D) => {
+      this.background(g, now, w / 2, h * 0.5, w * 0.95);
+      this.art(g, 0, head, w, h - head, full ? 'full' : 'bottom', room);
+      // the card's lower part a little darker, so the weapon in its skin and the alias stand out (the owner:
+      // «оружие / скины сильнее выделить — снизу затемнить градиентом немного карточки»)
+      const g0 = h * (squat ? 0.56 : full ? 0.55 : 0.48);
+      const shade = g.createLinearGradient(0, g0, 0, h);
+      shade.addColorStop(0, 'rgba(10,8,7,0)');
+      shade.addColorStop(0.5, 'rgba(10,8,7,0.5)');
+      shade.addColorStop(1, 'rgba(10,8,7,0.92)');
+      g.fillStyle = shade;
+      g.fillRect(0, g0, w, h - g0);
+    };
+    // over it: the label, the grade, the level, the alias (and a legendary skin's eliminations), the frame
+    const over = (g: CanvasRenderingContext2D) => {
+      if (this.d.label) this.header(g, fs);
+      if (!compact) this.ribbon(g, 0, head + w * 0.035, Math.max(7, w * 0.046));
+      if (!this.mini) {
+        this.levelBadge(g, w - w * 0.035, head + w * 0.035, Math.max(9, w * (compact ? 0.07 : 0.06)));
+        // the alias: small, bottom left; a legendary skin's eliminations at the right
+        const y = h - foot * 0.42;
+        const pad = w * 0.06;
+        const counter = skinPerks(this.d.finish)?.counter && typeof this.d.kills === 'number' ? `★ ${this.d.kills}` : '';
+        let max = w - pad * 2;
+        if (counter) {
+          this.text(g, counter, w - pad, y, ns * 0.9, '#f2d27a', { weight: 600, align: 'right' });
+          max -= this.measure(g, counter, ns * 0.9, 600) + pad * 0.6;
+        }
+        this.text(g, this.d.name, pad, y, ns, BEIGE, { weight: 600, max });
+      }
+      this.frameStill(g);
+    };
+    // a moving card copies both from its layers (once its art is in); a still one is drawn straight
+    const d = this.d;
+    const cache = this.moves() && loaded.has(artSrc(d.character, full));
+    const u = cache ? this.layer('under', `${d.character}|${d.finish ?? ''}|${full}|${head}|${room}`, under) : null;
+    if (u) this.paste(ctx, u);
+    else under(ctx);
     this.legendFx(ctx, now, 0, head, w, h - head);
-    if (this.d.label) this.header(ctx, fs);
-    if (!compact) this.ribbon(ctx, 0, head + w * 0.035, Math.max(7, w * 0.046));
-    if (!this.mini) this.levelBadge(ctx, w - w * 0.035, head + w * 0.035, Math.max(9, w * (compact ? 0.07 : 0.06)));
     // the weapon: the lower right corner, its butt towards the middle, the muzzle up to the right; on a squat card
     // (the phone's kit: the portrait cut at the chest, the face low and to the right) a little smaller, lower left
     const ww = w * (squat ? 0.66 : compact ? 0.74 : 0.6);
@@ -708,18 +818,10 @@ export class FighterCard {
     const cy = this.mini ? h - w * 0.05 - bh / 2 : h - foot - bh / 2 + bh * 0.08;
     this.weaponSpot(ctx, now, cx, cy, ww);
     this.weapon(ctx, now, cx, cy, ww, tilt);
-    if (this.mini) return this.frame(ctx, now);
-    // the alias: small, bottom left; a legendary skin's eliminations at the right
-    const y = h - foot * 0.42;
-    const pad = w * 0.06;
-    const counter = skinPerks(this.d.finish)?.counter && typeof this.d.kills === 'number' ? `★ ${this.d.kills}` : '';
-    let max = w - pad * 2;
-    if (counter) {
-      this.text(ctx, counter, w - pad, y, ns * 0.9, '#f2d27a', { weight: 600, align: 'right' });
-      max -= this.measure(ctx, counter, ns * 0.9, 600) + pad * 0.6;
-    }
-    this.text(ctx, this.d.name, pad, y, ns, BEIGE, { weight: 600, max });
-    this.frame(ctx, now);
+    const o = cache ? this.layer('over', `${d.label ?? ''}|${d.labelColor ?? ''}|${d.finish ?? ''}|${d.level ?? ''}|${d.bot ? 1 : 0}|${d.name}|${d.kills ?? ''}`, over) : null;
+    if (o) this.paste(ctx, o);
+    else over(ctx);
+    this.frameLight(ctx, now);
   }
 
   /**

@@ -86,7 +86,9 @@ html.rot #game, html.rot .ui { inset: auto; top: 0; left: 0; width: var(--rot-h,
   .panes--tablet[data-pane='c'] [data-pane-of]:not([data-pane-of~='c']),
   .panes--tablet[data-pane='d'] [data-pane-of]:not([data-pane-of~='d']) { display: none !important; }
 }
-.screen::after { content: ''; position: fixed; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px); mix-blend-mode: multiply; }
+/* v0.2.24: no blend mode — black lines multiplied over the page darken it exactly as they do laid over it, and a
+   blend mode made the browser blend the whole screen as a group on every frame of the game behind it */
+.screen::after { content: ''; position: fixed; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px); }
 .wrap { width: 100%; max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; flex: 1; }
 .wrap--wide { max-width: 1200px; }
 
@@ -2978,9 +2980,8 @@ button.cardslot:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px;
 .chars button.chargrade--legendary, .fcoll__char.chargrade--legendary { position: relative; }
 .chars button.chargrade--legendary::before, .fcoll__char.chargrade--legendary::before, .dossier__hero--legend::after {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
-  background: linear-gradient(105deg, transparent 38%, rgba(255, 228, 156, .42) 50%, transparent 62%) no-repeat;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 228, 156, .3) 50%, transparent 62%) no-repeat;
   background-size: 300% 100%; background-position: 150% 0;
-  mix-blend-mode: screen;
   animation: legend-sheen 4.6s ease-in-out infinite;
 }
 .fcoll__char.chargrade--legendary::before { animation-delay: .8s; }
@@ -3033,11 +3034,14 @@ button.cardslot:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px;
   .lobby .rchat__input, .lobby .rchat__send, .rchat .rchat__qbtn { min-height: 44px; }
   .range, .screen--settings .range, .settings .setslider > .range { height: 44px; }
   .panes > .panetabs button { min-height: 44px; }
-  :where(.footer a, .footer .linkish)::after { inset: -27px -12px -2px; }
-  :where(.linkish)::after { inset: -25px -8px -2px; }
   :where(.kitcard__view) { position: absolute; }
   :where(.kitcard__view)::after { content: ''; position: absolute; inset: -14px -10px -14px -6px; }
   .kitcard__who { min-height: 44px; }
+}
+/* an upright phone: the footer's links sit on its second line, under its own first line — their tap area grows
+   over that line (nothing to tap there), not into the menu above */
+@media (pointer: coarse) and (max-width: 560px) {
+  :where(.footer a, .footer .linkish)::after { inset: -27px -12px -2px; }
 }
 /* ── v0.2.24: a computer's narrow window (761–999 px wide: 800×600, 900×700, 960×640) — the characters and practice
    on one screen. The characters as on a phone held sideways (the crew on the left, the short file and the
@@ -3110,4 +3114,29 @@ button.cardslot:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px;
   .screen--kon .kon__actions .btn { min-height: 46px; }
   .screen--kon .kon__rating b { font-size: 26px; }
   .screen--kon .kon__note { display: none; }
+}
+/* ── v0.2.24: the story hub on a phone held sideways. The full run measured it: at 844×390 the campaign took half
+   the width (the two-campaign grid of a wide window with one campaign hidden) and its missions 0 px — none in
+   view. Now: «Пролог» and «Картотека» beside the campaign tabs (the premise is the prologue's), the campaign in two
+   columns — its head and chapters on the left, its missions scrolling down the whole right side — and the finale
+   one line ── */
+@container ui (orientation: landscape) and (max-height: 500px) {
+  .screen--story .story { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr); gap: 12px 10px; }
+  .screen--story .story > * { grid-column: 1 / -1; }
+  .screen--story .story > .panetabs { grid-column: 1; margin: 0; }
+  .screen--story .story__intro { display: contents; }
+  .screen--story .story__intro > .tag, .screen--story .story__lead { display: none; }
+  .screen--story .story__btns { grid-column: 2; grid-row: 1; flex-wrap: nowrap; align-items: stretch; }
+  .screen--story .story__btns .btn { flex: none; min-height: 0; }
+  .screen--story .story__camps { grid-row: 2; grid-template-columns: minmax(0, 1fr); }
+  .screen--story .scamp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); grid-template-rows: auto minmax(0, 1fr); gap: 8px 12px; padding-top: 18px; }
+  .screen--story .scamp > .scamp__head { grid-column: 1; grid-row: 1; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 8px; }
+  .screen--story .scamp__head > img { width: 44px; height: 44px; }
+  .screen--story .scamp__title { font-size: 20px; }
+  .screen--story .scamp__progress b { font-size: 22px; }
+  .screen--story .scamp__tagline, .screen--story .scamp__reward { display: none; }
+  .screen--story .scamp > .scamp__chapters { grid-column: 1; grid-row: 2; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; }
+  .screen--story .scamp > .smissions, .screen--story .scamp > .scamp__soon { grid-column: 2; grid-row: 1 / -1; min-height: 0; }
+  .screen--story .story__finale { padding: 14px 14px 8px; }
+  .screen--story .story__finale .muted { display: none; }
 }

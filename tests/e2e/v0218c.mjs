@@ -171,7 +171,8 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('[data-testid=blats-tab] .packrow').length >= 6, null, { timeout: 15000 }).catch(() => {});
   const rows = await page.locator('[data-testid=blats-tab] .packrow').evaluateAll((els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
   const prices = await page.locator('[data-testid=blats-tab] [data-testid^=stars-b]').allInnerTexts();
-  check(prices.join('|') === ['⭐ 75', '⭐ 150', '⭐ 375', '⭐ 750', '⭐ 1 500', '⭐ 3 750'].join('|') || prices.map((p) => p.replace(/\s/g, '')).join('|') === '⭐75|⭐150|⭐375|⭐750|⭐1500|⭐3750', `six packs priced in Stars: ${prices.join(', ')}`);
+  // v0.2.24: ten packs (299, 599, 699 and 799 BLATS added, so that every price in the game is exactly one pack)
+  check(prices.map((p) => p.replace(/\s/g, '')).join('|') === '⭐75|⭐150|⭐225|⭐375|⭐450|⭐525|⭐600|⭐750|⭐1500|⭐3750', `ten packs priced in Stars: ${prices.join(', ')}`);
   check(rows.every((r) => !/\$/.test(r)), 'no dollar price inside Telegram');
   const terms = await page.getByTestId('terms-link').getAttribute('href');
   check(/terms-ru\.html(\?|$)/.test(terms ?? ''), `the terms of purchase are a tap away (${terms})`);

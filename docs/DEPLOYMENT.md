@@ -73,6 +73,7 @@ Copy `.env.example` to `.env` and set at least:
 | `TELEGRAM_WEB_LOGIN` | `true`: «sign in with Telegram» on the website (needs the bot token and the bot's `/setdomain`); the Mini App signs in by itself either way |
 | `RESEND_API_KEY` + `MAIL_FROM` | optional: password-reset letters (Resend; the sender domain must be verified there). Without them admins issue one-time reset links in `/admin` |
 | `CASES_ENABLED` | `true` (default) / `false` — every case: the rare-weapon case (talons), the skin case and the character case (BLATS, 18+); off for markets where paid random items are restricted |
+| `PASS_SEASON_ID`, `PASS_SEASON_START`, `PASS_SEASON_WEEKS` | v0.2.24 — the Season Pass ([ECONOMY.md](ECONOMY.md) §4e): the season's name (a short slug, `s1`), its first moment (ISO 8601 in UTC, `YYYY-MM-DDTHH:MM:SSZ`) and its weeks (1–12, default 4). **Unset: the pass is not sold** (the Arsenal says the first season is coming); the owner sets the date. The next season: a new name and start |
 | `WELCOME_GIFT_UNTIL` | v0.2.18 part 2 — optional ISO date (e.g. `2027-01-31T23:59:59Z`): players who sign in before it get the welcome gift («Shark», «Blatkom ’89» on every weapon) and keep it; **unset: the gift has no end yet** (the owner sets the date) |
 | `WELCOME_BONUS_BLATS` | v0.2.20 — BLATS a guest account gets once for registering (an email, or a sign-in provider on the website); default `199`, `0` switches the bonus off ([ECONOMY.md](ECONOMY.md) §5b). Promo codes (BLATNOY …) live in the `promo_codes` table, not in the environment |
 | `HOUSE_PLAYERS` | v0.2.20 — house players: accounts the game keeps itself in the player tables (Top-100), with natural aliases and slowly moving numbers, left out of the dashboard's metrics, tables and exports, the tournament and every reward (default `240`, at most 500; `0`: none are added and the ones there leave the tables). Nobody can sign in to one |
@@ -185,3 +186,14 @@ Migration `023_blats.sql` only adds (a column and two unique indexes) and runs b
 - The game's protocol is 10 (the sprint button and the breath in the snapshot): a page opened before the update
   is asked to reload, as after every protocol change.
 
+## v0.2.24: what the update changes on the server
+
+- Migration **030** (`030_season_pass.sql`) only adds: the tables `pass_purchases` and `pass_drops`, the item
+  source `pass` and the ledger reason `pass` (the two checks keep every value they had). It runs by itself on
+  start; nothing is changed or removed.
+- **The Season Pass starts when the season is set**: on Render → Environment add `PASS_SEASON_ID=s1`,
+  `PASS_SEASON_START=<the first moment, ISO 8601, UTC>` and, if not four, `PASS_SEASON_WEEKS`; save — the service
+  restarts. Until then the pass is shown as «coming» and not sold. It is sold only while `CASES_ENABLED` is on.
+- The protocol is unchanged (no reload asked of open pages beyond the usual new-build refresh).
+- Nothing else to do on the server: the client's changes (the cards, the pass's screens, the story hub on a phone
+  held sideways, the cheaper card drawing) arrive with the new build.

@@ -1054,7 +1054,7 @@ export const RU: Record<string, string> = {
   '{weeks} weeks · until {date}': '{weeks} нед. · до {date}',
   'The first season is coming': 'Первый сезон — скоро',
   'No repeats — only what you don’t have yet. Skins and characters change the look, never the numbers.': 'Без повторов — только то, чего у тебя ещё нет. Скины и персонажи меняют вид, не цифры.',
-  'Every week of the season: a skin and a character you don’t have yet, drawn with the cases’ odds (listed below). Bought mid-season, the weeks gone by open at once. The purchase is final.': 'Каждую неделю сезона — скин и персонаж, которых у тебя ещё нет, с шансами кейсов (они ниже). Купил посреди сезона — прошедшие недели откроются сразу. Покупка окончательная.',
+  'Every week of the season: a skin and a character you don’t have yet, drawn with the cases’ odds («Odds» on the card). Bought mid-season, the weeks gone by open at once. The purchase is final.': 'Каждую неделю сезона — скин и персонаж, которых у тебя ещё нет, с шансами кейсов (кнопка «Шансы» на карточке). Купил посреди сезона — прошедшие недели откроются сразу. Покупка окончательная.',
   'Buy the Season Pass for {n} BLATS ({usd})?': 'Купить сезонный пропуск за {n} BLATS ({usd})?',
   'Each week gives one skin and one character, each drawn exactly as the skin case and the crew case draw them — the same odds, no repeats. With nothing of a kind left, that half gives {n} BLATS.': 'Каждая неделя даёт один скин и одного персонажа — ровно так, как их выдают кейс скинов и кейс братвы: те же шансы, без повторов. Если давать уже нечего, эта половина недели — {n} BLATS.',
   'Open the ready week': 'Открыть готовую неделю',

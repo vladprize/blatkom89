@@ -256,6 +256,46 @@ mark) and how many weapon skins of each grade they own (the welcome gift isn't c
 `GET /api/friends/:id/collection` — friends only (`403 not_friends`), read only. The lobby shows each
 player's character with its grade's colour.
 
+## 4e. The Season Pass (v0.2.24)
+
+The owner: «Season Pass за $3, где каждую неделю ему что-то выпадает. Один скин, один персонаж»
+(`packages/shared/src/game-rules/pass.ts`, the server in `economy/repo.ts`, the Arsenal's card in `ui/screens/shop.ts`
+and `ui/pass.ts`).
+
+* **The price:** `PASS_PRICE` — **299 BLATS ($2.99)**, exactly one pack; bought for BLATS like everything else
+  (inside Telegram the BLATS themselves are bought for Stars — §5), once per season and player.
+* **What it gives:** every week of the season **one weapon skin and one character the player doesn't have yet**,
+  drawn exactly as the skin case and the crew case draw them (`drawSkin`, `drawCharacter`: the same odds, shown
+  before the purchase — `passOdds`; no duplicates; never a free or a talon character). A half of a week with
+  nothing left to give (every character owned, every skin of the case owned) gives **50 BLATS** instead
+  (`PASS_FALLBACK_BLATS`; four weeks of nothing but BLATS come to 400 — less than two passes, so a full collection
+  never makes money). Skins and characters change the look, never the numbers.
+* **The weeks:** a week is ready from its first day; a player who buys mid-season gets the weeks gone by at once (the
+  purchase opens them straight away); the player opens a ready week when they like and the server draws it then
+  (`POST /api/pass/claim` — every ready week of every pass the player has, each once: the player's row is locked
+  and `(user, season, week)` is the key of `pass_drops`, so a retried or doubled request never gives a week
+  twice). The drops stay the player's for good; weeks not opened during the season can be opened after it.
+  A new skin goes on its weapon at once when that weapon wears none.
+* **The season:** its name, first moment and length come from the server's configuration — `PASS_SEASON_ID`
+  (a short slug, e.g. `s1`), `PASS_SEASON_START` (ISO 8601) and `PASS_SEASON_WEEKS` (1–12, default 4); **no date
+  is invented in the code**, and with no season set the pass is not sold (the card says «the first season is
+  coming»). The pass is on sale from the season's first moment to its end. A purchase keeps the schedule it
+  was bought under (`pass_purchases.season_start`, `weeks`), so setting the next season never takes an old
+  pass's weeks away; a new season is a new `PASS_SEASON_ID`.
+* **Paid random items:** the rules of §4b apply — the odds shown before buying, **«I am 18 or older»**
+  (`confirmAge: true`, else `400 confirm_age`), and `CASES_ENABLED=false` stops the sale (`403 cases_disabled`);
+  a pass already paid for still opens its weeks then.
+* **Where:** the Arsenal's «Кейсы» (first, above the cases) and the BLATS tab under the packs — the season's weeks
+  and dates, «Купить за 299», «Открыть готовую неделю», «Следующая неделя: …»; the weeks opened show as fighter
+  cards (the new character holding the new skin). The menu marks the Arsenal's tile «★ N» while N weeks are
+  ready, and the tile opens the cases then.
+* **API:** `GET /api/pass` (the season, `owned`, `onSale`, the weeks with their dates and drops, `ready`),
+  `POST /api/pass/buy` `{ confirmAge: true }`, `POST /api/pass/claim`; the season in `GET /api/shop/config`
+  (`pass`). Refusals: `pass_closed` (no season or not on now), `owned`, `funds`, `level`.
+* **Records:** `pass_purchases` and `pass_drops` (migration 030); the BLATS a ledger row `purchase` with
+  ref `pass:<season>`, the fallback BLATS `pass` rows (`pass:<season>:w<week>`); the items `user_items` with source
+  `pass`; analytics `shop_purchase` (kind `pass`) and `pass_week_opened` (season, week, the grades, BLATS).
+
 ## 5. Buying BLATS
 
 `DIAMOND_PACKS`: **99 / 199 / 299 / 499 / 599 / 699 / 799 / 999 / 1 999 / 4 999 BLATS for $0.99 / $1.99 /
@@ -392,6 +432,16 @@ nothing of the kind). Nothing was deleted from the database: `profiles.blat`, th
 talons (§6).
 
 ## 9. Tests
+
+v0.2.24: `packages/shared/src/__tests__/pass.test.ts` (299 = one pack; the weeks before, during and after a season,
+a buyer in week 3 gets weeks 1–3, a broken date sells nothing; a week gives a skin and a character not owned, never
+a free one; BLATS for a half with nothing left; the odds are the cases'), server `economy/pass.test.ts` (the season
+in the shop config; the 18+ confirmation, no money, one pass a season, the ledger row; the ready weeks open once —
+also two requests at once a week later; every character owned → 50 BLATS a ledger row each; not sold before or
+after its season, an old pass still opens every week; `CASES_ENABLED=false` stops the sale, not the weeks paid
+for; nothing without a session), `skins.test.ts` (every legendary finish live), `economy.test.ts`,
+`bundles.test.ts`, `ui/blats.test.ts` (the v0.2.24 prices, every price exactly one pack and ending in .99);
+browser: `tests/e2e/v0224.mjs` (the pass bought on a computer, the weeks as cards; a phone from the menu's mark).
 
 v0.2.23: `packages/shared/src/__tests__/bundles.test.ts` (every epic and legendary character for BLATS has a set,
 each legendary finish once, cheaper than apart, at most 999; refusals), `skins.test.ts` (the filled players'

@@ -1091,7 +1091,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
   const buyPass = () =>
     confirmCase(
       PASS_PRICE,
-      t('Every week of the season: a skin and a character you don’t have yet, drawn with the cases’ odds (listed below). Bought mid-season, the weeks gone by open at once. The purchase is final.'),
+      t('Every week of the season: a skin and a character you don’t have yet, drawn with the cases’ odds («Odds» on the card). Bought mid-season, the weeks gone by open at once. The purchase is final.'),
       async () => {
         passSt = await online!.buyPass();
         sfx.play('buy');

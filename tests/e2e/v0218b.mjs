@@ -4,7 +4,7 @@
 //  • the welcome gift for early players: «Shark» and «Blatkom ’89» on all 32 weapons (64 skins, no item
 //    rows), told once in a toast — in English and in Russian;
 //  • the character screen: 36 characters, the new ones locked with their grades and prices (Kasatik:
-//    legendary, 1 099 BLATS) — on a phone 6 × 6 portraits and the summary on one screen;
+//    legendary, 699 BLATS since v0.2.24) — on a phone 6 × 6 portraits and the summary on one screen;
 //  • the Arsenal's cases: the weapon case, the skin case and the new character case (299 BLATS); without
 //    BLATS it sends to «Buy BLATS»; with them it asks «I am 18 or older», reveals a character sold for BLATS
 //    (the art, the grade), the character is in the crew, the opening and its 299 BLATS are on the server;
@@ -137,7 +137,8 @@ try {
   await A.page.locator('.chars button', { hasText: 'Kasatik' }).click();
   await A.page.waitForFunction(() => /Kasatik/.test(document.querySelector('.dossier')?.textContent ?? ''), null, { timeout: 5000 });
   const file = (await A.page.locator('.dossier').innerText()).replace(/\s+/g, ' ');
-  check(tiles === 36 && lockedNew === 12 && /Legendary/i.test(file) && /1[\s,.]?099/.test(file), `36 characters; the twelve new ones locked; Kasatik's file: legendary, 1 099 BLATS («${file.slice(0, 90)}…»)`);
+  // v0.2.24: a legendary character 699 BLATS ($6.99; was 1 099)
+  check(tiles === 36 && lockedNew === 12 && /Legendary/i.test(file) && /699/.test(file) && !/1[\s,.]?099/.test(file), `36 characters; the twelve new ones locked; Kasatik's file: legendary, 699 BLATS («${file.slice(0, 90)}…»)`);
   await A.page.screenshot({ path: `${outDir}/chars_desktop.png` });
   await B.page.evaluate(() => window.__blatkom.app.showCharacters());
   await B.page.locator('.chars button').first().waitFor({ timeout: 15000 });
@@ -177,7 +178,7 @@ try {
   const invA = await A.page.evaluate(() => window.__blatkom.app.online.inventory);
   const got = invA.characters.filter((c) => !['petya', 'valuta'].includes(c));
   const rows = await sql`SELECT kind, character_id, rarity, price, currency FROM case_openings WHERE user_id = ${A.id}`;
-  check(heroOk && got.length === 1 && invA.diamonds === 801 && rows.length === 1 && rows[0].kind === 'character' && rows[0].character_id === got[0] && rows[0].price === 199, `revealed «${reveal.slice(0, 60)}» with the art: ${got[0]} joins the crew, 299 BLATS spent, recorded on the server`);
+  check(heroOk && got.length === 1 && invA.diamonds === 801 && rows.length === 1 && rows[0].kind === 'character' && rows[0].character_id === got[0] && rows[0].price === 199, `revealed «${reveal.slice(0, 60)}» with the art: ${got[0]} joins the crew, 199 BLATS spent (v0.2.24), recorded on the server`);
   await A.page.screenshot({ path: `${outDir}/char_reveal.png` });
   // B (phone): the three cases on the case chip; the odds sheet
   await sql`UPDATE profiles SET diamonds = 500 WHERE user_id = ${B.id}`;
@@ -207,7 +208,9 @@ try {
   const kas = await A.page.locator('[data-testid=friend-collection] .fcoll__char.chargrade--legendary[data-owned=true]').count();
   const leg = await A.page.locator('[data-testid=friend-collection] .fcoll__skin[data-grade=legendary] b').innerText();
   check(/Characters: 3 of 36/i.test(coll) && kas === 1 && leg.trim() === '1', `A sees B's collection: 3 of 36 characters (the legendary one in colour), 1 legendary skin («${coll.slice(0, 80)}»)`);
-  // v0.2.23: B's fighter card at the top — the main weapon of B's kit
+  // v0.2.23: B's fighter card at the top — the main weapon of B's kit. v0.2.24: the card is sized to its box once the
+  // box is laid out (a frame later — seconds on the stand's software GPU), so the test waits for it
+  await A.page.waitForSelector('[data-testid=friend-card] canvas[data-testid=fighter-card]', { timeout: 15000 }).catch(() => {});
   const fcard = await A.page.evaluate(() => {
     const c = document.querySelector('[data-testid=friend-card] canvas[data-testid=fighter-card]');
     return c ? { character: c.dataset.character, weapon: c.dataset.weapon, w: Math.round(c.getBoundingClientRect().width) } : null;

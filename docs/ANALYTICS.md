@@ -29,7 +29,7 @@ occurred_at, received_at, platform, props jsonb)`.
 | `profile_created` | same, first login of a new user | `method` |
 | `email_linked` | `POST /api/auth/email/link` | — |
 | `identity_linked` | v0.3: `POST /api/auth/oauth/finish`, `POST /api/auth/telegram/web` — a provider attached to an existing account | `provider` (`google`, `facebook`, `discord`, `reddit`, `telegram`) |
-| `shop_purchase` | `POST /api/shop/buy` | `kind` (`weapon`\|`character`\|`gadget`), `item`, `currency`, `amount` |
+| `shop_purchase` | `POST /api/shop/buy`, `/api/shop/skin`, `/api/shop/bundle`, v0.2.24 `/api/pass/buy` | `kind` (`weapon`\|`character`\|`gadget`\|`skin`\|`bundle`\|`pass`), `item` (the pass: `pass:<season>`), `currency`, `amount` |
 | `mod_bought` | `POST /api/shop/mod` | `weapon`, `mod`, `cost` |
 | `case_opened` | `POST /api/shop/case`, `POST /api/shop/skin-case` (v0.23), `POST /api/shop/character-case` (v0.2.18 part 2) | `weapon`, `rarity`, `price`; skin case: `kind: skin`, `finish`; character case: `kind: character`, `character` (no `weapon`) |
 | `payment_completed` | payment webhook credited BLATS (the `diamonds` field — v0.2.18 BLATS keep the code name) | `provider`, `packId`, `diamonds`, `amountCents` |
@@ -43,6 +43,7 @@ occurred_at, received_at, platform, props jsonb)`.
 | `invite_created` | `POST /api/rooms` (private room) | `code`, `roomId` |
 | `story_started` | v0.2.13: `POST /api/story/start` — a ticket for an open mission | `mission` |
 | `story_completed` | v0.2.13: `POST /api/story/complete` — a mission reported done (once per report; `first`: its rewards were paid now) | `mission`, `ms`, `first` |
+| `pass_week_opened` | v0.2.24: `POST /api/pass/claim` — one week of a Season Pass opened (one event a week, drawn once) | `season`, `week`, `skinRarity`, `characterGrade` (null: BLATS given instead), `blats` |
 
 ### 2.2 Client events (`POST /api/events`, authenticated, ≤50 per batch, 30 req/min per user, 64 KB)
 
@@ -77,7 +78,7 @@ Canonical (source of truth): `users`, `profiles`, `sessions`, `matches`, `match_
 `player_achievements`, `invitations`, `analytics_events`, `app_errors`, `admin_*`, and since
 `005_economy_email.sql`: `currency_ledger` (every balance change with the balance after it),
 `user_items`, `weapon_mods`, `case_openings`, `payments`, `password_resets`, `visitors`,
-`visitor_days`. The economy panel and the funnel read these tables directly; the economy analytics
+`visitor_days`; v0.2.24: `pass_purchases`, `pass_drops` (the Season Pass). The economy panel and the funnel read these tables directly; the economy analytics
 events above are for event-level exploration only and are not used for the dashboard numbers.
 
 `user_daily_activity (user_id, day)` is a de-duplicated activity index: one row per user per UTC day

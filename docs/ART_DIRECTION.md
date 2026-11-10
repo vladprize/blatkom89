@@ -198,3 +198,22 @@ Drawn on a canvas at the screen's pixel ratio, so «Поделиться» sends
   (a screen reader still reads them from its description); the wide card keeps its text.
 * The same rules as everywhere: no real brands (two stripes, never three), no prison symbols or tattoos, no
   text in the pictures.
+* **Where the cards stand (v0.2.24** — the owner: «на главное меню, в ожидание подбора матча, ко всем аккаунтам,
+  когда смотришь друзей»): the menu (a computer from 1000 px: the player's card in its own column, as tall as
+  the window allows; a phone: a small card by the character's name — both open the card big), the wait for a
+  match (the player's card, a light running down it, while the server finds or opens a room), the lobby's
+  «Бойцы» (everyone in the room as cards, one row or two, a sideways strip on a phone with ten; the box takes only
+  the room the screen leaves and steps aside when there is none), a friend's profile (their card full height
+  beside the collection). `ui/cardSlot.ts` sizes a card to its box; `full` keeps the full-height picture on a small
+  card, `mini` drops the texts.
+* **Legendary characters move like legendary skins (v0.2.24** — «скины легендарных персонажей с анимацией, как и
+  легендарное оружие»): `game/render/legendLooks.ts` gives each its light — Аркадич gold dust rising, Касатик snow
+  drifting down, Пятак five-pointed glints in his red. On a card: a foil sheen sweeping over the picture every
+  few seconds, the motes over it and a light running round the frame in the character's colour; in a match: a
+  halo breathing at the feet and the motes round them (hidden in smoke, like the name); the character grid, a
+  friend's collection and the personal file sweep a light over their portraits. Only the look.
+* **Every legendary skin is live (v0.2.24):** the seven that stood still loop now — «Царский» (the rubies light
+  up in turn, a wave of light over the gold), «Контора» (a light along the gold lines, the stars twinkle in turn),
+  «Ядерная зима» (the sign turns a third a loop, the cracks pulse, the frost glitters), «Мастер шашлыка» (heat
+  and sparks), «Золотой унитаз» (the horizon ripples, a glint runs), the retired «Золото партии» and «Янтарь».
+  Each loop is seamless (a unit test compares its end with its start).

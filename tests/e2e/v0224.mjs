@@ -10,7 +10,8 @@
 //   the cases, the weeks opened there;
 //   the leftovers — the legendary skin's «★ N» on the match HUD's weapon panel, a phone's targets 44 px to a
 //   finger (the lobby's quick lines, the sliders, the profile's tabs), a computer window of 800×600 (the
-//   characters and the practice screen without scrolling).
+//   characters and the practice screen without scrolling); the story hub on a phone held sideways (its missions
+//   in view — the first full run found them 0 px tall).
 // The runner's server has a season started eight days ago (PASS_SEASON_* — the production one is the owner's
 // to set). BLATS are granted straight in the test database (DATABASE_URL).
 // Usage: DATABASE_URL=… node tests/e2e/v0224.mjs <baseUrl> <outDir>
@@ -34,6 +35,16 @@ const check = (ok, what) => {
 };
 const RUN = Math.random().toString(36).slice(2, 6);
 let n = 0;
+/** The screenshots go to the owner: without the sign-up's passing notes or the mouse resting on something. */
+const quiet = new WeakSet();
+async function shot(page, name) {
+  if (!quiet.has(page)) {
+    quiet.add(page);
+    await page.addStyleTag({ content: '.toast { visibility: hidden !important; }' }).catch(() => {});
+  }
+  await page.mouse.move(1, 1).catch(() => {});
+  await page.screenshot({ path: `${outDir}/${name}` });
+}
 
 /** A guest who has played before (no first-match hints or windows), with an alias; their user id. */
 async function open(viewport, o = {}) {
@@ -90,7 +101,7 @@ try {
   check(!!hero && hero.inView && hero.w >= 160 && hero.h >= hero.w * 1.3, `a computer's menu: the fighter card in its own column, whole and in view (${JSON.stringify(hero)}, ${heroFull})`);
   const mf = await fits(A.page);
   check(mf.v <= 2 && mf.h <= 0, `the menu still fits the window (${JSON.stringify(mf)})`);
-  await A.page.screenshot({ path: `${outDir}/pc_menu.png` });
+  await shot(A.page, `pc_menu.png`);
   await A.page.getByTestId('menu-hero').click();
   await A.page.getByTestId('card-viewer').waitFor({ timeout: 10000 });
   check(true, 'a tap on the menu\'s card opens it big');
@@ -110,7 +121,7 @@ try {
   const wait = await rect(A.page, '[data-testid=wait-card] canvas[data-testid=fighter-card]');
   const waitText = (await A.page.getByTestId('match-wait').innerText()).replace(/\s+/g, ' ').trim();
   check(!!wait && wait.inView && wait.w >= 150 && /Ищем матч/.test(waitText), `the wait for a match: the player's card and «${waitText}» (${JSON.stringify(wait)})`);
-  await A.page.screenshot({ path: `${outDir}/pc_wait.png` });
+  await shot(A.page, `pc_wait.png`);
   await A.page.waitForSelector('[data-testid=lobby-cards] canvas[data-testid=fighter-card]', { timeout: 30000 });
   await A.page.unroute('**/api/rooms/quick');
   await A.page.waitForTimeout(600);
@@ -121,7 +132,7 @@ try {
     return { cards: cs, off: row.parentElement.classList.contains('cardpanel--off'), rightOver: right.scrollHeight - right.clientHeight };
   });
   check(lob.cards.length === 1 && lob.cards[0] >= 80 && !lob.off && lob.rightOver <= 0, `the quick-match lobby: «Бойцы» with the player's card, the right column not scrolling (${JSON.stringify(lob)})`);
-  await A.page.screenshot({ path: `${outDir}/pc_lobby.png` });
+  await shot(A.page, `pc_lobby.png`);
   await A.page.evaluate(() => window.__blatkom.app.online.leave?.());
   await A.ctx.close();
 
@@ -129,7 +140,7 @@ try {
   const P = await open({ width: 390, height: 844 }, { phone: true });
   const mini = await rect(P.page, '[data-testid=menu-minicard] canvas[data-testid=fighter-card]');
   check(!!mini && mini.inView && mini.w >= 50, `a phone's menu: the small fighter card by the character's name (${JSON.stringify(mini)})`);
-  await P.page.screenshot({ path: `${outDir}/phone_menu.png` });
+  await shot(P.page, `phone_menu.png`);
   await P.page.evaluate(() => window.__blatkom.app.online.createRoom('factory', 'petya', 'ffa'));
   await P.page.waitForSelector('[data-testid=lobby-cards] canvas[data-testid=fighter-card]', { timeout: 30000 });
   await P.page.waitForTimeout(600);
@@ -139,7 +150,7 @@ try {
   });
   const pf = await fits(P.page);
   check(plob.cards.length === 1 && plob.cards[0] >= 50 && !plob.off && pf.v <= 0 && pf.h <= 0, `a phone's room: the fighters' card shown and the room on one screen (${JSON.stringify({ ...plob, ...pf })})`);
-  await P.page.screenshot({ path: `${outDir}/phone_lobby.png` });
+  await shot(P.page, `phone_lobby.png`);
   await P.page.evaluate(() => window.__blatkom.app.online.leave?.());
   await P.ctx.close();
 
@@ -159,7 +170,7 @@ try {
     return a !== b;
   };
   const legendMoves = await poster('kasatka');
-  await L.page.screenshot({ path: `${outDir}/pc_legend_card.png` });
+  await shot(L.page, `pc_legend_card.png`);
   const plainMoves = await poster('uchastkovy');
   check(legendMoves && !plainMoves, `a legendary character's card moves (Касатик: ${legendMoves}), a plain one with a plain weapon stands still (Участковый: ${plainMoves})`);
   await L.page.evaluate(() => window.__blatkom.app['startPractice']({ mapId: 'factory', bots: 1, difficulty: 'easy', gameMode: 'ffa', character: 'zvezda' }));
@@ -188,7 +199,7 @@ try {
     weeks: [...document.querySelectorAll('[data-testid=pass-weeks] .passweek')].map((w) => w.dataset.state),
   }));
   check(/299/.test(card.text) && /каждую неделю/i.test(card.text) && JSON.stringify(card.weeks) === JSON.stringify(['later', 'later', 'later', 'later']), `the pass's card in the cases: the price, a skin and a character a week, the four weeks with their dates («${card.text.slice(0, 120)}»)`);
-  await B.page.screenshot({ path: `${outDir}/pc_pass_card.png` });
+  await shot(B.page, `pc_pass_card.png`);
   await B.page.getByTestId('pass-buy').click();
   const confirmBtn = B.page.getByTestId('case-confirm');
   check(await confirmBtn.isDisabled(), 'buying asks for the 18+ confirmation first');
@@ -200,7 +211,7 @@ try {
     [...document.querySelectorAll('[data-testid=pass-reveal] .passdrop')].map((d) => ({ week: d.dataset.week, card: d.querySelector('canvas')?.dataset.character, finish: d.querySelector('canvas')?.dataset.finish, text: d.innerText.replace(/\s+/g, ' ') })),
   );
   check(rev.length === 2 && rev[0].week === '1' && rev[1].week === '2' && rev.every((r) => r.card && r.finish), `bought in its second week: weeks 1 and 2 open at once, each a fighter card — the new character with the new skin (${JSON.stringify(rev)})`);
-  await B.page.screenshot({ path: `${outDir}/pc_pass_reveal.png` });
+  await shot(B.page, `pc_pass_reveal.png`);
   await B.page.getByTestId('sheet-close').click();
   await B.page.waitForTimeout(500);
   const after = await B.page.evaluate(() => [...document.querySelectorAll('[data-testid=pass-weeks] .passweek')].map((w) => w.dataset.state));
@@ -215,7 +226,7 @@ try {
   );
   const again = await authed(B.page, '/api/pass/buy', { method: 'POST', body: JSON.stringify({ confirmAge: true }) });
   check(again.status === 409 && again.body?.error?.code === 'owned', `one pass a season (${again.status} ${again.body?.error?.code})`);
-  await B.page.screenshot({ path: `${outDir}/pc_pass_after.png` });
+  await shot(B.page, `pc_pass_after.png`);
   await B.ctx.close();
 
   // ── a phone with ready weeks: the menu's mark, the tile to the cases, the weeks opened there ───────
@@ -228,18 +239,18 @@ try {
   await Q.page.getByTestId('pass-ready').waitFor({ timeout: 20000 });
   const mark = (await Q.page.getByTestId('pass-ready').innerText()).trim();
   check(/2/.test(mark), `the menu marks the Arsenal: «${mark}»`);
-  await Q.page.screenshot({ path: `${outDir}/phone_pass_mark.png` });
+  await shot(Q.page, `phone_pass_mark.png`);
   await Q.page.getByTestId('arsenal-tile').click();
   await Q.page.getByTestId('pass-claim').waitFor({ timeout: 20000 });
   check(true, 'the tile opens the cases, the pass\'s «open» button there');
-  await Q.page.screenshot({ path: `${outDir}/phone_pass_card.png` });
+  await shot(Q.page, `phone_pass_card.png`);
   await Q.page.getByTestId('pass-claim').click();
   await Q.page.getByTestId('pass-reveal').waitFor({ timeout: 30000 });
   await Q.page.waitForTimeout(1000);
   const qn = await Q.page.locator('[data-testid=pass-reveal] .passdrop').count();
   const qside = await Q.page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
   check(qn === 2 && qside <= 0, `the phone opens both weeks, the sheet no wider than the screen (${qn}, ${qside})`);
-  await Q.page.screenshot({ path: `${outDir}/phone_pass_reveal.png` });
+  await shot(Q.page, `phone_pass_reveal.png`);
   await Q.ctx.close();
   // ── the leftovers: the HUD's «★ N», a phone's 44 px targets, an 800×600 window ───────────────────────
   const H = await open({ width: 1280, height: 720 });
@@ -253,7 +264,7 @@ try {
     return { text: c?.text ?? null, visible: !!c?.visible, skin: me?.skin ?? null };
   });
   check(star.skin === 'bratok' && /^★ \d+$/.test(star.text ?? '') && star.visible, `the match HUD's weapon panel shows a legendary skin's eliminations (${JSON.stringify(star)})`);
-  await H.page.screenshot({ path: `${outDir}/pc_hud_star.png` });
+  await shot(H.page, `pc_hud_star.png`);
   await H.page.evaluate(() => window.__blatkom.app.goMenu());
   await H.ctx.close();
 
@@ -268,7 +279,7 @@ try {
   }));
   const sf = await fits(S.page);
   check(chips.chips.length > 0 && chips.chips.every((h) => h >= 44) && chips.input >= 44, `a phone sideways, the lobby: the ready-made lines and the chat field 44 px and more to a finger (${JSON.stringify(chips)}, page ${JSON.stringify(sf)})`);
-  await S.page.screenshot({ path: `${outDir}/phone_land_lobby.png` });
+  await shot(S.page, `phone_land_lobby.png`);
   await S.page.evaluate(() => window.__blatkom.app.online.leave?.());
   await S.page.evaluate(() => window.__blatkom.app.goMenu());
   await S.page.evaluate(() => window.__blatkom.app.open('profile'));
@@ -277,6 +288,23 @@ try {
   const ltabs = await S.page.evaluate(() => [...document.querySelectorAll('.panetabs button')].filter((b) => b.getBoundingClientRect().width > 0).map((b) => Math.round(b.getBoundingClientRect().height)));
   const lpf = await fits(S.page);
   check(ltabs.length > 0 && ltabs.every((h) => h >= 44) && lpf.v <= 0, `a phone sideways, the profile: its tabs 44 px tall, the screen still one view (${JSON.stringify(ltabs)}, ${JSON.stringify(lpf)})`);
+  // the story hub sideways: the campaign the story's whole width, its missions in view (they had 0 px before),
+  // «Пролог» and «Картотека» in the tabs' row, one screen
+  await S.page.evaluate(() => window.__blatkom.app.goMenu());
+  await S.page.evaluate(() => window.__blatkom.app.story.show(true));
+  await S.page.waitForSelector('.screen--story .smissions', { timeout: 20000 });
+  await S.page.waitForTimeout(800);
+  const lstory = await S.page.evaluate(() => {
+    const story = document.querySelector('.screen--story .story').getBoundingClientRect();
+    const camp = [...document.querySelectorAll('.screen--story .scamp')].find((e) => e.getBoundingClientRect().height > 0)?.getBoundingClientRect();
+    const list = [...document.querySelectorAll('.screen--story .smissions')].find((e) => e.getBoundingClientRect().height > 0)?.getBoundingClientRect();
+    const tab = document.querySelector('.screen--story .panetabs').getBoundingClientRect();
+    const pro = document.querySelector('[data-testid=story-prologue]').getBoundingClientRect();
+    return { wide: camp ? Math.round((camp.width / story.width) * 100) : 0, list: list ? Math.round(list.height) : 0, row: Math.abs(Math.round(pro.top - tab.top)) };
+  });
+  const lsf = await fits(S.page);
+  check(lstory.wide >= 95 && lstory.list >= 120 && lstory.row <= 2 && lsf.v <= 0 && lsf.h <= 0, `a phone sideways, the story: the campaign the hub's width, its missions in view, «Пролог» beside the tabs, one screen (${JSON.stringify(lstory)}, ${JSON.stringify(lsf)})`);
+  await shot(S.page, `phone_land_story.png`);
   await S.ctx.close();
   const U = await open({ width: 390, height: 664 }, { phone: true });
   await U.page.evaluate(() => window.__blatkom.app.open('settings'));
@@ -285,7 +313,7 @@ try {
   const sliders = await U.page.evaluate(() => [...document.querySelectorAll('.range')].filter((r) => r.getBoundingClientRect().width > 0).map((r) => Math.round(r.getBoundingClientRect().height)));
   const uf = await fits(U.page);
   check(sliders.length > 0 && sliders.every((h) => h >= 44) && uf.v <= 0, `a 390×664 phone, the settings: the sliders 44 px tall, the screen one view (${JSON.stringify(sliders)}, ${JSON.stringify(uf)})`);
-  await U.page.screenshot({ path: `${outDir}/phone_settings.png` });
+  await shot(U.page, `phone_settings.png`);
   await U.page.evaluate(() => window.__blatkom.app.goMenu());
   await U.page.evaluate(() => window.__blatkom.app.open('profile'));
   await U.page.waitForSelector('.panetabs button', { timeout: 15000 });
@@ -301,7 +329,7 @@ try {
     if (scr !== 'menu') await W8.page.evaluate((x) => window.__blatkom.app.open(x), scr);
     await W8.page.waitForTimeout(1200);
     small[scr] = (await fits(W8.page)).v;
-    await W8.page.screenshot({ path: `${outDir}/pc800_${scr}.png` });
+    await shot(W8.page, `pc800_${scr}.png`);
     if (scr !== 'menu') await W8.page.evaluate(() => window.__blatkom.app.goMenu());
   }
   check(Object.values(small).every((v) => v <= 0), `an 800×600 window: the menu, the characters, practice, play with friends and the tournament without scrolling (${JSON.stringify(small)})`);

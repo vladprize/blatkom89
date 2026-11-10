@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.23"),
+  SERVER_VERSION: external_exports.string().default("0.2.24"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -7826,6 +7826,14 @@ var EnvSchema = external_exports.object({
    * owner sets the date when the window should close; players who got the gift keep it.
    */
   WELCOME_GIFT_UNTIL: external_exports.coerce.date().optional(),
+  /**
+   * v0.2.24: the Season Pass (game-rules/pass.ts) — the season's name (a short slug, e.g. s1), its first moment
+   * (ISO 8601, e.g. 2026-12-01T09:00:00Z) and its length in weeks. The pass is sold only while a season with
+   * both a name and a start is on; the owner sets them — no date is invented. A new season is a new name.
+   */
+  PASS_SEASON_ID: external_exports.string().regex(/^[a-z0-9-]{1,16}$/, "a short slug: a-z, 0-9 and -").optional(),
+  PASS_SEASON_START: external_exports.coerce.date().optional(),
+  PASS_SEASON_WEEKS: external_exports.coerce.number().int().min(1).max(12).default(4),
   /**
    * v0.2.20: BLATS a guest account gets for registering (an email, or a sign-in provider on the website),
    * once per account (economy/bonuses.ts). 0 switches the bonus off.
@@ -7902,6 +7910,10 @@ function matchConfigFromEnv(env2) {
     minPlayers: env2.MATCH_MIN_PLAYERS,
     maxPlayers: env2.MATCH_MAX_PLAYERS
   };
+}
+function passSeasonOf(env2) {
+  if (!env2.PASS_SEASON_ID || !env2.PASS_SEASON_START || Number.isNaN(env2.PASS_SEASON_START.getTime())) return null;
+  return { id: env2.PASS_SEASON_ID, start: env2.PASS_SEASON_START.toISOString(), weeks: env2.PASS_SEASON_WEEKS };
 }
 
 // apps/server/src/logging/logger.ts
@@ -11397,13 +11409,13 @@ var FINISHES = Object.freeze({
   hohloma: { id: "hohloma", name: "Khokhloma", rarity: "epic" },
   elektronika: { id: "elektronika", name: "Elektronika", rarity: "epic" },
   led: { id: "led", name: "Ice Camo", rarity: "epic" },
-  carsky: { id: "carsky", name: "Tsar\u2019s", rarity: "legendary" },
-  kontora: { id: "kontora", name: "The Office", rarity: "legendary" },
-  yadernaya: { id: "yadernaya", name: "Nuclear Winter", rarity: "legendary" },
+  carsky: { id: "carsky", name: "Tsar\u2019s", rarity: "legendary", live: true },
+  kontora: { id: "kontora", name: "The Office", rarity: "legendary", live: true },
+  yadernaya: { id: "yadernaya", name: "Nuclear Winter", rarity: "legendary", live: true },
   bratok: { id: "bratok", name: "Golden Mobster", rarity: "legendary", live: true },
   korol: { id: "korol", name: "Rust King", rarity: "rare" },
   neon: { id: "neon", name: "Neon District", rarity: "epic" },
-  shashlyk: { id: "shashlyk", name: "Shashlik Master", rarity: "legendary" },
+  shashlyk: { id: "shashlyk", name: "Shashlik Master", rarity: "legendary", live: true },
   graffiti: { id: "graffiti", name: "Street Graffiti", rarity: "rare" },
   peklo: { id: "peklo", name: "Hellfire", rarity: "epic" },
   kilka: { id: "kilka", name: "Canned Fish", rarity: "epic" },
@@ -11418,7 +11430,7 @@ var FINISHES = Object.freeze({
   biohazard: { id: "biohazard", name: "Biohazard X", rarity: "epic" },
   obsidian: { id: "obsidian", name: "Obsidian Emperor", rarity: "legendary", live: true },
   borsch: { id: "borsch", name: "Borscht Edition", rarity: "epic" },
-  unitaz: { id: "unitaz", name: "Golden Toilet", rarity: "legendary" },
+  unitaz: { id: "unitaz", name: "Golden Toilet", rarity: "legendary", live: true },
   berezka: { id: "berezka", name: "Birch Camo", rarity: "common", retired: true },
   rzhavchina: { id: "rzhavchina", name: "Rust", rarity: "common", retired: true },
   zima: { id: "zima", name: "Winter", rarity: "common", retired: true },
@@ -11426,8 +11438,8 @@ var FINISHES = Object.freeze({
   gzhel: { id: "gzhel", name: "Gzhel", rarity: "rare", retired: true },
   pioner: { id: "pioner", name: "Pioneer", rarity: "rare", retired: true },
   malahit: { id: "malahit", name: "Malachite", rarity: "epic", retired: true },
-  zoloto: { id: "zoloto", name: "Party Gold", rarity: "legendary", retired: true },
-  yantar: { id: "yantar", name: "Amber", rarity: "legendary", retired: true }
+  zoloto: { id: "zoloto", name: "Party Gold", rarity: "legendary", retired: true, live: true },
+  yantar: { id: "yantar", name: "Amber", rarity: "legendary", retired: true, live: true }
 });
 var FREE_FINISHES = ["berezka", "rzhavchina"];
 var WELCOME_FINISHES = FINISH_IDS.filter((f2) => FINISHES[f2].gift);
@@ -11443,7 +11455,7 @@ var SKIN_PERKS = Object.freeze({
   epic: { shots: true, glow: true, killFx: "burst", cardBg: false, counter: false },
   legendary: { shots: true, glow: true, killFx: "grand", cardBg: true, counter: true }
 });
-var SKIN_PRICES = Object.freeze({ common: 99, rare: 199, epic: 299, legendary: 499 });
+var SKIN_PRICES = Object.freeze({ common: 99, rare: 99, epic: 199, legendary: 299 });
 function skinPrice(finish) {
   return SHOP_FINISHES.includes(finish) ? { currency: "diamonds", amount: SKIN_PRICES[FINISHES[finish].rarity], level: 1 } : null;
 }
@@ -11455,7 +11467,7 @@ function ownsSkin(owned, weapon, finish) {
 function isFinishId(v) {
   return typeof v === "string" && FINISH_IDS.includes(v);
 }
-var SKIN_CASE_PRICE = { currency: "diamonds", amount: 299, level: 1 };
+var SKIN_CASE_PRICE = { currency: "diamonds", amount: 199, level: 1 };
 var SKIN_RARITY_CHANCE = Object.freeze({ common: 40, rare: 30, epic: 20, legendary: 10 });
 var SKINNABLE_WEAPONS = WEAPON_IDS;
 function skinId(weapon, finish) {
@@ -11546,7 +11558,7 @@ var BLATS_PER_LEVEL = 10;
 function blatsForLevel(level) {
   return Number.isInteger(level) && level >= 2 ? BLATS_PER_LEVEL : 0;
 }
-var CHARACTER_GRADE_PRICES = Object.freeze({ common: 199, rare: 399, epic: 799, legendary: 1099 });
+var CHARACTER_GRADE_PRICES = Object.freeze({ common: 99, rare: 299, epic: 499, legendary: 699 });
 var FREE_WEAPONS = WEAPON_IDS.filter((w) => WEAPONS[w].tier === "base");
 var WEAPON_PRICES = {
   // four for talons from the start (the first one after about three matches)
@@ -11615,7 +11627,7 @@ function drawCase(owned, r) {
   }
   return left[left.length - 1];
 }
-var CHARACTER_CASE_PRICE = { currency: "diamonds", amount: 299, level: 1 };
+var CHARACTER_CASE_PRICE = { currency: "diamonds", amount: 199, level: 1 };
 var CHARACTER_CASE_CHANCE = Object.freeze({ common: 40, rare: 30, epic: 20, legendary: 10 });
 var CASE_CHARACTERS = CHARACTER_IDS.filter((c) => CHARACTER_PRICES[c]?.currency === "diamonds");
 function characterCaseOdds(owned) {
@@ -11643,7 +11655,11 @@ function drawCharacter(owned, rand) {
 var DIAMOND_PACKS = [
   { id: "b99", diamonds: 99, usdCents: 99 },
   { id: "b199", diamonds: 199, usdCents: 199 },
+  { id: "b299", diamonds: 299, usdCents: 299 },
   { id: "b499", diamonds: 499, usdCents: 499 },
+  { id: "b599", diamonds: 599, usdCents: 599 },
+  { id: "b699", diamonds: 699, usdCents: 699 },
+  { id: "b799", diamonds: 799, usdCents: 799 },
   { id: "b999", diamonds: 999, usdCents: 999 },
   { id: "b1999", diamonds: 1999, usdCents: 1999 },
   { id: "b4999", diamonds: 4999, usdCents: 4999 }
@@ -11712,7 +11728,8 @@ var REFUSAL_TEXT = {
   not_for_sale: "Not for sale",
   not_fit: "Doesn\u2019t fit this weapon",
   not_owned: "Buy the weapon first",
-  collection_complete: "The case collection is complete"
+  collection_complete: "The case collection is complete",
+  pass_closed: "The Season Pass is not on sale now"
 };
 var SHOP_WEAPONS = WEAPON_IDS.filter((w) => WEAPON_PRICES[w]);
 var SHOP_CHARACTERS = CHARACTER_IDS.filter((c) => CHARACTER_PRICES[c]);
@@ -11747,7 +11764,7 @@ var BUNDLE_FINISHES = Object.freeze({
   ezh: "yadernaya"
   // Igla, the mutant hedgehog — Nuclear Winter
 });
-var BUNDLE_PRICES = Object.freeze({ epic: 899, legendary: 999 });
+var BUNDLE_PRICES = Object.freeze({ epic: 599, legendary: 799 });
 function bundleOf(c) {
   const finish = BUNDLE_FINISHES[c];
   const grade = CHARACTERS[c]?.grade;
@@ -11762,6 +11779,35 @@ function bundleRefusal(inv, c) {
   if (inv.characters.includes(b2.character) || ownsSkin(inv.skins, b2.weapon, b2.finish)) return "owned";
   if (inv.diamonds < b2.price) return "funds";
   return null;
+}
+
+// packages/shared/src/game-rules/pass.ts
+var PASS_PRICE = { currency: "diamonds", amount: 299, level: 1 };
+var PASS_FALLBACK_BLATS = 50;
+var WEEK_MS = 7 * 864e5;
+function passEnd(season) {
+  return new Date(Date.parse(season.start) + season.weeks * WEEK_MS);
+}
+function passWeekStart(season, week) {
+  return new Date(Date.parse(season.start) + (week - 1) * WEEK_MS);
+}
+function passWeekAt(season, now) {
+  const t = now.getTime() - Date.parse(season.start);
+  if (!Number.isFinite(t) || t < 0) return 0;
+  return Math.min(season.weeks + 1, Math.floor(t / WEEK_MS) + 1);
+}
+function passOnSale(season, now) {
+  if (!season) return false;
+  const w = passWeekAt(season, now);
+  return w >= 1 && w <= season.weeks;
+}
+function passWeeksDue(season, now) {
+  return Math.max(0, Math.min(season.weeks, passWeekAt(season, now)));
+}
+function drawPassWeek(week, skins, characters, rand) {
+  const skin = drawSkin(skins, rand);
+  const character = drawCharacter(characters, rand);
+  return { week, skin, character, blats: (skin ? 0 : PASS_FALLBACK_BLATS) + (character ? 0 : PASS_FALLBACK_BLATS) };
 }
 
 // packages/shared/src/game-rules/match.ts
@@ -17331,7 +17377,7 @@ var SERVER_EVENT_PROPS = {
   match_abandoned: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), phase: external_exports.string() }),
   map_played: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS) }),
   invite_created: external_exports.object({ code: external_exports.string(), roomId: external_exports.string() }),
-  shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget", "skin", "bundle"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
+  shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget", "skin", "bundle", "pass"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
   mod_bought: external_exports.object({ weapon: external_exports.string(), mod: external_exports.string(), cost: external_exports.number().int() }),
   /** The weapon case and (v0.23) the skin case: `kind` skin carries the finish. */
   case_opened: external_exports.object({ weapon: external_exports.string().optional(), rarity: external_exports.enum(["common", "rare", "epic", "legendary"]), price: external_exports.number().int(), kind: external_exports.enum(["weapon", "skin", "character"]).optional(), finish: external_exports.string().max(24).optional(), character: external_exports.string().max(24).optional() }),
@@ -17341,7 +17387,9 @@ var SERVER_EVENT_PROPS = {
   identity_linked: external_exports.object({ provider: external_exports.enum(["google", "facebook", "discord", "reddit", "telegram"]), via: external_exports.enum(["code", "email", "widget"]).optional(), merged: external_exports.boolean().optional() }),
   /** v0.3 part 4: a story mission started / reported done (first: its rewards were paid now). */
   story_started: external_exports.object({ mission: external_exports.string().max(16) }),
-  story_completed: external_exports.object({ mission: external_exports.string().max(16), ms: external_exports.number().int(), first: external_exports.boolean() })
+  story_completed: external_exports.object({ mission: external_exports.string().max(16), ms: external_exports.number().int(), first: external_exports.boolean() }),
+  /** v0.2.24: a week of the Season Pass opened — what it gave (a grade, or none: BLATS instead). */
+  pass_week_opened: external_exports.object({ season: external_exports.string().max(16), week: external_exports.number().int(), skinRarity: external_exports.enum(["common", "rare", "epic", "legendary"]).nullable(), characterGrade: external_exports.enum(["common", "rare", "epic", "legendary"]).nullable(), blats: external_exports.number().int() })
 };
 var ClientEventEnvelopeSchema = external_exports.object({
   id: external_exports.string().uuid(),
@@ -17431,6 +17479,7 @@ var LoadoutRequest = external_exports.object({
   skins: external_exports.record(external_exports.enum(WEAPON_IDS), external_exports.enum(FINISH_IDS)).optional()
 }).strict();
 var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true).optional() }).strict();
+var PassBuyRequest = external_exports.object({ confirmAge: external_exports.literal(true).optional() }).strict();
 var SkinBuyRequest = external_exports.object({ weapon: external_exports.enum(WEAPON_IDS), finish: external_exports.enum(FINISH_IDS) }).strict();
 var BundleBuyRequest = external_exports.object({ character: external_exports.enum(CHARACTER_IDS) }).strict();
 var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card"]) }).strict();
@@ -18810,6 +18859,116 @@ var EconomyRepo = class {
       return { drop, equipped, inventory: await this.load(tx, userId, { ...wallet, [price.currency]: balance - price.amount, loadout }) };
     });
   }
+  // ── v0.2.24: the Season Pass (packages/shared/src/game-rules/pass.ts) ─────────────────────────────────
+  /**
+   * The pass as `userId` sees it: the configured season (`season`, null: none), whether they have its pass, its
+   * weeks (theirs, as bought) and how many weeks are ready to open — this season's and any older pass's.
+   */
+  async passState(userId, season, casesEnabled, now = /* @__PURE__ */ new Date(), tx = this.sql) {
+    const bought = await tx`SELECT season_id, season_start, weeks FROM pass_purchases WHERE user_id = ${userId}`;
+    const opened = await tx`SELECT season_id, week, skin_id, skin_rarity, character_id, character_grade, blats FROM pass_drops WHERE user_id = ${userId}`;
+    const mine = season ? bought.find((b2) => b2.season_id === season.id) : void 0;
+    let ready = 0;
+    for (const b2 of bought) {
+      const due = passWeeksDue(scheduleOf(b2), now);
+      ready += Math.max(0, due - opened.filter((d) => d.season_id === b2.season_id && d.week <= due).length);
+    }
+    const schedule = mine ? scheduleOf(mine) : season;
+    const weeks = [];
+    if (schedule) {
+      const due = mine ? passWeeksDue(schedule, now) : 0;
+      for (let w = 1; w <= schedule.weeks; w++) {
+        const d = mine ? opened.find((o) => o.season_id === mine.season_id && o.week === w) : void 0;
+        weeks.push({ week: w, opensAt: passWeekStart(schedule, w).toISOString(), due: w <= due, drop: d ? dropOf(d) : null });
+      }
+    }
+    return {
+      season: season ? { ...season, end: passEnd(season).toISOString() } : null,
+      onSale: casesEnabled && !mine && passOnSale(season, now),
+      owned: !!mine,
+      price: PASS_PRICE,
+      week: season ? passWeekAt(season, now) : 0,
+      weeks,
+      ready,
+      fallbackBlats: PASS_FALLBACK_BLATS,
+      casesEnabled
+    };
+  }
+  /** Buys the season's pass for BLATS (once a season, while it is on). Its weeks are opened with claimPass. */
+  async buyPass(userId, season, now = /* @__PURE__ */ new Date()) {
+    if (!season || !passOnSale(season, now)) throw new EconomyError("pass_closed");
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      if (inv.level < PASS_PRICE.level) throw new EconomyError("level");
+      const had = await tx`SELECT 1 FROM pass_purchases WHERE user_id = ${userId} AND season_id = ${season.id}`;
+      if (had.length) throw new EconomyError("owned");
+      if (wallet.diamonds < PASS_PRICE.amount) throw new EconomyError("funds");
+      await tx`INSERT INTO pass_purchases (user_id, season_id, season_start, weeks, price) VALUES (${userId}, ${season.id}, ${season.start}, ${season.weeks}, ${PASS_PRICE.amount})`;
+      await this.debit(tx, userId, "diamonds", PASS_PRICE.amount, wallet.diamonds, "purchase", `pass:${season.id}`);
+      this.log.info("season pass bought", { userId, season: season.id, amount: PASS_PRICE.amount });
+      return this.load(tx, userId, { ...wallet, diamonds: wallet.diamonds - PASS_PRICE.amount });
+    });
+  }
+  /**
+   * Opens every week that is ready and not opened yet, of every pass the player has: each gives a skin and a
+   * character they don't own (drawn now, the cases' odds) or BLATS for a half with nothing left. A new skin goes
+   * on its weapon when that weapon wears none. The player's row is locked and each week is a key in pass_drops,
+   * so a week gives once however often (or however concurrently) it is asked for.
+   */
+  async claimPass(userId, now = /* @__PURE__ */ new Date(), rand = secureRandom) {
+    return this.sql.begin(async (tx) => {
+      const wallet = await this.lockWallet(tx, userId);
+      const inv = await this.load(tx, userId, wallet);
+      const bought = await tx`SELECT season_id, season_start, weeks FROM pass_purchases WHERE user_id = ${userId} ORDER BY bought_at, season_id`;
+      const opened = await tx`SELECT season_id, week FROM pass_drops WHERE user_id = ${userId}`;
+      const done = new Set(opened.map((o) => `${o.season_id}#${o.week}`));
+      const skins = new Set(inv.skins);
+      const characters = new Set(inv.characters);
+      const drops = [];
+      let diamonds = wallet.diamonds;
+      const l = inv.loadout;
+      const wearing = { ...l.skins ?? {} };
+      let equipped = false;
+      for (const b2 of bought) {
+        const due = passWeeksDue(scheduleOf(b2), now);
+        for (let w = 1; w <= due; w++) {
+          if (done.has(`${b2.season_id}#${w}`)) continue;
+          const d = drawPassWeek(w, skins, characters, rand);
+          if (d.skin) {
+            const id = skinId(d.skin.weapon, d.skin.finish);
+            skins.add(id);
+            await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${id}, 'skin', 'pass') ON CONFLICT DO NOTHING`;
+            if (!wearing[d.skin.weapon]) {
+              wearing[d.skin.weapon] = d.skin.finish;
+              equipped = true;
+            }
+          }
+          if (d.character) {
+            characters.add(d.character.character);
+            await tx`INSERT INTO user_items (user_id, item_id, kind, source) VALUES (${userId}, ${d.character.character}, 'character', 'pass') ON CONFLICT DO NOTHING`;
+          }
+          await tx`
+            INSERT INTO pass_drops (user_id, season_id, week, skin_id, skin_rarity, character_id, character_grade, blats)
+            VALUES (${userId}, ${b2.season_id}, ${w}, ${d.skin ? skinId(d.skin.weapon, d.skin.finish) : null}, ${d.skin?.rarity ?? null}, ${d.character?.character ?? null}, ${d.character?.grade ?? null}, ${d.blats})`;
+          if (d.blats > 0) {
+            diamonds += d.blats;
+            await tx`UPDATE profiles SET diamonds = ${diamonds}, updated_at = now() WHERE user_id = ${userId}`;
+            await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'diamonds', ${d.blats}, ${diamonds}, 'pass', ${`pass:${b2.season_id}:w${w}`})`;
+          }
+          done.add(`${b2.season_id}#${w}`);
+          drops.push({ ...d, season: b2.season_id });
+        }
+      }
+      let loadout = wallet.loadout;
+      if (equipped) {
+        loadout = { sidearm: l.sidearm, melee: l.melee, primary: l.primary, gadget: l.gadget, mods: l.mods, skins: wearing };
+        await tx`UPDATE profiles SET loadout = ${tx.json(loadout)}, updated_at = now() WHERE user_id = ${userId}`;
+      }
+      if (drops.length) this.log.info("season pass weeks opened", { userId, weeks: drops.map((d) => `${d.season}#${d.week}`) });
+      return { drops, inventory: await this.load(tx, userId, { ...wallet, diamonds, loadout }) };
+    });
+  }
   /**
    * Stores the spawn loadout. Anything the player does not own falls back to the free default;
    * `gadget`/`mods` left out keep their current values.
@@ -18861,6 +19020,17 @@ async function awardMatchTokens(tx, userId, matchId, tokens) {
   const total = rows[0]?.tokens ?? 0;
   if (tokens > 0) await tx`INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref) VALUES (${userId}, 'tokens', ${tokens}, ${total}, 'match', ${matchId})`;
   return total;
+}
+var scheduleOf = (b2) => ({ start: b2.season_start.toISOString(), weeks: b2.weeks });
+function dropOf(r) {
+  const skin = r.skin_id ? parseSkin(r.skin_id) : null;
+  const character = r.character_id && isCharacterId(r.character_id) ? r.character_id : null;
+  return {
+    week: r.week,
+    skin: skin && r.skin_rarity ? { weapon: skin.weapon, finish: skin.finish, rarity: r.skin_rarity } : null,
+    character: character && r.character_grade ? { character, grade: r.character_grade } : null,
+    blats: r.blats
+  };
 }
 function skinKillsOf(rows) {
   const out = {};
@@ -22982,7 +23152,16 @@ var registerShopRoutes = (router, deps) => {
   router.get("/api/shop/config", (ctx) => {
     const p = deps.sql ? pg().payments : null;
     const web = REAL_MONEY ? p?.webProvider ?? null : null;
-    const res = { card: !!web, provider: web, stars: REAL_MONEY ? p?.starsPrices() ?? null : null, casesEnabled: deps.env.CASES_ENABLED, packs: REAL_MONEY ? [...DIAMOND_PACKS] : [] };
+    const season = passSeasonOf(deps.env);
+    const res = {
+      card: !!web,
+      provider: web,
+      stars: REAL_MONEY ? p?.starsPrices() ?? null : null,
+      casesEnabled: deps.env.CASES_ENABLED,
+      packs: REAL_MONEY ? [...DIAMOND_PACKS] : [],
+      // v0.2.24: the Season Pass's season (null: none configured)
+      pass: season ? { ...season, end: passEnd(season).toISOString() } : null
+    };
     ctx.json(200, res);
   });
   router.get("/api/me/inventory", auth, async (ctx) => {
@@ -23047,6 +23226,26 @@ var registerShopRoutes = (router, deps) => {
     const { drop, equipped, inventory } = await guard(() => pg().economy.openSkinCase(user.userId));
     deps.services.analytics.server("case_opened", { weapon: drop.weapon, rarity: drop.rarity, price: SKIN_CASE_PRICE.amount, currency: SKIN_CASE_PRICE.currency, kind: "skin", finish: drop.finish }, user);
     const res = { weapon: drop.weapon, finish: drop.finish, rarity: drop.rarity, equipped, inventory };
+    ctx.json(200, res);
+  });
+  router.get("/api/pass", auth, async (ctx) => {
+    ctx.json(200, await pg().economy.passState(currentUser(ctx).userId, passSeasonOf(deps.env), deps.env.CASES_ENABLED));
+  });
+  router.post("/api/pass/buy", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    if (!deps.env.CASES_ENABLED) throw new HttpError(403, "cases_disabled", "Cases are switched off on this server");
+    const user = currentUser(ctx);
+    adultCheck(await ctx.body(PassBuyRequest, 1024), PASS_PRICE);
+    const season = passSeasonOf(deps.env);
+    const inventory = await guard(() => pg().economy.buyPass(user.userId, season));
+    deps.services.analytics.server("shop_purchase", { kind: "pass", item: `pass:${season.id}`, currency: PASS_PRICE.currency, amount: PASS_PRICE.amount }, user);
+    const res = { state: await pg().economy.passState(user.userId, season, deps.env.CASES_ENABLED), inventory };
+    ctx.json(200, res);
+  });
+  router.post("/api/pass/claim", auth, rateLimit(shopLimiter, byUser), async (ctx) => {
+    const user = currentUser(ctx);
+    const { drops, inventory } = await guard(() => pg().economy.claimPass(user.userId));
+    for (const d of drops) deps.services.analytics.server("pass_week_opened", { season: d.season, week: d.week, skinRarity: d.skin?.rarity ?? null, characterGrade: d.character?.grade ?? null, blats: d.blats }, user);
+    const res = { drops, state: await pg().economy.passState(user.userId, passSeasonOf(deps.env), deps.env.CASES_ENABLED), inventory };
     ctx.json(200, res);
   });
   router.post("/api/shop/skin", auth, rateLimit(shopLimiter, byUser), async (ctx) => {

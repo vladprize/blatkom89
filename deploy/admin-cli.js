@@ -3327,13 +3327,13 @@ var FINISHES = Object.freeze({
   hohloma: { id: "hohloma", name: "Khokhloma", rarity: "epic" },
   elektronika: { id: "elektronika", name: "Elektronika", rarity: "epic" },
   led: { id: "led", name: "Ice Camo", rarity: "epic" },
-  carsky: { id: "carsky", name: "Tsar\u2019s", rarity: "legendary" },
-  kontora: { id: "kontora", name: "The Office", rarity: "legendary" },
-  yadernaya: { id: "yadernaya", name: "Nuclear Winter", rarity: "legendary" },
+  carsky: { id: "carsky", name: "Tsar\u2019s", rarity: "legendary", live: true },
+  kontora: { id: "kontora", name: "The Office", rarity: "legendary", live: true },
+  yadernaya: { id: "yadernaya", name: "Nuclear Winter", rarity: "legendary", live: true },
   bratok: { id: "bratok", name: "Golden Mobster", rarity: "legendary", live: true },
   korol: { id: "korol", name: "Rust King", rarity: "rare" },
   neon: { id: "neon", name: "Neon District", rarity: "epic" },
-  shashlyk: { id: "shashlyk", name: "Shashlik Master", rarity: "legendary" },
+  shashlyk: { id: "shashlyk", name: "Shashlik Master", rarity: "legendary", live: true },
   graffiti: { id: "graffiti", name: "Street Graffiti", rarity: "rare" },
   peklo: { id: "peklo", name: "Hellfire", rarity: "epic" },
   kilka: { id: "kilka", name: "Canned Fish", rarity: "epic" },
@@ -3348,7 +3348,7 @@ var FINISHES = Object.freeze({
   biohazard: { id: "biohazard", name: "Biohazard X", rarity: "epic" },
   obsidian: { id: "obsidian", name: "Obsidian Emperor", rarity: "legendary", live: true },
   borsch: { id: "borsch", name: "Borscht Edition", rarity: "epic" },
-  unitaz: { id: "unitaz", name: "Golden Toilet", rarity: "legendary" },
+  unitaz: { id: "unitaz", name: "Golden Toilet", rarity: "legendary", live: true },
   berezka: { id: "berezka", name: "Birch Camo", rarity: "common", retired: true },
   rzhavchina: { id: "rzhavchina", name: "Rust", rarity: "common", retired: true },
   zima: { id: "zima", name: "Winter", rarity: "common", retired: true },
@@ -3356,8 +3356,8 @@ var FINISHES = Object.freeze({
   gzhel: { id: "gzhel", name: "Gzhel", rarity: "rare", retired: true },
   pioner: { id: "pioner", name: "Pioneer", rarity: "rare", retired: true },
   malahit: { id: "malahit", name: "Malachite", rarity: "epic", retired: true },
-  zoloto: { id: "zoloto", name: "Party Gold", rarity: "legendary", retired: true },
-  yantar: { id: "yantar", name: "Amber", rarity: "legendary", retired: true }
+  zoloto: { id: "zoloto", name: "Party Gold", rarity: "legendary", retired: true, live: true },
+  yantar: { id: "yantar", name: "Amber", rarity: "legendary", retired: true, live: true }
 });
 var WELCOME_FINISHES = FINISH_IDS.filter((f) => FINISHES[f].gift);
 var SHOP_FINISHES = FINISH_IDS.filter((f) => !FINISHES[f].gift && !FINISHES[f].retired);
@@ -3369,14 +3369,14 @@ var SKIN_PERKS = Object.freeze({
   epic: { shots: true, glow: true, killFx: "burst", cardBg: false, counter: false },
   legendary: { shots: true, glow: true, killFx: "grand", cardBg: true, counter: true }
 });
-var SKIN_PRICES = Object.freeze({ common: 99, rare: 199, epic: 299, legendary: 499 });
+var SKIN_PRICES = Object.freeze({ common: 99, rare: 99, epic: 199, legendary: 299 });
 var SKIN_RARITY_CHANCE = Object.freeze({ common: 40, rare: 30, epic: 20, legendary: 10 });
 
 // packages/shared/src/game-rules/loadout.ts
 var DEFAULT_LOADOUT = Object.freeze({ sidearm: "pistol", melee: "montirovka", primary: "avtomat", gadget: "f1", mods: {}, skins: {} });
 
 // packages/shared/src/game-rules/economy.ts
-var CHARACTER_GRADE_PRICES = Object.freeze({ common: 199, rare: 399, epic: 799, legendary: 1099 });
+var CHARACTER_GRADE_PRICES = Object.freeze({ common: 99, rare: 299, epic: 499, legendary: 699 });
 var FREE_WEAPONS = WEAPON_IDS.filter((w) => WEAPONS[w].tier === "base");
 var WEAPON_PRICES = {
   // four for talons from the start (the first one after about three matches)
@@ -3461,7 +3461,7 @@ var BUNDLE_FINISHES = Object.freeze({
   ezh: "yadernaya"
   // Igla, the mutant hedgehog — Nuclear Winter
 });
-var BUNDLE_PRICES = Object.freeze({ epic: 899, legendary: 999 });
+var BUNDLE_PRICES = Object.freeze({ epic: 599, legendary: 799 });
 function bundleOf(c) {
   const finish = BUNDLE_FINISHES[c];
   const grade = CHARACTERS[c]?.grade;
@@ -3470,6 +3470,9 @@ function bundleOf(c) {
   return { id: c, character: c, weapon: BUNDLE_WEAPON, finish, price: BUNDLE_PRICES[grade], separate: charPrice.amount + SKIN_PRICES[FINISHES[finish].rarity] };
 }
 var BUNDLES = Object.freeze(CHARACTER_IDS.map(bundleOf).filter((b2) => b2 !== null));
+
+// packages/shared/src/game-rules/pass.ts
+var WEEK_MS = 7 * 864e5;
 
 // packages/shared/src/game-rules/match.ts
 var GAME_MODES = ["ffa", "teams", "ctf", "bases"];
@@ -8508,7 +8511,7 @@ var SERVER_EVENT_PROPS = {
   match_abandoned: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS), phase: external_exports.string() }),
   map_played: external_exports.object({ matchId: external_exports.string(), mapId: external_exports.enum(MAP_IDS) }),
   invite_created: external_exports.object({ code: external_exports.string(), roomId: external_exports.string() }),
-  shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget", "skin", "bundle"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
+  shop_purchase: external_exports.object({ kind: external_exports.enum(["weapon", "character", "gadget", "skin", "bundle", "pass"]), item: external_exports.string(), currency: external_exports.enum(["tokens", "diamonds"]), amount: external_exports.number().int() }),
   mod_bought: external_exports.object({ weapon: external_exports.string(), mod: external_exports.string(), cost: external_exports.number().int() }),
   /** The weapon case and (v0.23) the skin case: `kind` skin carries the finish. */
   case_opened: external_exports.object({ weapon: external_exports.string().optional(), rarity: external_exports.enum(["common", "rare", "epic", "legendary"]), price: external_exports.number().int(), kind: external_exports.enum(["weapon", "skin", "character"]).optional(), finish: external_exports.string().max(24).optional(), character: external_exports.string().max(24).optional() }),
@@ -8518,7 +8521,9 @@ var SERVER_EVENT_PROPS = {
   identity_linked: external_exports.object({ provider: external_exports.enum(["google", "facebook", "discord", "reddit", "telegram"]), via: external_exports.enum(["code", "email", "widget"]).optional(), merged: external_exports.boolean().optional() }),
   /** v0.3 part 4: a story mission started / reported done (first: its rewards were paid now). */
   story_started: external_exports.object({ mission: external_exports.string().max(16) }),
-  story_completed: external_exports.object({ mission: external_exports.string().max(16), ms: external_exports.number().int(), first: external_exports.boolean() })
+  story_completed: external_exports.object({ mission: external_exports.string().max(16), ms: external_exports.number().int(), first: external_exports.boolean() }),
+  /** v0.2.24: a week of the Season Pass opened — what it gave (a grade, or none: BLATS instead). */
+  pass_week_opened: external_exports.object({ season: external_exports.string().max(16), week: external_exports.number().int(), skinRarity: external_exports.enum(["common", "rare", "epic", "legendary"]).nullable(), characterGrade: external_exports.enum(["common", "rare", "epic", "legendary"]).nullable(), blats: external_exports.number().int() })
 };
 var ClientEventEnvelopeSchema = external_exports.object({
   id: external_exports.string().uuid(),
@@ -8604,6 +8609,7 @@ var LoadoutRequest = external_exports.object({
   skins: external_exports.record(external_exports.enum(WEAPON_IDS), external_exports.enum(FINISH_IDS)).optional()
 }).strict();
 var CaseOpenRequest = external_exports.object({ confirmAge: external_exports.literal(true).optional() }).strict();
+var PassBuyRequest = external_exports.object({ confirmAge: external_exports.literal(true).optional() }).strict();
 var SkinBuyRequest = external_exports.object({ weapon: external_exports.enum(WEAPON_IDS), finish: external_exports.enum(FINISH_IDS) }).strict();
 var BundleBuyRequest = external_exports.object({ character: external_exports.enum(CHARACTER_IDS) }).strict();
 var CheckoutRequest = external_exports.object({ packId: external_exports.string().regex(/^[a-z0-9]{2,16}$/), method: external_exports.enum(["card"]) }).strict();

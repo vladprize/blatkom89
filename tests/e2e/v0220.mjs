@@ -176,7 +176,9 @@ try {
   for (let i = 0; i < 12 && !pair; i++) {
     await S.page.waitForTimeout(1500);
     pair = await S.page.evaluate(() => {
-      const panels = [...document.querySelectorAll('.comic__panel:not(.comic__panel--caption)')].filter((p) => getComputedStyle(p).opacity !== '0');
+      // v0.2.24: every panel on the page counts — on a slow software GPU a reply's fade-in may not have begun after
+      // 1.5 s, and the test then tapped past the pair (the comic only ever shows the current page's panels)
+      const panels = [...document.querySelectorAll('.comic__panel:not(.comic__panel--caption)')];
       if (panels.length < 2) return null;
       const [a, b] = panels.map((p) => ({ box: p.getBoundingClientRect(), art: p.querySelector('.comic__art')?.getBoundingClientRect(), bub: p.querySelector('.comic__bubble')?.getBoundingClientRect(), right: p.classList.contains('comic__panel--right') }));
       return { firstAbove: a.box.bottom <= b.box.top + 1, mirrored: !a.right && b.right && a.art.left < a.bub.left && b.art.left > b.bub.left, inside: [a, b].every((x) => x.box.left >= -1 && x.box.right <= innerWidth + 1 && x.art.right <= innerWidth + 1) };

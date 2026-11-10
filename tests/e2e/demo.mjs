@@ -227,15 +227,23 @@ try {
     .waitForFunction(() => {
       const c = document.querySelector('[data-testid="dressing-room"] canvas[data-testid=fighter-card]');
       if (!c || !c.width) return false;
-      // the art fills the card's upper half: most of a grid of points there is lit (one point may hit an eye)
+      // the figure stands in the middle of the card and its picture has edges there — without the art the card is
+      // smooth gradients. v0.2.24: brightness alone no longer tells (the full-height pictures are darker, their
+      // sides the picture's own dark red), so the check counts sharp steps between neighbouring points
       const g = c.getContext('2d');
-      let lit = 0;
-      for (let i = 1; i <= 4; i++)
-        for (let j = 1; j <= 4; j++) {
-          const px = g.getImageData(Math.floor((c.width * i) / 5), Math.floor((c.height * 0.5 * j) / 5), 1, 1).data;
-          if (px[0] + px[1] + px[2] > 60) lit++;
+      const step = Math.max(2, Math.round(c.width / 70));
+      const sum = (x, y) => {
+        const d = g.getImageData(x, y, 1, 1).data;
+        return d[0] + d[1] + d[2];
+      };
+      let edges = 0;
+      for (let i = 0; i < 9; i++)
+        for (let j = 0; j < 9; j++) {
+          const x = Math.floor(c.width * (0.3 + (0.4 * i) / 8));
+          const y = Math.floor(c.height * (0.12 + (0.48 * j) / 8));
+          if (Math.abs(sum(x, y) - sum(x + step, y)) > 30) edges++;
         }
-      return lit >= 8;
+      return edges >= 8;
     }, null, { timeout: 10000 })
     .then(() => true)
     .catch(() => false);

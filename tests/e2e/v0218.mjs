@@ -7,7 +7,7 @@
 //  • BLATS for levels: a player at level 3 gets 2 × 10 BLATS once (told on the menu), never twice;
 //  • the menu's BLATS banner (desktop and phone, the menu still one screen; «on sale soon» while no payment
 //    provider is set) opens the Arsenal's «Buy BLATS» section: its banner, the balance, «1 BLATS = 1 cent»,
-//    six packs from 99 ($0.99), each with what it is enough for; on the phone in Russian on one screen;
+//    ten packs from 99 ($0.99; six before v0.2.24), each with what it is enough for; on the phone in Russian on one screen;
 //  • a weapon skin bought right in the dressing room for its grade's price (regular 99); the free finishes
 //    are the player's without buying;
 //  • a character bought right on the character screen (rare 399; v0.2.24: 299); «Try in practice» on a locked one plays
@@ -217,13 +217,17 @@ try {
   check(packs.length === 10 && /99/.test(packs[0]) && /\$0\.99/.test(packs[0]) && /4,999|4999/.test(packs[9]) && /\$49\.99/.test(packs[9]), `ten packs (v0.2.24) from 99 ($0.99) to 4,999 ($49.99) (${packs.join(' / ')})`);
   check(!NO_CRYPTO.test(tabA) && !/diamond/i.test(tabA), 'the tab says nothing about diamonds, $BLAT or tokens');
   const hints = await A.page.locator('[data-testid=blats-tab] [data-testid=pack-hint]').allInnerTexts();
-  check(hints.length === 6 && /regular skin/i.test(hints[0]) && /epic character/i.test(hints[3]) && /4 × legendary character/i.test(hints[5]), `every pack says what it is enough for (${hints.map((x) => x.replace(/\s+/g, ' ')).join(' / ')})`);
+  // v0.2.24: ten packs, each exactly the price of something (a regular character 99 … seven legendary ones)
+  check(
+    hints.length === 10 && /regular character/i.test(hints[0]) && /epic skin/i.test(hints[1]) && /epic character/i.test(hints[3]) && /set with a legendary character/i.test(hints[6]) && /2 × legendary character/i.test(hints[8]) && /7 × legendary character/i.test(hints[9]),
+    `every pack says what it is enough for (${hints.map((x) => x.replace(/\s+/g, ' ')).join(' / ')})`,
+  );
   await A.page.screenshot({ path: `${outDir}/blats_tab_A.png` });
   await B.page.getByTestId('menu-blats').click();
   await B.page.getByTestId('blats-tab').waitFor({ timeout: 20000 });
-  await B.page.waitForFunction(() => document.querySelectorAll('[data-testid=blats-tab] .packrow').length >= 6, null, { timeout: 15000 }).catch(() => {});
+  await B.page.waitForFunction(() => document.querySelectorAll('[data-testid=blats-tab] .packrow').length >= 10, null, { timeout: 15000 }).catch(() => {});
   const tabB = await B.page.getByTestId('blats-tab').innerText();
-  check(/1 БЛАТ = 1 цент/.test(tabB) && (await B.page.locator('[data-testid=blats-tab] .packrow').count()) === 6, 'B’s phone: «1 БЛАТ = 1 цент», six packs');
+  check(/1 БЛАТ = 1 цент/.test(tabB) && (await B.page.locator('[data-testid=blats-tab] .packrow').count()) === 10, 'B’s phone: «1 БЛАТ = 1 цент», ten packs (v0.2.24)');
   const bFit = await fits(B.page);
   check(bFit.v <= 0 && bFit.h <= 0, `B’s BLATS tab fits the phone (${JSON.stringify(bFit)})`);
   await B.page.screenshot({ path: `${outDir}/blats_tab_B_phone.png` });
