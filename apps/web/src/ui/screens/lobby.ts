@@ -12,6 +12,14 @@ import { MODE_ORDER, modeIcon, modeName, modeRules, modeShort, modeSub } from '.
 import { konLabel, konRules, tourneyIcon } from './kon.js';
 import { KON_RULES } from '@blatkom/shared';
 import { clubFlag } from '../clubFlag.js';
+import { CardRow, rosterCard } from '../cardSlot.js';
+import { openCardViewer } from '../cardViewer.js';
+
+/**
+ * v0.2.24 (the owner: «карточки — в ожидание подбора матча»): the fighters already in the room as their cards,
+ * the player's own first; one line kept across the room's redraws (a card is drawn again only when it changes).
+ */
+let lobbyCards: CardRow | null = null;
 
 /** The game modes as a 2×2 switch (disabled for room guests). */
 export function modeSwitch(o: { mode: GameMode; onMode?: (m: GameMode) => void }): HTMLElement {
@@ -152,7 +160,18 @@ export function renderLobby(o: {
     };
     players = h('div', { class: 'teams' }, col(0), col(1));
   } else {
-    players = h('div', { class: 'list' }, ...s.players.map(playerRow), ...Array.from({ length: Math.max(0, s.maxPlayers - s.players.length) }, freeSeat));
+    // v0.2.24: a phone shows only the free seat that completes a row of two (the class hides the rest there) —
+    // the room it frees goes to the fighters' cards
+    players = h(
+      'div',
+      { class: 'list' },
+      ...s.players.map(playerRow),
+      ...Array.from({ length: Math.max(0, s.maxPlayers - s.players.length) }, (_, i) => {
+        const seat = freeSeat();
+        if (i >= s.players.length % 2) seat.classList.add('player--spare');
+        return seat;
+      }),
+    );
   }
   // phones: «invite friends» opens in a sheet from a button by the players instead of its own panel
   const extra = o.extra ?? null;
@@ -253,6 +272,10 @@ export function renderLobby(o: {
         mapPicker({ selected: s.mapId, ...(s.isHost ? { onPick: o.onMap } : {}) }),
         h('div', { class: 'muted lobby__maphint' }, kon ? (s.isHost ? t('You host the room: you pick the map and start the match.') : t('The host picks the map.')) : s.isHost ? t('You host the room: you pick the map and the mode and start the match.') : t('The host picks the map and the mode.')),
       );
+  lobbyCards ??= new CardRow({ className: 'lobby__cardrow', full: true, max: 200, collapse: true, testid: 'lobby-cards', onOpen: (d) => openCardViewer(document.getElementById('ui') ?? document.body, d, { inTelegram: o.inTelegram }) });
+  const present = s.players.filter((p) => p.connected);
+  lobbyCards.set([...present.filter((p) => p.id === s.myId), ...present.filter((p) => p.id !== s.myId)].map((p) => ({ id: p.id, data: rosterCard(p) })));
+  const cardsPanel = h('div', { class: 'panel col lobby__cards' }, h('span', { class: 'tag' }, t('Fighters')), lobbyCards.el);
   const actions = h(
         'div',
         { class: 'row lobby__actions' },
@@ -280,6 +303,7 @@ export function renderLobby(o: {
         konPanel,
         modePanel,
         mapPanel,
+        cardsPanel,
         actions,
         h('div', { class: 'muted center lobby__note', 'data-testid': 'lobby-note' }, note),
       ),

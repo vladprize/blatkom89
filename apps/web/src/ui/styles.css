@@ -2902,3 +2902,69 @@ button.blatsban:focus-visible { outline: 2px solid var(--tape); outline-offset: 
 /* v0.2.23: a friend's fighter card at the top of their collection (opens big) */
 .fcoll__card { align-self: center; padding: 0; border: 0; background: none; cursor: pointer; line-height: 0; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
 .fcoll__card:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px; }
+
+/* ── v0.2.24: fighter cards in the menu, the match wait, the lobby and a friend's profile ─────────────────────── */
+/* a card filling a box laid out here (ui/cardSlot.ts: the box's size picks the card's) */
+.cardslot { display: grid; place-items: center; min-width: 0; min-height: 0; padding: 0; border: 0; background: none; color: inherit; line-height: 0; overflow: hidden; }
+button.cardslot { cursor: pointer; }
+button.cardslot:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px; }
+.cardslot canvas { display: block; box-shadow: 0 6px 16px rgba(0, 0, 0, .45); }
+/* the menu: the small card by the character's name (phones), the big one in its own column (computers) */
+.charcard__mini { flex: none; width: 72px; aspect-ratio: 1 / 1.42; }
+.charcard__mini canvas { box-shadow: 0 3px 8px rgba(0, 0, 0, .5); }
+.menu__hero { display: none; }
+@media (min-width: 900px) and (min-height: 560px) {
+  .wrap--menu { --hero-w: clamp(170px, min(17vw, 36vh), 300px); max-width: calc(980px + var(--hero-w) + 16px); }
+  .menu { grid-template-columns: var(--hero-w) minmax(0, 1fr) minmax(0, 340px); }
+  .menu__hero { display: flex; padding: 20px 8px 8px; min-height: 0; }
+  .menu__herocard { flex: 1 1 0; width: 100%; min-height: 0; }
+  .menu__char .charcard__mini { display: none; }
+}
+@media (min-width: 900px) and (min-height: 560px) and (max-width: 1099px) {
+  .menu { grid-template-columns: var(--hero-w) minmax(0, 1fr) minmax(0, 300px); }
+}
+@media (max-width: 760px) {
+  .menu__char .charcard__mini { width: 66px; }
+}
+@media (max-width: 760px) and (max-height: 690px) {
+  .menu__char .charcard__mini { width: 56px; }
+}
+/* the match wait: the player's card, a light running down it, the spinner and the line under it */
+.wait__col { gap: 14px; }
+.wait__card { position: relative; height: min(54vh, 430px); aspect-ratio: 1 / 1.42; }
+.wait__card::after { content: ''; position: absolute; left: 0; right: 0; top: -20%; height: 20%; background: linear-gradient(180deg, transparent, rgba(255, 214, 120, .16), transparent); animation: wait-scan 2.2s linear infinite; pointer-events: none; }
+@keyframes wait-scan { to { top: 100%; } }
+@media (prefers-reduced-motion: reduce) { .wait__card::after { animation: none; display: none; } }
+.wait__line { gap: 12px; align-items: center; justify-content: center; }
+@media (max-height: 480px) { .wait__card { height: min(58vh, 230px); } .wait__col { gap: 8px; } }
+/* a line of cards sharing a box (the lobby's fighters) */
+.cardrow { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-content: center; min-height: 0; min-width: 0; }
+.cardrow--scroll { flex-wrap: nowrap; justify-content: flex-start; align-content: stretch; align-items: center; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; scrollbar-width: thin; overscroll-behavior-x: contain; }
+.cardrow--scroll > .cardrow__item { flex: none; scroll-snap-align: start; }
+.cardrow__item { padding: 0; border: 0; background: none; line-height: 0; cursor: pointer; }
+.cardrow__item canvas { display: block; box-shadow: 0 4px 12px rgba(0, 0, 0, .45); }
+.cardrow__item:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px; }
+.lobby__cards { min-height: 0; }
+.lobby__cards > .cardrow { flex: 1 1 auto; height: 100%; }
+/* too little room left for a card: the box steps aside, keeping only the leftover space it had */
+.cardpanel--off { visibility: hidden; padding: 0 !important; border-width: 0; box-shadow: none; }
+/* the fighters take what room the screen has left (the room fits the window, v0.2.17): a computer's right
+   column down to the buttons, a phone's column up to 150 px; with no room for a card the box steps aside —
+   its gap given back, so the screen is exactly as it was without it */
+@media (min-width: 761px) {
+  .screen--lobby .lobby__col--right > .lobby__cards { flex: 1 1 0; min-height: 0; padding-top: 20px; }
+  .screen--lobby .lobby__col--right > .lobby__cards.cardpanel--off { margin-top: -12px; }
+  .screen--lobby .lobby__col--right > .lobby__actions { margin-top: 0; }
+}
+@media (max-width: 760px) {
+  .lobby > .lobby__col > .lobby__cards { order: 4; flex: 1 1 0; min-height: 0; max-height: 150px; padding: 16px 6px 6px; }
+  .lobby > .lobby__col > .lobby__cards.cardpanel--off { margin-top: -9px; }
+  .lobby__players > .list > .player--spare { display: none; }
+}
+/* a friend's profile: their card full height beside the collection (one above the other on a phone) */
+.fcoll__top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; justify-items: center; }
+.fcoll__tall { width: min(210px, 56vw); aspect-ratio: 1 / 1.42; }
+@media (min-width: 640px) {
+  .sheet--collection .fcoll__top { grid-template-columns: auto minmax(0, 1fr); align-items: start; justify-items: stretch; }
+  .sheet--collection .fcoll__tall { width: 214px; }
+}

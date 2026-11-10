@@ -27,6 +27,7 @@ import { clearLocalProfile, loadLocalProfile, saveLocalProfile } from '../profil
 import { openNicknameDialog, randomNickname } from '../profile/nickname.js';
 import { renderResults } from '../ui/screens/results.js';
 import { openCardViewer } from '../ui/cardViewer.js';
+import { CardSlot, ownCard } from '../ui/cardSlot.js';
 import { MatchCards } from '../ui/matchCards.js';
 import type { FighterCardData } from '../ui/fighterCard.js';
 import type { ResultsCards } from '../ui/screens/results.js';
@@ -219,6 +220,8 @@ export class App {
   private lastLocalResult: { matchId: string; personal: PersonalResult } | null = null;
   private nickClose: (() => void) | null = null;
   private stripEl: HTMLElement | null = null;
+  /** v0.2.24: the menu's fighter cards — the big one at the left (computers), the small one by the character's name. */
+  private heroSlots: CardSlot[] = [];
   /** v0.2.18: «+40 BLATS for the levels you reached» waiting to be shown on the menu. */
   private blatsNote: string | null = null;
   /** v0.2.18: the shop's configuration (is a payment provider connected?) for the menu's BLATS banner. */
@@ -470,7 +473,7 @@ export class App {
     const room = params.get('room');
     if (room && this.online && /^[A-Za-z0-9_-]{4,32}$/.test(room)) {
       this.go('loading');
-      this.render(this.loading(t('Connecting to the room…')));
+      this.render(this.matchWait(t('Connecting to the room…')));
       const online = this.online;
       void online.joinRoom(room, this.onlineCharacter()).catch((e: Error) => this.showError(apiErrorText(e)));
       return;
@@ -698,6 +701,7 @@ export class App {
           h(
             'div',
             { class: 'menu' },
+            this.heroPanel(),
             h(
               'div',
               { class: `panel menu__play ${this.online ? 'menu__play--kon' : ''}` },
@@ -731,7 +735,8 @@ export class App {
                 h(
                   'div',
                   { class: 'charcard', role: 'button', tabindex: '0', onclick: () => this.showCharacters(), onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && this.showCharacters() },
-                  portrait(this.character),
+                  // v0.2.24: the player's card in small (phones; computers have the big one at the left)
+                  this.heroSlot({ className: 'charcard__mini', mini: true, testid: 'menu-minicard' }).el,
                   h('div', { class: 'col', style: 'gap:2px;min-width:0' }, h('div', { class: 'name' }, charText(this.character).name), h('div', { class: 'nick' }, `«${charText(this.character).nickname}»`), h('div', { class: 'hand' }, charText(this.character).quote)),
                 ),
                 h('button', { class: 'btn btn--small menu__charbtn', onclick: () => this.showCharacters() }, t('Change character')),
@@ -827,6 +832,41 @@ export class App {
   private playerLevel(): number | null {
     if (this.online) return this.online.profile?.level ?? null;
     return this.localProfile ? levelForXp(this.localProfile.xp).level : null;
+  }
+
+  /** v0.2.24: the player's own fighter card — their character, the main weapon of their kit in its skin. */
+  private myCard(): FighterCardData {
+    return ownCard({ name: this.playerName() ?? charText(this.character).name, character: this.character, level: this.playerLevel(), inventory: this.online?.inventory });
+  }
+
+  private heroSlot(o: { className: string; mini?: boolean; testid: string; open?: boolean }): CardSlot {
+    const slot = new CardSlot(this.myCard(), {
+      className: o.className,
+      full: true,
+      ...(o.mini ? { mini: true } : {}),
+      testid: o.testid,
+      ...(o.open ? { onOpen: (d: FighterCardData) => openCardViewer(document.getElementById('ui') ?? document.body, d, { inTelegram: inTelegram() }) } : {}),
+    });
+    this.heroSlots.push(slot);
+    return slot;
+  }
+
+  /**
+   * v0.2.24 (the owner: «карточки в полный рост — на главное меню»): the player's fighter card, full height, at
+   * the left of the menu on a computer (opens big, to share); on a phone the small one by the character's name.
+   */
+  private heroPanel(): HTMLElement {
+    this.heroSlots = [];
+    return h('div', { class: 'panel col menu__hero' }, h('span', { class: 'tag' }, t('Fighter card')), this.heroSlot({ className: 'menu__herocard', testid: 'menu-hero', open: true }).el);
+  }
+
+  /**
+   * v0.2.24 (the owner: «карточки — в ожидание подбора матча»): the wait for a match — the player's card while
+   * the server finds or opens a room.
+   */
+  private matchWait(text: string): HTMLElement {
+    const slot = new CardSlot(this.myCard(), { className: 'wait__card', full: true, testid: 'wait-card' });
+    return h('div', { class: 'screen screen--dim center wait', 'data-testid': 'match-wait' }, h('div', { class: 'col center wait__col' }, slot.el, h('div', { class: 'row wait__line' }, h('div', { class: 'spinner' }), h('div', { class: 'hand' }, text))));
   }
 
   /** Square tile under the character card: level, alias (✎ to rename), XP and the wallet. Opens the profile. */
@@ -982,7 +1022,7 @@ export class App {
       draw();
       const f = this.konFormat();
       this.go('loading');
-      this.render(this.loading(how === 'find' ? t('Looking for opponents…') : t('Creating the room…')));
+      this.render(this.matchWait(how === 'find' ? t('Looking for opponents…') : t('Creating the room…')));
       try {
         if (how === 'find') await online.konQuick(this.onlineCharacter(), f);
         else await online.createRoom('factory', this.onlineCharacter(), 'teams', f);
@@ -1075,7 +1115,7 @@ export class App {
     const online = this.online;
     if (!online) return;
     this.go('loading');
-    this.render(this.loading(t('Calling [{tag}] out…', { tag: club.tag })));
+    this.render(this.matchWait(t('Calling [{tag}] out…', { tag: club.tag })));
     try {
       await this.ensureNicknameBeforeJoin();
       const r = await online.challengeGang(club.id, this.onlineCharacter(), kon);
@@ -1157,6 +1197,11 @@ export class App {
   }
 
   private refreshStrip() {
+    // v0.2.24: the menu's fighter cards follow the profile and the kit (they may come after the menu is drawn)
+    if (this.heroSlots.length) {
+      const d = this.myCard();
+      for (const slot of this.heroSlots) slot.set(d);
+    }
     // v0.2.18: the menu's BLATS tile follows the balance
     const bal = this.root.querySelector<HTMLElement>('[data-testid="menu-blats-balance"]');
     if (bal) bal.textContent = fmtNum(this.online?.inventory?.diamonds ?? this.online?.profile?.diamonds ?? 0);
@@ -1828,7 +1873,7 @@ export class App {
   private async findMatch(mode: GameMode) {
     if (!this.online) return;
     this.go('loading');
-    this.render(this.loading(t('Looking for a match…')));
+    this.render(this.matchWait(t('Looking for a match…')));
     try {
       await this.online.quickMatch(this.onlineCharacter(), mode);
     } catch (e) {
@@ -1859,7 +1904,7 @@ export class App {
             class: 'btn btn--red',
             onclick: async () => {
               this.go('loading');
-              this.render(this.loading(t('Creating the room…')));
+              this.render(this.matchWait(t('Creating the room…')));
               storageSet(QUICK_MODE_KEY, gameMode);
               try {
                 await this.online!.createRoom(mapId, this.onlineCharacter(), gameMode);
@@ -1928,7 +1973,7 @@ export class App {
     if (!online) return;
     this.pendingInvite = f;
     this.go('loading');
-    this.render(this.loading(t('Creating the room…')));
+    this.render(this.matchWait(t('Creating the room…')));
     try {
       await this.ensureNicknameBeforeJoin();
       if (b.kind === 'duel') await online.createRoom('factory', this.onlineCharacter(), 'teams', '1x1');
@@ -2110,7 +2155,7 @@ export class App {
     if (online.currentRoomId()) await online.leave();
     this.endSession();
     this.go('loading');
-    this.render(this.loading(t('Entering the room…')));
+    this.render(this.matchWait(t('Entering the room…')));
     try {
       await this.ensureNicknameBeforeJoin();
       await online.joinRoom(roomId, this.onlineCharacter());

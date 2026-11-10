@@ -193,10 +193,19 @@ export class FighterCard {
   private readonly dpr: number;
   /** The art with its edges faded (see fadedArt), kept while the character and the size stay. */
   private faded: { key: string; c: HTMLCanvasElement } | null = null;
+  /** v0.2.24: the full-height picture even on a small tall card (the menu's mini card, the lobby's line). */
+  private readonly forceFull: boolean;
+  /** v0.2.24: a thumbnail — no alias, counter or level on it (its owner's name is beside it). */
+  private readonly mini: boolean;
 
-  /** `ratio`: height ÷ width (tall 1.42, wide 0.34 by default; the Arsenal's poster is 4 : 3). */
-  constructor(d: FighterCardData, o: { shape?: CardShape; width: number; ratio?: number; className?: string }) {
+  /**
+   * `ratio`: height ÷ width (tall 1.42, wide 0.34 by default; the Arsenal's poster is 4 : 3). `full`: the
+   * full-height picture on a small tall card too; `mini`: a thumbnail without the texts.
+   */
+  constructor(d: FighterCardData, o: { shape?: CardShape; width: number; ratio?: number; className?: string; full?: boolean; mini?: boolean }) {
     this.shape = o.shape ?? 'tall';
+    this.forceFull = !!o.full;
+    this.mini = !!o.mini;
     this.w = Math.round(o.width);
     this.h = Math.round(o.width * (o.ratio ?? (this.shape === 'tall' ? 1.42 : 0.34)));
     const dpr = Math.min(3, Math.max(1, typeof devicePixelRatio === 'number' ? devicePixelRatio : 1));
@@ -305,7 +314,8 @@ export class FighterCard {
    * wide ones keep the waist-up portrait (a face reads better there).
    */
   private fullArt(): boolean {
-    return this.shape === 'tall' && !this.compact() && FULLBODY.has(this.d.character);
+    if (this.shape !== 'tall' || !FULLBODY.has(this.d.character)) return false;
+    return !this.compact() || (this.forceFull && this.h / this.w >= 1.25);
   }
 
   private grade(): Grade | null {
@@ -666,16 +676,17 @@ export class FighterCard {
     ctx.fillRect(0, g0, w, h - g0);
     if (this.d.label) this.header(ctx, fs);
     if (!compact) this.ribbon(ctx, 0, head + w * 0.035, Math.max(7, w * 0.046));
-    this.levelBadge(ctx, w - w * 0.035, head + w * 0.035, Math.max(9, w * (compact ? 0.07 : 0.06)));
+    if (!this.mini) this.levelBadge(ctx, w - w * 0.035, head + w * 0.035, Math.max(9, w * (compact ? 0.07 : 0.06)));
     // the weapon: the lower right corner, its butt towards the middle, the muzzle up to the right; on a squat card
     // (the phone's kit: the portrait cut at the chest, the face low and to the right) a little smaller, lower left
     const ww = w * (squat ? 0.66 : compact ? 0.74 : 0.6);
     const tilt = -0.16;
     const bh = (ww / 3) * Math.cos(-tilt) + ww * Math.sin(-tilt); // the turned icon's height (the icons are 3:1)
     const cx = squat ? w * 0.05 + ww / 2 : w - w * 0.045 - ww / 2;
-    const cy = h - foot - bh / 2 + bh * 0.08;
+    const cy = this.mini ? h - w * 0.05 - bh / 2 : h - foot - bh / 2 + bh * 0.08;
     this.weaponSpot(ctx, now, cx, cy, ww);
     this.weapon(ctx, now, cx, cy, ww, tilt);
+    if (this.mini) return this.frame(ctx, now);
     // the alias: small, bottom left; a legendary skin's eliminations at the right
     const y = h - foot * 0.42;
     const pad = w * 0.06;

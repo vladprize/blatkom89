@@ -1203,6 +1203,7 @@ export const RU: Record<string, string> = {
   'The card is saved as a picture': 'Карточка сохранена картинкой',
   'Your fighter card': 'Твоя карточка бойца',
   'Fighter card': 'Карточка бойца',
+  'Fighters': 'Бойцы',
   'Show it in the game': 'Показать, как в игре',
   'Show the fighter card': 'Показать карточку бойца',
   'Fighter': 'Боец',
