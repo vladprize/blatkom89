@@ -7709,6 +7709,7 @@ var UpdateClubBody = external_exports.object({ motto: clubMottoSchema.optional()
 
 // packages/shared/src/game-rules/referrals.ts
 var REFERRAL_RULES = Object.freeze({ minMatchSec: 60, dailyCap: 20 });
+var REFERRAL_BLATS = Object.freeze({ amount: 50, matches: 3, monthlyCap: 20 });
 
 // packages/shared/src/game-rules/kon.ts
 var KON_FORMATS = ["1x1", "2x2", "3x3", "5x5"];
@@ -8398,6 +8399,12 @@ var FILL_RULES = Object.freeze({
   teamPlayers: 3,
   /** Quick Match: how long the first person waits for others before players start arriving. */
   waitMs: 5e3,
+  /**
+   * v0.2.25 (the owner: «ожидание в лобби — не меньше 30 секунд, боты добираются равномерно и органично»):
+   * a Quick Match lobby lasts this long from the first person's arrival (0: it starts as soon as the lineup is
+   * there, as before); the players the room adds arrive spread over it. The server's QUICK_LOBBY_SECONDS sets it.
+   */
+  lobbyMs: 3e4,
   /** …then one more player arrives every arriveMinMs–arriveMaxMs (lobby). */
   arriveMinMs: 700,
   arriveMaxMs: 2200,

@@ -91,6 +91,10 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     GUEST_SIGNUPS_PER_IP_HOUR: 10,
     MATCH_BASE_SCORE_LIMIT: 250,
     MATCH_FILL_BOTS: false,
+    QUICK_LOBBY_SECONDS: 0,
+    REFERRAL_BLATS: 50,
+    REFERRAL_BLATS_MATCHES: 3,
+    REFERRAL_BLATS_MONTHLY: 20,
     ...overrides,
   };
 }

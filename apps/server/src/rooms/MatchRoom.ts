@@ -43,6 +43,7 @@ import {
   konDeal,
   isWeaponId,
   skinId,
+  lobbyArrivalDelay,
 } from '@blatkom/shared';
 import type {
   AvatarId,
@@ -143,6 +144,8 @@ interface Client {
   /** Owned characters and the validated spawn loadout (refreshed on 'loadout'). */
   gear: PlayerGear;
   lastGearAt: number;
+  /** v0.2.25: a loadout change waits for the rate window to pass (it is read then). */
+  gearLater?: boolean;
   ready: boolean;
   rematch: boolean;
   viaInvite: boolean;
@@ -233,6 +236,8 @@ export class MatchRoom {
   private readonly onPresence: (userId: string) => void;
   /** Quick Match lobby: players start arriving from this time on (0: nobody waiting yet). */
   private fillFrom = 0;
+  /** v0.2.25: since when people wait in this Quick Match lobby (0: nobody yet) — it lasts FillTiming.lobbyMs. */
+  private lobbySince = 0;
   /** When the next change of the filled lineup happens (0: none scheduled). */
   private nextFillAt = 0;
   private readonly log: Logger;
@@ -252,7 +257,9 @@ export class MatchRoom {
     this.battle = this.kon ? (opts.battle ?? null) : null;
     // a Kon room is people only, whatever the server's fill setting
     this.fillBots = this.kon ? false : (opts.fillBots ?? false);
-    this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
+    // the lobby's own clock only where the server sets it (index.ts: QUICK_LOBBY_SECONDS); rooms built
+    // without it (tests, tools) start as soon as their lineup is in, as before
+    this.fillTiming = { ...FILL_RULES, lobbyMs: 0, ...opts.fillTiming };
     this.onPresence = opts.onPresence ?? (() => {});
     const base: MatchConfig = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? 'ffa' };
     this.config = this.kon ? konConfig(base, this.kon) : base;
@@ -301,6 +308,21 @@ export class MatchRoom {
   /** A person holding a place in this room (connected or within the reconnect window). */
   hasMember(userId: string): boolean {
     return this.clients.has(userId);
+  }
+
+  /** v0.2.25: a Quick Match lobby that lasts its full time while the room's players arrive over it. */
+  private get quickLobby(): boolean {
+    return this.autoStart && this.fillBots && !this.isPrivate && !this.kon && this.fillTiming.lobbyMs > 0;
+  }
+
+  /** v0.2.25: how many of the room's players are still to arrive for the wanted lineup. */
+  private toAdd(): number {
+    const want = this.fillWant();
+    if (!want) return 0;
+    const seats = [...this.seats.values()];
+    if ('total' in want) return Math.max(0, want.total - seats.length);
+    const red = seats.filter((x) => this.world.players.get(x.id)?.team === 0).length;
+    return Math.max(0, want.red - red) + Math.max(0, want.blue - (seats.length - red));
   }
 
   /** People the host needs to start: one when the room fills the lineup up itself. */
@@ -586,11 +608,25 @@ export class MatchRoom {
         this.requestStart();
         return;
       case 'loadout': {
-        // the player changed weapons/upgrades over the API: re-read them (applies from the next spawn)
+        // the player changed weapons/upgrades over the API: re-read them (applies from the next spawn).
+        // v0.2.25: a change inside the 1.5 s window is read when the window passes (the lobby's kit sheet
+        // changes two slots in a row — the second one was lost)
         const now = Date.now();
-        if (now - c.lastGearAt < 1500) return;
-        c.lastGearAt = now;
         const userId = c.user.userId;
+        if (now - c.lastGearAt < 1500) {
+          if (!c.gearLater) {
+            c.gearLater = true;
+            setTimeout(() => {
+              const cur = this.clients.get(userId);
+              if (!cur || this.closed) return;
+              cur.gearLater = false;
+              cur.lastGearAt = 0;
+              this.handleControl(cur, { type: 'loadout' });
+            }, 1500 - (now - c.lastGearAt) + 20);
+          }
+          return;
+        }
+        c.lastGearAt = now;
         void this.services.economy
           .gear(userId)
           .then((g) => {
@@ -804,7 +840,7 @@ export class MatchRoom {
     if (phase === 'closed') return;
     const inLobby = phase === 'waiting';
     if (inLobby && this.connectedCount === 0) this.fillFrom = 0;
-    else if (inLobby && !this.fillFrom) this.fillFrom = now + this.fillTiming.waitMs;
+    else if (inLobby && !this.fillFrom) this.fillFrom = now + (this.quickLobby ? between(1800, 4200) : this.fillTiming.waitMs);
     const step = this.fillStep();
     if (!step) {
       this.nextFillAt = 0;
@@ -824,7 +860,13 @@ export class MatchRoom {
     }
     if (!this.nextFillAt) {
       const t = this.fillTiming;
-      this.nextFillAt = now + (step.kind === 'remove' ? between(t.leaveMinMs, t.leaveMaxMs) : inLobby ? between(t.arriveMinMs, t.arriveMaxMs) : between(t.joinMinMs, t.joinMaxMs));
+      // v0.2.25: a Quick Match lobby — the first player soon after the person, the rest spread over the wait
+      const arrive = (): number => {
+        if (!this.quickLobby || !this.lobbySince) return between(t.arriveMinMs, t.arriveMaxMs);
+        if (this.seats.size === 0) return between(500, 1600);
+        return lobbyArrivalDelay(now, this.lobbySince + t.lobbyMs, this.toAdd(), t, Math.random());
+      };
+      this.nextFillAt = now + (step.kind === 'remove' ? between(t.leaveMinMs, t.leaveMaxMs) : inLobby ? arrive() : between(t.joinMinMs, t.joinMaxMs));
       return;
     }
     if (now < this.nextFillAt) return;
@@ -840,6 +882,7 @@ export class MatchRoom {
   }
 
   private startMatch() {
+    this.lobbySince = 0;
     // the lineup fills up (and the sides even out) the moment the match is started
     if (this.fillBots) this.fillNow();
     for (const seat of this.seats.values()) {
@@ -1030,10 +1073,18 @@ export class MatchRoom {
     // lobby automation
     if (w.phase === 'waiting') {
       const connected = [...this.clients.values()].filter((c) => c.connected);
+      if (connected.length === 0) this.lobbySince = 0;
+      else if (!this.lobbySince) this.lobbySince = now;
       // filled players are always ready; a person has to be there
       const enough = connected.length > 0 && connected.length + this.seats.size >= this.config.minPlayers;
       const allReady = enough && connected.every((c) => c.ready);
-      if (allReady) {
+      if (this.quickLobby) {
+        // v0.2.25: the lobby lasts its full time (the lineup completes at kick-off if someone is still missing)
+        if (connected.length > 0 && connected.every((c) => c.ready) && now >= this.lobbySince + this.fillTiming.lobbyMs) {
+          this.autoStartAt = 0;
+          this.requestStart();
+        }
+      } else if (allReady) {
         if (!this.autoStartAt) this.autoStartAt = now + (this.autoStart ? AUTO_START_DELAY_MS : 600);
         if (now >= this.autoStartAt) {
           this.autoStartAt = 0;
@@ -1182,6 +1233,13 @@ export class MatchRoom {
   }
 
   // ── Output helpers ──────────────────────────────────────────────────────
+  /** v0.2.25: a Quick Match lobby — how long until the match starts (null: no such clock here). */
+  private lobbyLeft(): number | null {
+    if (!this.quickLobby || this.world.phase !== 'waiting' || this.connectedCount === 0) return null;
+    if (!this.lobbySince) this.lobbySince = this.clock();
+    return Math.max(0, this.lobbySince + this.fillTiming.lobbyMs - this.clock());
+  }
+
   roster(): ServerMessage {
     const finished = this.world.phase === 'finished';
     const order = (id: string) => {
@@ -1243,6 +1301,7 @@ export class MatchRoom {
       minToStart: this.minToStart,
       kon: this.kon,
       ...(this.battle ? { battle: this.battle } : {}),
+      ...(this.lobbyLeft() !== null ? { startsInMs: this.lobbyLeft()! } : {}),
     };
   }
 

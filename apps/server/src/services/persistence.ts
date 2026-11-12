@@ -5,6 +5,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Sql } from '../database/db.js';
 import type { Env } from '../config/env.js';
+import type { ReferralBlatsRules } from '@blatkom/shared';
 import type { Logger } from '../logging/logger.js';
 import type { Gangs, InviteRegistry, Services } from './contracts.js';
 import { ActivityTracker } from '../auth/activity.js';
@@ -90,6 +91,11 @@ export function pgGangs(sql: Sql): Gangs {
   };
 }
 
+/** v0.2.25: the BLATS for invitations, from the server's settings. */
+export function referralBlatsRules(env: Pick<Env, 'REFERRAL_BLATS' | 'REFERRAL_BLATS_MATCHES' | 'REFERRAL_BLATS_MONTHLY'>): ReferralBlatsRules {
+  return { amount: env.REFERRAL_BLATS, matches: env.REFERRAL_BLATS_MATCHES, monthlyCap: env.REFERRAL_BLATS_MONTHLY };
+}
+
 /** One context per database handle so that route modules and services share the same instances. */
 export function pgContext(sql: Sql, env: Env, log: Logger): PgContext {
   const existing = contexts.get(sql as unknown as object);
@@ -105,7 +111,7 @@ export function pgContext(sql: Sql, env: Env, log: Logger): PgContext {
     users: new UserRepo(sql),
     sessions: new SessionStore(sql, env.SESSION_SECRET, env.SESSION_TTL_HOURS, activity, log),
     profiles: new ProfileRepo(sql, env.WELCOME_BONUS_BLATS),
-    recorder: new PgMatchRecorder(sql, log),
+    recorder: new PgMatchRecorder(sql, log, referralBlatsRules(env)),
     invites: new PgInvites(sql),
     analytics,
     adminAuth: new AdminAuth(sql, env.SESSION_SECRET, env.ADMIN_SESSION_TTL_HOURS, env.PUBLIC_URL.startsWith('https://'), origins),

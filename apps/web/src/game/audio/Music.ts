@@ -101,10 +101,16 @@ class MusicPlayer {
     return true;
   }
 
-  /** Call from a user gesture (pointerdown / keydown). */
+  /**
+   * Call from a user gesture (pointerdown, pointerup, touchend, click, keydown). v0.2.25 (the owner: «музыка не
+   * включается автоматически, и на ПК и в мобилке»): a touch's pointerdown is no «user activation» (iOS and
+   * Android take touchend and click), so its play() was refused and every later tap skipped the retry — now
+   * each gesture tries again until the track really plays.
+   */
   unlock(): void {
     if (!this.available()) return;
-    if (this.unlocked && (this.gain || !sfx.context())) return;
+    const playingNow = !!this.el && !this.el.paused && sfx.context()?.state !== 'suspended';
+    if (this.unlocked && (this.gain || !sfx.context()) && (playingNow || !this.wanted || this.hidden || this.volume() <= 0)) return;
     const el = this.element();
     const ctx = sfx.context();
     if (ctx && !this.gain) {
@@ -118,10 +124,9 @@ class MusicPlayer {
         this.gain = null;
       }
     }
-    const first = !this.unlocked;
     this.unlocked = true;
     this.apply();
-    if (first && this.wanted) this.start();
+    if (this.wanted) this.start();
   }
 
   /** Menus want music, matches do not. */

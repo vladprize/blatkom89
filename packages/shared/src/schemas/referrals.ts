@@ -6,6 +6,11 @@ export interface ReferralRow {
   status: 'pending' | 'confirmed' | 'held' | 'rejected';
   /** Talons paid for this invitation (0 until it counts). */
   reward: number;
+  /** v0.2.25: BLATS paid for this friend (0 until their matches are played), and how many whole matches they have. */
+  blats?: number;
+  matches?: number;
+  /** v0.2.25: 'paid', 'pending', 'capped' (over the month's limit), 'held'/'rejected' (a check), 'legacy' (before the BLATS). */
+  blatsStatus?: string;
 }
 
 export interface ReferralResponse {
@@ -22,4 +27,6 @@ export interface ReferralResponse {
   /** Talons the next invitation that counts pays. */
   reward: number;
   recent: ReferralRow[];
+  /** v0.2.25: the BLATS part — what a friend brings, after how many matches, the month's limit and what it paid. */
+  blats?: { amount: number; matches: number; monthlyCap: number; earned: number; thisMonth: number };
 }

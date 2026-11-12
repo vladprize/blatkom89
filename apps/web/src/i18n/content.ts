@@ -4,7 +4,8 @@
  */
 import { ACHIEVEMENTS, CHARACTERS, FINISHES, GADGETS, MODS, REFUSAL_TEXT, WEAPONS, getMap, isGadgetId } from '@blatkom/shared';
 import type { AchievementId, ArmsId, AvatarId, BuyRefusal, CharacterId, FinishId, GadgetId, MapId, ModId, WeaponId } from '@blatkom/shared';
-import { getLang, t } from './index.js';
+import { getLang, getSwear, t } from './index.js';
+import { CHAR_MARKS, CHAR_MAT_QUOTES } from './dark.js';
 import { RU_ACHIEVEMENTS, RU_CHARACTERS, RU_FINISHES, RU_GADGETS, RU_MAPS, RU_MODS, RU_REFUSALS, RU_WEAPONS } from './ru-content.js';
 import type { CharacterText } from './ru-content.js';
 
@@ -12,10 +13,17 @@ export type { CharacterText };
 
 const ru = () => getLang() === 'ru';
 
-export function charText(id: CharacterId): CharacterText {
-  if (ru()) return RU_CHARACTERS[id];
+/** A character's texts as the screens show them: v0.2.25 adds «Distinguishing marks» (black humour, dark.ts). */
+export interface CharacterView extends CharacterText {
+  marks: string;
+}
+
+/** The character's texts in the player's language — the quote with swearing unless Settings say «No swearing». */
+export function charText(id: CharacterId): CharacterView {
+  const i = ru() ? 1 : 0;
   const c = CHARACTERS[id];
-  return { name: c.name, nickname: c.nickname, species: c.species, role: c.role, personality: c.personality, quote: c.quote, district: c.district, business: c.business, weaponsNote: c.weaponsNote, lore: c.lore, tag: c.tag };
+  const base: CharacterText = ru() ? RU_CHARACTERS[id] : { name: c.name, nickname: c.nickname, species: c.species, role: c.role, personality: c.personality, quote: c.quote, district: c.district, business: c.business, weaponsNote: c.weaponsNote, lore: c.lore, tag: c.tag };
+  return { ...base, quote: getSwear() ? CHAR_MAT_QUOTES[id][i] : base.quote, marks: CHAR_MARKS[id][i] };
 }
 
 export function charName(id: CharacterId): string {

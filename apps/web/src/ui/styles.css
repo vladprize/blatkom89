@@ -2918,7 +2918,7 @@ button.cardslot:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px;
 @media (min-width: 1000px) and (min-height: 560px) {
   .wrap--menu { --hero-w: clamp(170px, min(17vw, 36vh), 300px); max-width: calc(980px + var(--hero-w) + 16px); }
   .menu { grid-template-columns: var(--hero-w) minmax(0, 1fr) minmax(0, 340px); }
-  .menu__hero { display: flex; padding: 20px 8px 8px; min-height: 0; }
+  .menu__hero { display: flex; min-height: 0; }
   .menu__herocard { flex: 1 1 0; width: 100%; min-height: 0; }
   .menu__char .charcard__mini { display: none; }
 }
@@ -3139,4 +3139,460 @@ button.cardslot:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px;
   .screen--story .scamp > .smissions, .screen--story .scamp > .scamp__soon { grid-column: 2; grid-row: 1 / -1; min-height: 0; }
   .screen--story .story__finale { padding: 14px 14px 8px; }
   .screen--story .story__finale .muted { display: none; }
+}
+
+/* ── v0.2.25: the main menu (the owner's pre-release edits) ─────────────────────────────────────────────────
+   the fighter card without a panel round it: on a computer the left column as wide as the right one (the games
+   in the middle, under the logo) and the card as tall as the menu; on a phone, upright or sideways, the card
+   beside the Arsenal and the dossier, the character's name on its strip (the panel with the name is a
+   computer's). The logo further from the menu; the switches and the links small, in the screen's top right
+   corner (a computer). A tap on the card opens it big with every character beside it. */
+/* the card's box takes its height from the row(s) it sits in, never from the card; its width is set to a card
+   as tall as that (App.fitHero: --hero-w), so the card meets the panels' edges */
+.menu__hero { flex-direction: column; align-items: stretch; justify-content: center; min-width: 0; contain: size; }
+.menu__herocard.menu__herocard--phone { display: none; }
+@media (min-width: 1000px) and (min-height: 560px) {
+  .wrap--menu { --side-w: clamp(300px, 24vw, 350px); max-width: calc(var(--hero-w, 300px) + var(--side-w) + 660px + 32px); }
+  .menu { grid-template-columns: var(--hero-w, 300px) minmax(0, 1fr) var(--side-w); }
+}
+@media (min-width: 761px) and (min-height: 720px) {
+  .menu-center { gap: clamp(26px, 4.6vh, 52px); }
+  .wrap--menu .logo { margin-top: 0; }
+}
+@media (min-width: 761px) {
+  .wrap--menu > .corner { position: fixed; top: calc(10px + var(--safe-top)); right: calc(12px + var(--safe-right)); z-index: 5; gap: 3px; opacity: .62; transition: opacity .15s; }
+  .wrap--menu > .corner:hover, .wrap--menu > .corner:focus-within { opacity: 1; }
+  .wrap--menu > .corner .seg--tiny button { min-height: 26px; padding: 3px 7px; font-size: 12px; }
+  .wrap--menu > .corner .iconbtn { width: 28px; height: 26px; background: rgba(20, 16, 13, .6); }
+  .wrap--menu > .corner .iconbtn svg { width: 14px; height: 14px; }
+  .wrap--menu > .corner .fsbtn--label { width: 28px; padding: 0; justify-content: center; }
+  .wrap--menu > .corner .fsbtn--label .fsbtn__label { display: none; }
+}
+/* a phone held upright: the games, then the card at the left with the Arsenal and the dossier at its right, the
+   BLAT banner under them */
+@media (max-width: 760px) {
+  .menu { grid-template-columns: var(--hero-w, minmax(0, 1fr)) minmax(0, 1fr); grid-template-areas: 'play play' 'hero ars' 'hero prof' 'ad ad'; column-gap: 10px; }
+  .menu > .menu__play { grid-area: play; }
+  .menu > .menu__hero { grid-area: hero; display: flex; min-height: 0; }
+  .menu > .menu__side, .menu > .menu__side > .tiles { display: contents; }
+  .menu > .menu__side > .menu__char { display: none; }
+  .menu > .menu__side > .menu__ad { grid-area: ad; grid-column: 1 / -1; }
+  .menu__side .tile--arsenal { grid-area: ars; }
+  .menu__side .tile.tile--arsenal-art { aspect-ratio: auto; min-height: 0; height: 148px; }
+  .menu__herocard { display: none; }
+  .menu__herocard.menu__herocard--phone { display: grid; flex: 1 1 0; width: 100%; min-height: 0; }
+  /* the dossier in its column: the picture, the level and the wallet in a line; the alias (✎ beside it) and the
+     XP bar under them — the tag clear of the picture */
+  .menu { row-gap: 18px; }
+  .menu__side .tile > .tag { top: -10px; font-size: 12px; padding: 3px 9px 2px; }
+  .menu__side .tile--profile { grid-area: prof; height: 96px; }
+  .menu__side .tile--profile .tile__body { grid-template-columns: auto auto minmax(0, 1fr); grid-template-rows: auto auto auto; column-gap: 7px; row-gap: 4px; padding: 17px 9px 8px; align-content: center; }
+  .menu__side .tile--profile .tile__head .ava-btn { grid-column: 1; grid-row: 1; }
+  .menu__side .tile--profile .tile__head .ava { width: 32px; height: 32px; }
+  .menu__side .tile--profile .tile__head .lvlbadge { grid-column: 2; grid-row: 1; min-width: 32px; height: 32px; padding: 0 4px; font-size: 16px; }
+  .menu__side .tile--profile .tile__head .lvlbadge small { font-size: 7.5px; }
+  .menu__side .tile--profile .tile__wallet { grid-column: 3; grid-row: 1; margin: 0; flex-direction: column; align-items: flex-end; gap: 0; font-size: 14px; line-height: 1.15; }
+  .menu__side .tile--profile .tile__wallet img { width: 15px; height: 15px; }
+  .menu__side .tile--profile .nm { grid-column: 1 / -1; grid-row: 2; margin: 0; padding-right: 30px; font-size: 15px; line-height: 1.2; }
+  .menu__side .tile--profile .xpbar { grid-column: 1 / -1; grid-row: 3; }
+  .menu__side .tile--profile .xp { display: none; }
+  .menu__side .tile--profile .edit { top: auto; bottom: 15px; right: 7px; transform: none; width: 28px; height: 26px; font-size: 15px; }
+}
+/* the card's block follows the phone's height (the Arsenal beside it gives way first); the BLAT banner a slimmer
+   band and the logo a little smaller make room for it */
+@media (max-width: 760px) {
+  .menu .blatsart { aspect-ratio: 5 / 1; }
+}
+@media (max-width: 760px) and (min-height: 761px) {
+  .wrap--menu .logo { width: min(64%, 250px); }
+}
+@media (max-width: 760px) and (min-height: 701px) and (max-height: 760px) {
+  .wrap--menu .logo { width: min(54%, 205px); }
+}
+@media (max-width: 760px) and (max-height: 799px) {
+  .menu__side .tile.tile--arsenal-art { aspect-ratio: auto; height: 104px; }
+  .menu__side .tile--profile { height: 92px; }
+}
+@media (max-width: 760px) and (max-height: 700px) {
+  .menu__side .tile.tile--arsenal-art { height: 90px; }
+  .menu__side .tile--profile { height: 88px; }
+  .menu { row-gap: 16px; }
+}
+@media (max-width: 760px) and (max-height: 680px) {
+  .menu__side .tile.tile--arsenal-art { height: 78px; }
+  .menu__side .tile--profile { height: 84px; }
+  .menu__side .tile--profile .tile__body { padding-top: 15px; }
+}
+/* a phone held sideways (the owner, 12 Nov: «нет смысла делать настолько огромным на весь экран — центрировать,
+   сделать меньше и симметричным; тогда и лого не надо уменьшать»): one block of fixed proportions in the middle
+   of the screen under the logo at its full size — the card in the very middle, the games at its left, the
+   Arsenal, the dossier and the BLAT banner at its right; the two side columns as wide as each other, all three
+   as tall as each other. The screen's height sizes the block (a short-wide screen's width caps it); the
+   switches small in the screen's top right corner */
+@container ui (orientation: landscape) and (max-height: 500px) {
+  .wrap.wrap--menu {
+    --lg: clamp(46px, 17cqh, 70px);
+    --g: 12px;
+    --ct: 0px;
+    /* the block's height: what the logo leaves — or what keeps the block (card + two columns 1.25 cards wide each)
+       inside the width */
+    --mh: min(calc(100cqh - 38px - var(--safe-top) - var(--safe-bottom) - var(--lg) - var(--ct)), calc((100cqw - 24px - var(--safe-left) - var(--safe-right) - 2 * var(--g)) * .4057));
+    --cw: calc(var(--mh) / 1.42);
+    --sw: calc(var(--cw) * 1.25);
+    flex: none; width: calc(var(--cw) + 2 * var(--sw) + 2 * var(--g)); max-width: none; height: calc(var(--ct) + var(--lg) + 22px + var(--mh)); margin: auto;
+    grid-template-columns: var(--sw) var(--cw) var(--sw);
+    grid-template-rows: calc(var(--ct) + var(--lg) + 8px) minmax(0, 1fr) auto auto;
+    grid-template-areas: 'logo logo logo' 'play hero ars' 'play hero prof' 'play hero ad';
+    gap: 14px var(--g); align-content: stretch;
+  }
+  .wrap.wrap--menu:not(:has(.menu__ad)) { grid-template-rows: calc(var(--ct) + var(--lg) + 8px) minmax(0, 1fr) auto; grid-template-areas: 'logo logo logo' 'play hero ars' 'play hero prof'; }
+  .wrap.wrap--menu .logo { grid-area: logo; width: auto; max-width: none; height: var(--lg); margin: var(--ct) 0 0; justify-self: center; align-self: start; transform: none; }
+  .wrap--menu .menu > .menu__side, .wrap--menu .menu > .menu__side > .tiles { display: contents; }
+  .wrap--menu .menu > .menu__side > .menu__char { display: none; }
+  .wrap--menu .menu > .menu__hero { grid-area: hero; display: flex; min-height: 0; padding: 0; }
+  .wrap--menu .menu__herocard { display: none; }
+  .wrap--menu .menu__herocard.menu__herocard--phone { display: grid; flex: 1 1 0; width: 100%; min-height: 0; }
+  /* the games two to a row: Quick Match across the top, the four small tiles at the bottom */
+  .wrap.wrap--menu .menu__play { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; grid-auto-rows: minmax(0, 1fr); gap: 6px; padding: 16px 8px 8px; }
+  .wrap.wrap--menu .menu__play > .btn { min-height: 0; padding: 4px 6px; font-size: 15px; }
+  .wrap.wrap--menu .menu__play > .btn--red { grid-column: 1 / -1; font-size: 19px; }
+  .wrap.wrap--menu .menu__play > .menu__kon { gap: 5px; }
+  .wrap.wrap--menu .menu__play .stile { min-height: 0; padding: 3px 2px; }
+  .wrap.wrap--menu .menu__play .stile__txt b { font-size: 12px; letter-spacing: .03em; }
+  .wrap--menu .menu__side .tile--arsenal { grid-area: ars; }
+  .wrap--menu .menu__side .tile--profile { grid-area: prof; height: 52px; }
+  .wrap--menu .menu__side > .menu__ad { grid-area: ad; }
+  .wrap--menu .menu__side .tile.tile--arsenal-art { aspect-ratio: auto; min-height: 0; height: auto; }
+  .wrap.wrap--menu .menu__side .blatsart { aspect-ratio: 5 / 1; }
+  /* the banner is one button: its «→» would cover the art's own lettering in a column this narrow */
+  .wrap.wrap--menu .menu__side .blatsart__foot { display: none; }
+  /* the switches small, in the screen's corner (out of the logo's row) */
+  .wrap.wrap--menu > .corner { position: fixed; top: calc(8px + var(--safe-top)); right: calc(10px + var(--safe-right)); z-index: 5; gap: 3px; opacity: .62; }
+  .wrap.wrap--menu > .corner:hover, .wrap.wrap--menu > .corner:focus-within { opacity: 1; }
+  .wrap.wrap--menu > .corner .seg--tiny button { min-height: 26px; padding: 3px 6px; font-size: 11px; }
+  .wrap.wrap--menu > .corner .iconbtn { width: 28px; height: 26px; }
+  .wrap.wrap--menu > .corner .iconbtn svg { width: 14px; height: 14px; }
+  .wrap.wrap--menu > .corner .fsbtn--label { width: 28px; }
+  .wrap--menu .menu__side .tile--profile .tile__body { grid-template-columns: auto auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 7px; row-gap: 3px; padding: 15px 9px 7px; }
+  .wrap--menu .menu__side .tile--profile .tile__head .ava-btn { grid-column: 1; grid-row: 1 / 3; }
+  .wrap--menu .menu__side .tile--profile .tile__head .ava { width: 30px; height: 30px; }
+  .wrap--menu .menu__side .tile--profile .tile__head .lvlbadge { grid-column: 2; grid-row: 1 / 3; }
+  .wrap--menu .menu__side .tile--profile .nm { grid-column: 3; grid-row: 1; padding-right: 24px; }
+  .wrap--menu .menu__side .tile--profile .xpbar { grid-column: 3; grid-row: 2; }
+  .wrap--menu .menu__side .tile--profile .xp { display: none; }
+  .wrap--menu .menu__side .tile--profile .tile__wallet { display: none; }
+  .wrap--menu .menu__side .tile--profile .edit { top: 6px; bottom: auto; right: 6px; transform: none; }
+}
+/* a narrower phone held sideways (≤ 800 px): the switches would meet the logo — they keep a band of their own
+   above it */
+@container ui (orientation: landscape) and (max-height: 500px) and (max-width: 800px) {
+  .wrap.wrap--menu { --ct: 30px; }
+}
+/* the card big with every character at its left (ui/cardViewer.ts openCardPicker — the sizes are worked out
+   there so nothing scrolls); the card's button under it; the ✕ big, a tap outside closes it too */
+.sheet--pick { width: auto; max-width: 100%; }
+.sheet--pick .sheet__x { width: 44px; height: 44px; font-size: 22px; }
+.cardpick { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 14px; }
+.cardpick__grid { display: grid; flex: none; grid-template-columns: repeat(var(--cols, 6), var(--cell)); gap: 6px; align-content: start; }
+.cardpick__cell { position: relative; width: var(--cell); height: var(--cell); padding: 0; border: 1px solid var(--line); background: #120e0c; cursor: pointer; line-height: 0; }
+.cardpick__cell img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cardpick__cell.locked img { filter: grayscale(1) brightness(.5); }
+.cardpick__cell.locked::after { content: '🔒'; position: absolute; top: 2px; right: 2px; font-size: max(9px, calc(var(--cell) * .2)); line-height: 1; }
+.cardpick__cell::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #6a6058; z-index: 1; }
+.cardpick__cell.chargrade--rare::before { background: #c8312a; }
+.cardpick__cell.chargrade--epic::before { background: #9b4dff; }
+.cardpick__cell.chargrade--legendary::before { background: #f2b632; }
+.cardpick__cell:hover { border-color: var(--tape); }
+.cardpick__cell[aria-checked='true'] { border-color: var(--red); box-shadow: 0 0 0 2px var(--red); z-index: 2; }
+.cardpick__cell:focus-visible { outline: 2px solid var(--tape); outline-offset: 2px; }
+.cardpick__side { display: flex; flex: none; flex-direction: column; align-items: center; gap: 8px; }
+.cardpick__pic { position: relative; line-height: 0; }
+.cardpick__card--locked { filter: grayscale(.6) brightness(.72); }
+.cardpick__lock { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 44px; line-height: 1; pointer-events: none; }
+.cardpick__lock[hidden] { display: none; }
+.cardpick__acts { display: flex; flex-direction: column; align-self: stretch; }
+.cardpick__acts .btn { width: 100%; min-height: 48px; padding: 6px 8px; font-size: 15px; line-height: 1.15; white-space: normal; justify-content: center; text-align: center; }
+.cardpick__acts .btn[hidden] { display: none; }
+/* a phone held sideways: the sheet nearly the whole screen */
+@container ui (orientation: landscape) and (max-height: 500px) {
+  .sheetlay:has(.sheet--pick) { align-items: center; padding: calc(8px + var(--safe-top)) calc(8px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(8px + var(--safe-left)); }
+  .sheetlay .sheet--pick { max-height: 100%; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+}
+
+/* ── v0.2.25: every section in one screen, in the middle of it (the owner: «Раздел друзья — центрировать окно»;
+   the settings on a phone left a third of the screen empty under them) ─────────────────────────────────── */
+/* the friends: the window in the middle of the screen (a long list still starts at the top and scrolls) */
+@media (max-width: 560px) {
+  /* a phone: the title on top, the window in the middle of what is left */
+  .screen--social .wrap--vcenter > .topbar + * { margin-top: auto; }
+}
+/* the settings: a computer — both columns in the middle of the window, the title over them */
+@media (min-width: 761px) {
+  .screen--settings .settings.fitcol { flex: none; }
+}
+/* a phone: the tabs under the title, the open part in the middle of the rest */
+@media (max-width: 760px) {
+  .screen--settings .settings > .panetabs { margin-bottom: auto; }
+  .screen--settings .settings::after { content: ''; flex: none; margin-top: auto; }
+}
+/* the character screen on a phone (the owner: «раздели нижнее меню выбора и блок с иконками, подними блок с
+   персонажами выше, отдельно, симметрично»): the crew right under the title; the chosen one's file and its
+   buttons in the middle of what is left under it, clear of the crew */
+@media (max-width: 560px) {
+  .screen--chars .wrap--vcenter > .topbar + .chars { margin-top: 2px; margin-bottom: 14px; }
+  .screen--chars .charsel > .charsum { margin-top: auto; }
+}
+/* a short computer window: the file's last note goes (the buttons stayed 9 px under the window's edge) */
+@media (min-width: 1000px) and (max-height: 680px) {
+  .charsel > .dossier .dossier__fields > .dossier__note { display: none; }
+}
+
+/* a short phone (≤ 700 px tall): the crew's portraits a little lower (their shoulders give way) — the file and
+   the buttons under them stay on the screen */
+@media (max-width: 560px) and (max-height: 700px) {
+  .screen--chars .chars button img { aspect-ratio: 1 / .86; object-fit: cover; object-position: 50% 28%; }
+}
+/* the Arsenal's cases on a computer (ui/screens/shop.ts caseTab): three equal boxes side by side — the crate,
+   the name on one line, the price, a sentence a line, the buttons at the boxes' feet on one line */
+.cases.cases--three { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+.cases--three > .panel:last-child:nth-child(odd) { grid-column: auto; }
+.casebox { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 10px 10px; text-align: center; min-width: 0; }
+.casebox__art { display: grid; place-items: center; height: 64px; margin-top: 2px; }
+.casebox__art .crate { width: 76px; height: 58px; }
+.casebox__title { font-family: Oswald, sans-serif; font-weight: 700; font-size: 19px; line-height: 1.1; letter-spacing: .03em; text-transform: uppercase; color: var(--beige); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.casebox__price { display: flex; align-items: center; justify-content: center; gap: 6px; font-family: Oswald, sans-serif; font-weight: 700; font-size: 22px; line-height: 1; }
+.casebox__text { display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.25; text-wrap: balance; }
+.casebox__text > span { display: block; }
+.casebox__own { font-size: 12px; color: var(--muted); }
+.casebox__acts { display: flex; flex-direction: column; gap: 6px; align-self: stretch; margin-top: auto; }
+.casebox__acts .btn { width: 100%; justify-content: center; }
+.casebox__acts .btn--red { min-height: 44px; }
+.casebox__acts .badge { align-self: center; }
+.casetab { gap: 12px; }
+.casetab__note { font-size: 12.5px; line-height: 1.3; text-align: center; }
+@media (max-width: 1100px) {
+  .casebox__title { font-size: 16px; }
+  .casebox__price { font-size: 19px; }
+  .casebox__text { font-size: 12.5px; }
+}
+/* a short window: the crate smaller, the note shorter */
+@media (min-width: 561px) and (max-height: 760px) {
+  .casebox { gap: 4px; padding-top: 16px; }
+  .casebox__art { height: 46px; }
+  .casebox__art .crate { width: 56px; height: 42px; }
+  .casebox__acts .btn--red { min-height: 38px; }
+}
+/* the Arsenal's dressing room on a computer (the owner: «карточка и стата персонажа должны быть больше и
+   заполнять всё пустое пространство»): the fighter card as tall as everything beside it (its width follows —
+   ui/screens/shop.ts fitPoster), the weapon's numbers bigger and spread over that height; the skins and the
+   in-game view under them, clear of the card */
+@media (min-width: 900px) {
+  .arsenal:not(.arsenal--phone) > .dressing > .dressing__grid { grid-template-columns: var(--pw, 260px) minmax(0, 1fr); grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto auto auto; column-gap: 16px; row-gap: 0; }
+  .arsenal:not(.arsenal--phone) .dressing__poster { grid-column: 1; grid-row: 1 / 8; align-self: start; aspect-ratio: 3 / 4; }
+  .arsenal:not(.arsenal--phone) .dressing__info > .row:first-child { grid-row: 1; }
+  .arsenal:not(.arsenal--phone) .dressing__info > .dressing__name { grid-row: 2; }
+  .arsenal:not(.arsenal--phone) .dressing__info > .dressing__blurb { grid-row: 3; }
+  .arsenal:not(.arsenal--phone) .dressing__info > .dressing__buy { grid-row: 4; }
+  .arsenal:not(.arsenal--phone) .dressing__info > .modfit { grid-row: 5; }
+  .arsenal:not(.arsenal--phone) .dressing__info > .dressing__stats { grid-row: 6; align-self: stretch; display: flex; flex-direction: column; justify-content: center; min-height: 0; }
+  .arsenal:not(.arsenal--phone) .dressing__info > .skinpick__buy { grid-row: 7; }
+  .arsenal:not(.arsenal--phone) .dressing__info > .skinpick { grid-row: 8; grid-column: 1 / -1; }
+  .arsenal:not(.arsenal--phone) .dressing__info > .dressing__game { grid-row: 9; grid-column: 1 / -1; }
+  .arsenal:not(.arsenal--phone) .dressing__stats .wstats { gap: clamp(3px, 1.1vh, 11px); }
+  .arsenal:not(.arsenal--phone) .dressing__stats .wstat { grid-template-columns: minmax(84px, 34%) minmax(0, 1fr) 70px; gap: 10px; }
+  .arsenal:not(.arsenal--phone) .dressing__stats .wstat span { font-size: 13.5px; }
+  .arsenal:not(.arsenal--phone) .dressing__stats .wstat b { font-size: 15px; }
+  .arsenal:not(.arsenal--phone) .dressing__stats .wstat .bar { height: 9px; }
+}
+@media (min-width: 900px) and (max-height: 700px) {
+  .arsenal:not(.arsenal--phone) .dressing__stats .wstat span { font-size: 12px; }
+  .arsenal:not(.arsenal--phone) .dressing__stats .wstat b { font-size: 13.5px; }
+  .arsenal:not(.arsenal--phone) .dressing__stats .wstat .bar { height: 7px; }
+}
+/* the cases' tab on a computer: the Season Pass in two lines (its name and buttons, then its weeks); a short
+   window keeps the first line only */
+@media (min-width: 561px) {
+  .casetab .passcard { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'row acts' 'weeks weeks'; gap: 8px 12px; align-items: center; }
+  .casetab .passcard > .passcard__row { grid-area: row; margin-top: 4px; }
+  .casetab .passcard > .passweeks { grid-area: weeks; }
+  .casetab .passcard > .passcard__acts { grid-area: acts; flex-wrap: nowrap; margin-top: 4px; }
+  .casetab .passcard > .passcard__acts .btn--red { min-height: 42px; padding-left: 16px; padding-right: 16px; }
+  .casebox__acts .btn--red { font-size: 15px; padding-left: 6px; padding-right: 6px; white-space: nowrap; }
+  .casetab__note { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; }
+}
+@media (min-width: 561px) and (max-height: 760px) {
+  .casetab .passcard > .passweeks { display: none; }
+}
+/* a big window (≥ 1500 × 900): the Arsenal wider — the dressing room's card grows with it instead of leaving
+   the room under it empty */
+@media (min-width: 1500px) and (min-height: 900px) {
+  .screen--arsenal > .wrap--arsenal { max-width: min(1560px, calc(100vh * 1.55)); }
+}
+/* ── v0.2.25: the Quick Match lobby — its clock instead of «Start», the kit in a sheet ────────────────── */
+.lobby__timer { display: flex; align-items: baseline; justify-content: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; border: 1px dashed #6b5a3a; background: rgba(20, 16, 13, .72); font-family: Oswald, sans-serif; font-size: 15px; letter-spacing: .05em; text-transform: uppercase; color: var(--beige); }
+.lobby__timeleft { font-size: 26px; line-height: 1; color: #ffd36a; font-variant-numeric: tabular-nums; }
+.lobby__timeleft:empty { display: none; }
+.lobby__timer--soon .lobby__timeleft { color: #ff6a5a; }
+.sheet--kit { width: min(620px, 100%); }
+.lobbykit { gap: 12px; }
+.lobbykit__slot { display: flex; flex-direction: column; gap: 6px; }
+.lobbykit__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.lobbykit__opt { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; min-height: 48px; padding: 4px 8px; text-align: left; }
+.lobbykit__opt .wimg--small { width: 60px; flex: none; }
+.lobbykit__opt .none { width: 60px; flex: none; text-align: center; }
+.lobbykit__opt > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.lobbykit__opt.on { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }
+.lobbykit__note { font-size: 13px; text-align: center; }
+@media (max-width: 560px) {
+  .lobbykit__list { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .lobby__timer { padding: 6px 10px; font-size: 13px; }
+  .lobby__timeleft { font-size: 22px; }
+}
+/* ── v0.2.25: the results — the best three big (the podium takes most of the column, ui/screens/results.ts
+   fits the cards to it), the table of players smaller under it ─────────────────────────────────────────── */
+.screen--results .podium { flex: 1.7 1 0; min-height: 190px; align-items: flex-end; gap: 14px; padding: 12px 10px 8px; overflow: hidden; }
+.podium__step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: none; line-height: 1; }
+.podium__card { line-height: 0; }
+.podium__card canvas { display: block; box-shadow: 0 8px 22px rgba(0, 0, 0, .55); }
+.podium__step--1 .podium__card canvas { box-shadow: 0 0 0 2px #b8862a, 0 0 26px rgba(242, 182, 50, .35), 0 10px 26px rgba(0, 0, 0, .6); }
+.podium__stat { font-family: Oswald, sans-serif; font-size: 14px; letter-spacing: .03em; color: var(--muted); white-space: nowrap; }
+.podium__step--1 .podium__stat { color: #f2d58a; font-size: 15px; }
+.screen--results .results__table { flex: 1 1 0; min-height: 96px; }
+.screen--results .results__table .table td, .screen--results .results__table .table th { padding-top: 4px; padding-bottom: 4px; font-size: 14px; }
+.screen--results .results__points { font-size: 12px !important; line-height: 1.3; }
+@media (max-width: 560px) {
+  .screen--results .podium { flex: 1.5 1 0; min-height: 170px; gap: 8px; padding: 10px 6px 6px; }
+  .podium__stat { font-size: 12px; }
+  .podium__step--1 .podium__stat { font-size: 13px; }
+  .screen--results .results__table { flex: 1 1 0; min-height: 110px; }
+  .screen--results .results__points { display: none; }
+}
+/* (the phone's and the sideways screen's «every other panel keeps its own height» rule would leave the podium
+   at its first, smallest size) */
+.screen--results .results__main > .panel.podium { flex: 1.7 1 0; min-height: 150px; padding: 10px 8px 6px; }
+@container ui (orientation: landscape) and (max-height: 500px) {
+  .screen--results .results__main > .panel.podium { flex: 2.4 1 0; min-height: 120px; padding: 8px 6px 4px; gap: 10px; }
+  .screen--results .results__points { display: none; }
+  .podium__stat { font-size: 12px; }
+  .podium__step--1 .podium__stat { font-size: 13px; }
+}
+/* the points over the eliminations, two short lines under each card */
+.podium__stat { white-space: pre-line; text-align: center; line-height: 1.2; }
+/* ── v0.2.25: the loading screen's controls and tip (ui/loadTips.ts) ───────────────────────────────────── */
+.loadscr__help { position: absolute; left: 50%; bottom: calc(118px + var(--safe-bottom)); transform: translateX(-50%); width: min(960px, calc(100% - 32px)); display: flex; flex-direction: column; align-items: center; gap: 10px; z-index: 2; pointer-events: none; }
+.cguide { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; padding: 10px 14px; background: rgba(11, 9, 8, .78); border: 1px solid rgba(217, 199, 163, .25); box-shadow: 0 6px 18px rgba(0, 0, 0, .5); }
+.cguide__item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.cguide__caps { display: inline-flex; gap: 3px; }
+.cguide__key { display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; font-family: Oswald, sans-serif; font-size: 13px; font-weight: 600; color: #1a1410; background: linear-gradient(180deg, #f0e2c4, #cdb98f); border: 1px solid #6b5a3a; border-bottom-width: 3px; border-radius: 3px; }
+.cguide__what { font-family: Oswald, sans-serif; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--beige); }
+.cguide__item--fire .cguide__key { color: #fff; background: linear-gradient(180deg, #e0483c, #a8261e); border-color: #5c0f12; }
+.cguide--touch .cguide__key { min-width: 30px; height: 30px; border-radius: 50%; padding: 0; font-size: 16px; }
+.cguide--touch .cguide__item--stick .cguide__key { min-width: 34px; height: 34px; font-size: 22px; color: #f0e2c4; background: rgba(240, 226, 196, .14); border: 2px solid rgba(240, 226, 196, .6); }
+.loadtip { display: flex; align-items: baseline; gap: 10px; max-width: 760px; padding: 8px 14px; background: rgba(11, 9, 8, .82); border-left: 3px solid var(--red); font-size: 16px; line-height: 1.3; color: #f0e2c4; text-wrap: pretty; }
+.loadtip__tag { flex: none; font-family: Oswald, sans-serif; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #ffd36a; }
+@media (max-width: 760px), (max-height: 500px) {
+  .loadscr__help { bottom: calc(92px + var(--safe-bottom)); gap: 6px; width: calc(100% - 20px); }
+  .cguide { gap: 4px 10px; padding: 6px 8px; }
+  .cguide__what { font-size: 11px; }
+  .cguide__key { min-width: 22px; height: 22px; font-size: 12px; }
+  .loadtip { font-size: 13px; padding: 6px 10px; }
+}
+/* the loading window: how to play on this device and a tip, under the tape */
+.boot__help { display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(960px, calc(100vw - 32px)); margin-top: 18px; }
+.boot__help .loadtip { font-size: 15px; }
+@media (max-width: 760px), (max-height: 500px) { .boot__help { margin-top: 10px; gap: 6px; } }
+/* a short screen (a phone held sideways, a match turned for one held upright): the line-up higher and smaller,
+   the controls in one line between it and the map's name */
+@container ui (max-height: 500px) {
+  .mcards--lineup { top: 33%; }
+  .loadscr__help { bottom: calc(96px + var(--safe-bottom)); gap: 6px; }
+  .cguide { flex-wrap: nowrap; gap: 4px 10px; padding: 5px 8px; max-width: 100%; overflow: hidden; }
+  .cguide--keys .cguide__item:nth-child(n + 8) { display: none; }
+  .cguide__what { font-size: 11px; }
+  .cguide__key { min-width: 20px; height: 20px; padding: 0 4px; font-size: 11px; border-bottom-width: 2px; }
+  .cguide--touch .cguide__key { min-width: 24px; height: 24px; font-size: 14px; }
+  .cguide--touch .cguide__item--stick .cguide__key { min-width: 26px; height: 26px; font-size: 17px; }
+  .loadtip { font-size: 12.5px; padding: 5px 10px; }
+}
+/* the kit's names whole (two lines where a column is narrow) */
+.lobbykit__opt > span:last-child { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.15; }
+@media (max-width: 560px) { .lobbykit__opt > span:last-child { font-size: 12px; } .lobbykit__opt .wimg--small, .lobbykit__opt .none { width: 48px; } }
+.cardpick__price { margin-bottom: 6px; font-family: Oswald, sans-serif; font-size: 14px; letter-spacing: .03em; text-align: center; color: #f2d58a; }
+.cardpick__price[hidden] { display: none; }
+/* ── v0.2.25: «Приводи братву» — BLATS for friends (ui/referral.ts), in the BLATS tab ─────────────────── */
+.refcard { gap: 10px; padding-top: 20px; border-color: #7a1a16; background: radial-gradient(circle at 8% 40%, rgba(224, 55, 45, .22), transparent 46%), linear-gradient(100deg, #24090a 0%, #150707 60%, #0d0606 100%); }
+.refcard > .refcard__tag { background: #e0483c; color: #fff; }
+.refcard__head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.refcard__coin { flex: none; line-height: 0; filter: drop-shadow(0 0 10px rgba(255, 70, 50, .45)); }
+.refcard__txt { gap: 3px; min-width: 0; }
+.refcard__offer { font-family: Oswald, sans-serif; font-size: 18px; line-height: 1.2; letter-spacing: .02em; color: #f0e2c4; text-wrap: balance; }
+.refcard__limit { font-size: 13px; }
+.refcard__limit:empty { display: none; }
+.refcard__row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.refcard__link { flex: 1 1 220px; min-width: 0; min-height: 40px; padding-top: 6px; padding-bottom: 6px; font-size: 14px; }
+.refcard--compact { padding: 18px 10px 10px; }
+.refcard--compact .refcard__offer { font-size: 15px; }
+.refcard--compact .refcard__row .btn { flex: 1 1 auto; }
+.invite__offer--blats { font-size: 17px; color: #f0e2c4; }
+.invrecent__progress { font-size: 13px; color: #f2d58a; white-space: nowrap; }
+.refstrip { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; padding: 10px 14px; text-align: left; color: var(--beige); font: inherit; cursor: pointer; background: radial-gradient(circle at 6% 50%, rgba(224, 55, 45, .32), transparent 40%), linear-gradient(100deg, #2a0a0b 0%, #160707 70%, #0d0606 100%); border: 1px solid #a8261e; box-shadow: 0 0 0 1px #000, 0 6px 16px rgba(0, 0, 0, .4); transition: transform .12s ease, box-shadow .12s ease; }
+.refstrip:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px #000, 0 0 18px rgba(224, 55, 45, .35), 0 8px 18px rgba(0, 0, 0, .45); }
+.refstrip:focus-visible { outline: 2px solid var(--tape); outline-offset: 2px; }
+.refstrip__coin { flex: none; line-height: 0; filter: drop-shadow(0 0 8px rgba(255, 70, 50, .5)); }
+.refstrip__txt { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 0; }
+.refstrip__txt b { font-family: Oswald, sans-serif; font-size: 17px; letter-spacing: .05em; text-transform: uppercase; color: #ff6a5a; }
+.refstrip__txt span { font-size: 14px; color: #f0e2c4; }
+.refstrip__go { flex: none; padding: 6px 12px; font-family: Oswald, sans-serif; font-weight: 600; font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: #fff; background: var(--red); border: 1px solid #ff6a5a; box-shadow: 0 3px 0 #5c0f12; }
+
+/* ── v0.2.25: every sentence of a description on a line of its own (ui/sentences.ts) ─────────────── */
+.lore, .arsnote, .dressing__blurb, .itemsheet__blurb, .casetab__note, .dossier__note, .charsheet__marks, .sents, .dossier__fields .field > span { white-space: pre-line; }
+/* ── v0.2.25: the 18+ mark (swearing, black humour) — the menu's footer and the boot screen ─────────── */
+.age18 {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 20px; padding: 0 5px; margin-right: 8px;
+  border: 1.5px solid var(--red); border-radius: 4px; color: var(--red); background: transparent;
+  font: 700 12px/1 Oswald, 'PT Sans Narrow', sans-serif; letter-spacing: .02em; vertical-align: middle; cursor: pointer;
+}
+.age18:hover, .age18:focus-visible { background: rgba(200, 49, 42, .14); outline: none; }
+.boot__age { position: absolute; top: calc(12px + var(--safe-top, 0px)); right: calc(14px + var(--safe-right, 0px)); margin: 0; cursor: default; }
+/* the swearing switch's note under it */
+.settings__note { font-size: 13px; }
+/* the character's «Distinguishing marks» on the shop's character sheet */
+.charsheet__marks { grid-column: 1 / -1; font-size: 14px; line-height: 1.28; color: #d6cab0; }
+.charsheet__marks b { font-family: Oswald, sans-serif; font-weight: 500; color: var(--muted); }
+/* the personal file's «Distinguishing marks» — beside the photo, under the quote */
+.dossier__marks { margin-top: 2px; }
+.dossier__marks span { font-family: Caveat, cursive; font-size: 19px; line-height: 1.05; color: var(--beige); white-space: pre-line; }
+.dossier--sheet .dossier__marks span { font-size: 16px; }
+/* v0.2.25: the price beside the grade; the file's name and alias rows repeat its title — on a computer they go */
+.dossier__grade { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.dossier__price { font-size: 12px; }
+.dossier__marks span b { font-family: Oswald, sans-serif; font-weight: 500; color: var(--muted); text-transform: uppercase; font-size: 12px; letter-spacing: .04em; }
+@media (min-width: 1000px) {
+  .charsel > .dossier .dossier__fields > .field--dup { display: none; }
+}
+/* a short computer window: the black humour runs the file's whole width, under the photo */
+@media (min-width: 1000px) and (max-height: 760px) {
+  .charsel > .dossier .dossier__text > .dossier__marks { grid-column: 1 / -1; }
+  .charsel > .dossier .dossier__text > .lore { font-size: 13.5px; line-height: 1.22; }
+  .charsel > .dossier .field { padding: 2px 0; }
+  .charsel > .dossier .field span { font-size: 18px; }
+}
+/* the personal file in a sheet (phones): its name and alias rows repeat the title — they go, the black humour fits */
+.dossier--sheet .dossier__fields > .field--dup { display: none; }
+/* the language's buttons: the whole name, «EN» / «RU» where the swearing switch stands beside them (phones) */
+.settings__langseg .lang--short { display: none; }
+@media (max-width: 560px) {
+  .settings__lang { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; column-gap: 10px; }
+  .settings__lang > .tag { grid-column: 1 / -1; justify-self: start; }
+  .settings__lang > .settings__swear { margin-top: 0 !important; min-width: 0; }
+  .settings__lang > .settings__swear > .settings__swearlabel, .settings__lang > .settings__swear > .settings__note { display: none; }
+  .settings__lang .seg button { padding-left: 11px; padding-right: 11px; }
+  .settings__langseg .lang--long { display: none; }
+  .settings__langseg .lang--short { display: inline; }
+}
+/* a phone sideways: the corner's switches stay small (the owner: «меньше, менее заметными») but still take a
+   finger — each one's invisible edge reaches 44 px */
+@container ui (orientation: landscape) and (max-height: 500px) {
+  .wrap.wrap--menu > .corner { gap: 6px; }
+  :where(.wrap--menu > .corner:not(:has(.corner__hq)) .iconbtn, .wrap--menu > .corner:not(:has(.corner__hq)) .seg--tiny button)::after { inset: -9px -8px; }
 }

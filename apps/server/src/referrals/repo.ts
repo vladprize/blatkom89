@@ -8,8 +8,8 @@
  * retries and concurrent requests (docs/ECONOMY.md).
  */
 import { randomBytes } from 'node:crypto';
-import { REFERRAL_RULES, REFERRAL_TALONS, isRefCode } from '@blatkom/shared';
-import type { ReferralResponse, ReferralRow } from '@blatkom/shared';
+import { REFERRAL_BLATS, REFERRAL_RULES, REFERRAL_TALONS, isRefCode } from '@blatkom/shared';
+import type { ReferralBlatsRules, ReferralResponse, ReferralRow } from '@blatkom/shared';
 import type postgres from 'postgres';
 import type { Sql } from '../database/db.js';
 
@@ -31,11 +31,79 @@ export interface ReferralPaid {
 
 export type ConfirmResult = { status: 'confirmed'; paid: ReferralPaid } | { status: 'held'; referrerId: string; reason: string };
 
+/** v0.2.25: the BLATS for an invited friend's matches — paid, or why not. */
+export type BlatsResult =
+  | { status: 'paid'; referrerId: string; refereeId: string; refereeName: string; amount: number; balance: number }
+  | { status: 'capped' | 'held'; referrerId: string; refereeId: string; reason: string };
+
+/** A whole online match (the rule both the talons and the BLATS count by): at least this long. */
+const WHOLE_MS = REFERRAL_RULES.minMatchSec * 1000;
+
 export class ReferralRepo {
   constructor(
     private readonly sql: Sql,
     private readonly links: { publicUrl: string; botUsername?: string | null },
+    /** v0.2.25: the BLATS part (the server's settings; 0 BLATS: off). */
+    private readonly blatsRules: ReferralBlatsRules = REFERRAL_BLATS,
   ) {}
+
+  /** v0.2.25: has this invited player BLATS still to bring their inviter? */
+  async hasPendingBlats(refereeId: string): Promise<boolean> {
+    if (this.blatsRules.amount <= 0) return false;
+    return (await this.sql`SELECT 1 FROM referrals WHERE referee_id = ${refereeId} AND status = 'confirmed' AND blats_status = 'pending' AND referrer_id IS NOT NULL`).length > 0;
+  }
+
+  /**
+   * v0.2.25: pays the inviter the BLATS once `refereeId` has played the rules' number of whole matches — after
+   * the invitation itself counted (talons paid: not held, not flagged). Over the month's limit it is 'capped'
+   * (the talons stay); a flagged account on either side waits ('held'). Safe to call any number of times, from
+   * anywhere: the referral row is locked and the ledger takes one credit per friend.
+   */
+  async tryPayBlats(refereeId: string): Promise<BlatsResult | null> {
+    const rules = this.blatsRules;
+    if (rules.amount <= 0) return null;
+    return this.sql.begin(async (tx) => {
+      const [r] = await tx<Array<{ referrer_id: string | null; status: string; blats_status: string }>>`
+        SELECT referrer_id, status, blats_status FROM referrals WHERE referee_id = ${refereeId} FOR UPDATE`;
+      if (!r || !r.referrer_id || r.status !== 'confirmed' || r.blats_status !== 'pending') return null;
+      const referrerId = r.referrer_id;
+      const [played] = await tx<Array<{ n: number }>>`
+        SELECT count(*)::int AS n FROM match_participants mp JOIN matches m ON m.id = mp.match_id
+        WHERE mp.user_id = ${refereeId} AND mp.completed AND mp.damage_dealt > 0 AND m.status = 'completed' AND m.duration_ms >= ${WHOLE_MS}`;
+      if ((played?.n ?? 0) < rules.matches) return null;
+      const [f] = await tx<Array<{ a: string | null; b: string | null; gone: boolean | null }>>`
+        SELECT (SELECT blat_flag FROM users WHERE id = ${referrerId}) AS a, (SELECT blat_flag FROM users WHERE id = ${refereeId}) AS b,
+               (SELECT deleted_at IS NOT NULL FROM users WHERE id = ${referrerId}) AS gone`;
+      if (f?.gone) return null;
+      if (f?.a || f?.b) {
+        const reason = f.a ? 'inviter flagged' : 'invited player flagged';
+        await tx`UPDATE referrals SET blats_status = 'held', blats_at = now() WHERE referee_id = ${refereeId}`;
+        return { status: 'held' as const, referrerId, refereeId, reason };
+      }
+      const [month] = await tx<Array<{ n: number }>>`
+        SELECT count(*)::int AS n FROM referrals WHERE referrer_id = ${referrerId} AND blats_status = 'paid' AND blats_at > now() - interval '30 days'`;
+      if ((month?.n ?? 0) >= rules.monthlyCap) {
+        await tx`UPDATE referrals SET blats_status = 'capped', blats_at = now() WHERE referee_id = ${refereeId}`;
+        return { status: 'capped' as const, referrerId, refereeId, reason: `over ${rules.monthlyCap} a month` };
+      }
+      const [p] = await tx<Array<{ diamonds: number }>>`SELECT diamonds FROM profiles WHERE user_id = ${referrerId} FOR UPDATE`;
+      if (!p) return null;
+      const after = p.diamonds + rules.amount;
+      const ins = await tx`
+        INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref)
+        VALUES (${referrerId}, 'diamonds', ${rules.amount}, ${after}, 'referral', ${`referral-blats:${refereeId}`})
+        ON CONFLICT DO NOTHING RETURNING id`;
+      if (!ins.length) {
+        // paid before (a lost status update): the row says so now
+        await tx`UPDATE referrals SET blats_status = 'paid', blats_at = COALESCE(blats_at, now()) WHERE referee_id = ${refereeId}`;
+        return null;
+      }
+      await tx`UPDATE profiles SET diamonds = ${after}, updated_at = now() WHERE user_id = ${referrerId}`;
+      await tx`UPDATE referrals SET blats_status = 'paid', blats_reward = ${rules.amount}, blats_at = now() WHERE referee_id = ${refereeId}`;
+      const [u] = await tx<Array<{ display_name: string }>>`SELECT display_name FROM users WHERE id = ${refereeId}`;
+      return { status: 'paid' as const, referrerId, refereeId, refereeName: u?.display_name ?? '', amount: rules.amount, balance: after };
+    });
+  }
 
   /** The player's referral code (made the first time it is asked for). */
   async ensureCode(userId: string): Promise<string> {
@@ -146,8 +214,13 @@ export class ReferralRepo {
     const by = (s: ReferralRow['status']) => counts.find((c) => c.status === s)?.n ?? 0;
     const [earned] = await this.sql<Array<{ s: number }>>`
       SELECT COALESCE(sum(delta), 0)::int AS s FROM currency_ledger WHERE user_id = ${userId} AND currency = 'tokens' AND reason = 'referral'`;
-    const recent = await this.sql<Array<{ display_name: string; attached_at: Date; status: ReferralRow['status']; paid: number }>>`
-      SELECT u.display_name, r.attached_at, r.status,
+    const rules = this.blatsRules;
+    const [bl] = await this.sql<Array<{ s: number; m: number }>>`
+      SELECT COALESCE((SELECT sum(delta) FROM currency_ledger WHERE user_id = ${userId} AND currency = 'diamonds' AND reason = 'referral'), 0)::int AS s,
+             (SELECT count(*) FROM referrals WHERE referrer_id = ${userId} AND blats_status = 'paid' AND blats_at > now() - interval '30 days')::int AS m`;
+    const recent = await this.sql<Array<{ display_name: string; attached_at: Date; status: ReferralRow['status']; paid: number; blats_status: string; blats_reward: number; matches: number }>>`
+      SELECT u.display_name, r.attached_at, r.status, r.blats_status, r.blats_reward,
+             (SELECT count(*) FROM match_participants mp JOIN matches m ON m.id = mp.match_id WHERE mp.user_id = r.referee_id AND mp.completed AND mp.damage_dealt > 0 AND m.status = 'completed' AND m.duration_ms >= ${WHOLE_MS})::int AS matches,
              COALESCE((SELECT l.delta FROM currency_ledger l WHERE l.user_id = r.referrer_id AND l.currency = 'tokens' AND l.reason = 'referral' AND l.ref = 'referral:' || r.referee_id::text), 0)::int AS paid
       FROM referrals r JOIN users u ON u.id = r.referee_id
       WHERE r.referrer_id = ${userId} ORDER BY r.attached_at DESC LIMIT 20`;
@@ -162,7 +235,8 @@ export class ReferralRepo {
       held: by('held'),
       earned: earned?.s ?? 0,
       reward: REFERRAL_TALONS,
-      recent: recent.map((r) => ({ name: r.display_name, at: r.attached_at.toISOString(), status: r.status, reward: r.paid })),
+      recent: recent.map((r) => ({ name: r.display_name, at: r.attached_at.toISOString(), status: r.status, reward: r.paid, blats: r.blats_reward, matches: r.matches, blatsStatus: r.blats_status })),
+      ...(rules.amount > 0 ? { blats: { amount: rules.amount, matches: rules.matches, monthlyCap: rules.monthlyCap, earned: bl?.s ?? 0, thisMonth: bl?.m ?? 0 } } : {}),
     };
   }
 

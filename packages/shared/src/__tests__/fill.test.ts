@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FILL_RULES, fillTarget, fillPersona } from '../sim/fill.js';
+import { FILL_RULES, fillTarget, fillPersona, lobbyArrivalDelay } from '../sim/fill.js';
 import { PRACTICE_NAMES, fillNickname, randomNickname } from '../game-rules/nicknames.js';
 import { displayNameSchema } from '../schemas/api.js';
 import { isNick } from '../game-rules/aliases.js';
@@ -104,3 +104,17 @@ test('bots: every reachable goal is found however long the way round, and a bot 
   assert.ok(nav.searches <= brains.length * seconds * 2, `${nav.searches} searches for ${brains.length} bots in ${seconds} s`);
   assert.equal(nav.misses, 0, 'every search found its way');
 });
+
+test('v0.2.25: the Quick Match lobby spreads its arrivals evenly over what is left of it, never faster than a person could come', () => {
+  const t = { arriveMinMs: FILL_RULES.arriveMinMs };
+  // three to come with 25 s left: about 7 s apart, ±35 %
+  const mid = lobbyArrivalDelay(0, 27_500 + 2500, 3, t, 0.5);
+  assert.ok(mid > 6500 && mid < 9000, `${mid}`);
+  assert.ok(lobbyArrivalDelay(0, 30_000, 3, t, 0) < lobbyArrivalDelay(0, 30_000, 3, t, 1), 'some longer, some shorter');
+  // the last one with 10 s left lands before the start
+  for (const r of [0, 0.5, 1]) assert.ok(lobbyArrivalDelay(0, 12_500, 1, t, r) <= 10_000 * 1.35 / 1.35 + 1, `${r}`);
+  // no time left: at the human minimum
+  assert.equal(lobbyArrivalDelay(29_000, 30_000, 2, t, 0.5), FILL_RULES.arriveMinMs);
+  assert.equal(lobbyArrivalDelay(0, 30_000, 0, t, 0.5), FILL_RULES.arriveMinMs);
+});
+

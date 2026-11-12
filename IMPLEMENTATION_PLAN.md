@@ -442,6 +442,47 @@ Not done: the Season Pass's first season date (the owner sets `PASS_SEASON_*`); 
 retention ideas (not asked for this release); the eight pictures with sneaker marks are in as drawn (the owner's
 choice) — a corrected picture replaces its file.
 
+## 2q. v0.2.25 (2026-11-13) — the owner's pre-release edits
+
+The owner, 12 Nov (a list of 30 edits with 11 screenshots, then two more about the menu): every screen in one
+screen on a computer and a phone; the menu's card without a cell, as tall as the menu and as close to it as the
+right column, the menu centred, a phone's card dominant, a phone sideways smaller and symmetric; a tap on the card
+— every character beside it; the switches small, top right; the results' cards big, the table secondary; the lobby
+30 s with no quick start, bots arriving evenly, the kit changeable there; the Arsenal's card and stats bigger;
+the skins symmetric; a new sentence on a new line; music from the first tap; swearing (a letter hidden), absurd
+and black humour, mother jokes «без перебора», the cards' black humour, the «цветочный лох» easter egg; the
+characters' grid apart from its buttons; BLATS for invitations; plus the controls and a smart tip on the
+loading screen.
+
+| # | What | Implementation | Status |
+|---|---|---|---|
+| 1 | The killer's card: a long alias squeezed | `fitLine`: a line too wide for its room is set smaller (down to 62 %), then cut with «…» — never squeezed sideways as `fillText`'s width limit did; a card with a label no longer draws its top corner brackets into the label («IIРУСАК») | ✅ screens (killer's card, computer and phone sideways); e2e `v0223` |
+| 2 | Results: the cards big, the list second | the podium takes 1.7× the table's width (2.4× sideways), its cards fit their box (ResizeObserver), the points and eliminations on two lines under each | ✅ screens at 1440×790, 1366×625, phones; e2e `v0223` (podium) |
+| 3 | The quick lobby: ≥ 30 s, no «Quick start», bots spread out, the kit in the lobby | server: `QUICK_LOBBY_SECONDS` (30), `lobbyArrivalDelay` spreads the fill over the time left, the roster's `startsInMs`; client: the count-down, no start button in a quick lobby, «Оружие» opens the kit (saved through the room, applied at the next spawn) | ✅ server `fill.test.ts` (+2), shared `fill.test.ts` (+1); e2e `fill` (the timer, nobody starts it, arrivals spread, the kit) |
+| 4 | Arsenal: the card and the stats bigger, filling the space | the dressing room's grid: the poster as tall as the column, its width measured (ResizeObserver), bigger stats; wide windows keep the proportions | ✅ screens 1280–1920 px, phones |
+| 5 | Skins: symmetric, one screen, the text | the cases' tab in three equal boxes, the skins' and characters' counts; the dressing room in one screen; sentences on their own lines (#12) | ✅ screens; e2e `skins`, `v0218b` |
+| 6 | Every section in one screen | audited: menu, card picker, Arsenal (kit, weapons, equipment, characters, cases, BLATS), characters, friends, social, top, profile, clubs, tournament, practice, story, invite, credits, settings — 1440×790, 1366×625, 1280×720, iPhone 14 / SE / 15 Pro Max, 932×430 and 667×375 sideways | ✅ `shots225.mjs` (v = 0 everywhere listed); e2e `phone`, `v0221`, `v0224`, `v0225` |
+| 7 | Friends centred | the social screens (friends, top, invite) and the settings centred vertically | ✅ screens |
+| 8 | The menu's card without a cell, as tall as the menu, as close as the right column; the menu centred | the card is the menu's left column itself (no panel), its top and bottom on the menu panel's edges, the same 16 px gap as the right column; the menu block in the middle of the window | ✅ e2e `v0225` (edges ±4 px, gaps 16 / 16) |
+| 9 | A tap on the card: every character beside it; easy to close | `openCardPicker`: the 36 characters at the left in whole rows, the card at the right; a free one taken at once, a locked one greyed with its price and «Купить ›» (→ the character screen); ✕, a tap outside, Escape, «back» | ✅ e2e `v0225`, `v0224`; screens on six sizes |
+| 10 | The corner's switches smaller, top right | 28×26 buttons at 62 % opacity in the window's top right corner; on touch screens each still takes a 44 px finger (invisible margin) | ✅ e2e `v0225` (≤ 30 px, top right), `v0222` (44 px on phones) |
+| 11 | The logo higher, apart from the menu | the logo's row above the menu block with its own margin | ✅ screens |
+| 12 | Phone: the card dominant, no cell, easy to pick | the card beside the Arsenal and the dossier, 184 px wide on a 390 px phone; a tap opens the picker | ✅ e2e `v0225`, `v0224` |
+| 13 | «Персонаж» / «Досье» tags over the pictures | the side tiles' tags sit on their panels' top edge (smaller), clear of the pictures under them | ✅ screens |
+| 14 | Music doesn't start | the music starts with the first tap, click or key (browsers forbid sound before one): touchend and click count too (a touch's pointerdown is no user activation on iOS / Android), and every gesture tries again until the track really plays | ✅ Chromium with `--autoplay-policy=user-gesture-required`: silent before, playing after the first click; ⛔ a real iPhone and Telegram not tried |
+| 15 | Sideways: the logo slips, the menu spreads | a phone held sideways: the menu smaller and in the middle (58 / 58 px at 844×390), the logo whole above it | ✅ e2e `v0225`; screens 667×375, 844×390, 932×430 |
+| 16 | Swearing, absurd and black humour in the story, the captions and the main copy; «*» or «#» for one letter; the English version too | a layer over the plain texts (`story/mat.ts` ≈ 110 lines, `i18n/mat.ts` 66 keys × 2 languages, `i18n/dark.ts` 36 quotes × 2); on by default, «18+» marks, Settings → «Без мата»; never in prices, odds, payments, legal texts, invitations or the chat's ready-made lines; docs/STORY.md §5a | ✅ unit `mat.test.ts` (no whole swear word, plain texts clean, real keys, toggle), `script.test.ts` (+2); e2e `v0225` |
+| 17 | Black humour on the characters' cards | «Особые приметы» / «Distinguishing marks» — a line for each of the 36 in the personal file (beside the photo) and the shop's character sheet | ✅ unit `mat.test.ts`; e2e `v0225` |
+| 18 | The «цветочный лох» easter egg | a hidden comic with the meme's lines said by Borka and Gosha (no real people): five quick taps on Borka's portrait, or «цветы» / «flowers» typed in the menu | ✅ unit `script.test.ts`; e2e `v0225` (both ways) |
+| 19 | Characters: the crew apart from the buttons, higher | on a phone the crew right under the title, the file and its buttons in the middle of what is left | ✅ screens; e2e `phone` |
+| 20 | BLATS for invitations, shown somewhere | +50 BLATS for each friend after their 3rd whole match, at most 20 friends in 30 days (`REFERRAL_BLATS*`); migration 031 (only adds); the BLATS tab's strip, Friends' button «+50 БЛАТ», the invite screen's progress per friend; docs/ECONOMY.md §6a | ✅ server `referrals.test.ts` (+2: paid once after 3 matches, the monthly cap); e2e `invite`, `v0225` |
+| 21 | The controls and a smart tip while loading | `ui/loadTips.ts`: keys (WASD, Shift, the mouse, R, Q / 1–3, G, E, C, Tab) or the touch controls, by device; a tip by the mode, the gun in hand and the device, not the same twice in a row — on the first boot and before every match | ✅ e2e `v0225`; screens on a computer and phones |
+| 22 | A new sentence on a new line | `ui/sentences.ts`: every description block (lore, notes, blurbs, the personal file's fields) breaks after each sentence (initials and «No. 3» kept), wherever it is drawn | ✅ unit `sentences.test.ts`; e2e `v0225` |
+
+Not done: the owner's pictures from ChatGPT (`docs/ART_PROMPTS_v0225.md` — the cases, the pass, the referral
+banner, Borka with the bouquet, the loading background) — the screens use the current art until they come; the
+music on a real iPhone and inside Telegram.
+
 ## 3. Open risks / next steps
 
 - After v0.2.24 (above, §2p; unit 380 / 380; the second full browser run 28 of 30 on its bundle, the two red ones — a

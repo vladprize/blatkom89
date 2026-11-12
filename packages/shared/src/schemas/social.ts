@@ -127,7 +127,7 @@ export type SocialEvent =
   | { type: 'club_left'; clubId: string; reason: 'removed' | 'disbanded' }
   | { type: 'club_head'; clubId: string }
   /** An invitation counted — `reward` talons for the inviter (v0.2.18; 0 while it waits for a check), `balance`: their talons after it. */
-  | { type: 'referral'; name: string; reward: number; balance: number; held: boolean }
+  | { type: 'referral'; name: string; reward: number; balance: number; held: boolean; /** v0.2.25: BLATS a friend's matches brought */ blats?: number }
   /** The answer to a client `ping` (keep-alive through proxies that drop idle sockets). */
   | { type: 'pong'; t: number };
 

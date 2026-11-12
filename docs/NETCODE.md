@@ -94,9 +94,14 @@ itself — `BotBrain` (the practice AI) producing one input frame per tick throu
 * **Lineup:** free-for-all at least 4 players; team modes at least 3 a side, the sides always even (the
   bigger side of people sets the size of both); never beyond `MATCH_MAX_PLAYERS`. Only connected people
   count — a person in the reconnect grace period keeps the lineup as it is.
-* **Quick Match:** people get a head start of 5 s, then players arrive one by one every 0.7–2.2 s; the
-  usual auto-start (4 s after two are present) begins the match ≈ 10 s after a lone person came, and the
-  rest of the lineup is completed at kick-off.
+* **Quick Match (v0.2.25, the owner: «ожидание в лобби — не меньше 30 секунд, кнопку „быстрый старт“
+  выпилить, боты добираются равномерно и органично»):** the lobby lasts `QUICK_LOBBY_SECONDS` (30) from the
+  first person — no «Start» button; the first player arrives after 0.5–1.6 s, the rest spread evenly over the
+  time left (`lobbyArrivalDelay`, the last one ≈ 2.5 s before kick-off, each step jittered ±35 %); the roster
+  carries `startsInMs`, so the lobby shows the count-down; the match starts when the time is up and every
+  person is ready (a person who pressed «Отбой» holds it). «Weapons» in the lobby changes the kit; a change
+  sent during the count-down applies at the next spawn. `QUICK_LOBBY_SECONDS=0` brings back the old head start
+  (5 s, then arrivals every 0.7–2.2 s and the usual auto-start).
 * **Rooms with friends:** nobody is added while people gather; the host's «Start» works with one person
   (`roster.minToStart` = 1, so the lobby enables the button) and the lineup is completed (and the sides
   evened) the moment the match starts. Auto-start by «everyone ready» still needs two in the roster.

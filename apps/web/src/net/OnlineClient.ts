@@ -45,6 +45,8 @@ export interface LobbyState {
   battle?: GangBattle;
   /** The match length in this room (ms, from the server's rules). */
   durationMs?: number;
+  /** v0.2.25: a Quick Match lobby — when the match starts (this device's clock), null: the host starts it. */
+  startsAt?: number | null;
 }
 
 /** A line of the room chat as the client keeps it (system: a local notice such as «not so fast»). */
@@ -589,6 +591,7 @@ export class OnlineClient {
           minToStart: m.minToStart ?? this.config?.minPlayers ?? 2,
           kon: m.kon ?? null,
           ...(m.battle ? { battle: m.battle } : {}),
+          startsAt: typeof m.startsInMs === 'number' ? Date.now() + m.startsInMs : null,
           ...(this.config ? { durationMs: this.config.durationMs } : {}),
           ...(this.config ? { limits: { teamScoreLimit: this.config.teamScoreLimit, captureLimit: this.config.captureLimit, baseScoreLimit: this.config.baseScoreLimit } } : {}),
         };

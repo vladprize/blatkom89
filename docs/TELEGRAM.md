@@ -59,6 +59,11 @@ the webhook over (use a separate test bot for that).
    → *Menu Button* changes it by hand.
 6. Restart the server after changing the variables.
 
+**v0.2.25 — 18+.** The game's texts swear by default (a letter hidden) and it jokes darkly; the menu and the
+loading screen carry an «18+» mark and Settings → «Без мата» turns the swearing off. Say so where Telegram shows
+the game: the bot's description and about text in @BotFather (e.g. «18+: мат, чёрный юмор»), and the Mini App's
+listing if it is submitted anywhere.
+
 ## 2. What the client does inside Telegram
 
 `apps/web/src/telegram/tg.ts` (official `telegram-web-app.js` is loaded from `telegram.org`):

@@ -10,6 +10,9 @@ import { music } from './game/audio/Music.js';
 import { getLang, onLangChange, t } from './i18n/index.js';
 import { initLifecycle, isPaused, onLifecycle } from './app/lifecycle.js';
 import { markIosStandalone } from './app/landscape.js';
+import { h } from './ui/dom.js';
+import { controlsGuide, smartTip, tipLine } from './ui/loadTips.js';
+import { isTouchDevice } from './game/input/TouchState.js';
 
 /** Page language and the tab title follow the game language (Cyrillic name in Russian). */
 function applyLang() {
@@ -26,6 +29,11 @@ async function main() {
   onLangChange(applyLang);
   const hint = document.querySelector('.boot__hint');
   if (hint) hint.textContent = t('Rewinding the tape…');
+  // v0.2.25 (the owner): while the game loads — how to play on this device, and a tip
+  const boot = document.getElementById('boot');
+  if (boot && !boot.querySelector('.boot__help')) boot.append(h('div', { class: 'boot__help' }, controlsGuide(), tipLine(smartTip({ mode: 'ffa', weapon: null, touch: isTouchDevice() }))));
+  // v0.2.25: the game swears and jokes darkly — 18+ (Settings → «No swearing» takes the swearing out)
+  if (boot && !boot.querySelector('.age18')) boot.append(h('div', { class: 'age18 boot__age', title: t('18+: swearing, black humour, cartoon violence'), 'aria-label': t('18+: swearing, black humour, cartoon violence') }, '18+'));
   initLifecycle();
   const app = new App();
   initTelegram(() => app.back());
@@ -37,8 +45,10 @@ async function main() {
     sfx.unlock();
     music.unlock();
   };
-  window.addEventListener('pointerdown', unlock, { passive: true });
-  window.addEventListener('keydown', unlock);
+  // v0.2.25: every gesture that counts as one for the browser (a touch counts on its pointerup / touchend /
+  // click, a mouse on its pointerdown) — the music starts with the player's first tap anywhere
+  for (const ev of ['pointerdown', 'pointerup', 'touchend', 'click'] as const) window.addEventListener(ev, unlock, { passive: true, capture: true });
+  window.addEventListener('keydown', unlock, { capture: true });
   // the music stops in the background — a hidden tab, a locked phone, a minimised Mini App (V2.0 part E)
   music.setHidden(isPaused());
   onLifecycle((e) => {

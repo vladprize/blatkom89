@@ -9,6 +9,7 @@
  * that every literal passed to t() / plural() in the client has a Russian entry.
  */
 import { RU, RU_PLURALS } from './ru.js';
+import { EN_MAT, RU_MAT } from './mat.js';
 
 export type Lang = 'en' | 'ru';
 export const LANGS: readonly Lang[] = ['en', 'ru'];
@@ -80,6 +81,44 @@ export function _setLangForTests(l: Lang): void {
   current = l;
 }
 
+/**
+ * v0.2.25 (the owner: «весь основной копирайт должен содержать ненормативную лексику… с * или # вместо одной
+ * буквы»): the swearing layer — on by default (the game is 18+), off with Settings → «No swearing». The plain
+ * texts (ru.ts, the English keys) stay clean; the swearing versions lie over them (mat.ts, story/mat.ts,
+ * dark.ts). Prices, odds, payments and the legal texts never get a swearing version.
+ */
+const SWEAR_KEY = 'blatkom89.swear.v1';
+function readSwear(): boolean {
+  try {
+    return localStorage.getItem(SWEAR_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+let swear = typeof window === 'undefined' ? true : readSwear();
+
+/** Whether the texts swear (Settings → «No swearing» turns it off). */
+export function getSwear(): boolean {
+  return swear;
+}
+
+/** Turns the swearing on or off; the screens redraw as after a language switch. */
+export function setSwear(on: boolean): void {
+  if (on === swear) return;
+  swear = on;
+  try {
+    localStorage.setItem(SWEAR_KEY, on ? '1' : '0');
+  } catch {
+    /* storage unavailable */
+  }
+  for (const cb of [...listeners]) cb(current);
+}
+
+/** For tests: switch without persisting or notifying. */
+export function _setSwearForTests(on: boolean): void {
+  swear = on;
+}
+
 function fill(s: string, vars?: Record<string, string | number>): string {
   if (!vars) return s;
   return s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
@@ -87,7 +126,8 @@ function fill(s: string, vars?: Record<string, string | number>): string {
 
 /** Translates an English UI string (the English text is the key). */
 export function t(en: string, vars?: Record<string, string | number>): string {
-  return fill(current === 'ru' ? (RU[en] ?? en) : en, vars);
+  const mat = swear ? (current === 'ru' ? RU_MAT : EN_MAT)[en] : undefined;
+  return fill(mat ?? (current === 'ru' ? (RU[en] ?? en) : en), vars);
 }
 
 /** Russian plural category of n: 0 = one (1, 21), 1 = few (2–4, 22–24), 2 = many (0, 5–20, 25…). */

@@ -79,6 +79,8 @@ Copy `.env.example` to `.env` and set at least:
 | `HOUSE_PLAYERS` | v0.2.20 — house players: accounts the game keeps itself in the player tables (Top-100), with natural aliases and slowly moving numbers, left out of the dashboard's metrics, tables and exports, the tournament and every reward (default `240`, at most 500; `0`: none are added and the ones there leave the tables). Nobody can sign in to one |
 | `SOCIAL_X_URL`, `SOCIAL_TELEGRAM_URL`, `SOCIAL_INSTAGRAM_URL` | optional (v0.2.17; Instagram v0.2.19): where the menu's X, Telegram and Instagram buttons lead; without them the buttons say «coming soon» |
 | `MATCH_FILL_BOTS` | complete small lineups with players the server runs itself (default `true`: 4 in free-for-all, 3 a side in team modes; Quick Match after a 5 s head start, rooms with friends at kick-off; see docs/NETCODE.md §2a) |
+| `QUICK_LOBBY_SECONDS` | v0.2.25 — how long a Quick Match lobby waits before it starts by itself (default `30`, the owner's «не меньше 30 секунд»; the players who join fill it evenly over that time, «Weapons» can be changed in it). `0`: the old head start of a few seconds |
+| `REFERRAL_BLATS`, `REFERRAL_BLATS_MATCHES`, `REFERRAL_BLATS_MONTHLY` | v0.2.25 — BLATS for invitations ([ECONOMY.md](ECONOMY.md) §6a): BLATS per invited friend (default `50`; `0` switches it off), the whole online matches the friend must play first (default `3`), friends paid in 30 days at most (default `20`) |
 | `GUEST_SIGNUPS_PER_IP_HOUR` | new guest accounts per address per hour (default 10; raise it for events where many new players share one Wi-Fi) |
 | `LOG_LEVEL`, `MAX_ROOMS`, `SESSION_TTL_HOURS`, `TELEGRAM_AUTH_MAX_AGE_SEC` | optional |
 
@@ -185,6 +187,19 @@ Migration `023_blats.sql` only adds (a column and two unique indexes) and runs b
   and every half hour plays the hours since their last move (`app_settings` key `house_players.drift_at`).
 - The game's protocol is 10 (the sprint button and the breath in the snapshot): a page opened before the update
   is asked to reload, as after every protocol change.
+
+## v0.2.25: what the update changes on the server
+
+- Migration **031** (`031_referral_blats.sql`) only adds: three columns on `referrals` (`blats_status`,
+  `blats_reward`, `blats_at`), a check, an index and a unique index on the ledger (one invitation's BLATS once).
+  Invitations made before the update are marked `legacy` and keep what they paid. It runs by itself on start.
+- New optional settings, all with defaults that need nothing set: `QUICK_LOBBY_SECONDS` (30),
+  `REFERRAL_BLATS` (50), `REFERRAL_BLATS_MATCHES` (3), `REFERRAL_BLATS_MONTHLY` (20).
+- The protocol is unchanged (10); the lobby's roster carries an optional `startsInMs` that older pages ignore.
+- The game's texts swear by default (a letter hidden) and the game is marked **18+**; Settings → «Без мата» turns
+  the swearing off for that browser. The bot's description and the Mini App's listing should say 18+ too
+  (the owner's step in @BotFather; docs/TELEGRAM.md).
+- The Season Pass still waits for `PASS_SEASON_*` (v0.2.24, below).
 
 ## v0.2.24: what the update changes on the server
 

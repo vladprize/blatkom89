@@ -218,6 +218,50 @@ test('fill: Quick Match gives people a head start, then players arrive one by on
   assertLooksLikePeople(ws.roster().players);
 });
 
+test('fill: v0.2.25 — a Quick Match lobby lasts its full time (QUICK_LOBBY_SECONDS); the players arrive spread over it, none in its first seconds, the last before the start', () => {
+  const LOBBY = 30_000;
+  const t = setup({ isPrivate: false, fillTiming: { lobbyMs: LOBBY }, config: { reconnectGraceMs: 10_000 } });
+  const a = person('vovan');
+  const t0 = t.now;
+  const { ws } = t.join(a);
+  const first = ws.roster();
+  assert.ok(first.startsInMs !== undefined && first.startsInMs > LOBBY - 500 && first.startsInMs <= LOBBY, `the lobby tells how long it lasts (${first.startsInMs})`);
+  assert.ok(!t.run(1500, () => ws.roster().players.length > 1), 'nobody is there in the first seconds');
+  const arrivals: number[] = [];
+  let size = 1;
+  t.run(LOBBY + 2000, () => {
+    const n = ws.roster().players.length;
+    if (n > size) {
+      arrivals.push(t.now - t0);
+      size = n;
+    }
+    return t.room.phase !== 'waiting';
+  });
+  const started = t.now - t0;
+  assert.notEqual(t.room.phase, 'waiting', 'the match started by itself');
+  assert.ok(started >= LOBBY - TICK_MS && started <= LOBBY + 500, `not a moment before its time (${started} ms)`);
+  assert.equal(arrivals.length, FILL_RULES.ffaPlayers - 1, `the players arrived one by one (${arrivals.join(', ')} ms)`);
+  assert.ok(arrivals[0]! <= 7000, `the first one soon (${arrivals[0]} ms)`);
+  assert.ok(arrivals[arrivals.length - 1]! >= 12_000 && arrivals[arrivals.length - 1]! <= LOBBY, `the last one well into the wait (${arrivals.join(', ')} ms)`);
+  for (let i = 1; i < arrivals.length; i++) assert.ok(arrivals[i]! - arrivals[i - 1]! >= 2000, `spread out, not in a bunch (${arrivals.join(', ')} ms)`);
+  assertLooksLikePeople(ws.roster().players);
+  assert.equal(ws.roster().startsInMs, undefined, 'no lobby clock once the match is on');
+});
+
+test('fill: v0.2.25 — a Quick Match lobby whose person is not ready waits for them; a room with friends has no lobby clock', () => {
+  const t = setup({ isPrivate: false, fillTiming: { lobbyMs: 4000 } });
+  const a = person('tolik');
+  t.join(a);
+  t.send(a, { type: 'ready', ready: false });
+  assert.ok(!t.run(6000, () => t.room.phase !== 'waiting'), 'not ready: the lobby waits');
+  t.send(a, { type: 'ready', ready: true });
+  assert.ok(t.run(1000, () => t.room.phase !== 'waiting'), 'ready after its time: the match starts');
+  const f = setup({ isPrivate: true, fillTiming: { lobbyMs: 4000 } });
+  const b = person('lyokha');
+  const { ws } = f.join(b);
+  assert.equal(ws.roster().startsInMs, undefined, 'friends: the host starts the match');
+});
+
 test('fill: a person always gets a place — in a full room a filled player gives up theirs at once', () => {
   const t = setup({ config: { maxPlayers: 4 } });
   const a = person('petya');

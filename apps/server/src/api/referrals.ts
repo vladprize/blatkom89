@@ -13,7 +13,8 @@ import type { Ctx } from '../http/router.js';
 import { requireUser, currentUser } from '../http/auth.js';
 import { RateLimiter, rateLimit } from '../security/rateLimit.js';
 import { ReferralRepo } from '../referrals/repo.js';
-import type { ConfirmResult } from '../referrals/repo.js';
+import { referralBlatsRules } from '../services/persistence.js';
+import type { BlatsResult, ConfirmResult } from '../referrals/repo.js';
 
 export const registerReferralRoutes: RouteModule = (router, deps) => {
   const auth = requireUser(deps.services.sessions);
@@ -21,7 +22,7 @@ export const registerReferralRoutes: RouteModule = (router, deps) => {
   const readLimiter = new RateLimiter(60, 1);
   const repo = () => {
     if (!deps.sql) throw new HttpError(503, 'persistence_unavailable', 'The service is temporarily unavailable');
-    return new ReferralRepo(deps.sql, { publicUrl: deps.env.PUBLIC_URL, botUsername: deps.env.TELEGRAM_BOT_USERNAME || null });
+    return new ReferralRepo(deps.sql, { publicUrl: deps.env.PUBLIC_URL, botUsername: deps.env.TELEGRAM_BOT_USERNAME || null }, referralBlatsRules(deps.env));
   };
 
   router.get('/api/referrals', auth, rateLimit(readLimiter, byUser), async (ctx) => {
@@ -34,6 +35,13 @@ export const registerReferralRoutes: RouteModule = (router, deps) => {
       });
       if (c) notifyReferral(deps.social, c);
     }
+    if (await r.hasPendingBlats(me.userId)) {
+      const b = await r.tryPayBlats(me.userId).catch((e: Error) => {
+        deps.log.warn('referral blats failed', { err: e });
+        return null;
+      });
+      if (b) notifyReferralBlats(deps.social, b);
+    }
     const res: ReferralResponse = await r.overview(me.userId);
     ctx.json(200, res, { 'cache-control': 'no-store' });
   });
@@ -44,4 +52,10 @@ export function notifyReferral(social: { push(userId: string, e: SocialEvent): v
   if (!social) return;
   if (r.status === 'confirmed') social.push(r.paid.referrerId, { type: 'referral', name: r.paid.refereeName, reward: r.paid.reward, balance: r.paid.balance, held: false });
   else social.push(r.referrerId, { type: 'referral', name: '', reward: 0, balance: -1, held: true });
+}
+
+/** v0.2.25: tells the inviter that a friend's matches brought BLATS (a capped or held one says nothing yet). */
+export function notifyReferralBlats(social: { push(userId: string, e: SocialEvent): void } | null | undefined, b: BlatsResult): void {
+  if (!social || b.status !== 'paid') return;
+  social.push(b.referrerId, { type: 'referral', name: b.refereeName, reward: 0, balance: -1, held: false, blats: b.amount });
 }

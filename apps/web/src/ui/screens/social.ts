@@ -3,7 +3,7 @@
  * the lobby's «invite friends» panel and the card of an incoming invitation. Everything reads the
  * SocialClient store and redraws itself when it changes; the server decides every action.
  */
-import { CHARACTERS, CHARACTER_IDS, GRADES, GRADE_RANK, isNick, toNick, DM_MAX_LENGTH, LEADERBOARD_BY, REFERRAL_TALONS } from '@blatkom/shared';
+import { CHARACTERS, CHARACTER_IDS, GRADES, GRADE_RANK, isNick, toNick, DM_MAX_LENGTH, LEADERBOARD_BY, REFERRAL_BLATS } from '@blatkom/shared';
 import type { DirectMessage, FriendEntry, FriendRequestEntry, FriendStatus, LeaderboardBy, LeaderboardEntry, LeaderboardResponse, PlayerCard, RoomInviteEvent, GameMode } from '@blatkom/shared';
 import { h, fill, toast, founderTag, portrait } from '../dom.js';
 import { gradeTag } from './shop.js';
@@ -195,7 +195,7 @@ export function renderFriends(o: { online: OnlineClient; root: HTMLElement; onPl
         { class: 'row', style: 'gap:8px' },
         h('button', { class: 'btn btn--small btn--ghost', onclick: o.onTop }, t('Find players in the Top-100 →')),
         // v0.2.18: invite a friend to the game — talons when they play their first whole match
-        o.onInvite ? h('button', { class: 'btn btn--small btn--red', 'data-testid': 'friends-invite-game', onclick: o.onInvite }, t('Invite to the game · +{n} talons', { n: REFERRAL_TALONS })) : null,
+        o.onInvite ? h('button', { class: 'btn btn--small btn--red', 'data-testid': 'friends-invite-game', onclick: o.onInvite }, t('Invite to the game · +{n} BLATS', { n: REFERRAL_BLATS.amount })) : null,
       ),
     ),
     requests,

@@ -5,7 +5,7 @@
  * Every decision goes to the audit log.
  */
 import type { AdminMe, AdminReferralRow, AdminReferralSummary } from '@blatkom/shared';
-import { REFERRAL_RULES, REFERRAL_TALONS } from '@blatkom/shared';
+import { REFERRAL_BLATS, REFERRAL_RULES, REFERRAL_TALONS } from '@blatkom/shared';
 import { h, clear, toast } from '../dom.js';
 import { apiFetch, rangeQuery } from '../api.js';
 import { dateTime, num } from '../format.js';
@@ -120,7 +120,7 @@ export async function renderReferrals(root: HTMLElement, me: AdminMe): Promise<v
     h(
       'p',
       { class: 'note' },
-      `Друг засчитывается после первого полного онлайн-матча (не короче ${REFERRAL_RULES.minMatchSec} секунд, с нанесённым уроном); пригласивший получает ${REFERRAL_TALONS} талонов. Больше ${REFERRAL_RULES.dailyCap} засчитанных приглашений за сутки у одного игрока или помеченный аккаунт — приглашение ждёт решения здесь. Пометить аккаунт можно на карточке игрока.`,
+      `Друг засчитывается после первого полного онлайн-матча (не короче ${REFERRAL_RULES.minMatchSec} секунд, с нанесённым уроном); пригласивший получает ${REFERRAL_TALONS} талонов. Больше ${REFERRAL_RULES.dailyCap} засчитанных приглашений за сутки у одного игрока или помеченный аккаунт — приглашение ждёт решения здесь. Пометить аккаунт можно на карточке игрока. С v0.2.25 после ${REFERRAL_BLATS.matches} полных матчей друга пригласивший получает ещё ${REFERRAL_BLATS.amount} БЛАТ (не больше ${REFERRAL_BLATS.monthlyCap} друзей за 30 дней; сверх лимита — без БЛАТ, талоны остаются; помеченный аккаунт — БЛАТ не начисляются). Числа по умолчанию; на сервере — REFERRAL_BLATS, REFERRAL_BLATS_MATCHES, REFERRAL_BLATS_MONTHLY.`,
     ),
     h(
       'div',

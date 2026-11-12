@@ -112,12 +112,15 @@ try {
   await A.page.screenshot({ path: `${outDir}/menu_A.png` });
   await A.page.getByTestId('menu-friends').click();
   const inviteBtn = (await A.page.getByTestId('friends-invite-game').innerText()).replace(/\s+/g, ' ').trim();
-  check(/Invite to the game · \+150 talons/i.test(inviteBtn), `Friends: «${inviteBtn}»`);
+  // v0.2.25: the button promises the BLATS (the talons come after the first match, as before)
+  check(/Invite to the game · \+50 BLATS/i.test(inviteBtn), `Friends: «${inviteBtn}»`);
   await A.page.getByTestId('friends-invite-game').click();
   await A.page.getByTestId('invite').waitFor({ timeout: 20000 });
   const a1 = await screen(A.page);
   check(new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/\\?ref=[A-Za-z0-9]{8}$`).test(a1.link ?? ''), `A’s personal link: ${a1.link}`);
   check(/150/.test(a1.reward ?? '') && /talons/.test(a1.reward ?? ''), `the reward: «${a1.reward}»`);
+  const blatsOffer = await A.page.evaluate(() => document.querySelector('[data-testid=invite-blats]')?.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+  check(/50/.test(blatsOffer) && /BLATS/.test(blatsOffer) && /3 whole online matches/.test(blatsOffer), `v0.2.25: BLATS for a friend's three matches: «${blatsOffer}»`);
   check((await stat(A.page, 'invite-invited')) === '0', 'invited 0');
   await A.page.getByTestId('invite-copy').click();
   const clip = await A.page.evaluate(() => navigator.clipboard.readText());

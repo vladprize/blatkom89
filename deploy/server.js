@@ -7800,7 +7800,7 @@ var EnvSchema = external_exports.object({
   STATIC_DIR: external_exports.string().optional(),
   LOG_LEVEL: external_exports.enum(["debug", "info", "warn", "error"]).default("info"),
   /** Reported by /api/health and stored with errors; defaults to the version the bundle was built from. */
-  SERVER_VERSION: external_exports.string().default("0.2.24"),
+  SERVER_VERSION: external_exports.string().default("0.2.25"),
   MAX_ROOMS: external_exports.coerce.number().int().min(1).max(1e4).default(500),
   /** Match rules (free-for-all deathmatch). Defaults: 4 minutes, 50 points (elimination 2, assist 1), 2–6 players. */
   MATCH_DURATION_SEC: external_exports.coerce.number().int().min(30).max(900).default(240),
@@ -7818,6 +7818,19 @@ var EnvSchema = external_exports.object({
    * modes), so a match can always start; they look like everyone else (rooms/MatchRoom.ts).
    */
   MATCH_FILL_BOTS: bool.default("true"),
+  /**
+   * v0.2.25: a Quick Match lobby lasts at least this long (seconds) from the first person's arrival; the
+   * filled players arrive spread over it (game-rules: FILL_RULES.lobbyMs). 0: start as soon as the lineup is in.
+   */
+  QUICK_LOBBY_SECONDS: external_exports.coerce.number().int().min(0).max(120).default(30),
+  /**
+   * v0.2.25: BLATS for invitations (game-rules/referrals.ts REFERRAL_BLATS) — this many for every invited friend
+   * who has played REFERRAL_BLATS_MATCHES whole online matches, at most REFERRAL_BLATS_MONTHLY friends a month.
+   * 0 BLATS: off (the talons for the first match stay).
+   */
+  REFERRAL_BLATS: external_exports.coerce.number().int().min(0).max(1e3).default(50),
+  REFERRAL_BLATS_MATCHES: external_exports.coerce.number().int().min(1).max(50).default(3),
+  REFERRAL_BLATS_MONTHLY: external_exports.coerce.number().int().min(0).max(1e3).default(20),
   /** Paid cases can be switched off where randomised paid items are restricted (docs/ECONOMY.md). */
   CASES_ENABLED: bool.default("true"),
   /**
@@ -12129,6 +12142,7 @@ var UpdateClubBody = external_exports.object({ motto: clubMottoSchema.optional()
 // packages/shared/src/game-rules/referrals.ts
 var REFERRAL_TALONS = 150;
 var REFERRAL_RULES = Object.freeze({ minMatchSec: 60, dailyCap: 20 });
+var REFERRAL_BLATS = Object.freeze({ amount: 50, matches: 3, monthlyCap: 20 });
 var REF_CODE_RE = /^[A-Za-z0-9_-]{4,32}$/;
 var isRefCode = (v) => typeof v === "string" && REF_CODE_RE.test(v);
 var FOUNDER_LEVEL = 87;
@@ -17032,6 +17046,12 @@ var FILL_RULES = Object.freeze({
   teamPlayers: 3,
   /** Quick Match: how long the first person waits for others before players start arriving. */
   waitMs: 5e3,
+  /**
+   * v0.2.25 (the owner: «ожидание в лобби — не меньше 30 секунд, боты добираются равномерно и органично»):
+   * a Quick Match lobby lasts this long from the first person's arrival (0: it starts as soon as the lineup is
+   * there, as before); the players the room adds arrive spread over it. The server's QUICK_LOBBY_SECONDS sets it.
+   */
+  lobbyMs: 3e4,
   /** …then one more player arrives every arriveMinMs–arriveMaxMs (lobby). */
   arriveMinMs: 700,
   arriveMaxMs: 2200,
@@ -17042,6 +17062,12 @@ var FILL_RULES = Object.freeze({
   leaveMinMs: 500,
   leaveMaxMs: 2e3
 });
+function lobbyArrivalDelay(now, startAt, toAdd, t, r) {
+  const left = startAt - 2500 - now;
+  if (toAdd <= 0 || left <= t.arriveMinMs) return t.arriveMinMs;
+  const step = left / (toAdd + 0.35);
+  return Math.round(Math.max(t.arriveMinMs, step * (0.65 + 0.7 * r)));
+}
 function fillTarget(mode, people, maxPlayers) {
   if (isTeamMode(mode)) return { side: Math.min(Math.floor(maxPlayers / 2), Math.max(FILL_RULES.teamPlayers, people.red, people.blue)) };
   return { total: Math.min(maxPlayers, Math.max(FILL_RULES.ffaPlayers, people.total)) };
@@ -19517,13 +19543,71 @@ async function moveClubRatings(tx, deltas) {
 // apps/server/src/referrals/repo.ts
 import { randomBytes as randomBytes3 } from "node:crypto";
 var CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+var WHOLE_MS = REFERRAL_RULES.minMatchSec * 1e3;
 var ReferralRepo = class {
-  constructor(sql2, links) {
+  constructor(sql2, links, blatsRules = REFERRAL_BLATS) {
     this.sql = sql2;
     this.links = links;
+    this.blatsRules = blatsRules;
   }
   sql;
   links;
+  blatsRules;
+  /** v0.2.25: has this invited player BLATS still to bring their inviter? */
+  async hasPendingBlats(refereeId) {
+    if (this.blatsRules.amount <= 0) return false;
+    return (await this.sql`SELECT 1 FROM referrals WHERE referee_id = ${refereeId} AND status = 'confirmed' AND blats_status = 'pending' AND referrer_id IS NOT NULL`).length > 0;
+  }
+  /**
+   * v0.2.25: pays the inviter the BLATS once `refereeId` has played the rules' number of whole matches — after
+   * the invitation itself counted (talons paid: not held, not flagged). Over the month's limit it is 'capped'
+   * (the talons stay); a flagged account on either side waits ('held'). Safe to call any number of times, from
+   * anywhere: the referral row is locked and the ledger takes one credit per friend.
+   */
+  async tryPayBlats(refereeId) {
+    const rules = this.blatsRules;
+    if (rules.amount <= 0) return null;
+    return this.sql.begin(async (tx) => {
+      const [r] = await tx`
+        SELECT referrer_id, status, blats_status FROM referrals WHERE referee_id = ${refereeId} FOR UPDATE`;
+      if (!r || !r.referrer_id || r.status !== "confirmed" || r.blats_status !== "pending") return null;
+      const referrerId = r.referrer_id;
+      const [played] = await tx`
+        SELECT count(*)::int AS n FROM match_participants mp JOIN matches m ON m.id = mp.match_id
+        WHERE mp.user_id = ${refereeId} AND mp.completed AND mp.damage_dealt > 0 AND m.status = 'completed' AND m.duration_ms >= ${WHOLE_MS}`;
+      if ((played?.n ?? 0) < rules.matches) return null;
+      const [f2] = await tx`
+        SELECT (SELECT blat_flag FROM users WHERE id = ${referrerId}) AS a, (SELECT blat_flag FROM users WHERE id = ${refereeId}) AS b,
+               (SELECT deleted_at IS NOT NULL FROM users WHERE id = ${referrerId}) AS gone`;
+      if (f2?.gone) return null;
+      if (f2?.a || f2?.b) {
+        const reason = f2.a ? "inviter flagged" : "invited player flagged";
+        await tx`UPDATE referrals SET blats_status = 'held', blats_at = now() WHERE referee_id = ${refereeId}`;
+        return { status: "held", referrerId, refereeId, reason };
+      }
+      const [month] = await tx`
+        SELECT count(*)::int AS n FROM referrals WHERE referrer_id = ${referrerId} AND blats_status = 'paid' AND blats_at > now() - interval '30 days'`;
+      if ((month?.n ?? 0) >= rules.monthlyCap) {
+        await tx`UPDATE referrals SET blats_status = 'capped', blats_at = now() WHERE referee_id = ${refereeId}`;
+        return { status: "capped", referrerId, refereeId, reason: `over ${rules.monthlyCap} a month` };
+      }
+      const [p] = await tx`SELECT diamonds FROM profiles WHERE user_id = ${referrerId} FOR UPDATE`;
+      if (!p) return null;
+      const after = p.diamonds + rules.amount;
+      const ins = await tx`
+        INSERT INTO currency_ledger (user_id, currency, delta, balance_after, reason, ref)
+        VALUES (${referrerId}, 'diamonds', ${rules.amount}, ${after}, 'referral', ${`referral-blats:${refereeId}`})
+        ON CONFLICT DO NOTHING RETURNING id`;
+      if (!ins.length) {
+        await tx`UPDATE referrals SET blats_status = 'paid', blats_at = COALESCE(blats_at, now()) WHERE referee_id = ${refereeId}`;
+        return null;
+      }
+      await tx`UPDATE profiles SET diamonds = ${after}, updated_at = now() WHERE user_id = ${referrerId}`;
+      await tx`UPDATE referrals SET blats_status = 'paid', blats_reward = ${rules.amount}, blats_at = now() WHERE referee_id = ${refereeId}`;
+      const [u] = await tx`SELECT display_name FROM users WHERE id = ${refereeId}`;
+      return { status: "paid", referrerId, refereeId, refereeName: u?.display_name ?? "", amount: rules.amount, balance: after };
+    });
+  }
   /** The player's referral code (made the first time it is asked for). */
   async ensureCode(userId) {
     const [u] = await this.sql`SELECT ref_code FROM users WHERE id = ${userId}`;
@@ -19627,8 +19711,13 @@ var ReferralRepo = class {
     const by = (s) => counts.find((c) => c.status === s)?.n ?? 0;
     const [earned] = await this.sql`
       SELECT COALESCE(sum(delta), 0)::int AS s FROM currency_ledger WHERE user_id = ${userId} AND currency = 'tokens' AND reason = 'referral'`;
+    const rules = this.blatsRules;
+    const [bl] = await this.sql`
+      SELECT COALESCE((SELECT sum(delta) FROM currency_ledger WHERE user_id = ${userId} AND currency = 'diamonds' AND reason = 'referral'), 0)::int AS s,
+             (SELECT count(*) FROM referrals WHERE referrer_id = ${userId} AND blats_status = 'paid' AND blats_at > now() - interval '30 days')::int AS m`;
     const recent = await this.sql`
-      SELECT u.display_name, r.attached_at, r.status,
+      SELECT u.display_name, r.attached_at, r.status, r.blats_status, r.blats_reward,
+             (SELECT count(*) FROM match_participants mp JOIN matches m ON m.id = mp.match_id WHERE mp.user_id = r.referee_id AND mp.completed AND mp.damage_dealt > 0 AND m.status = 'completed' AND m.duration_ms >= ${WHOLE_MS})::int AS matches,
              COALESCE((SELECT l.delta FROM currency_ledger l WHERE l.user_id = r.referrer_id AND l.currency = 'tokens' AND l.reason = 'referral' AND l.ref = 'referral:' || r.referee_id::text), 0)::int AS paid
       FROM referrals r JOIN users u ON u.id = r.referee_id
       WHERE r.referrer_id = ${userId} ORDER BY r.attached_at DESC LIMIT 20`;
@@ -19643,7 +19732,8 @@ var ReferralRepo = class {
       held: by("held"),
       earned: earned?.s ?? 0,
       reward: REFERRAL_TALONS,
-      recent: recent.map((r) => ({ name: r.display_name, at: r.attached_at.toISOString(), status: r.status, reward: r.paid }))
+      recent: recent.map((r) => ({ name: r.display_name, at: r.attached_at.toISOString(), status: r.status, reward: r.paid, blats: r.blats_reward, matches: r.matches, blatsStatus: r.blats_status })),
+      ...rules.amount > 0 ? { blats: { amount: rules.amount, matches: rules.matches, monthlyCap: rules.monthlyCap, earned: bl?.s ?? 0, thisMonth: bl?.m ?? 0 } } : {}
     };
   }
   /** For tests and the admin: the inviter's confirmed count. */
@@ -19809,14 +19899,18 @@ async function existingUsers(tx, ids) {
   return new Set(rows.map((r) => r.id));
 }
 var PgMatchRecorder = class {
-  constructor(sql2, log2) {
+  constructor(sql2, log2, referralBlats = REFERRAL_BLATS) {
     this.sql = sql2;
     this.log = log2;
+    this.referralBlats = referralBlats;
   }
   sql;
   log;
+  referralBlats;
   /** V2.0: an invitation counted (or held) after a match — the app tells the inviter live. */
   onReferral = null;
+  /** v0.2.25: an invited friend's matches brought their inviter BLATS (or hit the month's limit). */
+  onReferralBlats = null;
   async matchStarted(m) {
     if (!UUID_RE.test(m.matchId)) return;
     await this.sql.begin(async (tx) => {
@@ -19840,13 +19934,22 @@ var PgMatchRecorder = class {
     return out;
   }
   async confirmReferrals(userIds) {
-    const refs = new ReferralRepo(this.sql, { publicUrl: "" });
+    const refs = new ReferralRepo(this.sql, { publicUrl: "" }, this.referralBlats);
     for (const id of userIds) {
-      if (!UUID_RE.test(id) || !await refs.hasPending(id)) continue;
-      const r = await refs.tryConfirm(id);
-      if (r) {
-        this.log.info("referral", r.status === "confirmed" ? { referee: id, referrer: r.paid.referrerId, reward: r.paid.reward, ordinal: r.paid.ordinal } : { referee: id, referrer: r.referrerId, held: r.reason });
-        this.onReferral?.(r);
+      if (!UUID_RE.test(id)) continue;
+      if (await refs.hasPending(id)) {
+        const r = await refs.tryConfirm(id);
+        if (r) {
+          this.log.info("referral", r.status === "confirmed" ? { referee: id, referrer: r.paid.referrerId, reward: r.paid.reward, ordinal: r.paid.ordinal } : { referee: id, referrer: r.referrerId, held: r.reason });
+          this.onReferral?.(r);
+        }
+      }
+      if (await refs.hasPendingBlats(id)) {
+        const b2 = await refs.tryPayBlats(id);
+        if (b2) {
+          this.log.info("referral blats", b2.status === "paid" ? { referee: id, referrer: b2.referrerId, blats: b2.amount } : { referee: id, referrer: b2.referrerId, [b2.status]: b2.reason });
+          this.onReferralBlats?.(b2);
+        }
       }
     }
   }
@@ -21349,6 +21452,9 @@ function pgGangs(sql2) {
     }
   };
 }
+function referralBlatsRules(env2) {
+  return { amount: env2.REFERRAL_BLATS, matches: env2.REFERRAL_BLATS_MATCHES, monthlyCap: env2.REFERRAL_BLATS_MONTHLY };
+}
 function pgContext(sql2, env2, log2) {
   const existing = contexts.get(sql2);
   if (existing) return existing;
@@ -21363,7 +21469,7 @@ function pgContext(sql2, env2, log2) {
     users: new UserRepo(sql2),
     sessions: new SessionStore(sql2, env2.SESSION_SECRET, env2.SESSION_TTL_HOURS, activity, log2),
     profiles: new ProfileRepo(sql2, env2.WELCOME_BONUS_BLATS),
-    recorder: new PgMatchRecorder(sql2, log2),
+    recorder: new PgMatchRecorder(sql2, log2, referralBlatsRules(env2)),
     invites: new PgInvites(sql2),
     analytics,
     adminAuth: new AdminAuth(sql2, env2.SESSION_SECRET, env2.ADMIN_SESSION_TTL_HOURS, env2.PUBLIC_URL.startsWith("https://"), origins),
@@ -22169,7 +22275,7 @@ var registerReferralRoutes = (router, deps) => {
   const readLimiter = new RateLimiter(60, 1);
   const repo = () => {
     if (!deps.sql) throw new HttpError(503, "persistence_unavailable", "The service is temporarily unavailable");
-    return new ReferralRepo(deps.sql, { publicUrl: deps.env.PUBLIC_URL, botUsername: deps.env.TELEGRAM_BOT_USERNAME || null });
+    return new ReferralRepo(deps.sql, { publicUrl: deps.env.PUBLIC_URL, botUsername: deps.env.TELEGRAM_BOT_USERNAME || null }, referralBlatsRules(deps.env));
   };
   router.get("/api/referrals", auth, rateLimit(readLimiter, byUser), async (ctx) => {
     const me = currentUser(ctx);
@@ -22181,6 +22287,13 @@ var registerReferralRoutes = (router, deps) => {
       });
       if (c) notifyReferral(deps.social, c);
     }
+    if (await r.hasPendingBlats(me.userId)) {
+      const b2 = await r.tryPayBlats(me.userId).catch((e2) => {
+        deps.log.warn("referral blats failed", { err: e2 });
+        return null;
+      });
+      if (b2) notifyReferralBlats(deps.social, b2);
+    }
     const res = await r.overview(me.userId);
     ctx.json(200, res, { "cache-control": "no-store" });
   });
@@ -22189,6 +22302,10 @@ function notifyReferral(social2, r) {
   if (!social2) return;
   if (r.status === "confirmed") social2.push(r.paid.referrerId, { type: "referral", name: r.paid.refereeName, reward: r.paid.reward, balance: r.paid.balance, held: false });
   else social2.push(r.referrerId, { type: "referral", name: "", reward: 0, balance: -1, held: true });
+}
+function notifyReferralBlats(social2, b2) {
+  if (!social2 || b2.status !== "paid") return;
+  social2.push(b2.referrerId, { type: "referral", name: b2.refereeName, reward: 0, balance: -1, held: false, blats: b2.amount });
 }
 
 // apps/server/src/admin/csv.ts
@@ -24742,7 +24859,7 @@ var MatchRoom = class {
     this.kon = opts.kon ?? null;
     this.battle = this.kon ? opts.battle ?? null : null;
     this.fillBots = this.kon ? false : opts.fillBots ?? false;
-    this.fillTiming = { ...FILL_RULES, ...opts.fillTiming };
+    this.fillTiming = { ...FILL_RULES, lobbyMs: 0, ...opts.fillTiming };
     this.onPresence = opts.onPresence ?? (() => {
     });
     const base2 = { ...DEFAULT_MATCH_CONFIG, ...opts.config, mode: opts.mode ?? opts.config?.mode ?? "ffa" };
@@ -24793,6 +24910,8 @@ var MatchRoom = class {
   onPresence;
   /** Quick Match lobby: players start arriving from this time on (0: nobody waiting yet). */
   fillFrom = 0;
+  /** v0.2.25: since when people wait in this Quick Match lobby (0: nobody yet) — it lasts FillTiming.lobbyMs. */
+  lobbySince = 0;
   /** When the next change of the filled lineup happens (0: none scheduled). */
   nextFillAt = 0;
   log;
@@ -24829,6 +24948,19 @@ var MatchRoom = class {
   /** A person holding a place in this room (connected or within the reconnect window). */
   hasMember(userId) {
     return this.clients.has(userId);
+  }
+  /** v0.2.25: a Quick Match lobby that lasts its full time while the room's players arrive over it. */
+  get quickLobby() {
+    return this.autoStart && this.fillBots && !this.isPrivate && !this.kon && this.fillTiming.lobbyMs > 0;
+  }
+  /** v0.2.25: how many of the room's players are still to arrive for the wanted lineup. */
+  toAdd() {
+    const want = this.fillWant();
+    if (!want) return 0;
+    const seats = [...this.seats.values()];
+    if ("total" in want) return Math.max(0, want.total - seats.length);
+    const red = seats.filter((x) => this.world.players.get(x.id)?.team === 0).length;
+    return Math.max(0, want.red - red) + Math.max(0, want.blue - (seats.length - red));
   }
   /** People the host needs to start: one when the room fills the lineup up itself. */
   get minToStart() {
@@ -25094,9 +25226,21 @@ var MatchRoom = class {
         return;
       case "loadout": {
         const now = Date.now();
-        if (now - c.lastGearAt < 1500) return;
-        c.lastGearAt = now;
         const userId = c.user.userId;
+        if (now - c.lastGearAt < 1500) {
+          if (!c.gearLater) {
+            c.gearLater = true;
+            setTimeout(() => {
+              const cur = this.clients.get(userId);
+              if (!cur || this.closed) return;
+              cur.gearLater = false;
+              cur.lastGearAt = 0;
+              this.handleControl(cur, { type: "loadout" });
+            }, 1500 - (now - c.lastGearAt) + 20);
+          }
+          return;
+        }
+        c.lastGearAt = now;
         void this.services.economy.gear(userId).then((g) => {
           const cur = this.clients.get(userId);
           if (!cur || this.closed) return;
@@ -25290,7 +25434,7 @@ var MatchRoom = class {
     if (phase === "closed") return;
     const inLobby = phase === "waiting";
     if (inLobby && this.connectedCount === 0) this.fillFrom = 0;
-    else if (inLobby && !this.fillFrom) this.fillFrom = now + this.fillTiming.waitMs;
+    else if (inLobby && !this.fillFrom) this.fillFrom = now + (this.quickLobby ? between(1800, 4200) : this.fillTiming.waitMs);
     const step = this.fillStep();
     if (!step) {
       this.nextFillAt = 0;
@@ -25309,7 +25453,12 @@ var MatchRoom = class {
     }
     if (!this.nextFillAt) {
       const t = this.fillTiming;
-      this.nextFillAt = now + (step.kind === "remove" ? between(t.leaveMinMs, t.leaveMaxMs) : inLobby ? between(t.arriveMinMs, t.arriveMaxMs) : between(t.joinMinMs, t.joinMaxMs));
+      const arrive = () => {
+        if (!this.quickLobby || !this.lobbySince) return between(t.arriveMinMs, t.arriveMaxMs);
+        if (this.seats.size === 0) return between(500, 1600);
+        return lobbyArrivalDelay(now, this.lobbySince + t.lobbyMs, this.toAdd(), t, Math.random());
+      };
+      this.nextFillAt = now + (step.kind === "remove" ? between(t.leaveMinMs, t.leaveMaxMs) : inLobby ? arrive() : between(t.joinMinMs, t.joinMaxMs));
       return;
     }
     if (now < this.nextFillAt) return;
@@ -25323,6 +25472,7 @@ var MatchRoom = class {
     this.startMatch();
   }
   startMatch() {
+    this.lobbySince = 0;
     if (this.fillBots) this.fillNow();
     for (const seat of this.seats.values()) {
       seat.brain = null;
@@ -25487,9 +25637,16 @@ var MatchRoom = class {
     if (this.fillBots || this.seats.size > 0) this.fillTick(now);
     if (w.phase === "waiting") {
       const connected = [...this.clients.values()].filter((c) => c.connected);
+      if (connected.length === 0) this.lobbySince = 0;
+      else if (!this.lobbySince) this.lobbySince = now;
       const enough = connected.length > 0 && connected.length + this.seats.size >= this.config.minPlayers;
       const allReady = enough && connected.every((c) => c.ready);
-      if (allReady) {
+      if (this.quickLobby) {
+        if (connected.length > 0 && connected.every((c) => c.ready) && now >= this.lobbySince + this.fillTiming.lobbyMs) {
+          this.autoStartAt = 0;
+          this.requestStart();
+        }
+      } else if (allReady) {
         if (!this.autoStartAt) this.autoStartAt = now + (this.autoStart ? AUTO_START_DELAY_MS : 600);
         if (now >= this.autoStartAt) {
           this.autoStartAt = 0;
@@ -25626,6 +25783,12 @@ var MatchRoom = class {
     m.set(id, (m.get(id) ?? 0) + 1);
   }
   // ── Output helpers ──────────────────────────────────────────────────────
+  /** v0.2.25: a Quick Match lobby — how long until the match starts (null: no such clock here). */
+  lobbyLeft() {
+    if (!this.quickLobby || this.world.phase !== "waiting" || this.connectedCount === 0) return null;
+    if (!this.lobbySince) this.lobbySince = this.clock();
+    return Math.max(0, this.lobbySince + this.fillTiming.lobbyMs - this.clock());
+  }
   roster() {
     const finished = this.world.phase === "finished";
     const order = (id) => {
@@ -25685,7 +25848,8 @@ var MatchRoom = class {
       mode: this.config.mode,
       minToStart: this.minToStart,
       kon: this.kon,
-      ...this.battle ? { battle: this.battle } : {}
+      ...this.battle ? { battle: this.battle } : {},
+      ...this.lobbyLeft() !== null ? { startsInMs: this.lobbyLeft() } : {}
     };
   }
   broadcastRoster() {
@@ -26084,10 +26248,13 @@ var applied = await migrate(sql);
 if (applied.length) log.info("migrations applied", { applied });
 var persistence = await createPersistence({ sql, env, log });
 var services = persistence.services;
-var rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env), fillBots: env.MATCH_FILL_BOTS });
+var rooms = new RoomManager(services, log, { maxRooms: env.MAX_ROOMS, config: matchConfigFromEnv(env), fillBots: env.MATCH_FILL_BOTS, fillTiming: { lobbyMs: env.QUICK_LOBBY_SECONDS * 1e3 } });
 var social = new SocialHub(rooms, log);
 rooms.onPresence((userId) => void social.announce(userId));
-if (persistence.recorder) persistence.recorder.onReferral = (r) => notifyReferral(social, r);
+if (persistence.recorder) {
+  persistence.recorder.onReferral = (r) => notifyReferral(social, r);
+  persistence.recorder.onReferralBlats = (b2) => notifyReferralBlats(social, b2);
+}
 var keepAwake = new KeepAwake(env.PUBLIC_URL, { always: env.KEEP_AWAKE, log });
 var handler = createApp({ env, sql, log, services, rooms, social, keepAwake });
 var server = createServer((req, res) => {

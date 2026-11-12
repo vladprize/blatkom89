@@ -27,6 +27,12 @@ export const FILL_RULES = Object.freeze({
   teamPlayers: 3,
   /** Quick Match: how long the first person waits for others before players start arriving. */
   waitMs: 5000,
+  /**
+   * v0.2.25 (the owner: «ожидание в лобби — не меньше 30 секунд, боты добираются равномерно и органично»):
+   * a Quick Match lobby lasts this long from the first person's arrival (0: it starts as soon as the lineup is
+   * there, as before); the players the room adds arrive spread over it. The server's QUICK_LOBBY_SECONDS sets it.
+   */
+  lobbyMs: 30000,
   /** …then one more player arrives every arriveMinMs–arriveMaxMs (lobby). */
   arriveMinMs: 700,
   arriveMaxMs: 2200,
@@ -39,7 +45,19 @@ export const FILL_RULES = Object.freeze({
 });
 
 /** The timings of FILL_RULES (rooms may shorten them, e.g. in tests). */
-export type FillTiming = Pick<typeof FILL_RULES, 'waitMs' | 'arriveMinMs' | 'arriveMaxMs' | 'joinMinMs' | 'joinMaxMs' | 'leaveMinMs' | 'leaveMaxMs'>;
+export type FillTiming = Record<'waitMs' | 'lobbyMs' | 'arriveMinMs' | 'arriveMaxMs' | 'joinMinMs' | 'joinMaxMs' | 'leaveMinMs' | 'leaveMaxMs', number>;
+
+/**
+ * v0.2.25: when the next of `toAdd` players arrives in a Quick Match lobby that starts at `startAt` — the room
+ * spread evenly over what is left of the wait (the last a few seconds before the start), each step a little
+ * longer or shorter than the others (`r`: a random number 0…1).
+ */
+export function lobbyArrivalDelay(now: number, startAt: number, toAdd: number, t: Pick<FillTiming, 'arriveMinMs'>, r: number): number {
+  const left = startAt - 2500 - now;
+  if (toAdd <= 0 || left <= t.arriveMinMs) return t.arriveMinMs;
+  const step = left / (toAdd + 0.35);
+  return Math.round(Math.max(t.arriveMinMs, step * (0.65 + 0.7 * r)));
+}
 
 /**
  * The lineup to reach: free-for-all — the total number of players; team modes — the size of each side

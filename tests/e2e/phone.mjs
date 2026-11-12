@@ -140,7 +140,8 @@ for (const [w, hgt, lang] of [
 
   // the character screen and its personal file
   await page.getByTestId('menu-nick').waitFor({ timeout: 10000 });
-  await page.locator('.menu__char').click();
+  // v0.2.25: a phone's menu has no character panel any more — its card opens the picker; the screen itself
+  await page.evaluate(() => window.__blatkom.app.showCharacters());
   await page.getByTestId('char-summary').waitFor({ timeout: 10000 });
   await page.waitForTimeout(400);
   await screen('the characters');

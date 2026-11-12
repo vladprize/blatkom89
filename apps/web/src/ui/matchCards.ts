@@ -143,7 +143,8 @@ export class MatchCards {
     const n = list.length;
     const { w: vw, h: vh } = this.size();
     const gap = 8;
-    const width = Math.floor(Math.max(56, Math.min(150, (vw - 32 - gap * (n - 1) - (myTeam !== null ? 16 : 0)) / n, (vh * 0.42) / 1.42)));
+    // v0.2.25: a short screen (a phone held sideways) leaves room under the cards for the loading screen's controls
+    const width = Math.floor(Math.max(56, Math.min(150, (vw - 32 - gap * (n - 1) - (myTeam !== null ? 16 : 0)) / n, (vh * (vh < 500 ? 0.3 : 0.42)) / 1.42)));
     const row = h('div', { class: 'mcards__row' });
     let lastTeam: Team | null | undefined;
     list.forEach((p, i) => {

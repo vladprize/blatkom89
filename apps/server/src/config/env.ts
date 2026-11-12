@@ -67,6 +67,19 @@ const EnvSchema = z.object({
    * modes), so a match can always start; they look like everyone else (rooms/MatchRoom.ts).
    */
   MATCH_FILL_BOTS: bool.default('true'),
+  /**
+   * v0.2.25: a Quick Match lobby lasts at least this long (seconds) from the first person's arrival; the
+   * filled players arrive spread over it (game-rules: FILL_RULES.lobbyMs). 0: start as soon as the lineup is in.
+   */
+  QUICK_LOBBY_SECONDS: z.coerce.number().int().min(0).max(120).default(30),
+  /**
+   * v0.2.25: BLATS for invitations (game-rules/referrals.ts REFERRAL_BLATS) — this many for every invited friend
+   * who has played REFERRAL_BLATS_MATCHES whole online matches, at most REFERRAL_BLATS_MONTHLY friends a month.
+   * 0 BLATS: off (the talons for the first match stay).
+   */
+  REFERRAL_BLATS: z.coerce.number().int().min(0).max(1000).default(50),
+  REFERRAL_BLATS_MATCHES: z.coerce.number().int().min(1).max(50).default(3),
+  REFERRAL_BLATS_MONTHLY: z.coerce.number().int().min(0).max(1000).default(20),
   /** Paid cases can be switched off where randomised paid items are restricted (docs/ECONOMY.md). */
   CASES_ENABLED: bool.default('true'),
   /**

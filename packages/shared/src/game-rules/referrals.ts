@@ -18,6 +18,15 @@ export const REFERRAL_TALONS = 150;
  */
 export const REFERRAL_RULES = Object.freeze({ minMatchSec: 60, dailyCap: 20 });
 
+/**
+ * v0.2.25 (the owner: «давать алмазы за приглашение друзей по уникальной ссылке»): BLATS on top of the talons —
+ * `amount` for every invited friend who has played `matches` whole online matches (the same «whole» as above),
+ * paid once; at most `monthlyCap` friends a month pay BLATS (the rest still pay their talons). The server's
+ * REFERRAL_BLATS, REFERRAL_BLATS_MATCHES and REFERRAL_BLATS_MONTHLY set them (0 BLATS: off).
+ */
+export const REFERRAL_BLATS = Object.freeze({ amount: 50, matches: 3, monthlyCap: 20 });
+export type ReferralBlatsRules = { amount: number; matches: number; monthlyCap: number };
+
 /** A referral code: the player's own (8 letters and digits) or a partner's (an author's name). */
 export const REF_CODE_RE = /^[A-Za-z0-9_-]{4,32}$/;
 export const isRefCode = (v: unknown): v is string => typeof v === 'string' && REF_CODE_RE.test(v);

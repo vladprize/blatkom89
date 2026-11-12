@@ -16,6 +16,8 @@ import type { FighterCardData } from '../fighterCard.js';
  */
 export interface ResultsCards {
   podium: FighterCardData[];
+  /** v0.2.25: under each podium card — its points and eliminations. */
+  podiumStats?: string[];
   killers: FighterCardData[];
   onTry?: (d: FighterCardData) => void;
   /** A player's card from the table (tap a row: the card big, to look at or share); null: not known. */
@@ -29,13 +31,42 @@ function viewSize(): { w: number; h: number } {
   return turned ? { w: window.innerHeight, h: window.innerWidth } : { w: window.innerWidth, h: window.innerHeight };
 }
 
-function podiumEl(list: FighterCardData[]): HTMLElement | null {
+/**
+ * The podium — v0.2.25 (the owner: «на табле карточки персонажей должны быть большими и притягивать внимание, а
+ * список игроков — вторичен, внизу»): the best three as big as the room they are given (the CSS gives the podium
+ * most of the column; the cards fill its height, the winner in the middle a size bigger), each with its points and
+ * eliminations under it.
+ */
+function podiumEl(list: FighterCardData[], stats: readonly string[]): HTMLElement | null {
   if (list.length < 2) return null;
-  const { h: vh } = viewSize();
-  const base = Math.round(Math.max(60, Math.min(118, (vh * 0.2) / 1.42)));
-  // second, first, third — the winner in the middle, a little bigger
+  // second, first, third — the winner in the middle
   const order = [1, 0, 2].filter((i) => i < list.length);
-  return h('div', { class: 'panel podium', 'data-testid': 'podium' }, ...order.map((i) => h('div', { class: `podium__step podium__step--${i + 1}` }, new FighterCard(list[i]!, { shape: 'tall', width: i === 0 ? Math.round(base * 1.16) : base }).el)));
+  const K = 0.84;
+  const steps = order.map((i) => ({ i, box: h('div', { class: 'podium__card' }), line: h('div', { class: 'podium__stat' }, stats[i] ?? '') }));
+  const el = h('div', { class: 'panel podium', 'data-testid': 'podium' }, ...steps.map((s) => h('div', { class: `podium__step podium__step--${s.i + 1}` }, s.box, s.line)));
+  const cards = new Map<number, FighterCard>();
+  let width = 0;
+  const fit = () => {
+    if (!el.isConnected) return;
+    // the layout's own sizes (a page turned for a phone held sideways turns getBoundingClientRect's too)
+    const cs = getComputedStyle(el);
+    const innerW = el.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    const innerH = el.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0) - 40;
+    if (innerW < 60 || innerH < 60) return;
+    const gaps = (steps.length - 1) * 14;
+    const w = Math.floor(Math.max(56, Math.min((innerW - gaps) / (1 + (steps.length - 1) * K), innerH / 1.42, 330)));
+    if (cards.size && Math.abs(w - width) < 3) return;
+    width = w;
+    for (const s of steps) {
+      cards.get(s.i)?.destroy();
+      const card = new FighterCard(list[s.i]!, { shape: 'tall', width: s.i === 0 ? w : Math.round(w * K) });
+      cards.set(s.i, card);
+      s.box.replaceChildren(card.el);
+    }
+  };
+  if (typeof ResizeObserver === 'function') new ResizeObserver(() => fit()).observe(el);
+  requestAnimationFrame(fit);
+  return el;
 }
 
 function killedByEl(c: ResultsCards): HTMLElement | null {
@@ -218,7 +249,7 @@ export function renderResults(o: {
             h('div', { class: 'teamwin__score' }, h('b', { class: 'red' }, String(red)), ' : ', h('b', { class: 'blue' }, String(blue))),
           );
   }
-  const podium = o.cards ? podiumEl(o.cards.podium) : null;
+  const podium = o.cards ? podiumEl(o.cards.podium, o.cards.podiumStats ?? []) : null;
   if (podium && !teams) banner = null;
   if (banner) {
     // the team banner stays (the podium comes under it)

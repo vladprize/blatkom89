@@ -191,6 +191,24 @@ function weaponFrame(w: WeaponId, f: FinishId | null, k: number, onReady: () => 
   return frames[k % n] ?? frames[0] ?? null;
 }
 
+/**
+ * v0.2.25 (the owner: «у персонажей на карточках иногда сжимается текст ника»): a line too wide for its room is
+ * set smaller (down to 62 % of its size), then cut with «…» — never squeezed sideways, which `fillText`'s own
+ * width limit does.
+ */
+export function fitLine(ctx: CanvasRenderingContext2D, s: string, size: number, max: number | undefined, weight: number, font: string): { s: string; size: number } {
+  if (!max || max <= 0) return { s, size };
+  ctx.font = `${weight} ${size}px ${font}`;
+  const w = ctx.measureText(s).width;
+  if (w <= max) return { s, size };
+  const z = Math.max(size * 0.62, Math.floor(size * (max / w) * 0.98 * 10) / 10);
+  ctx.font = `${weight} ${z}px ${font}`;
+  if (ctx.measureText(s).width <= max) return { s, size: z };
+  let cut = s;
+  while (cut.length > 1 && ctx.measureText(`${cut}…`).width > max) cut = cut.slice(0, -1);
+  return { s: `${cut.trimEnd()}…`, size: z };
+}
+
 /** Whether the cards' font (Oswald) is loaded — once it is, it stays. */
 let fontLoaded = false;
 function fontIn(): boolean {
@@ -603,12 +621,14 @@ export class FighterCard {
     ctx.strokeRect(1, 1, w - 2, h - 2);
     const L = Math.min(w, h) * 0.12;
     ctx.lineWidth = 3;
-    for (const [x, y, sx, sy] of [
+    // a card with a label: its strip marks the top (the top brackets cut into the label's first and last letters)
+    const corners = [
       [3, 3, 1, 1],
       [w - 3, 3, -1, 1],
       [3, h - 3, 1, -1],
       [w - 3, h - 3, -1, -1],
-    ] as const) {
+    ] as const;
+    for (const [x, y, sx, sy] of this.d.label ? corners.slice(2) : corners) {
       ctx.beginPath();
       ctx.moveTo(x, y + sy * L);
       ctx.lineTo(x, y);
@@ -674,14 +694,17 @@ export class FighterCard {
 
   private text(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, size: number, color: string, o: { weight?: number; align?: CanvasTextAlign; max?: number; font?: string } = {}) {
     ctx.save();
-    ctx.font = `${o.weight ?? 600} ${size}px ${o.font ?? 'Oswald, sans-serif'}`;
+    const font = o.font ?? 'Oswald, sans-serif';
+    const weight = o.weight ?? 600;
+    const fit = fitLine(ctx, s, size, o.max, weight, font);
+    ctx.font = `${weight} ${fit.size}px ${font}`;
     ctx.fillStyle = color;
     ctx.textAlign = o.align ?? 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.shadowColor = 'rgba(0,0,0,.75)';
     ctx.shadowBlur = 3;
     ctx.shadowOffsetY = 1;
-    ctx.fillText(s, x, y, o.max);
+    ctx.fillText(fit.s, x, y);
     ctx.restore();
   }
 
@@ -735,11 +758,12 @@ export class FighterCard {
     ctx.save();
     ctx.fillStyle = this.d.labelColor ?? '#b8261e';
     ctx.fillRect(0, 0, w, size * 1.7);
-    ctx.font = `700 ${size}px Oswald, sans-serif`;
+    const fit = fitLine(ctx, label.toUpperCase(), size, w - 18, 700, 'Oswald, sans-serif');
+    ctx.font = `700 ${fit.size}px Oswald, sans-serif`;
     ctx.fillStyle = '#fff3e0';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label.toUpperCase(), w / 2, size * 0.88, w - 12);
+    ctx.fillText(fit.s, w / 2, size * 0.88);
     ctx.restore();
   }
 

@@ -6,8 +6,9 @@
  * enemies, rewards) are in the shared package (packages/shared/src/story/missions.ts).
  */
 import type { CharacterId, StoryCampaign, StoryRole } from '@blatkom/shared';
-import { getLang } from '../i18n/index.js';
+import { getLang, getSwear } from '../i18n/index.js';
 import type { SceneId } from './scenes.js';
+import { STORY_MAT } from './mat.js';
 
 /** [English, Russian]. */
 export type Line = readonly [string, string];
@@ -42,9 +43,10 @@ export interface MissionScript {
   outro: Beat[];
 }
 
-/** The line in the player's language. */
+/** The line in the player's language — with the swearing (story/mat.ts) unless Settings say «No swearing». */
 export function line(l: Line): string {
-  return l[getLang() === 'ru' ? 1 : 0];
+  const mat = getSwear() ? STORY_MAT[l[0]] : undefined;
+  return (mat ?? l)[getLang() === 'ru' ? 1 : 0];
 }
 
 export const CAMPAIGNS: Record<StoryCampaign, { hero: CharacterId; title: Line; tagline: Line }> = {

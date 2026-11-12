@@ -8,7 +8,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { BLATS_PER_LEVEL, REFERRAL_RULES, REFERRAL_TALONS } from '@blatkom/shared';
+import { BLATS_PER_LEVEL, REFERRAL_BLATS, REFERRAL_RULES, REFERRAL_TALONS } from '@blatkom/shared';
 import type { PublicProfile, ReferralResponse } from '@blatkom/shared';
 import { startTestApp, api, devLogin, cookieFrom } from '../admin/testkit.js';
 import type { TestApp } from '../admin/testkit.js';
@@ -17,7 +17,7 @@ import { PgMatchRecorder } from '../progression/recorder.js';
 import { silentLogger } from '../logging/logger.js';
 import { ReferralRepo } from './repo.js';
 import { UserRepo } from '../auth/users.js';
-import type { ConfirmResult } from './repo.js';
+import type { BlatsResult, ConfirmResult } from './repo.js';
 import type { MatchCompletion, MatchParticipantResult } from '../services/contracts.js';
 
 let app: TestApp;
@@ -242,3 +242,78 @@ test('referrals: deleting an account keeps the inviter’s paid talons; the refe
   assert.equal((await app.db.sql`SELECT 1 FROM referrals WHERE referee_id = ${b.userId}`).length, 0);
   assert.equal(await talonsOf(a.userId), paid);
 });
+
+test('v0.2.25 — BLATS for invitations: the friend’s third whole match pays the inviter REFERRAL_BLATS once (retries, concurrent matches, the screen); the overview shows it', async () => {
+  const a = await signUp('Blats Inviter');
+  const code = (await refs(a.token)).body.code;
+  const b0 = await blatsOf(a.userId);
+  const heard: BlatsResult[] = [];
+  rec.onReferralBlats = (r) => heard.push(r);
+  const f = await signUp('Blats Friend', code);
+  const settle = async (n: number) => {
+    for (let i = 0; i < 60 && heard.length < n; i++) await new Promise((r) => setTimeout(r, 50));
+  };
+  // the first whole match: the talons, no BLATS yet; a short one and an idle one don't count
+  await rec.matchCompleted(match(f.userId));
+  await rec.matchCompleted(match(f.userId, { durationMs: (REFERRAL_RULES.minMatchSec - 10) * 1000 }));
+  await rec.matchCompleted(match(f.userId, { damage: 0 }));
+  await rec.matchCompleted(match(f.userId));
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(await blatsOf(a.userId), b0, 'two whole matches: nothing yet');
+  let view = (await refs(a.token)).body;
+  const row = view.recent.find((x) => x.name === 'blats_friend');
+  assert.deepEqual([row?.matches, row?.blats, row?.blatsStatus], [2, 0, 'pending'], JSON.stringify(row));
+  assert.deepEqual(view.blats, { amount: REFERRAL_BLATS.amount, matches: REFERRAL_BLATS.matches, monthlyCap: REFERRAL_BLATS.monthlyCap, earned: 0, thisMonth: 0 });
+  // the third: paid once, even with the screen asked for at the same moment
+  await Promise.all([rec.matchCompleted(match(f.userId)), refs(f.token), repo.tryPayBlats(f.userId)]);
+  await settle(1);
+  await rec.matchCompleted(match(f.userId));
+  await repo.tryPayBlats(f.userId);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(await blatsOf(a.userId), b0 + REFERRAL_BLATS.amount, 'paid exactly once');
+  const ledger = await app.db.sql<Array<{ delta: number; ref: string }>>`SELECT delta, ref FROM currency_ledger WHERE user_id = ${a.userId} AND currency = 'diamonds' AND reason = 'referral'`;
+  assert.deepEqual(ledger.map((l) => [l.delta, l.ref]), [[REFERRAL_BLATS.amount, `referral-blats:${f.userId}`]]);
+  view = (await refs(a.token)).body;
+  const paid = view.recent.find((x) => x.name === 'blats_friend');
+  assert.deepEqual([paid?.blats, paid?.blatsStatus, view.blats?.earned, view.blats?.thisMonth], [REFERRAL_BLATS.amount, 'paid', REFERRAL_BLATS.amount, 1]);
+  rec.onReferralBlats = null;
+});
+
+test('v0.2.25 — BLATS for invitations: over the month’s limit a friend still pays talons but no BLATS; a flagged account waits; invitations from before the release bring none', async () => {
+  const a = await signUp('Capped Inviter');
+  const code = (await refs(a.token)).body.code;
+  // the month's limit already reached by earlier friends
+  for (let i = 0; i < REFERRAL_BLATS.monthlyCap; i++) {
+    const id = await invitedRaw(`Paid Friend ${i}`, a.userId, code, 'confirmed', '2 days', i + 1);
+    await app.db.sql`UPDATE referrals SET blats_status = 'paid', blats_reward = ${REFERRAL_BLATS.amount}, blats_at = now() - interval '5 days' WHERE referee_id = ${id}`;
+  }
+  const f = await signUp('Late Friend', code);
+  const b0 = await blatsOf(a.userId);
+  const t0 = await talonsOf(a.userId);
+  for (let i = 0; i < REFERRAL_BLATS.matches; i++) await rec.matchCompleted(match(f.userId));
+  await repo.tryConfirm(f.userId);
+  const r = await repo.tryPayBlats(f.userId);
+  assert.ok(r === null || r.status === 'capped', JSON.stringify(r));
+  await new Promise((res) => setTimeout(res, 300));
+  const st = (await app.db.sql<Array<{ blats_status: string }>>`SELECT blats_status FROM referrals WHERE referee_id = ${f.userId}`)[0]!.blats_status;
+  assert.equal(st, 'capped');
+  assert.equal(await blatsOf(a.userId), b0, 'no BLATS over the limit');
+  assert.equal(await talonsOf(a.userId), t0 + REFERRAL_TALONS, 'the talons still come');
+  // a flagged invited player: held
+  const c = await signUp('Flag Inviter');
+  const code2 = (await refs(c.token)).body.code;
+  const g = await signUp('Flagged Friend', code2);
+  await rec.matchCompleted(match(g.userId));
+  await repo.tryConfirm(g.userId);
+  await app.db.sql`UPDATE users SET blat_flag = 'farm' WHERE id = ${g.userId}`;
+  for (let i = 1; i < REFERRAL_BLATS.matches; i++) await rec.matchCompleted(match(g.userId));
+  await repo.tryPayBlats(g.userId);
+  await new Promise((res) => setTimeout(res, 300));
+  assert.equal((await app.db.sql<Array<{ blats_status: string }>>`SELECT blats_status FROM referrals WHERE referee_id = ${g.userId}`)[0]!.blats_status, 'held');
+  // an invitation counted before the release ('legacy'): no BLATS whatever is played
+  const d = await invitedRaw('Legacy Friend', c.userId, code2, 'confirmed', '40 days', 1);
+  await app.db.sql`UPDATE referrals SET blats_status = 'legacy' WHERE referee_id = ${d}`;
+  assert.equal(await repo.hasPendingBlats(d), false);
+  assert.equal(await repo.tryPayBlats(d), null);
+});
+

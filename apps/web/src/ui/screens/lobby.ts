@@ -84,6 +84,38 @@ function playerRow(p: RosterEntry): HTMLElement {
 
 const freeSeat = () => h('div', { class: 'player player--free muted' }, h('div', { class: 'n' }, t('Free seat')));
 
+/**
+ * v0.2.25: the Quick Match lobby's clock — «Матч через 0:24», counting down on this device between the
+ * server's updates; at zero «Начинаем…» (or a nudge to press «Ready» when the player isn't).
+ */
+function lobbyTimer(startsAt: number, ready: boolean): HTMLElement {
+  const time = h('b', { class: 'lobby__timeleft' });
+  const label = h('span');
+  const el = h('div', { class: 'lobby__timer', 'data-testid': 'lobby-timer', role: 'timer', 'aria-live': 'off' }, label, time);
+  const paint = () => {
+    const left = Math.max(0, Math.ceil((startsAt - Date.now()) / 1000));
+    if (left > 0) {
+      label.textContent = t('The match starts in');
+      time.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    } else {
+      label.textContent = ready ? t('Starting…') : t('Press «Ready» — the match starts when you are');
+      time.textContent = '';
+    }
+    el.classList.toggle('lobby__timer--soon', left > 0 && left <= 5);
+  };
+  paint();
+  const iv = setInterval(() => {
+    if (!el.isConnected) {
+      // drawn but not on the screen yet, or replaced by the next draw
+      if (Date.now() - born > 2000) clearInterval(iv);
+      return;
+    }
+    paint();
+  }, 250);
+  const born = Date.now();
+  return el;
+}
+
 export function renderLobby(o: {
   state: LobbyState;
   character: CharacterId;
@@ -93,6 +125,8 @@ export function renderLobby(o: {
   onMode: (m: GameMode) => void;
   onTeam: (team: Team) => void;
   onCharacter: () => void;
+  /** v0.2.25 (the owner: «в лобби ожидания — возможность менять оружие»): the player's kit, slot by slot. */
+  onKit?: () => void;
   onLeave: () => void;
   inTelegram: boolean;
   /** Online: the «invite friends» panel (under the players). */
@@ -276,12 +310,17 @@ export function renderLobby(o: {
   const present = s.players.filter((p) => p.connected);
   lobbyCards.set([...present.filter((p) => p.id === s.myId), ...present.filter((p) => p.id !== s.myId)].map((p) => ({ id: p.id, data: rosterCard(p) })));
   const cardsPanel = h('div', { class: 'panel col lobby__cards' }, h('span', { class: 'tag' }, t('Fighters')), lobbyCards.el);
+  // v0.2.25 (the owner: «кнопку „быстрый старт“ выпилить»): a Quick Match lobby has no start button — it lasts
+  // its time (the server's clock, shown here) while the lineup gathers; a room with friends keeps the host's
+  const quick = !s.isPrivate && !kon;
+  const timer = quick && s.startsAt ? lobbyTimer(s.startsAt, !!me?.ready) : null;
   const actions = h(
         'div',
         { class: 'row lobby__actions' },
         h('button', { class: 'btn grow', onclick: o.onCharacter }, t('Character: {name}', { name: charName(o.character) })),
+        o.onKit ? h('button', { class: 'btn grow lobby__kitbtn', 'data-testid': 'lobby-kit', onclick: o.onKit }, t('Weapons')) : null,
         h('button', { class: `btn grow ${me?.ready ? '' : 'btn--red'}`, onclick: () => o.onReady(!me?.ready) }, me?.ready ? t('Not ready') : t('Ready')),
-        s.isHost
+        s.isHost && !quick
           ? h('button', { class: 'btn btn--red grow', 'data-testid': 'lobby-start', disabled: !canStart, onclick: o.onStart }, !canStart ? t('Waiting for players…') : allReady || connected < 2 ? t('Start') : t('Start without waiting'))
           : null,
       );
@@ -304,6 +343,7 @@ export function renderLobby(o: {
         modePanel,
         mapPanel,
         cardsPanel,
+        timer,
         actions,
         h('div', { class: 'muted center lobby__note', 'data-testid': 'lobby-note' }, note),
       ),

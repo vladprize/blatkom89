@@ -9,9 +9,11 @@ import { mapName } from '../i18n/content.js';
 import { SCENE_FOCUS, sceneForMap, sceneUrl } from '../story/scenes.js';
 import { h } from './dom.js';
 import { modeName } from './modes.js';
+import { controlsGuide, smartTip, tipLine } from './loadTips.js';
+import { isTouchDevice } from '../game/input/TouchState.js';
 
 /** The countdown left when the screen fades (time enough to see where you stand). */
-const FADE_AT_MS = 900;
+const FADE_AT_MS = 350;
 
 /** Shows the screen over `root` for `session`; returns a function that removes it (null: no picture). */
 export function showLoadScreen(root: HTMLElement, session: GameSession): (() => void) | null {
@@ -19,11 +21,19 @@ export function showLoadScreen(root: HTMLElement, session: GameSession): (() => 
   if (!sc) return null;
   const [fx, fy] = SCENE_FOCUS[sc];
   const first = session.hud();
+  const touch = isTouchDevice();
   const fillMs = first.phase === 'countdown' ? Math.max(800, first.phaseRemainingMs - FADE_AT_MS) : 2000;
   const el = h(
     'div',
     { class: 'loadscr', 'data-testid': 'loadscreen', 'data-scene': sc, style: `--fx:${fx}%;--fy:${fy}%;--load-ms:${fillMs}ms` },
     h('img', { src: sceneUrl(sc), alt: '', draggable: 'false' }),
+    // v0.2.25: the controls of this device and a tip for this match, over the art
+    h(
+      'div',
+      { class: 'loadscr__help' },
+      controlsGuide(touch),
+      tipLine(smartTip({ mode: session.gameMode, weapon: first.heavy ?? first.sidearm ?? null, touch })),
+    ),
     h(
       'div',
       { class: 'loadscr__bar' },

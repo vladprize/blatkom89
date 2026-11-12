@@ -12,7 +12,7 @@ import { t } from '../i18n/index.js';
 import { CHARACTERS, DEFAULT_LOADOUT, FINISHES, GRADE_RANK, skinId, skinPerks } from '@blatkom/shared';
 import type { CharacterId, FinishId, Inventory, Loadout, RosterEntry, WeaponId } from '@blatkom/shared';
 
-const RATIO = 1.42;
+export const RATIO = 1.42;
 
 /** A stable key of what a card shows (a new card only when it changes or the size does). */
 function keyOf(d: FighterCardData): string {

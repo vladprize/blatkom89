@@ -6,7 +6,7 @@ import { displayNameSchema, nickInput, MAX_NICK_LENGTH } from '@blatkom/shared';
 import { sfx } from '../../game/audio/Sfx.js';
 import { music } from '../../game/audio/Music.js';
 import { confirmAsync } from '../../telegram/tg.js';
-import { t, getLang, setLang, LANGS } from '../../i18n/index.js';
+import { t, getLang, setLang, LANGS, getSwear, setSwear } from '../../i18n/index.js';
 import { apiErrorText } from '../../net/errors.js';
 import { inPane, paneTabs } from '../panes.js';
 import { isTouchDevice } from '../../game/input/TouchState.js';
@@ -56,8 +56,24 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
     h('span', { class: 'tag' }, t('Language')),
     h(
       'div',
-      { class: 'seg', role: 'group', 'aria-label': t('Language'), style: 'margin-top:6px' },
-      ...LANGS.map((l) => h('button', { 'aria-pressed': String(getLang() === l), lang: l, onclick: () => setLang(l) }, l === 'en' ? 'English' : 'Русский')),
+      { class: 'seg settings__langseg', role: 'group', 'aria-label': t('Language'), style: 'margin-top:6px' },
+      ...LANGS.map((l) =>
+        h('button', { 'aria-pressed': String(getLang() === l), lang: l, 'aria-label': l === 'en' ? 'English' : 'Русский', onclick: () => setLang(l) }, h('span', { class: 'lang--long' }, l === 'en' ? 'English' : 'Русский'), h('span', { class: 'lang--short' }, l === 'en' ? 'EN' : 'RU')),
+      ),
+    ),
+    // v0.2.25 (the owner): the texts swear by default — the game is 18+; «No swearing» brings the plain ones back
+    h(
+      'div',
+      { class: 'col setrow settings__swear', style: 'gap:6px;margin-top:10px' },
+      h('div', { class: 'muted settings__swearlabel' }, t('Swearing (18+)')),
+      h(
+        'div',
+        { class: 'seg', role: 'group', 'aria-label': t('Swearing (18+)'), 'data-testid': 'settings-swear' },
+        ...([true, false] as const).map((on) =>
+          h('button', { 'aria-pressed': String(getSwear() === on), 'data-swear': on ? 'on' : 'off', onclick: () => (sfx.play('click'), setSwear(on)) }, on ? t('Swear') : t('No swearing')),
+        ),
+      ),
+      h('div', { class: 'muted settings__note' }, t('Prices, odds, payments and the legal texts are always without swearing.')),
     ),
   );
   const graphics = h(

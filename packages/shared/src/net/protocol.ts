@@ -177,6 +177,8 @@ export type ServerMessage =
       kon?: KonFormat | null;
       /** v0.2.17: a gang battle — red is the challenger's gang, blue the gang called out. */
       battle?: GangBattle;
+      /** v0.2.25: a Quick Match lobby — the match starts in this many ms (the lobby's own clock). */
+      startsInMs?: number;
     }
   | { type: 'ev'; tick: number; events: GameEvent[] }
   | { type: 'results'; matchId: string; reason: 'time' | 'score' | 'aborted'; durationMs: number; standings: Standing[]; mapId: MapId; mode: GameMode; teams?: TeamResultSummary }

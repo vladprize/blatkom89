@@ -186,6 +186,32 @@ duty: `BOT_EASE` in `sim/bots.ts`); the player's own team-mates keep their full 
 bot as the hero: a9 8/10 (was 4/10), a10 10/10 (5/8), a11 10/10, a12 10/10 (6/8), b7 10/10 (5/10), b9 9/10
 (6/10), b11 10/10, b12 9/10 (6/10).
 
+## 5a. Swearing and black humour (v0.2.25)
+
+The owner, 12 Nov: «сценарий, подписи к персонажам, весь основной копирайт — с ненормативной лексикой и абсурдными
+шутками, чёрный юмор, аморальный… с * или # вместо одной буквы; шутки про маму — без перебора; в карточках
+персонажей — чёрный юморок; спрятать пасхалку на мем „цветочный лох“».
+
+- **A layer, not a rewrite.** The plain script (`story/script.ts`) and the interface's texts (`i18n/ru.ts`, the
+  English keys) stay as they were; the swearing versions lie over them while the swearing is on (the default;
+  the game is marked 18+): `story/mat.ts` (≈ 110 lines of the story, keyed by a line's English text, `[English,
+  Russian]`), `i18n/mat.ts` (the menu's captions, the HUD's banners, the results, the loading tips — the same
+  keys in Russian and English), `i18n/dark.ts` (each character's quote with swearing, and their «Distinguishing
+  marks» — a line of black humour in the personal file that stays with «No swearing» too). Settings → «Без мата» /
+  «No swearing» brings the plain texts back at once (the screens redraw as after a language switch).
+- **Rules the tests keep** (`i18n/mat.test.ts`, `story/script.test.ts`): every swear word has one letter hidden
+  (none slips through whole — the list of roots is in the test); the plain texts have none at all, masked or
+  not; the overlays lie only over real keys with the same placeholders; never over prices, odds, payments,
+  purchases, the legal texts or anything shared outside the game (invitations, the chat's ready-made lines —
+  other players may have the swearing off); mother jokes — two, harmless; no prison nicknames for the heroes;
+  the owner's list of words is all there, masked.
+- **The hidden comic «Лох цветочный» / «Flower Loser»** (`story/flowers.ts`, `story/easter.ts`): the meme's
+  lines — «Братан, не надо снимать, они сами разберутся», «Толстый. Сиськастый. Подбородочный… Лох цветочный!»,
+  «…нужно просто пожать друг другу руки и закончить сегодня всю эту ситуацию» — said by our own Borka (with a
+  bouquet, on his way to a date) and Gosha (with a borrowed camcorder); no real people. It opens with five quick
+  taps on Borka's portrait in his personal file, or by typing «цветы» / «flowers» in the menu; a toast says it
+  was found. A picture of Borka with the bouquet (`easter_flowers`) can replace his usual card on its pages.
+
 ## 6. Tests
 
 Unit: `story/scenes.test.ts` (every picture 1600×900 with its 640×360 thumbnail, every map and so every

@@ -7,8 +7,8 @@
  *   4. mark the match completed + results_processed_at
  * Concurrent duplicate calls serialize on the match row lock, so XP is awarded exactly once.
  */
-import { ACHIEVEMENTS, ACHIEVEMENT_IDS, RATING_RULES, applyMatchProgress, parseSkin, ratingDelta, tokensForMatch } from '@blatkom/shared';
-import type { AchievementId, PersonalResult } from '@blatkom/shared';
+import { ACHIEVEMENTS, ACHIEVEMENT_IDS, RATING_RULES, REFERRAL_BLATS, applyMatchProgress, parseSkin, ratingDelta, tokensForMatch } from '@blatkom/shared';
+import type { AchievementId, PersonalResult, ReferralBlatsRules } from '@blatkom/shared';
 import type postgres from 'postgres';
 import type { Sql } from '../database/db.js';
 import type { Logger } from '../logging/logger.js';
@@ -16,7 +16,7 @@ import type { MatchCompletion, MatchRecorder, MatchStart } from '../services/con
 import { awardMatchTokens } from '../economy/repo.js';
 import { moveClubRatings } from '../clubs/repo.js';
 import { ReferralRepo } from '../referrals/repo.js';
-import type { ConfirmResult } from '../referrals/repo.js';
+import type { BlatsResult, ConfirmResult } from '../referrals/repo.js';
 import { creditLevelBlats } from './levelRewards.js';
 import { applyKonResults, konOutcome } from '../kon/repo.js';
 
@@ -43,10 +43,14 @@ async function existingUsers(tx: Tx, ids: string[]): Promise<Set<string>> {
 export class PgMatchRecorder implements MatchRecorder {
   /** V2.0: an invitation counted (or held) after a match — the app tells the inviter live. */
   onReferral: ((r: ConfirmResult) => void) | null = null;
+  /** v0.2.25: an invited friend's matches brought their inviter BLATS (or hit the month's limit). */
+  onReferralBlats: ((r: BlatsResult) => void) | null = null;
 
   constructor(
     private readonly sql: Sql,
     private readonly log: Logger,
+    /** v0.2.25: the BLATS for invitations (the server's settings). */
+    private readonly referralBlats: ReferralBlatsRules = REFERRAL_BLATS,
   ) {}
 
   async matchStarted(m: MatchStart): Promise<void> {
@@ -75,13 +79,23 @@ export class PgMatchRecorder implements MatchRecorder {
   }
 
   private async confirmReferrals(userIds: string[]): Promise<void> {
-    const refs = new ReferralRepo(this.sql, { publicUrl: '' });
+    const refs = new ReferralRepo(this.sql, { publicUrl: '' }, this.referralBlats);
     for (const id of userIds) {
-      if (!UUID_RE.test(id) || !(await refs.hasPending(id))) continue;
-      const r = await refs.tryConfirm(id);
-      if (r) {
-        this.log.info('referral', r.status === 'confirmed' ? { referee: id, referrer: r.paid.referrerId, reward: r.paid.reward, ordinal: r.paid.ordinal } : { referee: id, referrer: r.referrerId, held: r.reason });
-        this.onReferral?.(r);
+      if (!UUID_RE.test(id)) continue;
+      if (await refs.hasPending(id)) {
+        const r = await refs.tryConfirm(id);
+        if (r) {
+          this.log.info('referral', r.status === 'confirmed' ? { referee: id, referrer: r.paid.referrerId, reward: r.paid.reward, ordinal: r.paid.ordinal } : { referee: id, referrer: r.referrerId, held: r.reason });
+          this.onReferral?.(r);
+        }
+      }
+      // v0.2.25: the friend's later matches — the BLATS once they have played enough
+      if (await refs.hasPendingBlats(id)) {
+        const b = await refs.tryPayBlats(id);
+        if (b) {
+          this.log.info('referral blats', b.status === 'paid' ? { referee: id, referrer: b.referrerId, blats: b.amount } : { referee: id, referrer: b.referrerId, [b.status]: b.reason });
+          this.onReferralBlats?.(b);
+        }
       }
     }
   }

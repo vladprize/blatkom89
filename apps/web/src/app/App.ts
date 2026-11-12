@@ -26,8 +26,9 @@ import type { LocalProfile } from '../profile/localProfile.js';
 import { clearLocalProfile, loadLocalProfile, saveLocalProfile } from '../profile/localStore.js';
 import { openNicknameDialog, randomNickname } from '../profile/nickname.js';
 import { renderResults } from '../ui/screens/results.js';
-import { openCardViewer } from '../ui/cardViewer.js';
-import { CardSlot, ownCard } from '../ui/cardSlot.js';
+import { openCardPicker, openCardViewer } from '../ui/cardViewer.js';
+import { openLobbyKit } from '../ui/lobbyKit.js';
+import { CardSlot, ownCard, RATIO as CARD_RATIO } from '../ui/cardSlot.js';
 import { MatchCards } from '../ui/matchCards.js';
 import type { FighterCardData } from '../ui/fighterCard.js';
 import type { ResultsCards } from '../ui/screens/results.js';
@@ -45,10 +46,12 @@ import type { SocialSignal } from '../net/SocialClient.js';
 import { needsTelegramWelcome, needsWelcome, openTelegramWelcome, openWelcome, MATCHES_DONE_KEY, noteMatchDone } from '../ui/screens/welcome.js';
 import { sfx } from '../game/audio/Sfx.js';
 import { music } from '../game/audio/Music.js';
-import { t, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
+import { t, count, getLang, setLang, onLangChange, LANGS } from '../i18n/index.js';
 import { charText, finishName, gadgetName, modText, refusalText, weaponName } from '../i18n/content.js';
 import { apiErrorText } from '../net/errors.js';
 import { watchForUpdates } from './updates.js';
+import { playFlowers, tapCounter, watchWord } from '../story/easter.js';
+import { watchSentences } from '../ui/sentences.js';
 import { renderClubs, renderClub, renderClubEditor, clubLabel } from '../ui/screens/clubs.js';
 import { renderInvite } from '../ui/screens/invite.js';
 import { blatsCoin, fmtNum } from '../ui/coin.js';
@@ -222,6 +225,8 @@ export class App {
   private stripEl: HTMLElement | null = null;
   /** v0.2.24: the menu's fighter cards — the big one at the left (computers), the small one by the character's name. */
   private heroSlots: CardSlot[] = [];
+  /** v0.2.25: the slots whose card carries the character's name on its strip (the phone's menu card). */
+  private namedSlots = new Set<CardSlot>();
   /** v0.2.18: «+40 BLATS for the levels you reached» waiting to be shown on the menu. */
   private blatsNote: string | null = null;
   /** v0.2.18: the shop's configuration (is a payment provider connected?) for the menu's BLATS banner. */
@@ -288,6 +293,10 @@ export class App {
       e.returnValue = '';
     });
     onLangChange(() => this.relocalize());
+    // v0.2.25: every sentence of a description starts on a new line, wherever a screen or a sheet draws one
+    watchSentences(this.root);
+    // v0.2.25: «цветы» / «flowers» typed in the menu opens the hidden comic too
+    watchWord(['цветы', 'flowers'], () => this.screen === 'menu' && this.playFlowers());
     if (ONLINE_AVAILABLE)
       this.updates = watchForUpdates({
         canReload: () => this.screen === 'menu' && !this.pauseEl && !document.querySelector('.overlay, .sheet, .modal'),
@@ -302,7 +311,21 @@ export class App {
     });
   }
 
-  /** The language was switched: draw the current screen again in the new language. */
+  /** v0.2.25: the hidden comic «Flower Loser» (story/easter.ts) — over whatever screen is open. */
+  private playFlowers(): void {
+    if (document.querySelector('.comic')) return;
+    this.root.querySelector('.sheetlay')?.dispatchEvent(new Event('sheet-close'));
+    music.setWanted(true);
+    playFlowers(this.root, () => toast(t('Easter egg found: «Flower Loser»')));
+  }
+
+  /** v0.2.25: the «18+» mark (swearing, black humour) — its tooltip says why; a tap opens the settings to switch the swearing off. */
+  private age18(): HTMLElement {
+    const why = t('18+: swearing, black humour, cartoon violence');
+    return h('button', { class: 'age18', title: why, 'aria-label': why, 'data-testid': 'age-18', onclick: () => this.showSettings() }, '18+');
+  }
+
+  /** The language (or the swearing, v0.2.25) was switched: draw the current screen again with the new texts. */
   private relocalize() {
     switch (this.screen) {
       case 'menu':
@@ -748,14 +771,43 @@ export class App {
           ),
         ),
         ONLINE_AVAILABLE
-          ? h('div', { class: 'footer' }, '© ', (REAL_MONEY ? t('BLATKOM ’89 · v{v} · Free to play, purchases optional', { v: VERSION }) : t('BLATKOM ’89 · v{v} · Free to play', { v: VERSION })), ' · ', h('a', { href: asset(getLang() === 'ru' ? 'privacy-ru.html' : 'privacy.html'), target: '_blank', style: 'color:inherit' }, t('Privacy')), REAL_MONEY ? ' · ' : null, REAL_MONEY ? h('a', { href: asset(getLang() === 'ru' ? 'terms-ru.html' : 'terms.html'), target: '_blank', style: 'color:inherit', 'data-testid': 'footer-terms' }, t('Terms')) : null, ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits')))
-          : h('div', { class: 'footer' }, t('BLATKOM ’89 · v{v} · Demo: the game runs right in your browser; no data is collected or sent anywhere.', { v: VERSION }), ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits'))),
+          ? h('div', { class: 'footer' }, this.age18(), '© ', (REAL_MONEY ? t('BLATKOM ’89 · v{v} · Free to play, purchases optional', { v: VERSION }) : t('BLATKOM ’89 · v{v} · Free to play', { v: VERSION })), ' · ', h('a', { href: asset(getLang() === 'ru' ? 'privacy-ru.html' : 'privacy.html'), target: '_blank', style: 'color:inherit' }, t('Privacy')), REAL_MONEY ? ' · ' : null, REAL_MONEY ? h('a', { href: asset(getLang() === 'ru' ? 'terms-ru.html' : 'terms.html'), target: '_blank', style: 'color:inherit', 'data-testid': 'footer-terms' }, t('Terms')) : null, ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits')))
+          : h('div', { class: 'footer' }, this.age18(), t('BLATKOM ’89 · v{v} · Demo: the game runs right in your browser; no data is collected or sent anywhere.', { v: VERSION }), ' · ', h('button', { class: 'linkish', onclick: () => this.showCredits() }, t('Credits'))),
       ),
     );
     this.render(menu);
+    this.fitHero(menu);
     this.maybeWelcome();
     this.showPendingInvites();
     this.loadShopConfig();
+  }
+
+  /**
+   * v0.2.25 (the owner: «карточка по размеру как главное меню и так же близко, как правая секция; края всегда
+   * симметричны с краями меню»): the card's column is exactly as wide as a card as tall as its row(s) — so the
+   * card fills it edge to edge: its top and bottom on the panels' edges, the same gap to the games as the right
+   * column has. The row's height comes from the panels beside it (the card's box doesn't count, `contain: size`).
+   */
+  private heroFit: ResizeObserver | null = null;
+  private fitHero(screen: HTMLElement) {
+    this.heroFit?.disconnect();
+    this.heroFit = null;
+    const wrap = screen.querySelector<HTMLElement>('.wrap--menu');
+    const hero = screen.querySelector<HTMLElement>('.menu__hero');
+    if (!wrap || !hero || typeof ResizeObserver === 'undefined') return;
+    let raf = 0;
+    const apply = () => {
+      raf = 0;
+      const height = hero.clientHeight;
+      if (!height || !hero.isConnected) return;
+      const w = Math.round(height / CARD_RATIO);
+      const now = parseFloat(wrap.style.getPropertyValue('--hero-w')) || 0;
+      if (Math.abs(now - w) >= 1) wrap.style.setProperty('--hero-w', `${w}px`);
+    };
+    this.heroFit = new ResizeObserver(() => {
+      if (!raf) raf = requestAnimationFrame(apply);
+    });
+    this.heroFit.observe(hero);
   }
 
   /** v0.2.18: the shop's configuration once — the menu's BLATS banner says «Buy» only when a payment provider is connected. */
@@ -850,25 +902,72 @@ export class App {
     return ownCard({ name: this.playerName() ?? charText(this.character).name, character: this.character, level: this.playerLevel(), inventory: this.online?.inventory });
   }
 
-  private heroSlot(o: { className: string; mini?: boolean; testid: string; open?: boolean }): CardSlot {
-    const slot = new CardSlot(this.myCard(), {
+  private heroSlot(o: { className: string; mini?: boolean; testid: string; open?: boolean; named?: boolean }): CardSlot {
+    const data = (): FighterCardData => (o.named ? { ...this.myCard(), label: this.characterLabel(this.character) } : this.myCard());
+    const slot = new CardSlot(data(), {
       className: o.className,
       full: true,
       ...(o.mini ? { mini: true } : {}),
       testid: o.testid,
-      ...(o.open ? { onOpen: (d: FighterCardData) => openCardViewer(document.getElementById('ui') ?? document.body, d, { inTelegram: inTelegram() }) } : {}),
+      ...(o.open ? { onOpen: () => this.openCardPick() } : {}),
     });
+    if (o.named) this.namedSlots.add(slot);
     this.heroSlots.push(slot);
     return slot;
   }
 
+  /** «ПРУСАК «ПОДПОЛЬЩИК»» — the name on a card's strip (the phone's menu card has no panel with the name). */
+  private characterLabel(id: CharacterId): string {
+    const c = charText(id);
+    return `${c.name} «${c.nickname}»`;
+  }
+
   /**
-   * v0.2.24 (the owner: «карточки в полный рост — на главное меню»): the player's fighter card, full height, at
-   * the left of the menu on a computer (opens big, to share); on a phone the small one by the character's name.
+   * v0.2.24 (the owner: «карточки в полный рост — на главное меню»): the player's fighter card, full height.
+   * v0.2.25 (the owner: «карточка не в ячейке, а на весь раздел меню, и меню центрировано»): no panel around it —
+   * on a computer the left column as wide as the right one, the card as tall as the menu; on a phone (upright or
+   * sideways) the card beside the Arsenal and the dossier, the character's name on its strip. A tap opens it big
+   * with every character beside it.
    */
   private heroPanel(): HTMLElement {
     this.heroSlots = [];
-    return h('div', { class: 'panel col menu__hero' }, h('span', { class: 'tag' }, t('Fighter card')), this.heroSlot({ className: 'menu__herocard', testid: 'menu-hero', open: true }).el);
+    this.namedSlots = new Set();
+    return h(
+      'div',
+      { class: 'menu__hero' },
+      this.heroSlot({ className: 'menu__herocard', testid: 'menu-hero', open: true }).el,
+      this.heroSlot({ className: 'menu__herocard menu__herocard--phone', testid: 'menu-card', open: true, named: true }).el,
+    );
+  }
+
+  /** v0.2.25: the card big with every character beside it; a character taken there redraws the menu as it closes. */
+  private openCardPick() {
+    const before = this.character;
+    openCardPicker(document.getElementById('ui') ?? document.body, {
+      inTelegram: inTelegram(),
+      ids: CHARACTER_IDS,
+      current: this.character,
+      owned: (id) => this.ownsCharacter(id as CharacterId),
+      card: (id) => ({ ...ownCard({ name: this.playerName() ?? charText(id as CharacterId).name, character: id as CharacterId, level: this.playerLevel(), inventory: this.online?.inventory }), label: this.characterLabel(id as CharacterId) }),
+      portrait: (id) => portrait(id, true),
+      name: (id) => this.characterLabel(id as CharacterId),
+      grade: (id) => CHARACTERS[id as CharacterId].grade,
+      price: (id) => characterPriceNote(id as CharacterId, this.online?.inventory ?? null),
+      onPick: (id) => {
+        const c = id as CharacterId;
+        if (!this.ownsCharacter(c)) return;
+        this.character = c;
+        storageSet('blatkom89.character', c);
+        analytics.track('character_selected', { character: c });
+        void this.online?.setPreferredCharacter(c);
+        sfx.play('click');
+        haptic('select');
+      },
+      onLocked: (id) => this.showCharacters(true, id as CharacterId),
+      onClose: () => {
+        if (this.character !== before && this.screen === 'menu') this.goMenu();
+      },
+    });
   }
 
   /**
@@ -1212,7 +1311,7 @@ export class App {
     // v0.2.24: the menu's fighter cards follow the profile and the kit (they may come after the menu is drawn)
     if (this.heroSlots.length) {
       const d = this.myCard();
-      for (const slot of this.heroSlots) slot.set(d);
+      for (const slot of this.heroSlots) slot.set(this.namedSlots.has(slot) ? { ...d, label: this.characterLabel(this.character) } : d);
     }
     // v0.2.18: the menu's BLATS tile follows the balance
     const bal = this.root.querySelector<HTMLElement>('[data-testid="menu-blats-balance"]');
@@ -1325,6 +1424,7 @@ export class App {
   // ── characters ──────────────────────────────────────────────────────────
   private showCharacters(push = true, initial?: CharacterId) {
     this.go('characters', push);
+    const flowersTap = tapCounter();
     let selected = initial ?? this.character;
     this.host.previewScene()?.setFocus(selected);
     const grid = h('div', { class: 'chars', role: 'radiogroup', 'aria-label': t('Characters') });
@@ -1335,31 +1435,35 @@ export class App {
     /** The personal file: the portrait from the BLATKOM sheets, the text and the record card. */
     const file = (id: CharacterId, locked: boolean, price: string | null): HTMLElement[] => {
       const c = charText(id);
+      // v0.2.25: five quick taps on Borka's portrait open the hidden comic «Flower Loser»
+      const onHero = id === 'svinya' ? { onclick: () => flowersTap() && this.playFlowers(), 'data-testid': 'flowers-hero' } : {};
       return [
-        h('div', { class: `dossier__hero ${locked ? 'dossier__hero--locked' : ''} ${CHARACTERS[id].grade === 'legendary' ? 'dossier__hero--legend' : ''}` }, heroImg(id, 'dossier__img'), h('div', { class: 'dossier__stamp' }, locked ? t('NOT IN THE CREW') : t('IN THE CREW'))),
+        h('div', { class: `dossier__hero ${locked ? 'dossier__hero--locked' : ''} ${CHARACTERS[id].grade === 'legendary' ? 'dossier__hero--legend' : ''}`, ...onHero }, heroImg(id, 'dossier__img'), h('div', { class: 'dossier__stamp' }, locked ? t('NOT IN THE CREW') : t('IN THE CREW'))),
         h(
           'div',
           { class: 'col dossier__text' },
           h('div', { class: 'h1' }, c.name, ' ', h('span', { style: 'color:var(--red)' }, `«${c.nickname}»`)),
-          h('div', { class: 'dossier__grade' }, gradeTag(CHARACTERS[id].grade)),
+          // v0.2.25: a locked one's price beside its grade (the file got a line of black humour; the room came from here)
+          h('div', { class: 'dossier__grade' }, gradeTag(CHARACTERS[id].grade), price ? h('span', { class: 'badge badge--host dossier__price' }, price) : null),
           h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, t('Role:'), ' '), c.role),
           h('div', null, h('b', { style: 'font-family:Oswald;color:var(--muted)' }, t('Temper:'), ' '), c.personality),
           h('div', { class: 'quote' }, `«${c.quote}»`),
+          // v0.2.25 (the owner: «в карточках персонажей должен быть чёрный юморок»): beside the photo, under the quote
+          h('div', { class: 'dossier__marks', 'data-testid': 'dossier-marks' }, h('span', null, h('b', null, t('Distinguishing marks'), ': '), c.marks)),
           h('div', { class: 'lore' }, c.lore),
-          price ? h('div', { class: 'badge badge--host', style: 'align-self:flex-start' }, price) : null,
           h(
             'div',
             { class: 'col dossier__fields', style: 'gap:0;margin-top:6px' },
             ...(
               [
-                [t('Name'), c.name],
-                [t('Alias'), c.nickname],
+                [t('Name'), c.name, 'field--dup'],
+                [t('Alias'), c.nickname, 'field--dup'],
                 [t('Species'), c.species],
                 [t('District'), c.district],
                 [t('Business'), c.business],
                 [t('Weapons'), c.weaponsNote],
-              ] as const
-            ).map(([k, v]) => h('div', { class: 'field' }, h('b', null, k), h('span', null, v))),
+              ] as Array<readonly [string, string, string?]>
+            ).map(([k, v, cls]) => h('div', { class: `field ${cls ?? ''}` }, h('b', null, k), h('span', null, v))),
             h('div', { class: 'muted dossier__note', style: 'font-size:13px;margin-top:8px' }, t('All characters have the same stats — only their looks and temper differ.')),
           ),
         ),
@@ -1450,7 +1554,7 @@ export class App {
           testid: 'dossier-sheet',
           cls: 'sheet--dossier',
           body: h('div', { class: 'dossier dossier--sheet' }, ...file(selected, locked, price)),
-          actions: h('div', { class: 'row', style: 'flex:1;flex-wrap:nowrap' }, ...buttons(locked)),
+          actions: h('div', { class: 'row charsel__actions', style: 'flex:1;flex-wrap:nowrap' }, ...buttons(locked)),
         });
       summary.replaceChildren(
         h('span', { class: 'tag' }, t('Personal File')),
@@ -1497,6 +1601,7 @@ export class App {
       onTryCharacter: (c, at) => this.startPractice({ ...this.lastPractice, character: c, returnTo: { screen: 'arsenal', tab: at } }),
       onWallet: () => this.refreshStrip(),
       onCharacter: (c) => this.showCharacters(true, c),
+      onInvite: () => this.showInviteFriends(),
       // v0.2.23: a set bought — its character steps in at once, the card shows them with the new skin
       onSetBought: (c) => {
         if (!this.ownsCharacter(c)) return;
@@ -1825,7 +1930,8 @@ export class App {
       const g = mc.gear(s.slot);
       return g ? { name: s.name, character: s.character, level: g.level, weapon: g.weapon, finish: g.finish, kills: g.finish ? g.kills : null, bot: s.isBot } : null;
     };
-    return { podium, killers: mc.killers(), onTry: (d) => this.tryFromResults(d.weapon, d.finish), cardOf, onOpen: (d) => openCardViewer(this.root, d, { inTelegram: inTelegram() }) };
+    const podiumStats = top.map((s) => `${count(s.score, 'point')}\n${count(s.kills, 'elimination')}`);
+    return { podium, podiumStats, killers: mc.killers(), onTry: (d) => this.tryFromResults(d.weapon, d.finish), cardOf, onOpen: (d) => openCardViewer(this.root, d, { inTelegram: inTelegram() }) };
   }
 
   /** «Try on» a skin seen in the results: out of the match and into the Arsenal with it on. */
@@ -1958,8 +2064,8 @@ export class App {
     this.render(
       h(
         'div',
-        { class: 'screen screen--dim' },
-        h('div', { class: 'wrap' }, this.topbar(t('Friends')), renderFriends({ online, root: this.root, onPlayWith: (f) => void this.playWith(f), onTop: () => this.showTop(), onInvite: () => this.showInviteFriends() })),
+        { class: 'screen screen--dim screen--social' },
+        h('div', { class: 'wrap wrap--vcenter' }, this.topbar(t('Friends')), renderFriends({ online, root: this.root, onPlayWith: (f) => void this.playWith(f), onTop: () => this.showTop(), onInvite: () => this.showInviteFriends() })),
       ),
     );
   }
@@ -2050,9 +2156,13 @@ export class App {
     // v0.2.17: the lists that scroll inside a screen keep their place too
     const inner = new Map<string, number>();
     if (same) for (const e of this.root.querySelectorAll<HTMLElement>('[data-scroll-key]')) if (e.scrollTop) inner.set(e.dataset.scrollKey!, e.scrollTop);
+    // v0.2.25: a sheet open over the room (the kit, the rules, the invitation) stays open when the room redraws
+    // (a player arriving in the lobby closed it)
+    const sheet = same ? this.root.querySelector<HTMLElement>(':scope > .sheetlay') : null;
     const draw = () => this.render(el());
     if (chat) chat.keep(draw);
     else draw();
+    if (sheet && !sheet.isConnected) this.root.append(sheet);
     if (same && top) {
       const sc = this.root.querySelector<HTMLElement>(':scope > .screen');
       if (sc) sc.scrollTop = top;
@@ -2101,6 +2211,13 @@ export class App {
         return;
       // an invitation counted (v0.2.18: talons) or waits for a check
       case 'referral':
+        // v0.2.25: a friend's matches brought BLATS (the inventory is read again for the new balance)
+        if (e.blats) {
+          if (!inGame) toast(t('{name} played their matches — +{n} BLATS for the invitation', { name: e.name, n: e.blats }));
+          void this.online.loadInventory().catch(() => null);
+          if (this.screen === 'invite') this.showInviteFriends(false);
+          return;
+        }
         if (!inGame) toast(e.held ? t('An invitation of yours is being checked — the reward comes after the check') : t('{name} played their first match through your link: +{n} talons', { name: e.name, n: e.reward }));
         if (e.balance >= 0) {
           if (this.online.profile) this.online.profile = { ...this.online.profile, tokens: e.balance };
@@ -2259,6 +2376,7 @@ export class App {
         onMode: (m) => this.online?.setMode(m),
         onTeam: (team) => this.online?.setTeam(team),
         onCharacter: () => this.showCharacters(),
+        ...(online ? { onKit: () => openLobbyKit(this.root, online) } : {}),
         onLeave: () => void this.online?.leave(),
         inTelegram: inTelegram(),
       }),
@@ -2285,7 +2403,7 @@ export class App {
   private showSettings(push = true) {
     this.go('settings', push);
     const onResetLocal = !this.online && this.localProfile ? () => this.resetLocalProfile() : undefined;
-    this.render(h('div', { class: 'screen screen--dim screen--fit screen--settings' }, h('div', { class: 'wrap' }, this.topbar(t('Settings')), renderSettings({ inGame: false, online: this.online, ...(onResetLocal ? { onResetLocal } : {}) }))));
+    this.render(h('div', { class: 'screen screen--dim screen--fit screen--settings' }, h('div', { class: 'wrap wrap--vcenter' }, this.topbar(t('Settings')), renderSettings({ inGame: false, online: this.online, ...(onResetLocal ? { onResetLocal } : {}) }))));
   }
 
   /** Demo build: forget the browser-only profile (the nickname dialog opens again in the menu). */

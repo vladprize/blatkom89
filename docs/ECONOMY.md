@@ -412,6 +412,26 @@ ledger reason `referral`, ref `referral:<friend>`, once) and hears it live. More
 the invitation for a decision on the dashboard's «Приглашения» page. Talons are never sold, so an
 invitation can never become money.
 
+## 6a. BLATS for invitations (v0.2.25)
+
+The owner, 12 Nov: «в раздел алмазов — реферальная программа, алмазы за приглашение друзей по уникальной ссылке,
+и это надо где-то отобразить». On top of the talons above, the same invitation pays the inviter **50 BLATS**
+once the invited friend has played **3 whole online matches** (each at least 60 s, completed, with damage dealt),
+for at most **20 friends in 30 days**. The numbers are the server's (`REFERRAL_BLATS`, `REFERRAL_BLATS_MATCHES`,
+`REFERRAL_BLATS_MONTHLY`; `REFERRAL_BLATS=0` switches it off) and the client shows whatever the server says.
+
+- Ledger: currency `diamonds`, reason `referral`, ref `referral-blats:<friend>`; a unique index allows one such
+  credit per friend ever — a retried or doubled match cannot pay twice. The friend's row in `referrals` carries
+  `blats_status`: `pending` → `paid`; `capped` (the month's limit was reached when the third match came — that
+  friend pays no BLATS later); `held` (the inviter or the friend flagged on the dashboard, as with talons);
+  `legacy` (invitations made before v0.2.25 keep exactly what they paid — no BLATS are added to them).
+- Shown: a strip in the Arsenal's BLATS tab (computer and phone) — «Приводи друзей: +50 БЛАТ за каждого» →
+  the invite screen; Friends → «Позвать в игру · +50 БЛАТ»; the invite screen lists each friend's progress
+  (0–3 matches) and the month's count. The inviter hears «+50 БЛАТ» live.
+- BLATS bought and BLATS earned are the same coins; neither can be withdrawn, exchanged or sold back — an
+  invitation still can never become money.
+- Migration `031_referral_blats.sql` only adds columns, a check and two indexes; nothing existing changes.
+
 ## 7. Administrator grants and the founder
 
 `POST /api/admin/players/:id/grant` (role `admin`): ±1 … 1 000 000 talons or BLATS with a mandatory

@@ -120,7 +120,7 @@ try {
   await A.page.waitForTimeout(700);
   const wait = await rect(A.page, '[data-testid=wait-card] canvas[data-testid=fighter-card]');
   const waitText = (await A.page.getByTestId('match-wait').innerText()).replace(/\s+/g, ' ').trim();
-  check(!!wait && wait.inView && wait.w >= 150 && /Ищем матч/.test(waitText), `the wait for a match: the player's card and «${waitText}» (${JSON.stringify(wait)})`);
+  check(!!wait && wait.inView && wait.w >= 150 && /Ищем матч|Ищем, кому/.test(waitText), `the wait for a match: the player's card and «${waitText}» (${JSON.stringify(wait)})`);
   await shot(A.page, `pc_wait.png`);
   await A.page.waitForSelector('[data-testid=lobby-cards] canvas[data-testid=fighter-card]', { timeout: 30000 });
   await A.page.unroute('**/api/rooms/quick');
@@ -138,8 +138,9 @@ try {
 
   // the phone: the menu's small card, the lobby's fighters (the room fits the screen)
   const P = await open({ width: 390, height: 844 }, { phone: true });
-  const mini = await rect(P.page, '[data-testid=menu-minicard] canvas[data-testid=fighter-card]');
-  check(!!mini && mini.inView && mini.w >= 50, `a phone's menu: the small fighter card by the character's name (${JSON.stringify(mini)})`);
+  // v0.2.25 (the owner: «на мобилке карточка доминантная, без ячейки»): the card beside the Arsenal and the dossier
+  const mini = await rect(P.page, '[data-testid=menu-card] canvas[data-testid=fighter-card]');
+  check(!!mini && mini.inView && mini.w >= 110, `a phone's menu: the fighter card, big, beside the Arsenal (${JSON.stringify(mini)})`);
   await shot(P.page, `phone_menu.png`);
   await P.page.evaluate(() => window.__blatkom.app.online.createRoom('factory', 'petya', 'ffa'));
   await P.page.waitForSelector('[data-testid=lobby-cards] canvas[data-testid=fighter-card]', { timeout: 30000 });

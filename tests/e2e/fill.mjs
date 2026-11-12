@@ -128,8 +128,13 @@ try {
   check(!firstQuick.sheet && firstQuick.mode === 'ffa', `a newcomer's first Quick Match: no mode sheet, straight into a free-for-all (${JSON.stringify(firstQuick)})`);
   const noteB = (await B.page.getByTestId('lobby-note').innerText()).trim();
   check(/Собираем игроков/.test(noteB), `Quick Match lobby: «${noteB}»`);
+  // v0.2.25 (the owner): no «quick start» — the lobby's own clock (QUICK_LOBBY_SECONDS, 30 s by default)
+  await B.page.getByTestId('lobby-timer').waitFor({ timeout: 10000 });
+  const clock = await B.page.evaluate(() => ({ text: document.querySelector('[data-testid=lobby-timer]')?.textContent ?? '', start: !!document.querySelector('[data-testid=lobby-start]'), kit: !!document.querySelector('[data-testid=lobby-kit]') }));
+  check(/Матч начнётся через\s*0:(2\d|30)/.test(clock.text) && !clock.start && clock.kit, `Quick Match lobby: the clock instead of a start button, the weapons a tap away (${JSON.stringify(clock)})`);
   await B.page.screenshot({ path: `${outDir}/fill_quick_lobby_B.png` });
   const t0 = Date.now();
+  const arrivedAt = [];
   const sizes = [];
   let marked = false;
   let shot = false;
@@ -140,9 +145,12 @@ try {
       text: document.querySelector('#ui')?.innerText ?? '',
     }));
     if (MARKED.test(st.text)) marked = true;
-    if (sizes[sizes.length - 1] !== st.n) sizes.push(st.n);
+    if (sizes[sizes.length - 1] !== st.n) {
+      sizes.push(st.n);
+      arrivedAt.push(Math.round((Date.now() - t0) / 100) / 10);
+    }
     if (st.active) break;
-    if (Date.now() - t0 > 30000) throw new Error(`Quick Match did not start (lineup ${sizes.join('→')})`);
+    if (Date.now() - t0 > 45000) throw new Error(`Quick Match did not start (lineup ${sizes.join('→')})`);
     if (st.n >= 2 && !shot) {
       shot = true;
       await B.page.screenshot({ path: `${outDir}/fill_quick_arrivals_B.png` }).catch(() => {});
@@ -150,8 +158,10 @@ try {
     await B.page.waitForTimeout(250);
   }
   const waited = Date.now() - t0;
-  check(waited < 18000, `Quick Match alone: the match started by itself after ${(waited / 1000).toFixed(1)} s`);
-  check(sizes.length >= 3 && sizes[0] === 1, `players arrived one by one (${sizes.join(' → ')})`);
+  check(waited >= 26000 && waited < 40000, `Quick Match alone: the lobby lasted its half-minute, then the match started by itself (${(waited / 1000).toFixed(1)} s)`);
+  check(sizes.length >= 3 && sizes[0] === 1, `players arrived one by one (${sizes.join(' → ')} at ${arrivedAt.join(' / ')} s)`);
+  const gaps = arrivedAt.slice(2).map((v, i) => v - arrivedAt[i + 1]);
+  check(gaps.length >= 1 && gaps.every((g) => g >= 1.5), `…spread over the wait, not in a bunch (${arrivedAt.join(' / ')} s)`);
   check(!marked, 'nothing on the Quick Match screens marks anyone');
   await B.page.waitForTimeout(2000);
   const lb = await lineup(B.page);

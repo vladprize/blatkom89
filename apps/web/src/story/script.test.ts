@@ -74,3 +74,41 @@ test('the story so far ends on an open end for both heroes (v0.2.15): the last w
     for (const m of ms.slice(0, -1)) assert.ok(!MISSION_SCRIPTS[m.id]!.outro.some((b) => /^Продолжение следует/.test(b.say[1])), `${m.id} is not the end`);
   }
 });
+
+test('v0.2.25: the swearing versions belong to real lines, fit a bubble, and replace them only while the swearing is on', async () => {
+  const { STORY_MAT } = await import('./mat.js');
+  const { FLOWERS } = await import('./flowers.js');
+  const { line } = await import('./script.js');
+  const { _setLangForTests, _setSwearForTests } = await import('../i18n/index.js');
+  const english = new Set([...all().map(({ l }) => l[0]), ...FLOWERS.map((b) => b.say[0])]);
+  const orphans = Object.keys(STORY_MAT).filter((k) => !english.has(k));
+  assert.deepEqual(orphans, [], 'every key is a line of the script');
+  for (const [k, [en, ru]] of Object.entries(STORY_MAT)) {
+    for (const s of [en, ru]) assert.ok(s.trim() === s && s.length > 0 && s.length <= 240, `«${k}»: ${s.length} characters`);
+    assert.ok(/[а-яё]/i.test(ru), `«${k}»: the Russian is Russian`);
+    assert.ok(!/петух/i.test(ru), `«${k}»: no prison nicknames`);
+  }
+  assert.ok(Object.keys(STORY_MAT).length >= 100, `${Object.keys(STORY_MAT).length} lines swear`);
+  const l = MISSION_SCRIPTS.a2!.intro[1]!.say;
+  _setLangForTests('ru');
+  try {
+    assert.equal(line(l), STORY_MAT[l[0]]![1]);
+    _setSwearForTests(false);
+    assert.equal(line(l), l[1]);
+  } finally {
+    _setSwearForTests(true);
+    _setLangForTests('en');
+  }
+  assert.equal(line(l), STORY_MAT[l[0]]![0]);
+});
+
+test('v0.2.25: the hidden comic «Flower Loser» — Borka with the bouquet, Gosha with the camera, a handshake at the end', async () => {
+  const { FLOWERS } = await import('./flowers.js');
+  const who = new Set(FLOWERS.map((b) => b.who));
+  assert.ok(who.has('svinya') && who.has('popugay'));
+  const ru = FLOWERS.map((b) => b.say[1]).join(' ');
+  assert.match(ru, /Лох цветочный/);
+  assert.match(ru, /Братан, не надо снимать/);
+  assert.match(ru, /пожать друг другу руки и закончить сегодня всю эту ситуацию/);
+  for (const b of FLOWERS) for (const s of b.say) assert.ok(s.length <= 240);
+});

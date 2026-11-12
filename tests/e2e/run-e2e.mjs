@@ -79,6 +79,11 @@
 //  v0.2.24: the fighter cards in the menu, the wait for a match and the lobby; legendary characters that move; the
 //      Season Pass bought, its weeks opened (a computer; a phone from the menu's mark); the HUD's «★ N», a phone's
 //      44 px targets, an 800×600 window (tests/e2e/v0224.mjs)
+//  v0.2.25: the owner's pre-release edits — the menu's card edge to edge with the menu and its picker (every
+//      character beside the card), the switches small top right, «18+», the swearing (a letter hidden) and «No
+//      swearing», the personal file's black humour, a sentence a line, the hidden comic «Flower Loser», the
+//      loading screen's controls and tip, the referral strip in the BLATS tab, a phone upright and sideways
+//      (tests/e2e/v0225.mjs); the quick lobby's 30 seconds and «Weapons» in tests/e2e/fill.mjs
 //  21. v0.2.17 part 3: a gang calls another out from its page — the battle room of the two gangs, the
 //      call's card live to both gangs' people, sides by gang, nobody else let in (a stranger's link is
 //      turned away), the battle played and counted for both gangs; a friend's «To battle» → a duel room
@@ -274,6 +279,9 @@ try {
   console.log('\n[e2e] v0.2.24: the fighter cards in the menu, the wait for a match and the lobby; legendary characters that move; the Season Pass (a computer and a phone); the HUD\'s counter, a phone\'s 44 px targets, an 800×600 window');
   const v0224 = spawnSync(process.execPath, ['tests/e2e/v0224.mjs', base, join(out, 'v0224')], { stdio: 'inherit' });
   if (v0224.status !== 0) failed = true;
+  console.log('\n[e2e] v0.2.25: the menu\'s card edge to edge and its picker, the switches top right, 18+, the swearing and «No swearing», the personal file\'s black humour, a sentence a line, the hidden comic, the loading screen\'s controls, the referral strip, a phone upright and sideways');
+  const v0225 = spawnSync(process.execPath, ['tests/e2e/v0225.mjs', base, join(out, 'v0225')], { stdio: 'inherit' });
+  if (v0225.status !== 0) failed = true;
   console.log('\n[e2e] v0.2.17 part 3: gang against gang, a friend called to a duel (two browsers, two socket players)');
   const battle = spawnSync(process.execPath, ['tests/e2e/battle.mjs', base, join(out, 'battle')], { stdio: 'inherit' });
   if (battle.status !== 0) failed = true;

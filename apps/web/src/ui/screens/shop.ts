@@ -89,6 +89,7 @@ import { animateLiveIcon, skinIconReady, skinIconUrl } from '../../game/render/s
 import { blatsCoin, fmtNum } from '../coin.js';
 import { blatsBanner, blatsSale, coinPile, packHint } from '../blats.js';
 import { promoForm } from '../promo.js';
+import { referralStrip } from '../referral.js';
 import { openPassReveal, passDate, passWeeksTrack } from '../pass.js';
 
 export type ArsenalTab = 'loadout' | 'weapons' | 'gear' | 'characters' | 'case' | 'diamonds';
@@ -121,6 +122,8 @@ export interface ArsenalOptions {
   onWallet?: () => void;
   /** Show this character in the character screen. */
   onCharacter?: (c: CharacterId) => void;
+  /** v0.2.25: the invitations screen (from the BLATS tab's «Bring your crew»). */
+  onInvite?: () => void;
   /** v0.2.18: play a practice match as this character, then come back to the Arsenal's `tab`. */
   onTryCharacter?: (c: CharacterId, tab: ArsenalTab) => void;
   /** v0.2.23: put this on in the dressing room at once (a skin seen after a match: «Try on»). */
@@ -133,7 +136,7 @@ export interface ArsenalOptions {
   playerLevel?: () => number | null;
 }
 
-const slotLabel = (slot: 1 | 2 | 3 | 4) => (slot === 1 ? t('Sidearm') : slot === 2 ? t('Melee') : slot === 3 ? t('Primary') : t('Equipment'));
+export const slotLabel = (slot: 1 | 2 | 3 | 4) => (slot === 1 ? t('Sidearm') : slot === 2 ? t('Melee') : slot === 3 ? t('Primary') : t('Equipment'));
 const mountLabel = (m: ModMount) => (m === 'muzzle' ? t('Muzzle') : m === 'optic' ? t('Sight') : m === 'rail' ? t('Rail') : t('Magazine'));
 
 export const tokenWord = (n: number) => plural(n, 'talon');
@@ -411,6 +414,29 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     kills: finish && skinPerks(finish)?.counter ? (inv?.skinKills?.[skinId(w, finish)] ?? 0) : null,
   });
   const openCard = (w: WeaponId, finish: FinishId | null) => openCardViewer(uiRoot(), cardData(w, finish), { inTelegram: o.inTelegram });
+  // v0.2.25: on a computer the poster is as tall as the room the skins and the in-game view leave above them
+  // (its width follows at 3 : 4, up to 58 % of the room's width); kept between redraws so a new skin never makes
+  // it jump
+  let posterW = 0;
+  const fitPoster = (grid: HTMLElement) => {
+    const below = [...grid.querySelectorAll<HTMLElement>(':scope > .dressing__info > .skinpick, :scope > .dressing__info > .dressing__game')].reduce((a, el) => a + el.getBoundingClientRect().height + 10, 0);
+    const room = grid.clientHeight - below;
+    const w = Math.round(Math.max(120, Math.min(room * 0.75, grid.clientWidth * 0.58)));
+    if (room > 0 && Math.abs(w - posterW) >= 2) {
+      posterW = w;
+      grid.style.setProperty('--pw', `${w}px`);
+    }
+  };
+  const posterFit =
+    typeof ResizeObserver === 'function'
+      ? new ResizeObserver((entries) => {
+          for (const e of entries) {
+            const grid = e.target as HTMLElement;
+            if (!grid.isConnected) posterFit?.unobserve(grid);
+            else fitPoster(grid);
+          }
+        })
+      : null;
   const itemEls = new Map<string, HTMLImageElement>();
   const itemEl = (key: string, make: () => HTMLImageElement) => {
     let el = itemEls.get(key);
@@ -453,7 +479,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       h('span', { class: 'tag' }, t('Dressing room')),
       h(
         'div',
-        { class: 'dressing__grid dressing__grid--two' },
+        { class: 'dressing__grid dressing__grid--two', ...(posterW > 0 ? { style: `--pw:${posterW}px` } : {}) },
         h(
           'div',
           { class: `dressing__poster${g ? '' : ' dressing__poster--card'}`, role: 'button', tabindex: '0', title: t('Change character'), onclick: () => o.onCharacter?.(c), onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && o.onCharacter?.(c) },
@@ -464,7 +490,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
                   // the level badge would sit under the corner button: the poster leaves it to the big card
                   const data = { ...cardData(w, finish), level: null };
                   if (posterCard) posterCard.set(data);
-                  else posterCard = new FighterCard(data, { shape: 'tall', width: 340, ratio: 4 / 3, className: 'dressing__card' });
+                  else posterCard = new FighterCard(data, { shape: 'tall', width: 420, ratio: 4 / 3, className: 'dressing__card' });
                   return posterCard.el;
                 })(),
                 h('button', { class: 'dressing__share', type: 'button', 'data-testid': 'card-open', title: t('Fighter card'), 'aria-label': t('Fighter card'), onclick: (e: Event) => (e.stopPropagation(), openCard(w, finish)) }, '⤢'),
@@ -497,6 +523,12 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
         ),
       ),
     );
+    const grid = roomEl.querySelector<HTMLElement>('.dressing__grid');
+    if (grid && posterFit) {
+      posterFit.disconnect();
+      posterFit.observe(grid);
+      requestAnimationFrame(() => grid.isConnected && fitPoster(grid));
+    }
   };
 
   /**
@@ -1357,6 +1389,12 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       p.classList.add('panel--insheet');
       return p;
     });
+  /**
+   * v0.2.25 (the owner: «не симметрично и не в одном экране, съезжает текст по строчкам»): the Season Pass on top,
+   * the three cases side by side in equal boxes — the crate, the name on one line, the price under it, a sentence
+   * a line, the box's own «Odds»; the open buttons on one line at the boxes' feet. The rare weapons are in the
+   * weapon case's odds (their numbers a tap away there), so the tab is one screen.
+   */
   const caseTab = (): HTMLElement => {
     const have = new Set(inv?.weapons ?? []);
     const left = caseOdds(have).filter((e) => e.odds > 0).length;
@@ -1364,68 +1402,66 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     const skinsHave = caseSkinsOwned(inv?.skins ?? []);
     const skinTotal = caseSkinTotal();
     const skinsLeft = skinTotal - skinsHave.size;
+    const off = () => h('div', { class: 'badge badge--off' }, t('Cases are disabled on this server'));
+    const done = () => h('div', { class: 'badge badge--ok' }, t('Collection complete!'));
+    const box = (b: { testid: string; tag: string; crate: string; title: string; price: ShopPrice; lines: string[]; owned: HTMLElement | null; action: HTMLElement; oddsId: string; odds: () => void }) =>
+      h(
+        'div',
+        { class: 'panel casebox', 'data-testid': b.testid },
+        h('span', { class: 'tag' }, b.tag),
+        h('div', { class: 'casebox__art' }, h('div', { class: `crate ${b.crate}` })),
+        h('div', { class: 'casebox__title' }, b.title),
+        h('div', { class: 'casebox__price' }, amount(b.price.amount, b.price.currency)),
+        h('div', { class: 'casebox__text muted' }, ...b.lines.map((l) => h('span', null, l))),
+        b.owned,
+        h('div', { class: 'casebox__acts' }, b.action, h('button', { class: 'btn btn--small', 'data-testid': b.oddsId, onclick: b.odds }, t('Odds'))),
+      );
     return h(
       'div',
-      { class: 'col' },
+      { class: 'col casetab' },
       reveal ? revealPanel(reveal) : null,
-      passCard(false),
+      passCard(true),
       h(
         'div',
-        { class: 'cases' },
-        h(
-          'div',
-          { class: 'panel col' },
-          h('span', { class: 'tag' }, t('The Defitsit Case')),
-          h('div', { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' }, h('div', { class: 'crate' }), h('div', { class: 'col grow', style: 'gap:4px' }, h('div', { class: 'h2' }, `${t('Rare weapon')} · `, amount(CASE_PRICE.amount, CASE_PRICE.currency)), h('div', { class: 'muted' }, t('One of 10 rare guns. No duplicates: a weapon you already got from the case never drops again, and the odds of the rest are recalculated. Once the collection is complete, the case is no longer sold.')))),
-          !enabled ? h('div', { class: 'badge badge--off' }, t('Cases are disabled on this server')) : left === 0 ? h('div', { class: 'badge badge--ok' }, t('Collection complete!')) : openBtn(CASE_PRICE, openWeaponCase, 'open-weapon-case'),
-        ),
-        h(
-          'div',
-          { class: 'panel col', 'data-testid': 'skin-case' },
-          h('span', { class: 'tag' }, t('The Skin Case')),
-          h(
-            'div',
-            { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' },
-            h('div', { class: 'crate crate--skins' }),
-            h(
-              'div',
-              { class: 'col grow', style: 'gap:4px' },
-              h('div', { class: 'h2' }, `${t('Weapon skin')} · `, amount(SKIN_CASE_PRICE.amount, SKIN_CASE_PRICE.currency)),
-              h('div', { class: 'muted' }, t('One of {n} skins: {f} finishes for each of {w} weapons. Skins change only the look, never the numbers. No duplicates: a skin you have never drops again.', { n: skinTotal, f: CASE_FINISHES.length, w: SKINNABLE_WEAPONS.length })),
-              online ? h('div', { class: 'muted', 'data-testid': 'skins-owned' }, t('Your skins: {n} of {total}', { n: skinsHave.size, total: skinTotal })) : null,
-            ),
-          ),
-          !enabled ? h('div', { class: 'badge badge--off' }, t('Cases are disabled on this server')) : skinsLeft === 0 ? h('div', { class: 'badge badge--ok' }, t('Collection complete!')) : openBtn(SKIN_CASE_PRICE, openSkinCase, 'open-skin-case'),
-        ),
-        h(
-          'div',
-          { class: 'panel col', 'data-testid': 'char-case' },
-          h('span', { class: 'tag' }, t('The Crew Case')),
-          h(
-            'div',
-            { class: 'row', style: 'margin-top:6px;flex-wrap:nowrap' },
-            h('div', { class: 'crate crate--chars' }),
-            h(
-              'div',
-              { class: 'col grow', style: 'gap:4px' },
-              h('div', { class: 'h2' }, `${t('Character')} · `, amount(CHARACTER_CASE_PRICE.amount, CHARACTER_CASE_PRICE.currency)),
-              h('div', { class: 'muted' }, t('One of the {n} characters sold for BLATS. Everyone has the same stats. No duplicates: a character you have never drops again.', { n: CASE_CHARACTERS.length })),
-              online ? h('div', { class: 'muted', 'data-testid': 'chars-owned' }, t('Your characters: {n} of {total}', { n: charsOwnedFromCase(), total: CASE_CHARACTERS.length })) : null,
-            ),
-          ),
-          !enabled ? h('div', { class: 'badge badge--off' }, t('Cases are disabled on this server')) : charsOwnedFromCase() >= CASE_CHARACTERS.length ? h('div', { class: 'badge badge--ok' }, t('Collection complete!')) : openBtn(CHARACTER_CASE_PRICE, openCharacterCase, 'open-char-case'),
-        ),
+        { class: 'cases cases--three' },
+        box({
+          testid: 'weapon-case',
+          tag: t('The Defitsit Case'),
+          crate: '',
+          title: t('Rare weapon'),
+          price: CASE_PRICE,
+          lines: [t('One of 10 rare guns.'), t('No repeats: the odds of the rest are recalculated.')],
+          owned: null,
+          action: !enabled ? off() : left === 0 ? done() : openBtn(CASE_PRICE, openWeaponCase, 'open-weapon-case'),
+          oddsId: 'case-odds-open',
+          odds: () => openOdds(t('Odds'), caseOddsPanel),
+        }),
+        box({
+          testid: 'skin-case',
+          tag: t('The Skin Case'),
+          crate: 'crate--skins',
+          title: t('Weapon skin'),
+          price: SKIN_CASE_PRICE,
+          lines: [t('One of {n} skins.', { n: fmtNum(skinTotal) }), t('Only the look changes, never the numbers.')],
+          owned: online ? h('div', { class: 'casebox__own', 'data-testid': 'skins-owned' }, t('Your skins: {n} of {total}', { n: skinsHave.size, total: skinTotal })) : null,
+          action: !enabled ? off() : skinsLeft === 0 ? done() : openBtn(SKIN_CASE_PRICE, openSkinCase, 'open-skin-case'),
+          oddsId: 'skin-odds-open',
+          odds: () => openOdds(t('Skin odds'), skinOddsPanel),
+        }),
+        box({
+          testid: 'char-case',
+          tag: t('The Crew Case'),
+          crate: 'crate--chars',
+          title: t('Character'),
+          price: CHARACTER_CASE_PRICE,
+          lines: [t('One of the {n} characters sold for BLATS.', { n: CASE_CHARACTERS.length }), t('Everyone has the same stats.')],
+          owned: online ? h('div', { class: 'casebox__own', 'data-testid': 'chars-owned' }, t('Your characters: {n} of {total}', { n: charsOwnedFromCase(), total: CASE_CHARACTERS.length })) : null,
+          action: !enabled ? off() : charsOwnedFromCase() >= CASE_CHARACTERS.length ? done() : openBtn(CHARACTER_CASE_PRICE, openCharacterCase, 'open-char-case'),
+          oddsId: 'char-odds-open',
+          odds: () => openOdds(t('Character odds'), charOddsPanel),
+        }),
       ),
-      h('div', { class: 'muted', style: 'font-size:13px' }, caseNote()),
-      // v0.2.18: one screen — the odds open in a sheet
-      h(
-        'div',
-        { class: 'row', style: 'gap:8px' },
-        h('button', { class: 'btn btn--small', 'data-testid': 'case-odds-open', onclick: () => openOdds(t('Odds'), caseOddsPanel) }, t('Weapon case odds')),
-        h('button', { class: 'btn btn--small', 'data-testid': 'skin-odds-open', onclick: () => openOdds(t('Skin odds'), skinOddsPanel) }, t('Skin case odds')),
-        h('button', { class: 'btn btn--small', 'data-testid': 'char-odds-open', onclick: () => openOdds(t('Character odds'), charOddsPanel) }, t('Character case odds')),
-      ),
-      shopGroup(t('From the weapon case'), t('tap one for its numbers'), CASE_TABLE.map((e) => cell('weapon', e.weapon))),
+      h('div', { class: 'muted casetab__note' }, caseNote()),
     );
   };
 
@@ -1519,6 +1555,8 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
       'div',
       { class: 'col blatsshop', 'data-testid': 'blats-tab' },
       head,
+      // v0.2.25: BLATS for bringing friends — the strip leads to the invitations screen
+      o.onInvite ? referralStrip({ onOpen: o.onInvite }) : null,
       h('div', { class: 'packs' }, ...(cfg?.packs ?? []).map((p, i) => packCard(p, i, methods))),
       passCard(true),
       promoPaid(),
@@ -1991,6 +2029,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
     return h(
       'div',
       { class: 'col arsdiamonds', 'data-testid': 'blats-tab' },
+      o.onInvite ? referralStrip({ onOpen: o.onInvite }) : null,
       h('div', { class: 'muted arsnote' }, blatsIntro()),
       o.inTelegram
         ? stars
@@ -2112,6 +2151,7 @@ export function renderArsenal(o: ArsenalOptions): HTMLElement {
           heroImg(c, 'charsheet__hero'),
           h('div', { class: 'col charsheet__txt' }, h('div', { class: 'nick' }, `«${d.nickname}»`), h('div', { class: 'muted' }, `${d.species} · ${d.role}`), h('div', { class: 'row charsheet__tags' }, gradeTag(CHARACTERS[c].grade), statusBadge(mine, CHARACTER_PRICES[c], false)), h('div', { class: 'quote' }, `«${d.quote}»`)),
           h('div', { class: 'lore charsheet__lore' }, d.lore),
+          h('div', { class: 'charsheet__marks' }, h('b', null, t('Distinguishing marks'), ': '), d.marks),
         );
       },
       () => {
