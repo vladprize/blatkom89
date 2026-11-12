@@ -3596,3 +3596,10 @@ button.cardslot:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px;
   .wrap.wrap--menu > .corner { gap: 6px; }
   :where(.wrap--menu > .corner:not(:has(.corner__hq)) .iconbtn, .wrap--menu > .corner:not(:has(.corner__hq)) .seg--tiny button)::after { inset: -9px -8px; }
 }
+/* the smallest phones (≤ 680 px tall, 360 × 640): the logo clear of the menu again (the owner: «логотип —
+   не так близко к основному меню») — the menu's rows a little closer, the BLAT banner a slimmer band; the card
+   keeps its size */
+@media (max-width: 760px) and (max-height: 680px) {
+  .menu { row-gap: 12px; }
+  .menu .blatsart { aspect-ratio: 6 / 1; }
+}
