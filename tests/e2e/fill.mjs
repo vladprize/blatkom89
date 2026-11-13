@@ -116,6 +116,13 @@ try {
   await A.page.waitForTimeout(400);
   await A.page.screenshot({ path: `${outDir}/fill_scoreboard_A.png` });
   await A.page.keyboard.up('Tab');
+  // v0.2.25: B's Quick Match now waits its half-minute lobby, so A's 40-second match ends (and its room goes back
+  // to the lobby) while B is still waiting — A's results are caught the moment they show
+  const aResults = A.page
+    .getByText('Match report')
+    .waitFor({ timeout: 150000 })
+    .then(async () => ({ rows: await A.page.locator('table.table tbody tr').count(), text: await A.page.locator('#ui').innerText(), shot: await A.page.screenshot({ path: `${outDir}/fill_results_A.png`, fullPage: true }).then(() => true) }));
+  aResults.catch(() => {});
 
   // ── B: Quick Match alone ────────────────────────────────────────────────
   await B.page.goto(base + '/');
@@ -168,13 +175,10 @@ try {
   check(lb.inGame.length === 4 && lb.inGame.every((p) => p.isBot === false) && lb.roster.every((p) => p.isBot === false), `B's match: 4 players, nobody marked (${lb.roster.map((p) => p.name).join(', ')})`);
   await B.page.screenshot({ path: `${outDir}/fill_quick_match_B.png` });
 
-  // ── A: the results ──────────────────────────────────────────────────────
-  await A.page.getByText('Match report').waitFor({ timeout: 90000 });
-  const rows = await A.page.locator('table.table tbody tr').count();
-  const resultsText = await A.page.locator('#ui').innerText();
+  // ── A: the results (caught when they showed, above) ─────────────────────
+  const { rows, text: resultsText } = await aResults;
   check(rows === 4, `results list the whole lineup (${rows} rows)`);
   check(!MARKED.test(resultsText), 'the results screen marks nobody');
-  await A.page.screenshot({ path: `${outDir}/fill_results_A.png`, fullPage: true });
 } catch (e) {
   await fail(e);
 }
