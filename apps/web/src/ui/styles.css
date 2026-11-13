@@ -3605,3 +3605,14 @@ button.cardslot:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px;
   .menu { row-gap: 12px; }
   .menu .blatsart { aspect-ratio: 6 / 1; }
 }
+/* a phone held sideways: the language and the swearing side by side too (the 667 × 375 run found the settings
+   56 px too tall with the switch's label and note beside it) */
+@container ui (orientation: landscape) and (max-height: 500px) {
+  .settings__lang { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; column-gap: 10px; }
+  .settings__lang > .tag { grid-column: 1 / -1; justify-self: start; }
+  .settings__lang > .settings__swear { margin-top: 0 !important; min-width: 0; }
+  .settings__lang > .settings__swear > .settings__swearlabel, .settings__lang > .settings__swear > .settings__note { display: none; }
+  .settings__lang .seg button { padding-left: 11px; padding-right: 11px; }
+  .settings__langseg .lang--long { display: none; }
+  .settings__langseg .lang--short { display: inline; }
+}
