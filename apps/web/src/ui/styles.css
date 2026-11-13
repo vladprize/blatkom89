@@ -3165,8 +3165,10 @@ button.cardslot:focus-visible { outline: 2px solid #f2b632; outline-offset: 2px;
   .wrap--menu > .corner .seg--tiny button { min-height: 26px; padding: 3px 7px; font-size: 12px; }
   .wrap--menu > .corner .iconbtn { width: 28px; height: 26px; background: rgba(20, 16, 13, .6); }
   .wrap--menu > .corner .iconbtn svg { width: 14px; height: 14px; }
-  .wrap--menu > .corner .fsbtn--label { width: 28px; padding: 0; justify-content: center; }
-  .wrap--menu > .corner .fsbtn--label .fsbtn__label { display: none; }
+  /* v0.2.19 (the owner): on a computer the full-screen button says what it does — kept, only small */
+  .wrap--menu > .corner .fsbtn--label { width: auto; padding: 0 8px 0 6px; gap: 5px; justify-content: center; }
+  .wrap--menu > .corner .fsbtn--label svg { width: 13px; height: 13px; }
+  .wrap--menu > .corner .fsbtn--label .fsbtn__label { display: inline; font-size: 11px; letter-spacing: .04em; }
 }
 /* a phone held upright: the games, then the card at the left with the Arsenal and the dossier at its right, the
    BLAT banner under them */
