@@ -485,6 +485,14 @@ music on a real iPhone and inside Telegram.
 
 ## 3. Open risks / next steps
 
+- After v0.2.25 (above, §2q; unit 393 / 393; the second full browser run 22 of 30 at once, the eight red stages fixed or
+  updated and every stage they touched passing on the release bundle — docs/TESTING.md §3): the owner's look at the
+  swearing and the black humour in both languages (`i18n/mat.ts`, `story/mat.ts`, `i18n/dark.ts` — every line easy to
+  change or drop); «18+» in the bot's description in @BotFather; the owner's pictures from ChatGPT
+  (`docs/ART_PROMPTS_v0225.md`) — Borka with the bouquet can go straight into the hidden comic; the music's first-tap
+  start on a real iPhone and inside Telegram; the 30-second quick lobby and the referral's numbers (50 BLATS, 3
+  matches, 20 a month) are first values to watch in `/admin`; `PASS_SEASON_*` still waits for the owner (v0.2.24).
+
 - After v0.2.24 (above, §2p; unit 380 / 380; the second full browser run 28 of 30 on its bundle, the two red ones — a
   test reading a card before its layout, a 0.7 s timing outlier — and every card stage pass on the release bundle;
   docs/TESTING.md §3): the owner sets the Season Pass's first season (`PASS_SEASON_ID`, `PASS_SEASON_START`,
