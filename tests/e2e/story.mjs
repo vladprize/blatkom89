@@ -130,7 +130,8 @@ try {
   const missionMusic = await A.page.evaluate(() => window.__blatkom.music.state());
   check(!missionMusic.wanted && !missionMusic.quiet, `the soundtrack fades out with the mission (${JSON.stringify(missionMusic)})`);
   await A.page.getByTestId('story-bark').first().waitFor({ timeout: 15000 });
-  check(/No unauthorised persons/.test(await text(A.page, '[data-testid=story-bark]')), `the hero says his line at the start («${await text(A.page, '[data-testid=story-bark]')}»)`);
+  // v0.2.25: the lines swear by default (a letter hidden) — «No unauthorised persons!» is «Unauthorised? F*ck off!»
+  check(/No unauthorised persons|Unauthorised\? F\*ck off/.test(await text(A.page, '[data-testid=story-bark]')), `the hero says his line at the start («${await text(A.page, '[data-testid=story-bark]')}»)`);
   await A.page.screenshot({ path: `${outDir}/story_mission_a1.png` });
   // the hero can't be dropped while the test waits out the server's shortest mission time
   await world(A.page, 'w.players.get("local").invulnUntil = 1e12;');
@@ -182,7 +183,8 @@ try {
   await world(A.page, dropHero);
   await A.page.getByTestId('story-fail').waitFor({ timeout: 20000 });
   const fail = await text(A.page, '[data-testid=story-fail]');
-  check(/Mission failed/i.test(fail) && /headache/.test(fail), `dropped: «${fail.slice(0, 90)}…»`);
+  // v0.2.25: swearing by default — «MISSION F*CKED», «…a head like the morning after a wake…»
+  check(/Mission failed|Mission f\*cked/i.test(fail) && /headache|morning after a wake/.test(fail), `dropped: «${fail.slice(0, 90)}…»`);
   await A.page.screenshot({ path: `${outDir}/story_fail.png` });
   await A.page.getByTestId('story-retry').click();
   await A.page.getByTestId('story-goal').waitFor({ state: 'visible', timeout: 30000 });
