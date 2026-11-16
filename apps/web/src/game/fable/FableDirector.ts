@@ -1,12 +1,16 @@
 /**
- * Fable cut (the trial build): everything the new picture and sound add to a match, switched as one.
+ * Fable cut: the match's picture and sound — the light map with shadows, the bloom-and-grade pass, shadows
+ * under the characters, the map's ambient life, a camera that kicks with the shot and punches in on a kill,
+ * blood on the walls, the place's echo.
  *
- * On: the light map with shadows, the bloom-and-grade pass, shadows under the characters, the map's ambient
- * life, a camera that kicks with the shot and punches in on a kill, blood on the walls, the place's echo.
- * Off: the match looks and sounds exactly as the main version does.
+ * v0.2.26 (the owner: «сделай тогда просто FableCut главный… убери предыдущую»): it began as a trial build beside
+ * the main version and is now the game's only picture — no switch, no key, no mark on the screen. What a
+ * player chooses is how much of it their device draws (the quality), and a device that cannot keep up is
+ * taken down the ladder by the game itself (watch.ts). The plain light map of the versions before is kept
+ * for one case only: a browser that cannot draw this one (no WebGL, a driver that refuses the shaders).
  *
- * It is all presentation. The session (rules, hits, scores, the protocol) is read, never written: a player
- * on the Fable cut and a player on the classic picture are in the same match with the same information.
+ * It is all presentation. The session (rules, hits, scores, the protocol) is read, never written: two
+ * players on different qualities are in the same match with the same information.
  */
 import * as Phaser from 'phaser';
 import type { CollisionWorld, MapDef } from '@blatkom/shared';
@@ -16,44 +20,50 @@ import type { Effects } from '../render/Effects.js';
 import type { MapRenderer } from '../render/MapRenderer.js';
 import { D } from '../render/depth.js';
 import { sfx } from '../audio/Sfx.js';
-import { getSettings } from '../../app/settings.js';
+import { getSettings, updateSettings } from '../../app/settings.js';
 import { hudBus } from '../scenes/hudBus.js';
 import { toast } from '../../ui/dom.js';
 import { t } from '../../i18n/index.js';
-import { isTouchDevice } from '../input/TouchState.js';
 import { FablePipeline } from './FablePipeline.js';
 import { Ambient } from './Ambient.js';
 import { lookOf } from './looks.js';
 import type { MapLook } from './looks.js';
 import { TIERS } from './tiers.js';
 import type { FableTier } from './tiers.js';
+import { LOWEST, PerfWatch, qualityOf, stepDown } from './watch.js';
+import type { QualityLevel } from './watch.js';
 
 export interface FableWanted {
   on: boolean;
-  tier: FableTier;
-  /** Pinned by the address bar (screenshots, measurements): the quality never steps down by itself. */
+  /** The step of the quality ladder asked for. */
+  level: QualityLevel;
+  /**
+   * Pinned — by the player in the settings, or by the address bar (screenshots, measurements): the game does
+   * not lower it by itself.
+   */
   locked: boolean;
 }
 
 /**
- * What the player asked for: the «look» setting, or `?fable=0|fast|balanced|cine` in the address bar (for
- * screenshots and measurements). The Canvas renderer has no shaders: the classic picture only.
+ * What is asked for: the «quality» setting. The address bar can pin it for screenshots and measurements —
+ * `?fable=fast|balanced|cine`, or `?fablelock` (the setting's own, never lowered); `?fable=0` is the plain
+ * light map of the versions before, for telling a fault of the picture from a fault of the driver. The
+ * Canvas renderer has no shaders: the plain light map only.
  */
 export function fableWanted(webgl: boolean): FableWanted {
-  if (!webgl) return { on: false, tier: 0, locked: true };
+  if (!webgl) return { on: false, level: 0, locked: true };
   let q: string | null = null;
   try {
     q = new URLSearchParams(location.search).get('fable');
   } catch {
     /* no address bar */
   }
-  if (q === '0' || q === 'off' || q === 'classic') return { on: false, tier: 0, locked: true };
-  if (q === 'fast') return { on: true, tier: 0, locked: true };
-  if (q === 'balanced') return { on: true, tier: 1, locked: true };
-  if (q === 'cine') return { on: true, tier: 2, locked: true };
+  if (q === '0' || q === 'off' || q === 'classic') return { on: false, level: 0, locked: true };
+  if (q === 'fast') return { on: true, level: 0, locked: true };
+  if (q === 'balanced') return { on: true, level: 1, locked: true };
+  if (q === 'cine') return { on: true, level: 2, locked: true };
   const s = getSettings();
-  // `?fablelock`: the setting decides (F2 still switches), but the quality is pinned
-  return { on: s.look === 'fable', tier: s.fableTier, locked: q !== null || has('fablelock') };
+  return { on: true, level: qualityOf(s.quality, 1), locked: s.qualityPicked === true || q !== null || has('fablelock') };
 }
 
 function has(param: string): boolean {
@@ -95,15 +105,15 @@ const lampTmp = { dx: 0, dy: 0, k: 0 };
 
 export class FableDirector {
   on = false;
-  tier: FableTier = 2;
+  /** Where on the quality ladder the match is now (lower than what was asked for once the game stepped down). */
+  level: QualityLevel = 2;
   /** The camera's offset from where it would be: the recoil of the last shots, in world px. */
   readonly cam = { x: 0, y: 0 };
   private kvx = 0;
   private kvy = 0;
   private locked = false;
-  /** The player chose the picture themselves in this match. */
-  private picked = false;
-  private post = true;
+  /** The driver refused the finish pass's shaders: the picture goes on without it. */
+  private noPass = false;
   private pipeline: FablePipeline | null = null;
   private readonly look: MapLook;
   private ambient: Ambient | null = null;
@@ -123,15 +133,10 @@ export class FableDirector {
   private whizAt = 0;
   private sparks = 0;
   private zoomNow = 1;
-  private intro: { rem0: number; fx: number; fy: number; said: boolean } | null = null;
+  private intro: { rem0: number; fx: number; fy: number } | null = null;
   private introDone = false;
-  private perfFrames = 0;
-  private perfStart = 0;
-  private slow = 0;
+  private readonly perf = new PerfWatch();
   private told = false;
-  private lastTag = '';
-  private bornAt = -1;
-  private announced = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -140,53 +145,39 @@ export class FableDirector {
     this.look = lookOf(d.map.id);
   }
 
-  /** Whether the Fable picture's own pass is on the camera (the scene keeps the classic tape pass off then). */
+  /** The quality tier drawn now: «Кино», «Баланс» or «Быстро» (the ladder's lowest step is «Быстро» too). */
+  get tier(): FableTier {
+    return this.level < 0 ? 0 : (this.level as FableTier);
+  }
+
+  /** Whether the picture's finish pass is on the camera (the scene keeps the plain tape pass off then). */
   get posting(): boolean {
     return this.on && this.pipeline !== null;
   }
 
   /**
-   * Brings the match in line with what the player asked for. `userChange`: a setting was just changed — if it
-   * was the quality itself, it is theirs now and no longer steps down by itself (the volume or the language
-   * changing does not undo a step down).
+   * Brings the match in line with the settings: called at the match's start and whenever a setting changes.
+   * The quality is re-made only when it really is another one — the volume or the language changing does not
+   * bake the lamps again, and neither does the game's own step down (it has applied itself already).
    */
-  sync(userChange = false): void {
+  sync(): void {
     const webgl = this.scene.game.renderer.type === Phaser.WEBGL;
     const want = fableWanted(webgl);
-    const before = this.asked;
-    this.asked = { on: want.on, tier: want.tier };
-    const lookChanged = !before || before.on !== want.on;
-    const tierChanged = !!before && before.tier !== want.tier;
-    if (want.locked) this.locked = true;
-    if (userChange && tierChanged) {
-      this.picked = true;
-      this.locked = true;
-    }
-    if (lookChanged || tierChanged) {
-      let tier = want.tier;
-      if (!this.picked && !want.locked) {
-        // a software renderer (no graphics card behind the browser) starts on the cheapest tier and without the
-        // picture's pass — every full-screen pass is the processor's work there; a quality that stepped down
-        // by itself in this match stays down when the picture is switched off and on again
-        if (softwareRenderer(this.scene.game)) {
-          tier = 0;
-          this.post = false;
-        }
-        if (this.stepped !== null && this.stepped < tier) tier = this.stepped;
-      }
-      if (this.picked) this.post = true;
+    // a software renderer (no graphics card behind the browser) starts on the lowest step — every full-screen
+    // pass is the processor's work there — unless a quality was asked for by name
+    const level = want.on && !want.locked && softwareRenderer(this.scene.game) ? LOWEST : want.level;
+    const first = !this.synced;
+    this.synced = true;
+    this.locked = want.locked;
+    if (first || want.on !== this.on || level !== this.level) {
       this.on = want.on;
-      this.tier = tier;
+      this.level = level;
       this.apply(true);
     }
     if (this.pipeline) this.pipeline.vhs = getSettings().vhs === 0 ? 0 : getSettings().vhs === 1 ? 0.5 : 1;
-    this.tag();
   }
 
-  /** What the settings asked for at the last sync. */
-  private asked: { on: boolean; tier: FableTier } | null = null;
-  /** The tier the quality stepped down to by itself in this match (null: it did not). */
-  private stepped: FableTier | null = null;
+  private synced = false;
 
   private apply(rebuild: boolean) {
     const { lighting, mapView, fx, map } = this.d;
@@ -194,19 +185,19 @@ export class FableDirector {
     const cfg = TIERS[this.tier];
     lighting.setFable(this.on ? this.tier : null, this.look, rebuild, this.d.zoom);
     mapView.setDropShadows(this.on ? 0.4 : 1);
-    // the picture's pass
-    const wantPost = this.on && this.post;
+    // the picture's finish pass (the ladder's lowest step goes without it)
+    const wantPost = this.on && this.level >= 0 && !this.noPass;
     if (wantPost && !this.pipeline) {
       try {
         cam.setPostPipeline(FablePipeline);
         const p = cam.getPostPipeline(FablePipeline);
         this.pipeline = ((Array.isArray(p) ? p[0] : p) as FablePipeline | undefined) ?? null;
       } catch (e) {
-        // a graphics driver that will not take the shaders: the Fable cut goes on without its pass
+        // a graphics driver that will not take the shaders: the picture goes on without its finish pass
         console.warn('[fable] the picture pass is unavailable', e);
         this.pipeline = null;
       }
-      if (!this.pipeline) this.post = false;
+      if (!this.pipeline) this.noPass = true;
     } else if (!wantPost && this.pipeline) {
       cam.removePostPipeline(this.pipeline);
       this.pipeline = null;
@@ -248,22 +239,6 @@ export class FableDirector {
 
   private listener: { x: number; y: number } | null = null;
 
-  /** The mark at the bottom of the HUD: which picture this is and how to switch it. */
-  private tag() {
-    const key = isTouchDevice() ? '' : ' · F2';
-    const name = this.tier === 2 ? t('CINEMA') : this.tier === 1 ? t('BALANCED') : t('FAST');
-    const text = this.on ? `FABLE CUT · ${name}${key}` : `${t('CLASSIC PICTURE')}${key}`;
-    if (text === this.lastTag) return;
-    this.lastTag = text;
-    hudBus.emit('fable-tag', text);
-  }
-
-  /** The HUD starts a moment after the match scene: tell it again once it is there. */
-  announce(): void {
-    this.lastTag = '';
-    this.tag();
-  }
-
   private setZoom(k: number) {
     // at rest the zoom is exactly the scene's own: pixel art shimmers at 2.0001
     if (Math.abs(k - 1) < 0.0005) k = 1;
@@ -297,16 +272,12 @@ export class FableDirector {
         dy /= dist;
       }
       const far = Math.min(dist, 230);
-      this.intro = { rem0: hud.phaseRemainingMs, fx: me.x + dx * far, fy: me.y + dy * far, said: false };
+      this.intro = { rem0: hud.phaseRemainingMs, fx: me.x + dx * far, fy: me.y + dy * far };
     }
     const it = this.intro;
     // the match's own countdown is the clock: a slow first frame (the map being built) does not eat the pan
-    const p = hud.phase === 'countdown' ? (it.rem0 - hud.phaseRemainingMs) / Math.max(1, it.rem0 - 300) : 1;
     // (the loading screen has just named the map and the mode: the pan needs no title of its own)
-    if (!it.said && p > 0.06) {
-      it.said = true;
-      this.announce();
-    }
+    const p = hud.phase === 'countdown' ? (it.rem0 - hud.phaseRemainingMs) / Math.max(1, it.rem0 - 300) : 1;
     if (p >= 1) {
       this.introDone = true;
       this.intro = null;
@@ -319,12 +290,6 @@ export class FableDirector {
   }
 
   update(time: number, dtMs: number, players: RenderPlayer[], me: RenderPlayer | null, hidden: ReadonlySet<number>, paused: boolean): void {
-    // the HUD starts a moment after the match scene: the mark is told to it once it is there
-    if (this.bornAt < 0) this.bornAt = time;
-    if (!this.announced && time - this.bornAt > 350) {
-      this.announced = true;
-      this.announce();
-    }
     if (!this.on) return;
     // real time, so a slow frame does not slow the spring or the fades (a stall is not replayed)
     const dt = Math.min(0.25, dtMs / 1000);
@@ -443,30 +408,25 @@ export class FableDirector {
   /** Where each player's last footprint was left. */
   private readonly strides = new Map<number, { x: number; y: number }>();
 
-  /** Below ~38 frames a second for four seconds: the quality steps down once, and says so the first time. */
+  /**
+   * A device that cannot keep up (watch.ts: under ~38 frames a second for four seconds in a row) goes one
+   * step down the ladder, and the step is remembered: the next match starts there. It is the game's step, not
+   * the player's choice — it can go lower still; a quality the player picked in the settings is never touched.
+   */
   private watch(paused: boolean) {
     if (this.locked) return;
-    const now = performance.now();
-    if (!this.perfStart) this.perfStart = now;
-    this.perfFrames++;
-    const span = now - this.perfStart;
-    if (span < 1000) return;
-    const fps = (this.perfFrames * 1000) / span;
-    this.perfFrames = 0;
-    this.perfStart = now;
-    this.slow = fps < 38 && !paused ? this.slow + 1 : 0;
-    if (this.slow < 4) return;
-    this.slow = 0;
-    if (this.tier > 0) {
-      this.tier = (this.tier - 1) as FableTier;
-      this.stepped = this.tier;
-    } else if (this.post) this.post = false;
-    else {
+    if (!this.perf.frame(performance.now(), paused)) return;
+    const next = stepDown(this.level);
+    // nothing left to give up (the lowest step, or «Быстро» on a driver that never took the finish pass)
+    if (next === null || (next === LOWEST && !this.pipeline)) {
       this.locked = true;
       return;
     }
+    this.level = next;
+    // what is baked stays as it was made; what is drawn every frame gets cheaper at once
     this.apply(false);
-    this.tag();
+    // (the settings tell the match they changed: `sync` finds the level already there and re-makes nothing)
+    updateSettings({ quality: next });
     if (!this.told) {
       this.told = true;
       toast(t('The picture was made simpler to keep things smooth — change it in the settings'));
@@ -582,6 +542,5 @@ export class FableDirector {
     sfx.setFable(null);
     sfx.occluded = null;
     this.d.fx.onShell = null;
-    hudBus.emit('fable-tag', null);
   }
 }

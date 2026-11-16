@@ -1,5 +1,5 @@
 /**
- * Fable cut (the trial build): the geometry of light and shadow. No Phaser, no DOM — plain numbers, so it is
+ * Fable cut (the match's picture, see FableDirector.ts): the geometry of light and shadow. No Phaser, no DOM — plain numbers, so it is
  * tested in node.
  *
  * What stops light is taken from the map itself (its walls and props), the same table the collision is built

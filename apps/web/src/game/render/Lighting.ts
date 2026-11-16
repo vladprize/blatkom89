@@ -152,7 +152,10 @@ export class Lighting {
   private readonly pool: Phaser.GameObjects.Image[] = [];
   private used = 0;
   enabled = true;
-  /** Fable cut (the trial build): the light map with shadows; null — the classic one below. */
+  /**
+   * Fable cut: the light map with shadows — the game's picture since v0.2.26; null — the plain one below, kept for a
+   * browser that cannot draw it (no WebGL, a refused canvas or shader) and for the menu's backdrop.
+   */
   private v2: ShadowLights | null = null;
   /** Every lamp's brightness this frame (its flicker). */
   flick: number[] = [];

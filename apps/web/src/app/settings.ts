@@ -14,10 +14,15 @@ export interface Settings {
   bots: number;
   /** The room chat (lobby, match, results): shown or hidden. */
   chat: boolean;
-  /** The trial build: the Fable cut (shadows, bloom, the new sound) or the classic picture and sound. */
-  look: 'fable' | 'classic';
-  /** The Fable cut's quality: 2 — everything, 1 — balanced, 0 — fast. */
-  fableTier: 0 | 1 | 2;
+  /**
+   * v0.2.26 (the owner: «сделай тогда просто FableCut главный… убери предыдущую»): the game has one picture — the
+   * one with shadows, bloom and the place's sound — and this is how much of it the device draws: 2 «Кино»
+   * (everything), 1 «Баланс», 0 «Быстро». −1 is «Быстро» without the finish pass: only the game itself steps
+   * down to it, on a device that cannot keep up (game/fable/watch.ts).
+   */
+  quality: -1 | 0 | 1 | 2;
+  /** The player chose the quality themselves: the game no longer lowers it. */
+  qualityPicked: boolean;
 }
 
 const KEY = 'blatkom89.settings.v1';
@@ -32,7 +37,7 @@ function lowEndDevice(): boolean {
   }
 }
 
-/** A phone or a tablet: the Fable cut starts a tier lower there (a small graphics chip, a battery, heat). */
+/** A phone or a tablet: the picture starts a step lower there (a small graphics chip, a battery, heat). */
 function coarsePointer(): boolean {
   try {
     return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -54,8 +59,8 @@ export const DEFAULT_SETTINGS: Settings = {
   botDifficulty: 'normal',
   bots: 3,
   chat: true,
-  look: 'fable',
-  fableTier: lowEndDevice() || coarsePointer() ? 1 : 2,
+  quality: lowEndDevice() || coarsePointer() ? 1 : 2,
+  qualityPicked: false,
 };
 
 let current: Settings = load();

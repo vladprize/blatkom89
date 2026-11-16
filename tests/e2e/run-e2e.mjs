@@ -84,6 +84,11 @@
 //      swearing», the personal file's black humour, a sentence a line, the hidden comic «Flower Loser», the
 //      loading screen's controls and tip, the referral strip in the BLATS tab, a phone upright and sideways
 //      (tests/e2e/v0225.mjs); the quick lobby's 30 seconds and «Weapons» in tests/e2e/fill.mjs
+//  v0.2.26: the picture with shadows, bloom and the place's sound is the game's only one (docs/FABLE_CUT.md) — on
+//      by itself, nothing on the screen naming it, F2 no key of the game; its moments on «Кино» (the opening pan, the
+//      recoil, a run of kills, low health, the end); «Качество картинки» in the pause menu and on the settings screen
+//      (a computer, an 800×600 window, a phone upright and sideways; Russian and English); the game's own step down,
+//      saved; the plain light map behind `?fable=0` — the demo build, no server (tests/e2e/v0226.mjs)
 //  21. v0.2.17 part 3: a gang calls another out from its page — the battle room of the two gangs, the
 //      call's card live to both gangs' people, sides by gang, nobody else let in (a stranger's link is
 //      turned away), the battle played and counted for both gangs; a friend's «To battle» → a duel room
@@ -310,6 +315,9 @@ try {
   console.log('\n[e2e] equipment: grenades, mines, C4, turret (demo build)');
   const gadgets = spawnSync(process.execPath, ['tests/e2e/gadgets.mjs', 'apps/web/dist-demo/blatkom89-demo.html', join(out, 'gadgets')], { stdio: 'inherit' });
   if (gadgets.status !== 0) failed = true;
+  console.log('\n[e2e] v0.2.26: one picture — on by itself with nothing naming it, its moments on «Кино», the quality in the settings (a computer, a small window, a phone), the game\'s own step down remembered, the plain light map behind `?fable=0` (demo build)');
+  const v0226 = spawnSync(process.execPath, ['tests/e2e/v0226.mjs', 'apps/web/dist-demo/blatkom89-demo.html', join(out, 'v0226')], { stdio: 'inherit' });
+  if (v0226.status !== 0) failed = true;
   console.log('\n[e2e] sign-in with Google, Telegram, Discord (third server with every provider set up; providers stubbed)');
   await ready(signBase);
   const signin = spawnSync(process.execPath, ['tests/e2e/signin.mjs', signBase, join(out, 'signin'), base], { stdio: 'inherit', env: { ...process.env, E2E_TG_BOT_TOKEN } });

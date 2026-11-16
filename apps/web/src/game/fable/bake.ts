@@ -74,6 +74,15 @@ function canvasOf(w: number, h: number): HTMLCanvasElement {
   return c;
 }
 
+/**
+ * A canvas that is done with gives its memory back at once: a phone's browser counts every canvas against one
+ * small budget and frees them late (the lamps of a map are some thirty canvases, baked again on every new map).
+ */
+function release(c: HTMLCanvasElement) {
+  c.width = 0;
+  c.height = 0;
+}
+
 function path(ctx: CanvasRenderingContext2D, pts: number[]) {
   ctx.moveTo(pts[0]!, pts[1]!);
   for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i]!, pts[i + 1]!);
@@ -222,8 +231,12 @@ export function bakeLights(map: MapDef, index: OccluderIndex, o: BakeOptions): B
     const x = l.x - l.radius;
     const y = l.y - l.radius;
     if (flickers(l)) cookies.push({ index: i, canvas: lamp, x, y, size: l.radius * 2 });
-    else ctx.drawImage(lamp, Math.round(x * o.res), Math.round(y * o.res));
+    else {
+      ctx.drawImage(lamp, Math.round(x * o.res), Math.round(y * o.res));
+      release(lamp);
+    }
   });
   ctx.globalCompositeOperation = 'source-over';
+  release(mask);
   return { base, cookies, res: o.res, origins, ms: performance.now() - t0 };
 }

@@ -1,5 +1,5 @@
 import { h, toast } from '../dom.js';
-import { getSettings, updateSettings } from '../../app/settings.js';
+import { getSettings, onSettings, updateSettings } from '../../app/settings.js';
 import type { Settings } from '../../app/settings.js';
 import type { OnlineClient } from '../../net/OnlineClient.js';
 import { displayNameSchema, nickInput, MAX_NICK_LENGTH } from '@blatkom/shared';
@@ -13,7 +13,7 @@ import { isTouchDevice } from '../../game/input/TouchState.js';
 
 export function renderSettings(opts: { inGame: boolean; online: OnlineClient | null; onResetLocal?: () => void }): HTMLElement {
   const s = getSettings();
-  const seg = <T extends string | number | boolean>(label: string, values: Array<[T, string]>, key: keyof Settings) => {
+  const seg = <T extends string | number | boolean>(label: string, values: Array<[T, string]>, key: keyof Settings, cls = '') => {
     const box = h('div', { class: 'seg', role: 'group', 'aria-label': label });
     const draw = () =>
       box.replaceChildren(
@@ -33,7 +33,7 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
         ),
       );
     draw();
-    return h('div', { class: 'col setrow', style: 'gap:6px' }, h('div', { class: 'muted' }, label), box);
+    return h('div', { class: `col setrow${cls ? ` ${cls}` : ''}`, style: 'gap:6px' }, h('div', { class: 'muted' }, label), box);
   };
   const pct = (v: number) => `${Math.round(v * 100)}%`;
   const slider = (label: string, key: 'sfxVolume' | 'musicVolume' | 'stickScale', min: number, max: number, step: number) => {
@@ -76,39 +76,53 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
       h('div', { class: 'muted settings__note' }, t('Prices, odds, payments and the legal texts are always without swearing.')),
     ),
   );
-  // the trial build: the Fable cut or the classic picture (on the panel's top edge, beside its tag: no room is taken), and how
-  // much of the Fable cut — a row shown where the screen has room for it and always in the pause menu
-  const lookBox = h('div', { class: 'seg seg--tight settings__look', role: 'group', 'aria-label': t('Picture'), 'data-testid': 'settings-look' });
-  const tierBox = h('div', { class: 'seg', role: 'group', 'aria-label': t('Fable cut quality'), 'data-testid': 'settings-tier' });
-  const drawLooks = () => {
-    const cur = getSettings();
-    const pick = (patch: Partial<Settings>) => () => {
-      updateSettings(patch);
-      sfx.play('click');
-      drawLooks();
-    };
-    lookBox.replaceChildren(
-      h('button', { 'aria-pressed': String(cur.look === 'fable'), 'data-look': 'fable', onclick: pick({ look: 'fable' }) }, 'Fable cut'),
-      h('button', { 'aria-pressed': String(cur.look === 'classic'), 'data-look': 'classic', onclick: pick({ look: 'classic' }) }, t('Classic')),
-    );
-    tierBox.replaceChildren(
+  // v0.2.26 (the owner: «сделай тогда просто FableCut главный… убери предыдущую»): one picture — what is chosen is how
+  // much of it the device draws. A row of its own where the screen has room (and always in the pause menu); on a
+  // small settings screen the same three buttons sit on the panel's top edge, beside its tag (styles.css), so the
+  // screen still fits. A step the game took by itself shows here too; a tap on another one makes it the player's.
+  const qualityBox = h('div', { class: 'seg', role: 'group', 'aria-label': t('Picture quality'), 'data-testid': 'settings-quality' });
+  const shown = () => Math.max(0, getSettings().quality);
+  const drawQuality = () =>
+    qualityBox.replaceChildren(
       ...([[0, t('Fast')], [1, t('Balanced')], [2, t('Cinema')]] as const).map(([tier, text]) =>
-        h('button', { 'aria-pressed': String(cur.look === 'fable' && cur.fableTier === tier), 'data-tier': String(tier), onclick: pick({ look: 'fable', fableTier: tier }) }, text),
+        h(
+          'button',
+          {
+            'aria-pressed': String(shown() === tier),
+            'data-quality': String(tier),
+            onclick: () => {
+              // the one already on stays as it is (also where the game itself went a step below «Быстро»)
+              if (shown() === tier) return;
+              updateSettings({ quality: tier, qualityPicked: true });
+              sfx.play('click');
+              drawQuality();
+            },
+          },
+          text,
+        ),
       ),
     );
-  };
-  drawLooks();
+  drawQuality();
+  // the game may step the quality down while this is open (the pause menu's settings do not stop a match)
+  const offQuality = onSettings(() => (qualityBox.isConnected ? drawQuality() : offQuality()));
   const graphics = h(
     'div',
     { class: 'panel col settings__picture' },
     h('span', { class: 'tag' }, t('Picture')),
-    lookBox,
-    h('div', { class: 'col setrow settings__tier', style: 'gap:6px' }, h('div', { class: 'muted' }, t('Fable cut quality')), tierBox),
+    h(
+      'div',
+      { class: 'col setrow settings__quality', style: 'gap:6px' },
+      // (a small screen: the buttons stand on the panel's edge after its tag — this hidden copy of the tag keeps its width for them)
+      h('span', { class: 'tag settings__ghost', 'aria-hidden': 'true' }, t('Picture')),
+      h('div', { class: 'muted' }, t('Picture quality')),
+      qualityBox,
+    ),
     seg(t('VHS effect (grain, tracking lines, vignette)'), [
       [0, t('Off')],
       [1, t('Worn tape')],
       [2, t('Tenth copy')],
-    ], 'vhs'),
+      // v0.2.26: the row with the longest buttons — in a narrow column its name goes above them (styles.css)
+    ], 'vhs', 'setrow--long'),
     seg(t('Camera shake'), [
       [true, t('On')],
       [false, t('Off')],

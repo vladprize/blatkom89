@@ -74,7 +74,7 @@ export class Effects {
   private readonly growing: Array<{ img: Phaser.GameObjects.Image; target: number; speed: number }> = [];
   private readonly flights = new Map<number, Flight>();
   shakeScale = 1;
-  /** Fable cut (the trial build): called where a spent case comes to rest. */
+  /** Fable cut: called where a spent case comes to rest. */
   onShell: ((x: number, y: number) => void) | null = null;
 
   constructor(private readonly scene: Phaser.Scene) {

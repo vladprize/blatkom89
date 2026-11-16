@@ -19,7 +19,7 @@ import { FableDirector } from '../fable/FableDirector.js';
 import { InputManager } from '../input/InputManager.js';
 import { D } from '../render/depth.js';
 import { sfx } from '../audio/Sfx.js';
-import { getSettings, onSettings, updateSettings } from '../../app/settings.js';
+import { getSettings, onSettings } from '../../app/settings.js';
 import { hudBus } from './hudBus.js';
 import type { ObjectiveEntry } from './hudBus.js';
 import { haptic } from '../../telegram/tg.js';
@@ -77,7 +77,10 @@ export class GameScene extends Phaser.Scene {
   private qualityReduced = false;
   /** Falling snow on a winter map (v0.2.18). */
   private snow: Snowfall | null = null;
-  /** The trial build: the Fable cut's picture and sound (off: the match is the main version's). */
+  /**
+   * The match's picture and sound (game/fable). v0.2.26 (the owner: «сделай тогда просто FableCut главный… убери
+   * предыдущую»): the game's only one — the plain light map and tape pass below serve a browser that cannot draw it.
+   */
   private fable!: FableDirector;
   /** Players a smoke cloud hides this frame. */
   private readonly hiddenSlots = new Set<number>();
@@ -145,13 +148,6 @@ export class GameScene extends Phaser.Scene {
     hudBus.on('pause-state', this.onPauseState, this);
     hudBus.on('chat-open', this.onChatOpen, this);
     hudBus.on('chat-say', this.onChatSay, this);
-    // the trial build: F2 switches between the Fable cut and the classic picture in the middle of a match
-    this.input.keyboard?.on('keydown-F2', this.onLookKey, this);
-  }
-
-  private onLookKey(e: KeyboardEvent) {
-    e.preventDefault?.();
-    updateSettings({ look: getSettings().look === 'fable' ? 'classic' : 'fable' });
   }
 
   /**
@@ -213,8 +209,9 @@ export class GameScene extends Phaser.Scene {
     const s = getSettings();
     // the VHS pass is a full-screen post-process: removed entirely when switched off (saves GPU on phones)
     const cam = this.cameras.main;
-    // the trial build: the Fable cut has a pass of its own with the tape look folded in
-    this.fable.sync(userChange);
+    // the picture has a finish pass of its own with the tape look folded in; the plain tape pass is for a
+    // browser the picture cannot be drawn in
+    this.fable.sync();
     const wantVhs = !this.fable.on && s.vhs > 0 && this.game.renderer.type === Phaser.WEBGL && !this.debug.has('novhs');
     if (wantVhs && !this.vhs) {
       cam.setPostPipeline(VhsPipeline);
@@ -231,7 +228,6 @@ export class GameScene extends Phaser.Scene {
 
   private cleanup() {
     this.unsubSettings?.();
-    this.input.keyboard?.off('keydown-F2', this.onLookKey, this);
     this.fable.destroy();
     // the match's key captures must not outlive it (they swallowed W/A/S/D… in the menus' text fields)
     this.input.keyboard?.removeAllKeys(true, true);
@@ -319,7 +315,7 @@ export class GameScene extends Phaser.Scene {
         tx += Math.cos(this.inputs.aimAngle) * look;
         ty += Math.sin(this.inputs.aimAngle) * look;
       }
-      // the trial build: the opening glides in to the player on the countdown; the recoil offsets the camera
+      // the opening glides in to the player on the countdown; the recoil offsets the camera
       const opening = this.fable.opening(tx, ty, me);
       if (opening) {
         this.camX = opening.x;
@@ -497,7 +493,7 @@ export class GameScene extends Phaser.Scene {
         if (!silenced) this.lighting.flash(m.x, m.y, def.flash === 'obrez' || def.sound === 'flame' ? 150 : 110, def.sound === 'flame' ? 0xff8a30 : (skinLight ?? 0xffb050), 0.9, def.sound === 'flame' ? 120 : 60, time);
         sfx.play(silenced && !def.silenced && def.sound !== 'shotgun' && def.sound !== 'obrez' ? 'silenced' : def.sound, { x: ox, y: oy, volume: isLocal ? 0.9 : silenced ? 0.6 : 1 });
         if (isLocal) {
-          // the trial build: the camera kicks back along the barrel, so less of the shake at random
+          // the camera kicks back along the barrel, so less of the shake at random
           this.fx.shake(cam, def.shake * (this.fable.on ? 0.45 : 1));
           this.fable.recoil(aim, def.shake);
         } else this.fable.whiz(e, local ?? null, time);

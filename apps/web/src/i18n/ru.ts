@@ -571,16 +571,11 @@ export const RU: Record<string, string> = {
   'Camera shake': 'Тряска камеры',
   'On': 'Вкл',
   'FPS counter': 'Счётчик FPS',
-  // the trial build (Fable cut)
-  'Fable cut quality': 'Качество Fable cut',
-  'Classic': 'Классика',
+  // v0.2.26: the picture with shadows is the game's only one — what is chosen is how much of it a device draws
+  'Picture quality': 'Качество картинки',
   'Fast': 'Быстро',
   'Balanced': 'Баланс',
   'Cinema': 'Кино',
-  'CINEMA': 'КИНО',
-  'BALANCED': 'БАЛАНС',
-  'FAST': 'БЫСТРО',
-  'CLASSIC PICTURE': 'КЛАССИКА',
   'DOUBLE!': 'ДВОЙНОЕ!',
   'TRIPLE!': 'ТРОЙНОЕ!',
   'NO MERCY!': 'БЕСПРЕДЕЛ!',

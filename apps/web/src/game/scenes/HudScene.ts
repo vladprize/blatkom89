@@ -216,8 +216,6 @@ export class HudScene extends Phaser.Scene {
   private scoreboard!: Phaser.GameObjects.Container;
   private scoreboardVisible = false;
   private fpsText: Phaser.GameObjects.Text | null = null;
-  /** The trial build's mark: which picture is on («FABLE CUT · КИНО» / «КЛАССИКА»), bottom centre. */
-  private fableTag: Phaser.GameObjects.Text | null = null;
   private lastShotAt = new Map<number, number>();
   // touch
   private sticks: Stick[] = [];
@@ -333,7 +331,6 @@ export class HudScene extends Phaser.Scene {
     hudBus.on('supply', this.onSupply, this);
     hudBus.on('objective', this.onObjective, this);
     hudBus.on('fable-banner', this.onFableBanner, this);
-    hudBus.on('fable-tag', this.onFableTag, this);
     this.edge = this.add.graphics().setDepth(18);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       publishHudLayout(null);
@@ -347,7 +344,6 @@ export class HudScene extends Phaser.Scene {
       hudBus.off('supply', this.onSupply, this);
       hudBus.off('objective', this.onObjective, this);
       hudBus.off('fable-banner', this.onFableBanner, this);
-      hudBus.off('fable-tag', this.onFableTag, this);
       touchState.moveX = touchState.moveY = 0;
       touchState.aimActive = false;
       touchState.fireHeld = false;
@@ -945,7 +941,6 @@ export class HudScene extends Phaser.Scene {
     this.bigText.setPosition(cx, H * 0.36);
     this.subText.setPosition(cx, H * 0.36 + 48);
     this.promptText.setPosition(cx, H * 0.7);
-    this.fableTag?.setPosition(W / 2, H - ins.bottom - 3);
     this.layoutHints();
   }
 
@@ -1014,21 +1009,9 @@ export class HudScene extends Phaser.Scene {
     this.bannerMs = ms;
   }
 
-  /** Fable cut (the trial build): a banner of its own — the map's name on the countdown, a run of eliminations. */
+  /** The match's director (game/fable): a banner of its own — a run of eliminations. */
   private onFableBanner(e: { title: string; sub?: string | null; good: boolean | null; ms?: number }) {
     this.showBanner(e.title, e.sub ?? null, e.good, e.ms ?? 2400);
-  }
-
-  /** The trial build's mark at the bottom of the screen (null: none). */
-  private onFableTag(text: string | null) {
-    if (!text) {
-      this.fableTag?.destroy();
-      this.fableTag = null;
-      return;
-    }
-    if (!this.fableTag) this.fableTag = txt(this, 0, 0, text, 12, '#c9b78f', '600').setOrigin(0.5, 1).setDepth(21).setAlpha(0.7);
-    else this.fableTag.setText(text);
-    this.fableTag.setPosition(this.lw / 2, this.lh - this.inset.bottom - 3);
   }
 
   /** Flags and bases: a line in the kill feed, and a banner when it concerns the local player's team. */

@@ -6,7 +6,7 @@ import type { WeaponSound } from '@blatkom/shared';
 
 type SfxName = WeaponSound | 'hit' | 'ricochet' | 'reload' | 'dry' | 'pickup' | 'death' | 'kill' | 'assist' | 'supply' | 'beep' | 'beepHigh' | 'click' | 'step' | 'end' | 'hurt' | 'respawn' | 'boom' | 'heal' | 'buy' | 'throw' | 'place' | 'deploy' | 'flashbang' | 'tinnitus' | 'ignite' | 'hiss' | 'mineBeep' | 'turret' | 'crash' | 'flagTaken' | 'flagCaptured' | 'flagReturned' | 'flagDropped' | 'baseCaptured' | 'baseLost' | 'shell' | 'whiz' | 'heart' | 'thump';
 
-/** Fable cut (the trial build): where the fight is — its echo — and what hums under it. */
+/** Fable cut (the match's picture and sound, game/fable): where the fight is — its echo — and what hums under it. */
 export interface FableSound {
   reverb: 'hall' | 'yard' | 'open' | 'rooms' | null;
   bed: 'works' | 'street' | 'wind' | 'rooms' | null;

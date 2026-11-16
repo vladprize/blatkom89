@@ -133,7 +133,7 @@ export class MapRenderer {
   }
 
   /**
-   * Fable cut (the trial build): the painted drop shadows are toned down while the lamps throw real ones
+   * Fable cut: the painted drop shadows are toned down while the lamps throw real ones
    * (1: as painted).
    */
   setDropShadows(k: number): void {
