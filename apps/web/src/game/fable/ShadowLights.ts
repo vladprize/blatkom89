@@ -101,10 +101,11 @@ export class ShadowLights {
     const ch = (v: number) => Math.min(255, Math.round(255 * 0.5 * b * (0.52 + 0.48 * (v / m))));
     const amb: [number, number, number] = [ch(c.red), ch(c.green), ch(c.blue)];
     this.ambient = Phaser.Display.Color.GetColor(amb[0], amb[1], amb[2]);
-    const key = `${map.id}|${this.res}|${cfg.samples}|${amb.join(',')}`;
+    const wet = look.weather === 'rain';
+    const key = `${map.id}|${this.res}|${cfg.samples}|${amb.join(',')}|${wet}`;
     if (lastBake?.key === key) this.baked = lastBake.baked;
     else {
-      this.baked = bakeLights(map, this.index, { res: this.res, samples: cfg.samples, ambient: amb, gain: LAMP_GAIN * 0.5 });
+      this.baked = bakeLights(map, this.index, { res: this.res, samples: cfg.samples, ambient: amb, gain: LAMP_GAIN * 0.5, wet });
       lastBake = { key, baked: this.baked };
     }
     this.bakeMs = this.baked.ms;

@@ -20,6 +20,17 @@ export const POOL_STOPS: ReadonlyArray<readonly [number, number]> = [
   [1, 0],
 ];
 
+/** The same pool on wet ground (rain): a tighter, hotter core — the lamp's own reflection in the asphalt. */
+const WET_STOPS: ReadonlyArray<readonly [number, number]> = [
+  [0, 1],
+  [0.07, 0.9],
+  [0.18, 0.6],
+  [0.4, 0.43],
+  [0.62, 0.2],
+  [0.82, 0.06],
+  [1, 0],
+];
+
 export interface BakeOptions {
   /** Texels per world pixel. */
   res: number;
@@ -29,6 +40,8 @@ export interface BakeOptions {
   ambient: readonly [number, number, number];
   /** Light-map units a lamp of intensity 1 adds at its centre (0–1). */
   gain: number;
+  /** The ground is wet: the lamps are mirrored in it. */
+  wet?: boolean;
 }
 
 export interface Cookie {
@@ -150,7 +163,7 @@ function bakeLamp(l: LightDef, origin: { x: number; y: number }, near: Occluder[
   const r = (l.color >> 16) & 255;
   const gr = (l.color >> 8) & 255;
   const b = l.color & 255;
-  for (const [stop, a] of POOL_STOPS) g.addColorStop(stop, `rgba(${r},${gr},${b},${(a * peak).toFixed(4)})`);
+  for (const [stop, a] of o.wet ? WET_STOPS : POOL_STOPS) g.addColorStop(stop, `rgba(${r},${gr},${b},${(a * peak).toFixed(4)})`);
   acc.fillStyle = g;
   acc.fillRect(0, 0, S, S);
   acc.globalCompositeOperation = 'source-over';
@@ -203,7 +216,7 @@ export function bakeLights(map: MapDef, index: OccluderIndex, o: BakeOptions): B
     index.query(l.x - l.radius, l.y - l.radius, l.x + l.radius, l.y + l.radius, near);
     const origin = offTheWall(near, l.x, l.y);
     origins.push(origin);
-    const peak = Math.min(1, l.intensity * o.gain);
+    const peak = Math.min(1, l.intensity * o.gain * (o.wet ? 1.22 : 1));
     if (peak <= 0.01) return;
     const lamp = bakeLamp(l, origin, near, o, mask, peak);
     const x = l.x - l.radius;

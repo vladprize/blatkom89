@@ -281,9 +281,12 @@ export class GameScene extends Phaser.Scene {
       let v = this.views.get(p.slot);
       if (!v) {
         v = new CharacterView(this, p);
+        const slot = p.slot;
         v.onFootstep = (x, y) => {
           this.fx.dust(x, y);
           if (p.isLocal) sfx.play('step', { volume: 0.25 });
+          const now = this.lastPlayers.find((q) => q.slot === slot);
+          if (now) this.fable.step(slot, x, y, now.vx, now.vy, this.time.now);
         };
         v.onSmoke = (x, y) => this.fx.cigaretteSmoke(x, y);
         v.onMote = (x, y, look) => this.fx.legendMote(x, y, look);
@@ -320,7 +323,7 @@ export class GameScene extends Phaser.Scene {
         ty += Math.sin(this.inputs.aimAngle) * look;
       }
       // the trial build: the opening glides in to the player on the countdown; the recoil offsets the camera
-      const opening = this.fable.opening(tx, ty, time, me);
+      const opening = this.fable.opening(tx, ty, me);
       if (opening) {
         this.camX = opening.x;
         this.camY = opening.y;

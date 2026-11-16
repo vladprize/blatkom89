@@ -76,10 +76,34 @@ export function renderSettings(opts: { inGame: boolean; online: OnlineClient | n
       h('div', { class: 'muted settings__note' }, t('Prices, odds, payments and the legal texts are always without swearing.')),
     ),
   );
+  // the trial build: the Fable cut or the classic picture (on the panel's top edge, beside its tag: no room is taken), and how
+  // much of the Fable cut — a row shown where the screen has room for it and always in the pause menu
+  const lookBox = h('div', { class: 'seg seg--tight settings__look', role: 'group', 'aria-label': t('Picture'), 'data-testid': 'settings-look' });
+  const tierBox = h('div', { class: 'seg', role: 'group', 'aria-label': t('Fable cut quality'), 'data-testid': 'settings-tier' });
+  const drawLooks = () => {
+    const cur = getSettings();
+    const pick = (patch: Partial<Settings>) => () => {
+      updateSettings(patch);
+      sfx.play('click');
+      drawLooks();
+    };
+    lookBox.replaceChildren(
+      h('button', { 'aria-pressed': String(cur.look === 'fable'), 'data-look': 'fable', onclick: pick({ look: 'fable' }) }, 'Fable cut'),
+      h('button', { 'aria-pressed': String(cur.look === 'classic'), 'data-look': 'classic', onclick: pick({ look: 'classic' }) }, t('Classic')),
+    );
+    tierBox.replaceChildren(
+      ...([[0, t('Fast')], [1, t('Balanced')], [2, t('Cinema')]] as const).map(([tier, text]) =>
+        h('button', { 'aria-pressed': String(cur.look === 'fable' && cur.fableTier === tier), 'data-tier': String(tier), onclick: pick({ look: 'fable', fableTier: tier }) }, text),
+      ),
+    );
+  };
+  drawLooks();
   const graphics = h(
     'div',
     { class: 'panel col settings__picture' },
     h('span', { class: 'tag' }, t('Picture')),
+    lookBox,
+    h('div', { class: 'col setrow settings__tier', style: 'gap:6px' }, h('div', { class: 'muted' }, t('Fable cut quality')), tierBox),
     seg(t('VHS effect (grain, tracking lines, vignette)'), [
       [0, t('Off')],
       [1, t('Worn tape')],

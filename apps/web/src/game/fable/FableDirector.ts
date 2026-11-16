@@ -20,8 +20,6 @@ import { getSettings } from '../../app/settings.js';
 import { hudBus } from '../scenes/hudBus.js';
 import { toast } from '../../ui/dom.js';
 import { t } from '../../i18n/index.js';
-import { mapName } from '../../i18n/content.js';
-import { modeName } from '../../ui/modes.js';
 import { isTouchDevice } from '../input/TouchState.js';
 import { FablePipeline } from './FablePipeline.js';
 import { Ambient } from './Ambient.js';
@@ -66,6 +64,22 @@ function has(param: string): boolean {
   }
 }
 
+let software: boolean | null = null;
+/** Whether WebGL is drawn by the processor (SwiftShader, llvmpipe…): every full-screen pass is dear there. */
+function softwareRenderer(game: Phaser.Game): boolean {
+  if (software !== null) return software;
+  software = false;
+  try {
+    const gl = (game.renderer as Phaser.Renderer.WebGL.WebGLRenderer).gl;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+    software = /swiftshader|llvmpipe|softpipe|software|basic render/i.test(name);
+  } catch {
+    /* unknown: treated as a real one */
+  }
+  return software;
+}
+
 export interface FableDeps {
   map: MapDef;
   session: GameSession;
@@ -87,6 +101,8 @@ export class FableDirector {
   private kvx = 0;
   private kvy = 0;
   private locked = false;
+  /** The player chose the picture themselves in this match. */
+  private picked = false;
   private post = true;
   private pipeline: FablePipeline | null = null;
   private readonly look: MapLook;
@@ -107,13 +123,15 @@ export class FableDirector {
   private whizAt = 0;
   private sparks = 0;
   private zoomNow = 1;
-  private intro: { t0: number; dur: number; fx: number; fy: number; said: boolean } | null = null;
+  private intro: { rem0: number; fx: number; fy: number; said: boolean } | null = null;
   private introDone = false;
   private perfFrames = 0;
   private perfStart = 0;
   private slow = 0;
   private told = false;
   private lastTag = '';
+  private bornAt = -1;
+  private announced = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -134,6 +152,9 @@ export class FableDirector {
   sync(userChange = false): void {
     const webgl = this.scene.game.renderer.type === Phaser.WEBGL;
     const want = fableWanted(webgl);
+    if (userChange) this.picked = true;
+    // a software renderer (no graphics card behind the browser) starts on the cheapest tier unless told otherwise
+    if (want.on && !want.locked && !this.picked && softwareRenderer(this.scene.game)) want.tier = 0;
     if (userChange || want.locked) this.locked = true;
     const changed = want.on !== this.on || (want.on && want.tier !== this.tier) || (want.on && userChange && !this.post);
     if (changed) {
@@ -216,7 +237,9 @@ export class FableDirector {
   }
 
   private setZoom(k: number) {
-    if (Math.abs(k - this.zoomNow) < 0.0005) return;
+    // at rest the zoom is exactly the scene's own: pixel art shimmers at 2.0001
+    if (Math.abs(k - 1) < 0.0005) k = 1;
+    if (k === this.zoomNow || (k !== 1 && Math.abs(k - this.zoomNow) < 0.0005)) return;
     this.zoomNow = k;
     this.scene.cameras.main.setZoom(this.d.zoom * k);
   }
@@ -225,10 +248,10 @@ export class FableDirector {
    * The opening: on the countdown the camera glides in to the player from the map's side while the map's
    * name is up. Returns where the camera should be, or null once it is the player's again.
    */
-  opening(tx: number, ty: number, time: number, me: RenderPlayer): { x: number; y: number } | null {
+  opening(tx: number, ty: number, me: RenderPlayer): { x: number; y: number } | null {
     if (!this.on || this.introDone) return null;
+    const hud = this.d.session.hud();
     if (!this.intro) {
-      const hud = this.d.session.hud();
       if (hud.phase !== 'countdown' || hud.phaseRemainingMs < 1400 || hud.story) {
         this.introDone = true;
         return null;
@@ -246,13 +269,14 @@ export class FableDirector {
         dy /= dist;
       }
       const far = Math.min(dist, 230);
-      this.intro = { t0: time, dur: Math.min(2500, hud.phaseRemainingMs - 250), fx: me.x + dx * far, fy: me.y + dy * far, said: false };
+      this.intro = { rem0: hud.phaseRemainingMs, fx: me.x + dx * far, fy: me.y + dy * far, said: false };
     }
     const it = this.intro;
-    const p = (time - it.t0) / it.dur;
-    if (!it.said && time - it.t0 > 200) {
+    // the match's own countdown is the clock: a slow first frame (the map being built) does not eat the pan
+    const p = hud.phase === 'countdown' ? (it.rem0 - hud.phaseRemainingMs) / Math.max(1, it.rem0 - 300) : 1;
+    // (the loading screen has just named the map and the mode: the pan needs no title of its own)
+    if (!it.said && p > 0.06) {
       it.said = true;
-      hudBus.emit('fable-banner', { title: mapName(this.d.map.id).toUpperCase(), sub: modeName(this.d.session.gameMode), good: null, ms: it.dur + 500 });
       this.announce();
     }
     if (p >= 1) {
@@ -267,20 +291,30 @@ export class FableDirector {
   }
 
   update(time: number, dtMs: number, players: RenderPlayer[], me: RenderPlayer | null, hidden: ReadonlySet<number>, paused: boolean): void {
+    // the HUD starts a moment after the match scene: the mark is told to it once it is there
+    if (this.bornAt < 0) this.bornAt = time;
+    if (!this.announced && time - this.bornAt > 350) {
+      this.announced = true;
+      this.announce();
+    }
     if (!this.on) return;
-    const dt = Math.min(0.05, dtMs / 1000);
+    // real time, so a slow frame does not slow the spring or the fades (a stall is not replayed)
+    const dt = Math.min(0.25, dtMs / 1000);
     const { lighting, session } = this.d;
     this.listener = me;
     this.sparks = 0;
-    if (!this.introDone && !this.intro && time > 400) this.announce();
 
-    // the recoil: a spring that brings the camera back
+    // the recoil: a spring that brings the camera back (small steps keep it stable on a slow frame)
     const K = 260;
     const C = 30;
-    this.kvx += (-K * this.cam.x - C * this.kvx) * dt;
-    this.kvy += (-K * this.cam.y - C * this.kvy) * dt;
-    this.cam.x += this.kvx * dt;
-    this.cam.y += this.kvy * dt;
+    const sub = Math.max(1, Math.ceil(dt / 0.008));
+    const h = dt / sub;
+    for (let i = 0; i < sub; i++) {
+      this.kvx += (-K * this.cam.x - C * this.kvx) * h;
+      this.kvy += (-K * this.cam.y - C * this.kvy) * h;
+      this.cam.x += this.kvx * h;
+      this.cam.y += this.kvy * h;
+    }
     const len = Math.hypot(this.cam.x, this.cam.y);
     if (len > 11) {
       this.cam.x *= 11 / len;
@@ -303,7 +337,7 @@ export class FableDirector {
       if (time >= this.beatAt) {
         this.beatAt = time + 520 + (me.hp / 35) * 380;
         this.beat = 1;
-        if (!paused) sfx.play('heart', { volume: 0.45 + 0.4 * low });
+        if (!paused) sfx.play('heart', { volume: 0.28 + 0.3 * low });
       }
     }
     this.beat = Math.max(0, this.beat - dt / 0.35);
@@ -384,6 +418,12 @@ export class FableDirector {
     }
   }
 
+  /** A foot came down: prints in the snow, and in blood after a walk through it. */
+  step(slot: number, x: number, y: number, vx: number, vy: number, time: number): void {
+    if (!this.on || !this.ambient || (vx === 0 && vy === 0)) return;
+    this.ambient.step(slot, x, y, Math.atan2(vy, vx), time);
+  }
+
   /** The local player was hit (0–1). */
   hurt(amount: number): void {
     if (this.on) this.damage = Math.min(1, this.damage + amount);
@@ -392,7 +432,7 @@ export class FableDirector {
   /** A shot by the local player: the camera kicks back along the barrel. */
   recoil(aim: number, strength: number): void {
     if (!this.on || !getSettings().shake) return;
-    const j = (1.1 + strength * 5.5) * 40;
+    const j = (1.2 + strength * 6) * 52;
     this.kvx -= Math.cos(aim) * j;
     this.kvy -= Math.sin(aim) * j;
   }
@@ -448,6 +488,7 @@ export class FableDirector {
     if (!this.on) return;
     const a = killer ? Math.atan2(victim.y - killer.y, victim.x - killer.x) : Math.random() * 6.28;
     for (let i = 0; i < 3; i++) this.splat(victim.x, victim.y, a + (i - 1) * 0.42, 84, true);
+    this.ambient?.pool(victim.x, victim.y, time);
     if (corpse) {
       const dx = Math.cos(a);
       const dy = Math.sin(a);
@@ -457,7 +498,7 @@ export class FableDirector {
     }
     if (!killer?.isLocal) return;
     if (getSettings().shake) this.punch = 1;
-    sfx.play('thump', { volume: 0.75 });
+    sfx.play('thump', { volume: 0.6 });
     this.streak = time - this.streakAt < 4500 ? this.streak + 1 : 1;
     this.streakAt = time;
     if (this.streak >= 2) {

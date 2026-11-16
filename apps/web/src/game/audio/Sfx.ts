@@ -15,7 +15,7 @@ export interface FableSound {
 
 /** How much of a sound goes to the echo, and how long the echo is, per kind of place. */
 const REVERBS = {
-  hall: { send: 0.36, seconds: 1.9, decay: 0.42, dark: 0.22, echoes: [[0.061, 0.5], [0.113, 0.34]] },
+  hall: { send: 0.32, seconds: 1.9, decay: 0.42, dark: 0.22, echoes: [[0.061, 0.5], [0.113, 0.34]] },
   yard: { send: 0.24, seconds: 1.2, decay: 0.26, dark: 0.3, echoes: [[0.092, 0.6], [0.171, 0.4], [0.254, 0.2]] },
   open: { send: 0.12, seconds: 0.9, decay: 0.2, dark: 0.36, echoes: [[0.21, 0.5]] },
   rooms: { send: 0.22, seconds: 0.55, decay: 0.11, dark: 0.3, echoes: [[0.023, 0.5], [0.041, 0.3]] },
@@ -35,6 +35,8 @@ class SfxEngine {
   private fable: FableSound | null = null;
   private muffle: BiquadFilterNode | null = null;
   private comp: DynamicsCompressorNode | null = null;
+  /** The last node before the output (for measuring). */
+  trim: GainNode | null = null;
   private wet: GainNode | null = null;
   private conv: ConvolverNode | null = null;
   private readonly impulses = new Map<string, AudioBuffer>();
@@ -108,7 +110,12 @@ class SfxEngine {
       // the echo is part of the mix: it is muffled and compressed with the rest
       this.conv.connect(this.muffle);
       this.muffle.connect(this.comp);
-      this.comp.connect(ctx.destination);
+      // the echo adds to the mix: a trim keeps the Fable cut about as loud as the classic chain (measured)
+      const trim = ctx.createGain();
+      trim.gain.value = 0.84;
+      this.comp.connect(trim);
+      trim.connect(ctx.destination);
+      this.trim = trim;
     }
     master.connect(this.muffle);
     this.muffle.frequency.value = 20000;

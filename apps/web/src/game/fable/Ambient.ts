@@ -25,6 +25,17 @@ interface Drop {
   v: number;
 }
 
+interface Print {
+  img: Phaser.GameObjects.Image;
+  born: number;
+  life: number;
+  a0: number;
+}
+
+const PRINTS = 150;
+/** Steps that still leave blood after walking through a pool of it. */
+const BLOODY_STEPS = 9;
+
 /** Rain falls at this slant (radians from straight down, to the left). */
 const RAIN_SLANT = 0.2;
 
@@ -35,9 +46,15 @@ export class Ambient {
   private splashAt = 0;
   private lastW = 0;
   private lastH = 0;
+  // footprints: in the snow, and in blood for a few steps after walking through it
+  private readonly prints: Print[] = [];
+  private printAt = 0;
+  private readonly bloody = new Map<number, number>();
+  private readonly foot = new Map<number, number>();
+  private readonly pools: Array<{ x: number; y: number; until: number }> = [];
 
   constructor(
-    scene: Phaser.Scene,
+    private readonly scene: Phaser.Scene,
     private readonly map: MapDef,
     private readonly look: MapLook,
     private readonly fx: Effects,
@@ -73,14 +90,71 @@ export class Ambient {
           .setTint(0xa9bfd8)
           .setScale(near ? 0.5 : 0.35, near ? 7 : 4.5)
           .setRotation(RAIN_SLANT)
-          .setAlpha(near ? 0.3 : 0.16 + Math.random() * 0.1);
+          .setAlpha(near ? 0.26 : 0.13 + Math.random() * 0.09);
         this.drops.push({ img, x: Math.random() * 2000, y: Math.random() * 2000, v: (near ? 520 : 380) + Math.random() * 120 });
       }
     }
   }
 
+  /** Fresh blood on the floor: whoever walks through it leaves prints for a few steps. */
+  pool(x: number, y: number, timeMs: number): void {
+    this.pools.push({ x, y, until: timeMs + 25_000 });
+    if (this.pools.length > 24) this.pools.shift();
+  }
+
+  private snowAt(x: number, y: number): boolean {
+    const m = this.map;
+    for (let i = m.floors.length - 1; i >= 0; i--) {
+      const f = m.floors[i]!;
+      if (x >= f.x && x < f.x + f.w && y >= f.y && y < f.y + f.h) return f.type === 'snow' || f.type === 'snow_trodden';
+    }
+    return m.baseFloor === 'snow' || m.baseFloor === 'snow_trodden';
+  }
+
+  /** A foot came down at (x, y), its owner heading `heading`. */
+  step(slot: number, x: number, y: number, heading: number, timeMs: number): void {
+    let left = this.bloody.get(slot) ?? 0;
+    for (const p of this.pools) {
+      if (timeMs < p.until && Math.abs(p.x - x) < 13 && Math.abs(p.y - y) < 13) {
+        left = BLOODY_STEPS;
+        break;
+      }
+    }
+    const blood = left > 0;
+    if (blood) this.bloody.set(slot, left - 1);
+    else if (!this.snowAt(x, y)) return;
+    // left foot, right foot
+    const side = this.foot.get(slot) === 1 ? -1 : 1;
+    this.foot.set(slot, side);
+    const px = x - Math.sin(heading) * 2.4 * side;
+    const py = y + Math.cos(heading) * 2.4 * side;
+    let pr = this.prints[this.printAt];
+    if (!pr) {
+      if (this.prints.length >= PRINTS) return;
+      pr = { img: this.scene.add.image(0, 0, 'fx', 'px').setDepth(D.BLOOD + 0.1), born: 0, life: 1, a0: 0 };
+      this.prints.push(pr);
+    }
+    this.printAt = (this.printAt + 1) % PRINTS;
+    pr.born = timeMs;
+    pr.life = blood ? 16_000 : 8000;
+    pr.a0 = blood ? 0.2 + 0.6 * (left / BLOODY_STEPS) : 0.42;
+    pr.img
+      .setPosition(px, py)
+      .setRotation(heading)
+      .setScale(1.5, 0.85)
+      .setTint(blood ? 0x74120e : 0x4e5f7e)
+      .setAlpha(pr.a0)
+      .setVisible(true);
+  }
+
   update(view: Phaser.Geom.Rectangle, dtMs: number, timeMs: number, flick: number[]): void {
     const dt = Math.min(0.1, dtMs / 1000);
+    for (const pr of this.prints) {
+      if (!pr.img.visible) continue;
+      const k = 1 - (timeMs - pr.born) / pr.life;
+      if (k <= 0) pr.img.setVisible(false);
+      else pr.img.setAlpha(pr.a0 * Math.min(1, k * 2.5));
+    }
     const lights = this.map.lights;
     for (const m of this.moths) {
       const l = lights[m.lamp]!;
@@ -139,12 +213,15 @@ export class Ambient {
         d.y += sy * d.v * dt;
         d.x = x0 + ((((d.x - x0) % w) + w) % w);
         d.y = y0 + ((((d.y - y0) % h) + h) % h);
-        d.img.setPosition(d.x, d.y);
+        // it rains on the map, not on the dark past its edge
+        d.img.setVisible(d.x > 0 && d.x < this.map.width && d.y > 0 && d.y < this.map.height).setPosition(d.x, d.y);
       }
       // where the drops land: rings on the ground, under the light map — they glint under the lamps
       if (timeMs >= this.splashAt) {
         this.splashAt = timeMs + 28 / Math.max(0.3, this.amount);
-        this.fx.particle('ring', view.x + Math.random() * view.width, view.y + Math.random() * view.height, { life: 240, scale: 0.03, grow: 0.42, tint: 0xb9cde4, alpha: 0.5, add: true, depth: D.FX_LOW });
+        const sx = view.x + Math.random() * view.width;
+        const sy = view.y + Math.random() * view.height;
+        if (sx > 0 && sx < this.map.width && sy > 0 && sy < this.map.height) this.fx.particle('ring', sx, sy, { life: 240, scale: 0.03, grow: 0.42, tint: 0xb9cde4, alpha: 0.5, add: true, depth: D.FX_LOW });
       }
     }
   }
@@ -154,5 +231,7 @@ export class Ambient {
     this.moths.length = 0;
     for (const d of this.drops) d.img.destroy();
     this.drops.length = 0;
+    for (const p of this.prints) p.img.destroy();
+    this.prints.length = 0;
   }
 }

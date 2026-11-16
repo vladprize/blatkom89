@@ -55,7 +55,7 @@ async function main() {
     music.setHidden(e.type === 'pause');
     sfx.setPaused(e.type === 'pause');
   });
-  window.__blatkom = { host, app, game: host.game, music };
+  window.__blatkom = { host, app, game: host.game, music, sfx };
   await app.start(host);
   // The soundtrack starts with the menu: straight away where the browser allows sound without a tap,
   // otherwise with the player's first tap anywhere (the unlock above). v0.2.18 (the owner): no «▶ Play»
