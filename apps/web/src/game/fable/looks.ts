@@ -15,6 +15,10 @@ export interface MapLook {
   contrast: number;
   /** How much of the blurred highlights is laid back over the picture. */
   bloom: number;
+  /** How bright a thing must be to bloom (higher on a map that is bright all over: snow). */
+  threshold?: number;
+  /** The local player's own light, as a share of the usual (snow throws it back: less is needed). */
+  torch?: number;
   vignette: number;
   /** What hangs in the lamps' light. */
   motes: 'dust' | 'moths' | 'none';
@@ -55,7 +59,7 @@ export const LOOKS: Record<MapId, MapLook> = {
   // the market: a hundred bulbs
   cherkizon: { ...BASE, night: 0.74, shadows: [0.94, 0.92, 1.06], highlights: [1.1, 1.0, 0.88], saturation: 1.14, bloom: 0.95, motes: 'moths', reverb: 'yard', bed: 'street' },
   // the north: blue frost, the snow is the map's own
-  vorkuta: { ...BASE, night: 0.78, shadows: [0.84, 0.98, 1.16], highlights: [1.04, 1.0, 0.94], saturation: 1.0, bloom: 1.0, motes: 'none', reverb: 'open', bed: 'wind' },
+  vorkuta: { ...BASE, night: 0.6, shadows: [0.84, 0.98, 1.16], highlights: [1.04, 1.0, 0.94], saturation: 1.0, contrast: 1.12, bloom: 0.45, threshold: 0.86, torch: 0.5, motes: 'none', reverb: 'open', bed: 'wind' },
 };
 
 export function lookOf(mapId: MapId): MapLook {

@@ -141,7 +141,7 @@ export class Ambient {
     pr.img
       .setPosition(px, py)
       .setRotation(heading)
-      .setScale(1.5, 0.85)
+      .setScale(1.25, 0.75)
       .setTint(blood ? 0x74120e : 0x4e5f7e)
       .setAlpha(pr.a0)
       .setVisible(true);

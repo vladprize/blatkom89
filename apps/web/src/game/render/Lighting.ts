@@ -136,7 +136,7 @@ function ensureTextures(scene: Phaser.Scene): void {
 }
 
 export class Lighting {
-  private rt: Phaser.GameObjects.RenderTexture | null = null;
+  private classicRt: Phaser.GameObjects.RenderTexture | null = null;
   private dyn: DynLight[] = [];
   /** Steady light pools set every frame from game state (flags, bases). */
   private steady: Array<{ x: number; y: number; radius: number; color: number; intensity: number }> = [];
@@ -213,16 +213,16 @@ export class Lighting {
     const even = (n: number) => n + (n % 2);
     const W = even(Math.ceil(w * LIGHT_RES) + 2);
     const H = even(Math.ceil(h * LIGHT_RES) + 2);
-    if (this.rt && this.rt.width === W && this.rt.height === H) return this.rt;
-    this.rt?.destroy();
-    this.rt = this.scene.add
+    if (this.classicRt && this.classicRt.width === W && this.classicRt.height === H) return this.classicRt;
+    this.classicRt?.destroy();
+    this.classicRt = this.scene.add
       .renderTexture(0, 0, W, H)
       .setOrigin(0, 0)
       .setDepth(D.LIGHT)
       .setScale(1 / LIGHT_RES);
-    this.rt.setBlendMode(this.blend ?? Phaser.BlendModes.MULTIPLY);
-    this.rt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
-    return this.rt;
+    this.classicRt.setBlendMode(this.blend ?? Phaser.BlendModes.MULTIPLY);
+    this.classicRt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    return this.classicRt;
   }
 
   /**
@@ -247,10 +247,15 @@ export class Lighting {
     this.v2 = new ShadowLights(this.scene, this.map, tier, look, this.blend, this.addBlend, zoom);
     this.v2Tier = tier;
     this.dyn.length = 0;
-    this.rt?.setVisible(false);
+    this.classicRt?.setVisible(false);
   }
 
   private v2Tier: FableTier | null = null;
+
+  /** The light map on screen now (the browser tests watch that it is made once, not anew every frame). */
+  get rt(): Phaser.GameObjects.RenderTexture | null {
+    return this.v2 ? this.v2.target : this.classicRt;
+  }
 
   /** The light map with shadows, while the Fable cut is on. */
   get shadows(): ShadowLights | null {
@@ -287,12 +292,12 @@ export class Lighting {
     this.flick = flick;
     for (const f of this.fixtures) f.glow.setVisible(this.enabled).setAlpha(f.base * flick[f.index]!);
     if (!this.enabled) {
-      if (this.rt) this.rt.setVisible(false);
+      if (this.classicRt) this.classicRt.setVisible(false);
       this.v2?.setVisible(false);
       return;
     }
     if (this.v2) {
-      if (this.rt) this.rt.setVisible(false);
+      if (this.classicRt) this.classicRt.setVisible(false);
       this.v2.update(now, players, flick);
       return;
     }
@@ -344,8 +349,8 @@ export class Lighting {
   destroy(): void {
     this.v2?.destroy();
     this.v2 = null;
-    this.rt?.destroy();
-    this.rt = null;
+    this.classicRt?.destroy();
+    this.classicRt = null;
     for (const img of this.pool) img.destroy();
     this.pool.length = 0;
     for (const f of this.fixtures) {

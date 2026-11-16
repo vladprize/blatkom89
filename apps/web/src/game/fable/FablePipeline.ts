@@ -87,7 +87,7 @@ void main () {
   float tracking = step(0.9965, rand(vec2(floor(uTime * 6.0), band)));
   uv.x += tracking * 0.0025 * uVhs;
   // colour fringing: a trace of it at the edges, more on a worn tape, a jolt when hit or on a kill
-  float ca = dot(d, d) * (0.0012 + 0.0035 * uVhs) + 0.0007 * uVhs + uDamage * 0.004 + uKick * 0.0055;
+  float ca = dot(d, d) * (0.0012 + 0.0035 * uVhs) + 0.0007 * uVhs + uDamage * 0.003 + uKick * 0.0022;
   vec3 col;
   col.r = texture2D(uMainSampler, uv + vec2(ca, 0.0)).r;
   col.g = texture2D(uMainSampler, uv).g;
@@ -186,7 +186,7 @@ export class FablePipeline extends Phaser.Renderer.WebGL.Pipelines.PostFXPipelin
       this.linear(half2);
       sBright.bind(true, false);
       this.set2f('uTexel', 1 / src.width, 1 / src.height, sBright);
-      this.set1f('uThreshold', 0.6, sBright);
+      this.set1f('uThreshold', look?.threshold ?? 0.6, sBright);
       this.set1f('uKnee', 0.22, sBright);
       this.bindAndDraw(src, half1, true, true, sBright);
       sBlur.bind(true, false);

@@ -359,6 +359,29 @@ export class FableDirector {
       pl.fade = this.fade;
     }
 
+    // footprints: a print every stride walked (in the snow; in blood after a walk through it)
+    if (this.ambient) {
+      for (const q of players) {
+        if (!q.alive) {
+          this.strides.delete(q.slot);
+          continue;
+        }
+        const last = this.strides.get(q.slot);
+        if (!last) {
+          this.strides.set(q.slot, { x: q.x, y: q.y });
+          continue;
+        }
+        const dx = q.x - last.x;
+        const dy = q.y - last.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < 81) continue;
+        last.x = q.x;
+        last.y = q.y;
+        // a respawn or a correction from the server is not a stride
+        if (d2 < 3600) this.ambient.step(q.slot, q.x, q.y, Math.atan2(dy, dx), time);
+      }
+    }
+
     // a shadow under everyone, thrown away from the lamps that reach them
     const shadows = lighting.shadows;
     const seen = this.blobSeen;
@@ -389,6 +412,8 @@ export class FableDirector {
   }
 
   private readonly blobSeen = new Set<number>();
+  /** Where each player's last footprint was left. */
+  private readonly strides = new Map<number, { x: number; y: number }>();
 
   /** Below ~38 frames a second for four seconds: the quality steps down once, and says so the first time. */
   private watch(paused: boolean) {
@@ -416,12 +441,6 @@ export class FableDirector {
       this.told = true;
       toast(t('The picture was made simpler to keep things smooth — change it in the settings'));
     }
-  }
-
-  /** A foot came down: prints in the snow, and in blood after a walk through it. */
-  step(slot: number, x: number, y: number, vx: number, vy: number, time: number): void {
-    if (!this.on || !this.ambient || (vx === 0 && vy === 0)) return;
-    this.ambient.step(slot, x, y, Math.atan2(vy, vx), time);
   }
 
   /** The local player was hit (0–1). */

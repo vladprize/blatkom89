@@ -1026,7 +1026,7 @@ export class HudScene extends Phaser.Scene {
       this.fableTag = null;
       return;
     }
-    if (!this.fableTag) this.fableTag = txt(this, 0, 0, text, 10, '#c9b78f', '600').setOrigin(0.5, 1).setDepth(21).setAlpha(0.7);
+    if (!this.fableTag) this.fableTag = txt(this, 0, 0, text, 12, '#c9b78f', '600').setOrigin(0.5, 1).setDepth(21).setAlpha(0.7);
     else this.fableTag.setText(text);
     this.fableTag.setPosition(this.lw / 2, this.lh - this.inset.bottom - 3);
   }

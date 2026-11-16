@@ -75,6 +75,8 @@ export class ShadowLights {
   private readonly drawList: Phaser.GameObjects.GameObject[] = [];
   private readonly nearScratch: Occluder[] = [];
   private tier: FableTier;
+  /** The local player's own light, as a share of the usual. */
+  private readonly torch: number;
   /** How long the lamps took to bake, for the report. */
   readonly bakeMs: number;
   /** Shadowed lights cast last frame and the rays they took (for the performance read-out). */
@@ -91,6 +93,7 @@ export class ShadowLights {
     private readonly zoom: number,
   ) {
     this.tier = tier;
+    this.torch = look.torch ?? 1;
     const cfg = TIERS[tier];
     this.res = cfg.lightRes;
     this.index = new OccluderIndex(buildOccluders(map), map.width, map.height);
@@ -201,6 +204,11 @@ export class ShadowLights {
     this.rt?.setVisible(v);
   }
 
+  /** The light map itself. */
+  get target(): Phaser.GameObjects.RenderTexture | null {
+    return this.rt;
+  }
+
   update(now: number, players: LightPlayer[], flick: number[]): void {
     const cam = this.scene.cameras.main;
     const view = cam.worldView;
@@ -245,9 +253,9 @@ export class ShadowLights {
         this.vis.compute(this.index, local.x, local.y, BEAM.radius, 72, beamRays(aim));
         this.stats.casts++;
         this.stats.rays += this.vis.n;
-        this.fan(g, local.x, local.y, AURA.radius, AURA.color, AURA.gain * 0.5, ox, oy, null);
-        this.fan(g, local.x, local.y, BEAM.radius, BEAM.color, BEAM.gain * 0.5, ox, oy, aim);
-      } else this.stamp(local.x - ox, local.y - oy, AURA.radius * 1.1, AURA.color, AURA.gain * 1.15, view, local.x, local.y);
+        this.fan(g, local.x, local.y, AURA.radius, AURA.color, AURA.gain * 0.5 * this.torch, ox, oy, null);
+        this.fan(g, local.x, local.y, BEAM.radius, BEAM.color, BEAM.gain * 0.5 * this.torch, ox, oy, aim);
+      } else this.stamp(local.x - ox, local.y - oy, AURA.radius * 1.1, AURA.color, AURA.gain * 1.15 * this.torch, view, local.x, local.y);
     }
     for (const l of this.steady) this.stamp(l.x - ox, l.y - oy, l.radius, l.color, l.intensity, view, l.x, l.y);
 
