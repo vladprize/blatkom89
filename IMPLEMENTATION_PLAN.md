@@ -508,8 +508,12 @@ server's and `packages/shared`'s only change is the version number. Details and 
 | 11 | Speed on real devices | not measurable here (software WebGL: 8.8 frames a second with the plain light → 6.9 «Быстро» → 3.5 «Кино» says nothing about a graphics card). The ladder, the watch and the fallback are the answer until it is seen on real phones and computers | ⛔ not verified |
 
 Checks: `tsc --strict` clean; unit **406 / 406** (shared + web 215 — 7 new in `fable/watch.test.ts`; server 191 — the
-server is not changed); `tests/e2e/v0226.mjs` 49 / 49 on the demo build. The full browser run on the release bundle
-and what it found: docs/TESTING.md §3.
+server is not changed). The full browser run on the release bundle (32 stages, 83 min): **30 pass at once**,
+`v0226` 49 / 49 among them; two red, neither the game — «skins» (an old test that waited 400 ms for a key while the
+software GPU went 1.9 s without a frame after «go», in v0.2.25 as well; it passed or failed by what the case gave —
+the test waits for the game's frames now: 17 / 17 four times) and «the tournament» (one page did not load in 30 s;
+21 / 21 alone). On the stand the lowest step draws as many frames as v0.2.25 did (11–13 against 10.7–11 a second).
+Details: docs/TESTING.md §3.
 
 Not done: nobody has seen the picture's speed on a real graphics card or phone, or heard the sound; no new
 drawings (characters, weapons, tiles, the interface are as they were); no music in a match; the menu's backdrop
@@ -517,7 +521,7 @@ keeps the plain light. Rolling back is the client only: the tag `v0.2.25` (`d61a
 
 ## 3. Open risks / next steps
 
-- After v0.2.26 (above, §2r; unit 406 / 406; the full browser run on the release bundle — docs/TESTING.md §3): the owner's look at a match on his own phone and computer — whether it is smooth, whether «Баланс» is the
+- After v0.2.26 (above, §2r; unit 406 / 406; the full browser run 30 of 32 at once, the two red stages — a test's 400 ms wait and a page that did not load in 30 s — pass alone on the release bundle; docs/TESTING.md §3): the owner's look at a match on his own phone and computer — whether it is smooth, whether «Баланс» is the
   right start for a phone, whether the game steps the quality down too eagerly (38 frames a second for 4 s —
   `PERF_WATCH` in `fable/watch.ts`); the sound by ear (the echo, the bed under the fight, the compressor); the
   twelve maps' looks (`fable/looks.ts` — how dark each night is, the grade, the bloom) are one person's taste and

@@ -133,13 +133,30 @@ try {
   // practice: the weapon in hand and the HUD icon wear it
   await page.getByRole('button', { name: 'Test in practice' }).click();
   await page.waitForFunction(() => window.__blatkom?.game?.scene.getScene('game')?.session?.phase?.() === 'active', null, { timeout: 30000 });
-  // the skin's weapon may sit in any slot: take it in hand
+  // the skin's weapon may sit in any slot: take it in hand. v0.2.26: the wait is on the game's frames, not on the
+  // clock — on the software GPU a match goes a second or two without a frame right after «go» (1.8–1.9 s measured,
+  // in v0.2.25 as well), so a sidearm from the case never got into the hand within the 400 ms this used to wait
+  // (a heavy weapon starts in the hand: whether the stage passed hung on what the case gave)
   const current = () => page.evaluate(() => window.__blatkom.game.scene.getScene('game').session.players().find((p) => p.isLocal).weapon);
   for (const key of ['3', '1', '2']) {
     if ((await current()) === weapon) break;
+    const f0 = await page.evaluate(() => window.__blatkom.game.loop.frame);
     await page.keyboard.press(key);
-    await page.waitForTimeout(400);
+    await page.waitForFunction((f) => window.__blatkom.game.loop.frame >= f + 3, f0, { timeout: 15000 }).catch(() => {});
   }
+  // the weapon's picture follows on the frame after the switch
+  await page
+    .waitForFunction(
+      (w) => {
+        const s = window.__blatkom.game.scene.getScene('game');
+        const me = s.session.players().find((p) => p.isLocal);
+        const hud = window.__blatkom.game.scene.getScene('hud');
+        return me.weapon === w && String(s.views.get(me.slot)?.gun.texture.key).startsWith('skin~') && String(hud.weaponIcon?.texture.key).startsWith('skin~');
+      },
+      weapon,
+      { timeout: 8000 },
+    )
+    .catch(() => {});
   const inHand = await page.evaluate(() => {
     const s = window.__blatkom.game.scene.getScene('game');
     const me = s.session.players().find((p) => p.isLocal);
