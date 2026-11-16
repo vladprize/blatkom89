@@ -108,6 +108,8 @@ export class MapRenderer {
   private lastCull: { x: number; y: number; w: number; h: number } | null = null;
   /** Lake/river surfaces: drifted slowly in animate(). */
   private readonly water: Array<{ t: Phaser.GameObjects.TileSprite; x0: number; y0: number }> = [];
+  /** The painted drop shadows of walls and props, with the alpha each was painted at. */
+  private readonly dropShadows: Array<{ o: { setAlpha(a: number): unknown }; a: number }> = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -128,6 +130,14 @@ export class MapRenderer {
         this.cullables.push({ o: obj, b: obj.getBounds() });
       }
     }
+  }
+
+  /**
+   * Fable cut (the trial build): the painted drop shadows are toned down while the lamps throw real ones
+   * (1: as painted).
+   */
+  setDropShadows(k: number): void {
+    for (const d of this.dropShadows) d.o.setAlpha(d.a * k);
   }
 
   /** Hides static map objects outside the camera view (re-evaluated only after the camera moves). */
@@ -321,13 +331,15 @@ export class MapRenderer {
       const rot = Phaser.Math.DegToRad(p.rot);
       if (def.layer !== 'floor') {
         const off = def.layer === 'high' ? 5 : 3;
-        this.scene.add
+        const a = def.layer === 'high' ? 0.45 : 0.35;
+        const sh = this.scene.add
           .image(p.x + off, p.y + off * 1.2, 'props', frame)
           .setScale(TEX_SCALE)
           .setRotation(rot)
           .setTintFill(0x000000)
-          .setAlpha(def.layer === 'high' ? 0.45 : 0.35)
+          .setAlpha(a)
           .setDepth(def.layer === 'high' ? D.WALL_SHADOW : D.SHADOW);
+        this.dropShadows.push({ o: sh, a });
       }
       this.scene.add.image(p.x, p.y, 'props', frame).setScale(TEX_SCALE).setRotation(rot).setDepth(depth);
       if (p.type === 'garage') {
@@ -346,6 +358,7 @@ export class MapRenderer {
 
   private buildWalls() {
     const shadows = this.scene.add.graphics().setDepth(D.WALL_SHADOW);
+    this.dropShadows.push({ o: shadows, a: 1 });
     const edges = this.scene.add.graphics().setDepth(D.WALL + 0.5);
     const shore = this.scene.add.graphics().setDepth(D.FLOOR_OVER + 0.3);
     for (const [i, w] of this.map.walls.entries()) {

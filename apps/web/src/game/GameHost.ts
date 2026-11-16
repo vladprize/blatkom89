@@ -8,6 +8,7 @@ import { GameScene } from './scenes/GameScene.js';
 import { HudScene } from './scenes/HudScene.js';
 import { PreviewScene } from './scenes/PreviewScene.js';
 import { VhsPipeline } from './render/VhsPipeline.js';
+import { FablePipeline } from './fable/FablePipeline.js';
 import { internalSize } from './viewSize.js';
 import { isRotated, patchPhaser } from '../app/landscape.js';
 
@@ -37,7 +38,7 @@ export class GameHost {
       fps: { target: 60, smoothStep: true },
       render: { powerPreference: 'high-performance', batchSize: 4096 },
       audio: { noAudio: true },
-      pipeline: { Vhs: VhsPipeline } as unknown as Phaser.Types.Core.PipelineConfig,
+      pipeline: { Vhs: VhsPipeline, Fable: FablePipeline } as unknown as Phaser.Types.Core.PipelineConfig,
       scene: [BootScene, PreviewScene, GameScene, HudScene],
       banner: false,
     });

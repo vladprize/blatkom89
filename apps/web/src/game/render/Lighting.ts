@@ -11,6 +11,9 @@
 import * as Phaser from 'phaser';
 import type { LightDef, MapDef } from '@blatkom/shared';
 import { D } from './depth.js';
+import { ShadowLights } from '../fable/ShadowLights.js';
+import type { FableTier } from '../fable/tiers.js';
+import type { MapLook } from '../fable/looks.js';
 
 interface DynLight {
   x: number;
@@ -149,6 +152,10 @@ export class Lighting {
   private readonly pool: Phaser.GameObjects.Image[] = [];
   private used = 0;
   enabled = true;
+  /** Fable cut (the trial build): the light map with shadows; null — the classic one below. */
+  private v2: ShadowLights | null = null;
+  /** Every lamp's brightness this frame (its flicker). */
+  flick: number[] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -218,13 +225,47 @@ export class Lighting {
     return this.rt;
   }
 
+  /**
+   * Fable cut: switches the light map to the one with shadows (`tier`: its quality) or back to the classic
+   * one (null). WebGL only — the Canvas renderer keeps the classic picture.
+   */
+  setFable(tier: FableTier | null, look?: MapLook, rebuild = true, zoom = 2): void {
+    if (tier === null || !look || this.blend === null) {
+      this.v2?.destroy();
+      this.v2 = null;
+      this.v2Tier = null;
+      return;
+    }
+    if (this.v2 && this.v2Tier === tier) return;
+    if (this.v2 && !rebuild) {
+      // the quality stepped down by itself: what is baked stays, what is cast every frame gets cheaper
+      this.v2.setTier(tier);
+      this.v2Tier = tier;
+      return;
+    }
+    this.v2?.destroy();
+    this.v2 = new ShadowLights(this.scene, this.map, tier, look, this.blend, this.addBlend, zoom);
+    this.v2Tier = tier;
+    this.dyn.length = 0;
+    this.rt?.setVisible(false);
+  }
+
+  private v2Tier: FableTier | null = null;
+
+  /** The light map with shadows, while the Fable cut is on. */
+  get shadows(): ShadowLights | null {
+    return this.v2;
+  }
+
   /** Light pools for this frame (replaces the previous set): objective markers glow in their team colour. */
   setSteady(lights: Array<{ x: number; y: number; radius: number; color: number; intensity: number }>): void {
     this.steady = lights;
+    this.v2?.setSteady(lights);
   }
 
   flash(x: number, y: number, radius: number, color: number, intensity: number, durationMs: number, now: number): void {
-    this.dyn.push({ x, y, radius, color, intensity, until: now + durationMs, born: now });
+    if (this.v2) this.v2.flash(x, y, radius, color, intensity, durationMs, now);
+    else this.dyn.push({ x, y, radius, color, intensity, until: now + durationMs, born: now });
   }
 
   private flicker(l: LightDef, i: number, t: number): number {
@@ -239,13 +280,20 @@ export class Lighting {
     return 1;
   }
 
-  update(now: number, players: Array<{ x: number; y: number; alive: boolean; isLocal: boolean }>): void {
+  update(now: number, players: Array<{ x: number; y: number; alive: boolean; isLocal: boolean; aim?: number }>): void {
     const cam = this.scene.cameras.main;
     const view = cam.worldView;
     const flick = this.map.lights.map((l, i) => this.flicker(l, i, now));
+    this.flick = flick;
     for (const f of this.fixtures) f.glow.setVisible(this.enabled).setAlpha(f.base * flick[f.index]!);
     if (!this.enabled) {
       if (this.rt) this.rt.setVisible(false);
+      this.v2?.setVisible(false);
+      return;
+    }
+    if (this.v2) {
+      if (this.rt) this.rt.setVisible(false);
+      this.v2.update(now, players, flick);
       return;
     }
     const rt = this.ensureRT(view.width, view.height);
@@ -294,6 +342,8 @@ export class Lighting {
   }
 
   destroy(): void {
+    this.v2?.destroy();
+    this.v2 = null;
     this.rt?.destroy();
     this.rt = null;
     for (const img of this.pool) img.destroy();

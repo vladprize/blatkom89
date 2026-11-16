@@ -14,6 +14,10 @@ export interface Settings {
   bots: number;
   /** The room chat (lobby, match, results): shown or hidden. */
   chat: boolean;
+  /** The trial build: the Fable cut (shadows, bloom, the new sound) or the classic picture and sound. */
+  look: 'fable' | 'classic';
+  /** The Fable cut's quality: 2 — everything, 1 — balanced, 0 — fast. */
+  fableTier: 0 | 1 | 2;
 }
 
 const KEY = 'blatkom89.settings.v1';
@@ -41,6 +45,8 @@ export const DEFAULT_SETTINGS: Settings = {
   botDifficulty: 'normal',
   bots: 3,
   chat: true,
+  look: 'fable',
+  fableTier: lowEndDevice() ? 1 : 2,
 };
 
 let current: Settings = load();

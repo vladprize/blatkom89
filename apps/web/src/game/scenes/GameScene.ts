@@ -15,10 +15,11 @@ import { CharacterView, spawnCorpse } from '../render/CharacterView.js';
 import { GadgetView } from '../render/GadgetView.js';
 import { ObjectiveView, TEAM_CLOTH } from '../render/ObjectiveView.js';
 import { VhsPipeline, vhsIntensity } from '../render/VhsPipeline.js';
+import { FableDirector } from '../fable/FableDirector.js';
 import { InputManager } from '../input/InputManager.js';
 import { D } from '../render/depth.js';
 import { sfx } from '../audio/Sfx.js';
-import { getSettings, onSettings } from '../../app/settings.js';
+import { getSettings, onSettings, updateSettings } from '../../app/settings.js';
 import { hudBus } from './hudBus.js';
 import type { ObjectiveEntry } from './hudBus.js';
 import { haptic } from '../../telegram/tg.js';
@@ -76,6 +77,10 @@ export class GameScene extends Phaser.Scene {
   private qualityReduced = false;
   /** Falling snow on a winter map (v0.2.18). */
   private snow: Snowfall | null = null;
+  /** The trial build: the Fable cut's picture and sound (off: the match is the main version's). */
+  private fable!: FableDirector;
+  /** Players a smoke cloud hides this frame. */
+  private readonly hiddenSlots = new Set<number>();
 
   constructor() {
     super('game');
@@ -111,6 +116,7 @@ export class GameScene extends Phaser.Scene {
     this.gadgetView = new GadgetView(this, this.fx, this.lighting);
     this.objectives = this.session.gameMode === 'ctf' || this.session.gameMode === 'bases' ? new ObjectiveView(this, this.lighting) : null;
     this.collision = getCollision(this.session.mapId);
+    this.fable = new FableDirector(this, { map: this.map, session: this.session, lighting: this.lighting, fx: this.fx, mapView: this.mapView, collision: this.collision, zoom: TEX });
     this.lasers = this.add.graphics().setDepth(D.FX_ADD - 0.5).setBlendMode(Phaser.BlendModes.ADD);
     this.inputs = new InputManager(this);
     this.inputs.assist = (aim, me) => this.aimAssist(aim, me);
@@ -139,6 +145,13 @@ export class GameScene extends Phaser.Scene {
     hudBus.on('pause-state', this.onPauseState, this);
     hudBus.on('chat-open', this.onChatOpen, this);
     hudBus.on('chat-say', this.onChatSay, this);
+    // the trial build: F2 switches between the Fable cut and the classic picture in the middle of a match
+    this.input.keyboard?.on('keydown-F2', this.onLookKey, this);
+  }
+
+  private onLookKey(e: KeyboardEvent) {
+    e.preventDefault?.();
+    updateSettings({ look: getSettings().look === 'fable' ? 'classic' : 'fable' });
   }
 
   /**
@@ -200,13 +213,15 @@ export class GameScene extends Phaser.Scene {
     const s = getSettings();
     // the VHS pass is a full-screen post-process: removed entirely when switched off (saves GPU on phones)
     const cam = this.cameras.main;
-    const wantVhs = s.vhs > 0 && this.game.renderer.type === Phaser.WEBGL && !this.debug.has('novhs');
+    // the trial build: the Fable cut has a pass of its own with the tape look folded in
+    this.fable.sync(userChange);
+    const wantVhs = !this.fable.on && s.vhs > 0 && this.game.renderer.type === Phaser.WEBGL && !this.debug.has('novhs');
     if (wantVhs && !this.vhs) {
       cam.setPostPipeline(VhsPipeline);
       this.vhs = cam.getPostPipeline(VhsPipeline) as VhsPipeline;
       if (userChange) this.qualityReduced = true; // the player chose it: never auto-disable again
     } else if (!wantVhs && this.vhs) {
-      cam.resetPostPipeline();
+      cam.removePostPipeline(this.vhs);
       this.vhs = null;
     }
     if (this.vhs) this.vhs.intensity = vhsIntensity(s.vhs);
@@ -216,6 +231,8 @@ export class GameScene extends Phaser.Scene {
 
   private cleanup() {
     this.unsubSettings?.();
+    this.input.keyboard?.off('keydown-F2', this.onLookKey, this);
+    this.fable.destroy();
     // the match's key captures must not outlive it (they swallowed W/A/S/D… in the menus' text fields)
     this.input.keyboard?.removeAllKeys(true, true);
     hudBus.off('pause-state', this.onPauseState, this);
@@ -258,6 +275,7 @@ export class GameScene extends Phaser.Scene {
     this.gadgetView.update(this.session.gadgets(), this.session.localSlot(), time, dt);
     // views
     const seen = new Set<number>();
+    this.hiddenSlots.clear();
     for (const p of players) {
       seen.add(p.slot);
       let v = this.views.get(p.slot);
@@ -272,6 +290,7 @@ export class GameScene extends Phaser.Scene {
         this.views.set(p.slot, v);
       }
       const hidden = !p.isLocal && this.gadgetView.concealed(p.x, p.y);
+      if (hidden) this.hiddenSlots.add(p.slot);
       v.update(p, time, dt, hidden);
       // v0.2.20: a sprinting player kicks up dust behind
       if (p.sprinting && p.alive && !hidden && time - (this.sprintDust.get(p.slot) ?? 0) > 70) {
@@ -300,10 +319,17 @@ export class GameScene extends Phaser.Scene {
         tx += Math.cos(this.inputs.aimAngle) * look;
         ty += Math.sin(this.inputs.aimAngle) * look;
       }
-      const k = 1 - Math.pow(0.0001, dt / 1000);
-      this.camX += (tx - this.camX) * Math.min(1, k * 1.2);
-      this.camY += (ty - this.camY) * Math.min(1, k * 1.2);
-      this.cameras.main.centerOn(Math.round(this.camX * TEX) / TEX, Math.round(this.camY * TEX) / TEX);
+      // the trial build: the opening glides in to the player on the countdown; the recoil offsets the camera
+      const opening = this.fable.opening(tx, ty, time, me);
+      if (opening) {
+        this.camX = opening.x;
+        this.camY = opening.y;
+      } else {
+        const k = 1 - Math.pow(0.0001, dt / 1000);
+        this.camX += (tx - this.camX) * Math.min(1, k * 1.2);
+        this.camY += (ty - this.camY) * Math.min(1, k * 1.2);
+      }
+      this.cameras.main.centerOn(Math.round((this.camX + this.fable.cam.x) * TEX) / TEX, Math.round((this.camY + this.fable.cam.y) * TEX) / TEX);
       sfx.setListener(me.x, me.y);
       this.mapView.updateOverhead(me.x, me.y, dt);
     }
@@ -327,6 +353,7 @@ export class GameScene extends Phaser.Scene {
         this.crosshair.setPosition(wp.x, wp.y);
       }
     }
+    this.fable.update(time, dt, players, me, this.hiddenSlots, this.paused);
     this.fx.update(dt);
     this.lighting.update(time, players);
     this.damagePulse = Math.max(0, this.damagePulse - dt / 400);
@@ -357,7 +384,7 @@ export class GameScene extends Phaser.Scene {
     this.slowSeconds = fps < 40 && !this.paused ? this.slowSeconds + 1 : 0;
     if (this.slowSeconds >= 6) {
       this.qualityReduced = true;
-      this.cameras.main.resetPostPipeline();
+      this.cameras.main.removePostPipeline(this.vhs);
       this.vhs = null;
       toast(t('Video effects switched off to keep things smooth — turn them back on in the settings'));
     }
@@ -469,7 +496,11 @@ export class GameScene extends Phaser.Scene {
         if (!(isLocal && e.predicted && this.session.mode === 'online')) this.impacts(e);
         if (!silenced) this.lighting.flash(m.x, m.y, def.flash === 'obrez' || def.sound === 'flame' ? 150 : 110, def.sound === 'flame' ? 0xff8a30 : (skinLight ?? 0xffb050), 0.9, def.sound === 'flame' ? 120 : 60, time);
         sfx.play(silenced && !def.silenced && def.sound !== 'shotgun' && def.sound !== 'obrez' ? 'silenced' : def.sound, { x: ox, y: oy, volume: isLocal ? 0.9 : silenced ? 0.6 : 1 });
-        if (isLocal) this.fx.shake(cam, def.shake);
+        if (isLocal) {
+          // the trial build: the camera kicks back along the barrel, so less of the shake at random
+          this.fx.shake(cam, def.shake * (this.fable.on ? 0.45 : 1));
+          this.fable.recoil(aim, def.shake);
+        } else this.fable.whiz(e, local ?? null, time);
         break;
       }
       case 'melee': {
@@ -492,6 +523,7 @@ export class GameScene extends Phaser.Scene {
       case 'flashbang': {
         this.fx.flashBurst(e.x, e.y);
         this.lighting.flash(e.x, e.y, 520, 0xffffff, 1.4, 260, time);
+        this.fable.blast(e.x, e.y, local ?? null, time, true);
         sfx.play('flashbang', { x: e.x, y: e.y });
         if (local && local.alive && Math.hypot(local.x - e.x, local.y - e.y) < 300) {
           this.fx.shake(cam, 0.5);
@@ -532,6 +564,7 @@ export class GameScene extends Phaser.Scene {
         this.fx.endFlight(e.id);
         this.fx.explosion(e.x, e.y, e.radius);
         this.lighting.flash(e.x, e.y, e.radius * 3, 0xff9a40, 1, 380, time);
+        this.fable.blast(e.x, e.y, local ?? null, time);
         sfx.play('boom', { x: e.x, y: e.y });
         if (local) {
           const d = Math.hypot(local.x - e.x, local.y - e.y);
@@ -556,11 +589,13 @@ export class GameScene extends Phaser.Scene {
         if (victim) {
           const a = attacker ? Math.atan2(victim.y - attacker.y, victim.x - attacker.x) : 0;
           this.fx.blood(victim.x, victim.y, a, e.amount);
+          if (attacker) this.fable.blood(victim.x, victim.y, a, e.amount);
           this.views.get(e.victim)?.onHit(time);
           sfx.play('hit', { x: victim.x, y: victim.y });
         }
         if (victim?.isLocal) {
           this.damagePulse = Math.min(1, this.damagePulse + 0.5);
+          this.fable.hurt(0.5);
           this.fx.shake(cam, 0.35);
           sfx.play('hurt', { volume: 0.7 });
           haptic('impact-medium');
@@ -573,7 +608,8 @@ export class GameScene extends Phaser.Scene {
         const victim = bySlot(e.victim);
         const killer = bySlot(e.killer);
         if (victim) {
-          spawnCorpse(this, victim.character, victim.x, victim.y, victim.aim);
+          const corpse = spawnCorpse(this, victim.character, victim.x, victim.y, victim.aim);
+          this.fable.kill(victim, killer, corpse, time);
           this.fx.bloodPool(victim.x, victim.y);
           sfx.play('death', { x: victim.x, y: victim.y });
           // v0.2.23: an elimination with an epic or legendary skin ends in a burst of its colours
@@ -650,6 +686,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'matchEnd':
         sfx.play('end', { volume: 0.7 });
+        this.fable.finish();
         hudBus.emit('match-end', e.reason);
         break;
       case 'phase':
@@ -750,6 +787,7 @@ export class GameScene extends Phaser.Scene {
         const ex = e.ox + Math.cos(pl.angle) * pl.dist;
         const ey = e.oy + Math.sin(pl.angle) * pl.dist;
         this.fx.wallHit(ex, ey, pl.angle);
+        this.fable.impact(ex, ey, pl.angle, this.time.now);
         if (Math.random() < 0.3) sfx.play('ricochet', { x: ex, y: ey, volume: 0.5 });
       }
     }

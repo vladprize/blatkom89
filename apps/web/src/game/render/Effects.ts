@@ -74,6 +74,8 @@ export class Effects {
   private readonly growing: Array<{ img: Phaser.GameObjects.Image; target: number; speed: number }> = [];
   private readonly flights = new Map<number, Flight>();
   shakeScale = 1;
+  /** Fable cut (the trial build): called where a spent case comes to rest. */
+  onShell: ((x: number, y: number) => void) | null = null;
 
   constructor(private readonly scene: Phaser.Scene) {
     for (let i = 0; i < MAX_PARTICLES; i++) {
@@ -340,6 +342,7 @@ export class Effects {
         onEnd: (p) => {
           const d = this.decal('shell', p.img.x, p.img.y, p.img.rotation, 0.5, 0.9, D.BLOOD);
           d.setDepth(D.BLOOD);
+          this.onShell?.(p.img.x, p.img.y);
         },
       });
     }
@@ -412,6 +415,26 @@ export class Effects {
     }
     const off = 10 + Math.random() * 10;
     this.decal(`blood_${Math.floor(Math.random() * 6)}`, x + Math.cos(a) * off, y + Math.sin(a) * off, a, 0.4 + Math.random() * 0.2, 0.9);
+  }
+
+  /** Fable cut: blood thrown on the wall behind someone hit — on the wall's top, at its edge. */
+  wallBlood(x: number, y: number, rot: number, big: boolean): void {
+    this.decal(`blood_${Math.floor(Math.random() * 6)}`, x, y, rot, (big ? 0.4 : 0.28) + Math.random() * 0.12, 0.8, D.WALL + 0.4);
+  }
+
+  /** Fable cut: a red haze where a bullet went through. */
+  bloodMist(x: number, y: number, a: number): void {
+    this.spawn('smoke', x, y, { vx: Math.cos(a) * 28, vy: Math.sin(a) * 28, life: 420, scale: 0.14, grow: 0.55, alpha: 0.42, drag: 3, tint: 0x7a1410, depth: D.FX_LOW });
+  }
+
+  /** Fable cut: sparks off stone and metal that fly further, bounce and die slowly. */
+  sparkBurst(x: number, y: number, a: number, n: number): void {
+    const back = a + Math.PI;
+    for (let i = 0; i < n; i++) {
+      const ang = back + (Math.random() - 0.5) * 2.2;
+      const sp = 90 + Math.random() * 170;
+      this.spawn('px', x, y, { vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: 260 + Math.random() * 320, scale: 0.3 + Math.random() * 0.2, tint: i % 2 ? 0xffe9a8 : 0xffb050, add: true, drag: 3.2 });
+    }
   }
 
   bloodPool(x: number, y: number): void {

@@ -4,7 +4,22 @@
  */
 import type { WeaponSound } from '@blatkom/shared';
 
-type SfxName = WeaponSound | 'hit' | 'ricochet' | 'reload' | 'dry' | 'pickup' | 'death' | 'kill' | 'assist' | 'supply' | 'beep' | 'beepHigh' | 'click' | 'step' | 'end' | 'hurt' | 'respawn' | 'boom' | 'heal' | 'buy' | 'throw' | 'place' | 'deploy' | 'flashbang' | 'tinnitus' | 'ignite' | 'hiss' | 'mineBeep' | 'turret' | 'crash' | 'flagTaken' | 'flagCaptured' | 'flagReturned' | 'flagDropped' | 'baseCaptured' | 'baseLost';
+type SfxName = WeaponSound | 'hit' | 'ricochet' | 'reload' | 'dry' | 'pickup' | 'death' | 'kill' | 'assist' | 'supply' | 'beep' | 'beepHigh' | 'click' | 'step' | 'end' | 'hurt' | 'respawn' | 'boom' | 'heal' | 'buy' | 'throw' | 'place' | 'deploy' | 'flashbang' | 'tinnitus' | 'ignite' | 'hiss' | 'mineBeep' | 'turret' | 'crash' | 'flagTaken' | 'flagCaptured' | 'flagReturned' | 'flagDropped' | 'baseCaptured' | 'baseLost' | 'shell' | 'whiz' | 'heart' | 'thump';
+
+/** Fable cut (the trial build): where the fight is — its echo — and what hums under it. */
+export interface FableSound {
+  reverb: 'hall' | 'yard' | 'open' | 'rooms' | null;
+  bed: 'works' | 'street' | 'wind' | 'rooms' | null;
+  rain: boolean;
+}
+
+/** How much of a sound goes to the echo, and how long the echo is, per kind of place. */
+const REVERBS = {
+  hall: { send: 0.36, seconds: 1.9, decay: 0.42, dark: 0.22, echoes: [[0.061, 0.5], [0.113, 0.34]] },
+  yard: { send: 0.24, seconds: 1.2, decay: 0.26, dark: 0.3, echoes: [[0.092, 0.6], [0.171, 0.4], [0.254, 0.2]] },
+  open: { send: 0.12, seconds: 0.9, decay: 0.2, dark: 0.36, echoes: [[0.21, 0.5]] },
+  rooms: { send: 0.22, seconds: 0.55, decay: 0.11, dark: 0.3, echoes: [[0.023, 0.5], [0.041, 0.3]] },
+} as const;
 
 /** Rapid-fire sounds are rate-limited per listener so automatic fire does not turn into noise. */
 const MIN_GAP: Partial<Record<SfxName, number>> = { avtomat: 30, smg: 28, lmg: 34, nail: 40, flame: 90, step: 60, turret: 40 };
@@ -16,6 +31,19 @@ class SfxEngine {
   private volume = 0.8;
   private listener = { x: 0, y: 0 };
   private lastPlay = new Map<SfxName, number>();
+  // ── Fable cut: master → muffle → compressor → out; a send bus through a convolver (the place's echo) ──
+  private fable: FableSound | null = null;
+  private muffle: BiquadFilterNode | null = null;
+  private comp: DynamicsCompressorNode | null = null;
+  private wet: GainNode | null = null;
+  private conv: ConvolverNode | null = null;
+  private readonly impulses = new Map<string, AudioBuffer>();
+  private bed: { src: AudioBufferSourceNode; gain: GainNode; key: string } | null = null;
+  private readonly beds = new Map<string, AudioBuffer>();
+  /** Fable cut: whether something solid stands between the listener and a point (set by the match scene). */
+  occluded: ((x: number, y: number) => boolean) | null = null;
+  /** Voices started since the context was unlocked (for the tests and the performance read-out). */
+  voices = 0;
 
   /** Must be called from a user gesture on iOS/Telegram. */
   unlock(): void {
@@ -30,6 +58,220 @@ class SfxEngine {
     this.master.gain.value = this.volume;
     this.master.connect(this.ctx.destination);
     this.build();
+    if (this.fable) this.route();
+  }
+
+  /**
+   * Fable cut: the place's echo, the bed under the fight, a compressor that keeps a firefight from
+   * clipping — or (null) the classic chain, exactly as it was: every voice straight to the output.
+   */
+  setFable(f: FableSound | null): void {
+    this.fable = f;
+    if (this.ctx) this.route();
+  }
+
+  /** Fable cut: 0 — clear, 1 — the world heard through cotton wool (nearly dead, a blast next to you). */
+  setMuffle(amount: number, seconds = 0.12): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.muffle) return;
+    const a = Math.max(0, Math.min(1, amount));
+    const hz = 20000 * Math.pow(600 / 20000, a);
+    this.muffle.frequency.setTargetAtTime(hz, ctx.currentTime, Math.max(0.01, seconds));
+  }
+
+  private route() {
+    const ctx = this.ctx;
+    const master = this.master;
+    if (!ctx || !master) return;
+    master.disconnect();
+    const f = this.fable;
+    if (!f) {
+      master.connect(ctx.destination);
+      this.stopBed();
+      return;
+    }
+    if (!this.muffle || !this.comp || !this.wet || !this.conv) {
+      this.muffle = ctx.createBiquadFilter();
+      this.muffle.type = 'lowpass';
+      this.muffle.frequency.value = 20000;
+      this.muffle.Q.value = 0.5;
+      this.comp = ctx.createDynamicsCompressor();
+      this.comp.threshold.value = -15;
+      this.comp.knee.value = 12;
+      this.comp.ratio.value = 3.5;
+      this.comp.attack.value = 0.003;
+      this.comp.release.value = 0.18;
+      this.wet = ctx.createGain();
+      this.conv = ctx.createConvolver();
+      this.conv.normalize = false;
+      this.wet.connect(this.conv);
+      // the echo is part of the mix: it is muffled and compressed with the rest
+      this.conv.connect(this.muffle);
+      this.muffle.connect(this.comp);
+      this.comp.connect(ctx.destination);
+    }
+    master.connect(this.muffle);
+    this.muffle.frequency.value = 20000;
+    if (f.reverb) {
+      const r = REVERBS[f.reverb];
+      let ir = this.impulses.get(f.reverb);
+      if (!ir) {
+        ir = this.impulse(r.seconds, r.decay, r.dark, r.echoes);
+        this.impulses.set(f.reverb, ir);
+      }
+      this.conv.buffer = ir;
+      this.wet.gain.value = 1;
+    } else this.wet.gain.value = 0;
+    this.startBed(f);
+  }
+
+  /**
+   * A place's impulse response, made up: a few early echoes, then noise that dies away and grows duller as
+   * it does. Its energy is normalised to 1, so the send level alone says how loud the echo is.
+   */
+  private impulse(seconds: number, decay: number, dark: number, echoes: ReadonlyArray<readonly [number, number]>): AudioBuffer {
+    const ctx = this.ctx!;
+    const sr = ctx.sampleRate;
+    const n = Math.floor(seconds * sr);
+    const b = ctx.createBuffer(2, n, sr);
+    let seed = 987654321;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff - 0.5;
+    };
+    for (let ch = 0; ch < 2; ch++) {
+      const d = b.getChannelData(ch);
+      let y = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        // the tail starts after the first reflection and loses its top as it decays
+        const k = Math.max(0.03, dark * Math.exp(-t / (decay * 1.6)) + 0.03);
+        y += k * (rnd() * 2 - y);
+        d[i] = t < 0.012 ? 0 : y * Math.exp(-(t - 0.012) / decay);
+      }
+      for (const [at, g] of echoes) {
+        // the two ears hear a wall at slightly different times
+        const i0 = Math.floor((at + ch * 0.0037) * sr);
+        for (let j = 0; j < 40 && i0 + j < n; j++) d[i0 + j] = d[i0 + j]! + g * (1 - j / 40) * (j % 2 ? -0.6 : 1);
+      }
+      let e = 0;
+      for (let i = 0; i < n; i++) e += d[i]! * d[i]!;
+      const norm = 1 / Math.sqrt(e || 1);
+      for (let i = 0; i < n; i++) d[i] = d[i]! * norm;
+    }
+    return b;
+  }
+
+  /** The bed under the fight: four seconds that loop without a seam (the hums are whole periods, the noise is crossfaded). */
+  private bedBuffer(key: string, f: FableSound): AudioBuffer {
+    const cached = this.beds.get(key);
+    if (cached) return cached;
+    const ctx = this.ctx!;
+    const sr = ctx.sampleRate;
+    const seconds = 4;
+    const n = seconds * sr;
+    const fadeN = Math.floor(0.6 * sr);
+    const b = ctx.createBuffer(1, n, sr);
+    const d = b.getChannelData(0);
+    let seed = 24681357;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff - 0.5;
+    };
+    const lp = (k: number) => {
+      let y = 0;
+      return (x: number) => (y += k * (x - y));
+    };
+    const TAU = Math.PI * 2;
+    const noise = new Float32Array(n + fadeN);
+    const lay = (make: (i: number, t: number) => number) => {
+      for (let i = 0; i < n + fadeN; i++) noise[i] = make(i, i / sr);
+      // the tail past the loop's end is folded into its start
+      for (let i = 0; i < n; i++) {
+        const x = i < fadeN ? noise[i]! * (i / fadeN) + noise[n + i]! * (1 - i / fadeN) : noise[i]!;
+        d[i] = d[i]! + x;
+      }
+    };
+    if (f.bed === 'works') {
+      const a = lp(0.012);
+      const c = lp(0.2);
+      lay(() => a(rnd() * 2) * 9);
+      lay(() => c(rnd() * 2) * 0.05);
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        d[i] = d[i]! * (0.75 + 0.25 * Math.sin(TAU * 0.25 * t)) + Math.sin(TAU * 50 * t) * 0.2 + Math.sin(TAU * 100 * t) * 0.13 + Math.sin(TAU * 150 * t) * 0.04;
+      }
+    } else if (f.bed === 'street') {
+      const a = lp(0.03);
+      lay(() => a(rnd() * 2) * 4);
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        d[i] = d[i]! * (0.6 + 0.4 * Math.sin(TAU * 0.25 * t + 1)) + Math.sin(TAU * 100 * t) * 0.02;
+      }
+    } else if (f.bed === 'wind') {
+      const a = lp(0.07);
+      const c = lp(0.008);
+      lay(() => {
+        const x = rnd() * 2;
+        return (a(x) - c(x)) * 3;
+      });
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        d[i] = d[i]! * (0.55 + 0.3 * Math.sin(TAU * 0.25 * t) + 0.15 * Math.sin(TAU * 0.75 * t + 2));
+      }
+    } else if (f.bed === 'rooms') {
+      const a = lp(0.15);
+      lay(() => a(rnd() * 2) * 0.12);
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        d[i] = d[i]! + Math.sin(TAU * 50 * t) * 0.16 + Math.sin(TAU * 100 * t) * 0.06;
+      }
+    }
+    if (f.rain) {
+      const a = lp(0.35);
+      const c = lp(0.04);
+      lay(() => {
+        const x = rnd() * 2;
+        return (x - a(x)) * 0.5 + c(rnd() * 2) * 1.6;
+      });
+    }
+    let peak = 0;
+    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(d[i]!));
+    if (peak > 0) for (let i = 0; i < n; i++) d[i] = (d[i]! / peak) * 0.9;
+    this.beds.set(key, b);
+    return b;
+  }
+
+  private startBed(f: FableSound) {
+    const ctx = this.ctx;
+    if (!ctx || !this.master) return;
+    const key = `${f.bed ?? 'none'}|${f.rain ? 'rain' : 'dry'}`;
+    if (this.bed?.key === key) return;
+    this.stopBed();
+    if (!f.bed && !f.rain) return;
+    const src = ctx.createBufferSource();
+    src.buffer = this.bedBuffer(key, f);
+    src.loop = true;
+    const gain = ctx.createGain();
+    const level = (f.bed === 'works' ? 0.085 : f.bed === 'wind' ? 0.07 : f.bed === 'street' ? 0.05 : f.bed === 'rooms' ? 0.035 : 0) + (f.rain ? 0.06 : 0);
+    gain.gain.value = 0;
+    gain.gain.setTargetAtTime(level, ctx.currentTime, 0.8);
+    src.connect(gain).connect(this.master);
+    src.start();
+    this.bed = { src, gain, key };
+  }
+
+  private stopBed() {
+    const bed = this.bed;
+    if (!bed) return;
+    this.bed = null;
+    try {
+      bed.src.stop();
+    } catch {
+      /* never started */
+    }
+    bed.src.disconnect();
+    bed.gain.disconnect();
   }
 
   setVolume(v: number): void {
@@ -234,6 +476,23 @@ class SfxEngine {
       // base lost: the same chime falling, minor
       this.buffers.set('baseLost', this.buf(0.8, (t) => (t < 0.18 ? Math.sin(2 * Math.PI * 622 * t) * env(t, 0.003, 0.12) : Math.sin(2 * Math.PI * 523 * t) * env(t - 0.18, 0.003, 0.3)) * 0.33));
     }
+    // ── Fable cut ──
+    {
+      // a spent case rings on concrete: three pings, each quieter
+      this.buffers.set('shell', this.buf(0.16, (t) => click(t, 0.0, 5200) * 0.5 + click(t, 0.047, 6100) * 0.34 + click(t, 0.082, 4700) * 0.2));
+      // a bullet going past the ear: a short falling hiss
+      const f = lp(0.5);
+      const g = lp(0.12);
+      this.buffers.set('whiz', this.buf(0.2, (t) => {
+        const x = rnd() * 2;
+        return (f(x) - g(x)) * Math.sin(Math.PI * Math.min(1, t / 0.2)) ** 2 * 2.4 + Math.sin(2 * Math.PI * (3400 - 9000 * t) * t) * env(t, 0.004, 0.05) * 0.18;
+      }));
+      // the heart, when there is little health left: two low beats
+      const beat = (t: number, at: number, hz: number) => (t > at ? Math.sin(2 * Math.PI * hz * (t - at)) * env(t - at, 0.006, 0.055) : 0);
+      this.buffers.set('heart', this.buf(0.42, (t) => beat(t, 0, 54) * 0.9 + beat(t, 0.17, 46) * 0.7));
+      // an elimination lands: a low drop under the confirmation ping
+      this.buffers.set('thump', this.buf(0.42, (t) => Math.sin(2 * Math.PI * (82 - 90 * t) * t) * env(t, 0.003, 0.11)));
+    }
     this.buffers.set('end', this.buf(1.2, (t) => {
       const notes = [523, 659, 784, 1046];
       const i = Math.min(3, Math.floor(t / 0.18));
@@ -264,6 +523,36 @@ class SfxEngine {
     src.playbackRate.value = (opts.rate ?? 1) * (0.94 + Math.random() * 0.12);
     const g = ctx.createGain();
     g.gain.value = vol;
+    this.voices++;
+    const f = this.fable;
+    if (f && this.wet && opts.x !== undefined && opts.y !== undefined) {
+      // Fable cut: a sound in the world — duller with distance and behind a wall, and the place answers it
+      const d = Math.hypot(opts.x - this.listener.x, opts.y - this.listener.y);
+      const behind = d > 24 && !!this.occluded?.(opts.x, opts.y);
+      let node: AudioNode = src.connect(g);
+      if (behind) g.gain.value = vol * 0.7;
+      if (behind || d > 240) {
+        const lpf = ctx.createBiquadFilter();
+        lpf.type = 'lowpass';
+        lpf.frequency.value = behind ? 950 : 16000 - Math.min(1, (d - 240) / 460) * 12500;
+        lpf.Q.value = 0.4;
+        node = node.connect(lpf);
+      }
+      if (ctx.createStereoPanner) {
+        const p = ctx.createStereoPanner();
+        p.pan.value = pan;
+        node = node.connect(p);
+      }
+      node.connect(this.master);
+      if (f.reverb) {
+        // far and hidden sounds are mostly echo; a shot in your own hands is mostly itself
+        const send = ctx.createGain();
+        send.gain.value = REVERBS[f.reverb].send * (0.45 + 0.55 * Math.min(1, d / 420)) * (behind ? 1.35 : 1);
+        node.connect(send).connect(this.wet);
+      }
+      src.start();
+      return;
+    }
     if (ctx.createStereoPanner) {
       const p = ctx.createStereoPanner();
       p.pan.value = pan;
