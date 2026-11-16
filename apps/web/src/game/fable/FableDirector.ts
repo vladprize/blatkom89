@@ -146,26 +146,47 @@ export class FableDirector {
   }
 
   /**
-   * Brings the match in line with what the player asked for. `userChange`: they just changed it — the
-   * quality is theirs now and no longer steps down by itself.
+   * Brings the match in line with what the player asked for. `userChange`: a setting was just changed — if it
+   * was the quality itself, it is theirs now and no longer steps down by itself (the volume or the language
+   * changing does not undo a step down).
    */
   sync(userChange = false): void {
     const webgl = this.scene.game.renderer.type === Phaser.WEBGL;
     const want = fableWanted(webgl);
-    if (userChange) this.picked = true;
-    // a software renderer (no graphics card behind the browser) starts on the cheapest tier unless told otherwise
-    if (want.on && !want.locked && !this.picked && softwareRenderer(this.scene.game)) want.tier = 0;
-    if (userChange || want.locked) this.locked = true;
-    const changed = want.on !== this.on || (want.on && want.tier !== this.tier) || (want.on && userChange && !this.post);
-    if (changed) {
+    const before = this.asked;
+    this.asked = { on: want.on, tier: want.tier };
+    const lookChanged = !before || before.on !== want.on;
+    const tierChanged = !!before && before.tier !== want.tier;
+    if (want.locked) this.locked = true;
+    if (userChange && tierChanged) {
+      this.picked = true;
+      this.locked = true;
+    }
+    if (lookChanged || tierChanged) {
+      let tier = want.tier;
+      if (!this.picked && !want.locked) {
+        // a software renderer (no graphics card behind the browser) starts on the cheapest tier and without the
+        // picture's pass — every full-screen pass is the processor's work there; a quality that stepped down
+        // by itself in this match stays down when the picture is switched off and on again
+        if (softwareRenderer(this.scene.game)) {
+          tier = 0;
+          this.post = false;
+        }
+        if (this.stepped !== null && this.stepped < tier) tier = this.stepped;
+      }
+      if (this.picked) this.post = true;
       this.on = want.on;
-      this.tier = want.tier;
-      if (userChange) this.post = true;
+      this.tier = tier;
       this.apply(true);
     }
     if (this.pipeline) this.pipeline.vhs = getSettings().vhs === 0 ? 0 : getSettings().vhs === 1 ? 0.5 : 1;
     this.tag();
   }
+
+  /** What the settings asked for at the last sync. */
+  private asked: { on: boolean; tier: FableTier } | null = null;
+  /** The tier the quality stepped down to by itself in this match (null: it did not). */
+  private stepped: FableTier | null = null;
 
   private apply(rebuild: boolean) {
     const { lighting, mapView, fx, map } = this.d;
@@ -176,9 +197,16 @@ export class FableDirector {
     // the picture's pass
     const wantPost = this.on && this.post;
     if (wantPost && !this.pipeline) {
-      cam.setPostPipeline(FablePipeline);
-      const p = cam.getPostPipeline(FablePipeline);
-      this.pipeline = (Array.isArray(p) ? p[0] : p) as FablePipeline;
+      try {
+        cam.setPostPipeline(FablePipeline);
+        const p = cam.getPostPipeline(FablePipeline);
+        this.pipeline = ((Array.isArray(p) ? p[0] : p) as FablePipeline | undefined) ?? null;
+      } catch (e) {
+        // a graphics driver that will not take the shaders: the Fable cut goes on without its pass
+        console.warn('[fable] the picture pass is unavailable', e);
+        this.pipeline = null;
+      }
+      if (!this.pipeline) this.post = false;
     } else if (!wantPost && this.pipeline) {
       cam.removePostPipeline(this.pipeline);
       this.pipeline = null;
@@ -429,8 +457,10 @@ export class FableDirector {
     this.slow = fps < 38 && !paused ? this.slow + 1 : 0;
     if (this.slow < 4) return;
     this.slow = 0;
-    if (this.tier > 0) this.tier = (this.tier - 1) as FableTier;
-    else if (this.post) this.post = false;
+    if (this.tier > 0) {
+      this.tier = (this.tier - 1) as FableTier;
+      this.stepped = this.tier;
+    } else if (this.post) this.post = false;
     else {
       this.locked = true;
       return;

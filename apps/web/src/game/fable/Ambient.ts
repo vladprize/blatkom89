@@ -36,6 +36,9 @@ const PRINTS = 150;
 /** Steps that still leave blood after walking through a pool of it. */
 const BLOODY_STEPS = 9;
 
+// Depths: everything here that is drawn over the light map sits just above the effects layer — the band
+// between the light map and the effects (30–31) is the snow's alone (the browser tests count flakes there).
+
 /** Rain falls at this slant (radians from straight down, to the left). */
 const RAIN_SLANT = 0.2;
 
@@ -72,7 +75,7 @@ export class Ambient {
         for (let k = 0; k < n && this.moths.length < 60; k++) {
           const img = scene.add
             .image(l.x, l.y, 'fx', 'px')
-            .setDepth(D.LIGHT + 0.6)
+            .setDepth(D.FX_ADD + 0.3)
             .setTint(0xfff2d0)
             .setScale(0.5)
             .setAlpha(0.85);
@@ -86,7 +89,7 @@ export class Ambient {
         const near = Math.random() < 0.3;
         const img = scene.add
           .image(0, 0, 'fx', 'px')
-          .setDepth(D.LIGHT + 0.5)
+          .setDepth(D.FX_ADD + 0.2)
           .setTint(0xa9bfd8)
           .setScale(near ? 0.5 : 0.35, near ? 7 : 4.5)
           .setRotation(RAIN_SLANT)
@@ -186,7 +189,7 @@ export class Ambient {
           tint: l.color,
           alpha: 0.3 + Math.random() * 0.25,
           add: true,
-          depth: D.LIGHT + 0.3,
+          depth: D.FX_ADD + 0.1,
         });
         break;
       }

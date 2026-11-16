@@ -244,7 +244,15 @@ export class Lighting {
       return;
     }
     this.v2?.destroy();
-    this.v2 = new ShadowLights(this.scene, this.map, tier, look, this.blend, this.addBlend, zoom);
+    this.v2 = null;
+    try {
+      this.v2 = new ShadowLights(this.scene, this.map, tier, look, this.blend, this.addBlend, zoom);
+    } catch (e) {
+      // no memory for the baked light, a canvas the browser refuses: the classic light map carries on
+      console.warn('[fable] the light with shadows is unavailable', e);
+      this.v2Tier = null;
+      return;
+    }
     this.v2Tier = tier;
     this.dyn.length = 0;
     this.classicRt?.setVisible(false);
@@ -298,8 +306,16 @@ export class Lighting {
     }
     if (this.v2) {
       if (this.classicRt) this.classicRt.setVisible(false);
-      this.v2.update(now, players, flick);
-      return;
+      try {
+        this.v2.update(now, players, flick);
+        return;
+      } catch (e) {
+        // whatever went wrong, a match must not go dark: back to the classic light map for good
+        console.warn('[fable] the light with shadows failed, the classic one takes over', e);
+        this.v2.destroy();
+        this.v2 = null;
+        this.v2Tier = null;
+      }
     }
     const rt = this.ensureRT(view.width, view.height);
     rt.setVisible(true);

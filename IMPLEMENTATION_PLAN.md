@@ -563,3 +563,28 @@ music on a real iPhone and inside Telegram.
 | Up to 10 players, team modes, capture the flag, base capture | ✅ | shared, realtime and E2E tests (see 2c) |
 | Menu music licence | 🟡 | v0.2.19: «Hurt» (Infraction & Emerel Gray) is the menu music again, at the owner's choice — its licence for use in a game is to confirm (the authors' library comes with downloadable licences; games aren't named) ([docs/ASSETS.md](docs/ASSETS.md)); the game's own «Районные дела» stays in `tools/music/` as the replacement |
 | Lint/format clean | ⛔ | ESLint/Prettier unavailable in the build sandbox (tsc strict with unused-code checks passes) |
+
+## 2r. Fable cut (2026-11-16) — a trial branch (the owner: «пересобери игру как пробную версию… насколько круче ты можешь её сделать»)
+
+**Branch `fable-trial` only. `main` (v0.2.25) is the main version and is not changed; Render deploys `main`, so
+nothing of this reaches the site.** Client only (`apps/web`): the simulation, the rules, protocol 10, the server
+and the database are untouched — a player on the Fable cut and a player on the classic picture are in the same
+match with the same information. Details, switches and measurements: `docs/FABLE_CUT.md`.
+
+| Part | Status | What |
+|---|---|---|
+| Light with shadows | ✅ | The map's lamps baked at match start with their shadows (walls: to the light's edge, a lit rim; props: lit top, a shadow of a length; soft penumbra; darker at the foot of walls); the local player's glow and beam and the brightest flashes cast every frame (`fable/shadows.ts`, `bake.ts`, `ShadowLights.ts`) |
+| The picture's pass | ✅ | Bloom at half size, a grade per map, vignette, grain, the tape look folded in (`fable/FablePipeline.ts`, `looks.ts`) |
+| The fight | ✅ | Recoil along the barrel, a punch-in on a kill, blood on the wall behind, bodies knocked along the shot, sparks with light, runs of kills, low health (pulse, colour, muffled sound) (`fable/FableDirector.ts`) |
+| Sound | 🟡 | An echo per place, duller behind walls and far away, bullets passing, spent cases, a bed per map, a compressor; loudness matched to the classic chain by measurement — **not listened to by a person** |
+| Presentation | ✅ | The opening pan on the countdown (driven by the match's own clock), the drained end frame |
+| Ambient life | ✅ | Dust in the lamps' light, moths, rain on two maps with lamps mirrored in wet ground, footprints in snow and in blood, shadows under characters |
+| The switch | ✅ | F2 in a match, «Fable cut \| Классика» in the settings, three quality tiers, automatic step-down, a software renderer starts on «fast», Canvas keeps the classic picture |
+| Speed on real devices | ⛔ | Not measurable here (software WebGL): 8.8 fps classic → 6.9 «fast» → 3.5 «cinema» says nothing about a graphics card. The tiers and the step-down are the answer until it is measured on phones |
+
+Checks: unit 208/208 (6 new: the light's geometry on all twelve maps), server 191/191 (the server is not
+changed), `tests/e2e/fable.mjs` 17/17 (the Fable cut's moments in a browser), loudness and bake time measured.
+The full browser suite on the branch's release bundle (31 stages, 77 min): 25 green; «maps» failed through a
+mistake of mine (moths and rain lay in the depth band the test counts snowflakes in — moved), five more on
+timing. After the fixes those six and nine match stages were rerun on the final bundle: 15/15. The sixteen
+other stages were not rerun after the last small fixes (their screens and the server are not touched by them).

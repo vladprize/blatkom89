@@ -32,6 +32,15 @@ function lowEndDevice(): boolean {
   }
 }
 
+/** A phone or a tablet: the Fable cut starts a tier lower there (a small graphics chip, a battery, heat). */
+function coarsePointer(): boolean {
+  try {
+    return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  } catch {
+    return false;
+  }
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   vhs: lowEndDevice() ? 0 : 1,
   shake: true,
@@ -46,7 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bots: 3,
   chat: true,
   look: 'fable',
-  fableTier: lowEndDevice() ? 1 : 2,
+  fableTier: lowEndDevice() || coarsePointer() ? 1 : 2,
 };
 
 let current: Settings = load();
