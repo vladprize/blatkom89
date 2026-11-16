@@ -196,7 +196,7 @@ Migration `023_blats.sql` only adds (a column and two unique indexes) and runs b
   echo (docs/FABLE_CUT.md) for everybody — there is no switch back. Open pages pick the new build up by the usual
   refresh on the menu. A player's settings in the browser gain `quality` and `qualityPicked`; nothing is sent
   to the server.
-- **Rolling back** is the client only: the tag `v0.2.25` (commit `d61a4e8`) is the version before; put `main`
+- **Rolling back** is the client only: the branch `v0225` (commit `d61a4e8`) is the version before; put `main`
   back on it (or revert v0.2.26's commits) and let Render deploy. The database needs nothing either way.
 - Still waiting for the owner from earlier releases: `PASS_SEASON_*` (v0.2.24), «18+» in @BotFather (v0.2.25).
 

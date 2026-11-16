@@ -517,7 +517,9 @@ Details: docs/TESTING.md §3.
 
 Not done: nobody has seen the picture's speed on a real graphics card or phone, or heard the sound; no new
 drawings (characters, weapons, tiles, the interface are as they were); no music in a match; the menu's backdrop
-keeps the plain light. Rolling back is the client only: the tag `v0.2.25` (`d61a4e8`), docs/DEPLOYMENT.md.
+keeps the plain light. Rolling back is the client only: the branch `v0225` (`d61a4e8`), docs/DEPLOYMENT.md. Not done from here either:
+the tag `v0.2.25` and the removal of the branch `fable-trial` (the development sandbox may push branches only — tags and
+deletions get 403); `fable-trial` is wholly inside `main` and Render deploys `main` alone.
 
 ## 3. Open risks / next steps
 
@@ -525,7 +527,7 @@ keeps the plain light. Rolling back is the client only: the tag `v0.2.25` (`d61a
   right start for a phone, whether the game steps the quality down too eagerly (38 frames a second for 4 s —
   `PERF_WATCH` in `fable/watch.ts`); the sound by ear (the echo, the bed under the fight, the compressor); the
   twelve maps' looks (`fable/looks.ts` — how dark each night is, the grade, the bloom) are one person's taste and
-  easy to change; the tag `v0.2.25` is the way back.
+  easy to change; the branch `v0225` is the way back; `fable-trial` can be deleted on GitHub (it is inside `main`).
 
 - After v0.2.25 (above, §2q; unit 393 / 393; the second full browser run 22 of 30 at once, the eight red stages fixed or
   updated and every stage they touched passing on the release bundle — docs/TESTING.md §3): the owner's look at the
