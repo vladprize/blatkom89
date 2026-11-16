@@ -188,6 +188,18 @@ Migration `023_blats.sql` only adds (a column and two unique indexes) and runs b
 - The game's protocol is 10 (the sprint button and the breath in the snapshot): a page opened before the update
   is asked to reload, as after every protocol change.
 
+## v0.2.26: what the update changes on the server
+
+- **Nothing on the server**: no migration, no new variable, the protocol is unchanged (10). `deploy/server.js`
+  differs from v0.2.25's by the version it reports (`/api/health`, the footer) only.
+- The client is another matter: the match's picture and sound are the ones with shadows, bloom and the place's
+  echo (docs/FABLE_CUT.md) for everybody — there is no switch back. Open pages pick the new build up by the usual
+  refresh on the menu. A player's settings in the browser gain `quality` and `qualityPicked`; nothing is sent
+  to the server.
+- **Rolling back** is the client only: the tag `v0.2.25` (commit `d61a4e8`) is the version before; put `main`
+  back on it (or revert v0.2.26's commits) and let Render deploy. The database needs nothing either way.
+- Still waiting for the owner from earlier releases: `PASS_SEASON_*` (v0.2.24), «18+» in @BotFather (v0.2.25).
+
 ## v0.2.25: what the update changes on the server
 
 - Migration **031** (`031_referral_blats.sql`) only adds: three columns on `referrals` (`blats_status`,

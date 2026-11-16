@@ -483,7 +483,45 @@ Not done: the owner's pictures from ChatGPT (`docs/ART_PROMPTS_v0225.md` — the
 banner, Borka with the bouquet, the loading background) — the screens use the current art until they come; the
 music on a real iPhone and inside Telegram.
 
+## 2r. v0.2.26 (2026-11-16) — one picture: the Fable cut is the game
+
+The owner, 16 Nov, in two steps. First: «на максимальной модели Fable пересобери нашу игру… как пробную версию…
+насколько круче ты можешь сделать нашу игру» — a trial build on a branch beside the main version (the picture with
+shadows, bloom, the match's director, the place's sound; a switch to the classic picture, F2, a mark on the screen).
+Then, having played it: «Супер, так сделай тогда просто FableCut главный. И все. Сделай ее main и убери предыдущую».
+
+Client only (`apps/web`): the simulation, the rules, protocol 10, the server and the database are untouched — the
+server's and `packages/shared`'s only change is the version number. Details and measurements: `docs/FABLE_CUT.md`.
+
+| # | What | Implementation | Status |
+|---|---|---|---|
+| 1 | The Fable cut is the main version | released to `main` as v0.2.26; the picture is on by itself in every match (practice, online, the story) — `fableWanted` no longer reads a «look» | ✅ e2e `v0226` (a first match with nothing asked for) |
+| 2 | The previous one removed | the «Fable cut \| Классика» switch, the F2 key and the HUD's mark («FABLE CUT · КИНО · F2») are gone, with their texts and styles; the `look` setting is gone. The plain light map stays in the code for one case only — a browser that cannot draw the picture (no WebGL, refused shaders, a failed bake) — and behind `?fable=0` for telling a fault of the picture from a fault of the driver; the menu's backdrop still uses it | ✅ e2e `v0226` (no mark, F2 no key, no switch; `?fable=0` still carries a match) |
+| 3 | What is left to choose: the quality | Settings → «Картинка» → **«Качество картинки»: Быстро / Баланс / Кино** (`quality`). A row of its own where the screen has room and always in the pause menu; in a short window, on a small phone and on a phone sideways the same three buttons stand on the panel's top edge right after its tag («Картинка: Быстро \| Баланс \| Кино») and take no room | ✅ e2e `v0226` (six sizes × two languages: on the screen, over nothing, one view); screens on 17 sizes |
+| 4 | A device that cannot keep up | `fable/watch.ts`: under ~38 frames a second for four seconds in a row → one step down (Кино → Баланс → Быстро → Быстро without the finish pass), **saved** — the next match starts there (the trial began every match with the same four seconds of stutter). Not judged: a match's first 3 s, the pause, a hidden tab, a stall over 3 s. A quality the player picked (`qualityPicked`) is never lowered; a software renderer starts on the lowest step and saves nothing | ✅ unit `watch.test.ts` (7); e2e `v0226` (step by step, nothing baked again mid-fight, saved, the next match, the player's pick kept after a reload) |
+| 5 | Light with shadows | the map's lamps baked at match start with their shadows (walls: to the light's edge, a lit rim; props: a lit top, a shadow of a length; soft penumbra; darker at the foot of walls); the local player's glow and beam and the brightest flashes cast every frame (`fable/shadows.ts`, `bake.ts`, `ShadowLights.ts`); the lamps' temporary canvases are released as soon as they are baked | ✅ unit `shadows.test.ts` (6: all twelve maps); e2e `v0226` (the lamps bright in the baked picture, on a second map too) |
+| 6 | The picture's finish | bloom at half size, a grade per map, vignette, grain, the tape look folded in (`fable/FablePipeline.ts`, `looks.ts`) | ✅ e2e `v0226`; screens of the twelve maps (trial) |
+| 7 | The fight | recoil along the barrel, a punch-in on a kill, blood on the wall behind, bodies knocked along the shot, sparks with light, runs of kills, low health (pulse, colour, muffled sound) (`fable/FableDirector.ts`) | ✅ e2e `v0226` |
+| 8 | Sound | an echo per place, duller behind walls and far away, bullets passing, spent cases, a bed per map, a compressor; loudness matched to the earlier chain by measurement | 🟡 measured, **not listened to by a person** |
+| 9 | Presentation and ambient life | the opening pan on the countdown (by the match's own clock), the drained end frame; dust in the lamps' light, moths, rain on two maps with lamps mirrored in wet ground, footprints in snow and in blood, shadows under characters | ✅ e2e `v0226`; screens (trial) |
+| 10 | Found on the way (old, since v0.2.17) | the settings in a window 761–1099 px wide: in Russian the tape row's last button stood 31 px out of its panel at 800 px (47 px on a tablet upright) and the row's name was squeezed into six lines at 1024 px — there the name goes above the buttons | ✅ e2e `v0226` (nothing stands out of its panel); 800×600 Russian: 601 → 565 px of 600 |
+| 11 | Speed on real devices | not measurable here (software WebGL: 8.8 frames a second with the plain light → 6.9 «Быстро» → 3.5 «Кино» says nothing about a graphics card). The ladder, the watch and the fallback are the answer until it is seen on real phones and computers | ⛔ not verified |
+
+Checks: `tsc --strict` clean; unit **406 / 406** (shared + web 215 — 7 new in `fable/watch.test.ts`; server 191 — the
+server is not changed); `tests/e2e/v0226.mjs` 49 / 49 on the demo build. The full browser run on the release bundle
+and what it found: docs/TESTING.md §3.
+
+Not done: nobody has seen the picture's speed on a real graphics card or phone, or heard the sound; no new
+drawings (characters, weapons, tiles, the interface are as they were); no music in a match; the menu's backdrop
+keeps the plain light. Rolling back is the client only: the tag `v0.2.25` (`d61a4e8`), docs/DEPLOYMENT.md.
+
 ## 3. Open risks / next steps
+
+- After v0.2.26 (above, §2r; unit 406 / 406; the full browser run on the release bundle — docs/TESTING.md §3): the owner's look at a match on his own phone and computer — whether it is smooth, whether «Баланс» is the
+  right start for a phone, whether the game steps the quality down too eagerly (38 frames a second for 4 s —
+  `PERF_WATCH` in `fable/watch.ts`); the sound by ear (the echo, the bed under the fight, the compressor); the
+  twelve maps' looks (`fable/looks.ts` — how dark each night is, the grade, the bloom) are one person's taste and
+  easy to change; the tag `v0.2.25` is the way back.
 
 - After v0.2.25 (above, §2q; unit 393 / 393; the second full browser run 22 of 30 at once, the eight red stages fixed or
   updated and every stage they touched passing on the release bundle — docs/TESTING.md §3): the owner's look at the
@@ -563,28 +601,3 @@ music on a real iPhone and inside Telegram.
 | Up to 10 players, team modes, capture the flag, base capture | ✅ | shared, realtime and E2E tests (see 2c) |
 | Menu music licence | 🟡 | v0.2.19: «Hurt» (Infraction & Emerel Gray) is the menu music again, at the owner's choice — its licence for use in a game is to confirm (the authors' library comes with downloadable licences; games aren't named) ([docs/ASSETS.md](docs/ASSETS.md)); the game's own «Районные дела» stays in `tools/music/` as the replacement |
 | Lint/format clean | ⛔ | ESLint/Prettier unavailable in the build sandbox (tsc strict with unused-code checks passes) |
-
-## 2r. Fable cut (2026-11-16) — a trial branch (the owner: «пересобери игру как пробную версию… насколько круче ты можешь её сделать»)
-
-**Branch `fable-trial` only. `main` (v0.2.25) is the main version and is not changed; Render deploys `main`, so
-nothing of this reaches the site.** Client only (`apps/web`): the simulation, the rules, protocol 10, the server
-and the database are untouched — a player on the Fable cut and a player on the classic picture are in the same
-match with the same information. Details, switches and measurements: `docs/FABLE_CUT.md`.
-
-| Part | Status | What |
-|---|---|---|
-| Light with shadows | ✅ | The map's lamps baked at match start with their shadows (walls: to the light's edge, a lit rim; props: lit top, a shadow of a length; soft penumbra; darker at the foot of walls); the local player's glow and beam and the brightest flashes cast every frame (`fable/shadows.ts`, `bake.ts`, `ShadowLights.ts`) |
-| The picture's pass | ✅ | Bloom at half size, a grade per map, vignette, grain, the tape look folded in (`fable/FablePipeline.ts`, `looks.ts`) |
-| The fight | ✅ | Recoil along the barrel, a punch-in on a kill, blood on the wall behind, bodies knocked along the shot, sparks with light, runs of kills, low health (pulse, colour, muffled sound) (`fable/FableDirector.ts`) |
-| Sound | 🟡 | An echo per place, duller behind walls and far away, bullets passing, spent cases, a bed per map, a compressor; loudness matched to the classic chain by measurement — **not listened to by a person** |
-| Presentation | ✅ | The opening pan on the countdown (driven by the match's own clock), the drained end frame |
-| Ambient life | ✅ | Dust in the lamps' light, moths, rain on two maps with lamps mirrored in wet ground, footprints in snow and in blood, shadows under characters |
-| The switch | ✅ | F2 in a match, «Fable cut \| Классика» in the settings, three quality tiers, automatic step-down, a software renderer starts on «fast», Canvas keeps the classic picture |
-| Speed on real devices | ⛔ | Not measurable here (software WebGL): 8.8 fps classic → 6.9 «fast» → 3.5 «cinema» says nothing about a graphics card. The tiers and the step-down are the answer until it is measured on phones |
-
-Checks: unit 208/208 (6 new: the light's geometry on all twelve maps), server 191/191 (the server is not
-changed), `tests/e2e/fable.mjs` 17/17 (the Fable cut's moments in a browser), loudness and bake time measured.
-The full browser suite on the branch's release bundle (31 stages, 77 min): 25 green; «maps» failed through a
-mistake of mine (moths and rain lay in the depth band the test counts snowflakes in — moved), five more on
-timing. After the fixes those six and nine match stages were rerun on the final bundle: 15/15. The sixteen
-other stages were not rerun after the last small fixes (their screens and the server are not touched by them).

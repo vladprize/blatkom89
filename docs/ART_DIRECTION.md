@@ -39,13 +39,19 @@ perspective projection is used anywhere.
   Bright colours are reserved for muzzle flashes, blood, the local player's UI accents and pickups.
 * **Readability first.** Characters always carry a small personal light, a name label and an HP bar;
   remote players are interpolated smoothly; clutter decals sit below characters and never block shots.
-* **Lighting.** Night scenes: a cool ambient light map with warm sodium/incandescent pools, red neon,
-  and flicker modes (`soft`, `broken`). On WebGL the light map is applied with an overbright blend
-  (`2 × light × scene`), so lamps can brighten their pools above the base texture like in the
-  reference. The light map is rendered at half resolution in one batched pass.
-* **VHS.** Scanlines, grain, chroma bleed, vignette and a rare tracking line in one post-process pass;
-  three levels in settings (off / light / strong). Weak devices start with it off and it switches itself
-  off if the game runs below ~40 FPS for 6 s.
+* **Lighting.** Night scenes: a cool ambient light with warm sodium/incandescent pools, red neon, and
+  flicker modes (`soft`, `broken`). Since v0.2.26 the light **casts shadows** (docs/FABLE_CUT.md): a map's lamps
+  are baked once a match into a texture with their shadows in it — a wall's shadow runs to the light's edge and
+  its rim is lit, a crate or a car has a lit top and a shadow of a length, the edges are soft, the foot of every
+  wall is darker; the player's own glow and aim beam and the brightest flashes are cast every frame. On WebGL the
+  light map is applied with an overbright blend (`2 × light × scene`), so lamps brighten their pools above the
+  base texture like in the reference. A browser without WebGL (or with a refused shader) keeps the plain light
+  map of the versions before: pools without shadows at half resolution.
+* **The picture's finish.** One camera pass over the match (the HUD is another scene and stays crisp): bloom at
+  half size, a grade per map (cool darks, warm lights — `fable/looks.ts`), a vignette, grain. **VHS** —
+  scanlines, chroma bleed and a rare tracking line — is folded into the same pass; three levels in settings
+  (off / worn tape / tenth copy). How much of all this a device draws is the «Picture quality» setting (Fast /
+  Balanced / Cinema); a device that cannot keep up is stepped down by the game and the step is remembered.
 * **Feedback.** Muzzle flash sprites + light flash, tracers, sparks and bullet holes on walls, smoke,
   ejected shells, blood splats and pools, hit flash on the victim, hit markers, light screen shake
   (can be disabled), low-HP red pulse, kill feed, haptics in Telegram.
